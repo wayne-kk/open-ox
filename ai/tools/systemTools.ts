@@ -1,6 +1,6 @@
 /**
- * System Tools - write_file, read_file, exec_shell, list_dir
- * Code Agent 执行环境操作
+ * System Tools - 网站生成 Agent 常用工具
+ * read_file, write_file, search_code, exec_shell, install_package, format_code, run_build
  */
 
 import { writeFileSync, readFileSync, readdirSync, existsSync } from "fs";
@@ -80,6 +80,64 @@ export const systemTools: ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "search_code",
+      description: "Search for pattern in codebase. Use to find usages, definitions, or similar code.",
+      parameters: {
+        type: "object",
+        properties: {
+          pattern: { type: "string", description: "Search pattern (regex or plain text)" },
+          path: { type: "string", description: "Directory to search, default '.'" },
+        },
+        required: ["pattern"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "install_package",
+      description: "Install npm package. Use when code references missing dependency.",
+      parameters: {
+        type: "object",
+        properties: {
+          package: { type: "string", description: "Package name (e.g. lodash, @radix-ui/react-dialog)" },
+          dev: { type: "boolean", description: "Install as devDependency" },
+        },
+        required: ["package"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "format_code",
+      description: "Format code file with Prettier. Use after writing to ensure style consistency.",
+      parameters: {
+        type: "object",
+        properties: {
+          path: { type: "string", description: "File path to format" },
+        },
+        required: ["path"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "run_build",
+      description: "Run project build. Use to verify generated code compiles.",
+      parameters: {
+        type: "object",
+        properties: {
+          script: { type: "string", description: "Build script name, default 'build'" },
+        },
+        required: [],
+      },
+    },
+  },
 ];
 
 export async function executeSystemTool(
@@ -121,6 +179,62 @@ export async function executeSystemTool(
         const entries = readdirSync(fullPath, { withFileTypes: true });
         const list = entries.map((e) => (e.isDirectory() ? `${e.name}/` : e.name)).join("\n");
         return { success: true, output: list || "(empty)", meta: { path } };
+      }
+      case "search_code": {
+        const pattern = args.pattern as string;
+        const searchPath = (args.path as string) || ".";
+        const fullPath = resolvePath(searchPath);
+        try {
+          const output = execSync(`rg "${pattern.replace(/"/g, '\\"')}" "${fullPath}" --no-heading -n 2>/dev/null || true`, {
+            encoding: "utf-8",
+            maxBuffer: 512 * 1024,
+          });
+          return { success: true, output: output?.trim() || "(no matches)", meta: { pattern } };
+        } catch {
+          return { success: true, output: "(search_code: rg not available, placeholder)", meta: { pattern } };
+        }
+      }
+      case "install_package": {
+        const pkg = args.package as string;
+        const dev = args.dev as boolean;
+        const cmd = dev ? `pnpm add -D ${pkg}` : `pnpm add ${pkg}`;
+        try {
+          const output = execSync(cmd, {
+            cwd: WORKSPACE_ROOT,
+            encoding: "utf-8",
+            maxBuffer: 1024 * 1024,
+          });
+          return { success: true, output: output?.trim() ?? `Installed ${pkg}` };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return { success: false, error: msg };
+        }
+      }
+      case "format_code": {
+        const path = args.path as string;
+        const fullPath = resolvePath(path);
+        try {
+          execSync(`pnpm exec prettier --write "${fullPath}"`, {
+            encoding: "utf-8",
+          });
+          return { success: true, output: `Formatted ${path}` };
+        } catch {
+          return { success: false, error: "format_code: Prettier not available (placeholder)" };
+        }
+      }
+      case "run_build": {
+        const script = (args.script as string) || "build";
+        try {
+          const output = execSync(`pnpm run ${script}`, {
+            cwd: WORKSPACE_ROOT,
+            encoding: "utf-8",
+            maxBuffer: 1024 * 1024,
+          });
+          return { success: true, output: output?.trim() ?? "" };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return { success: false, error: msg };
+        }
       }
       default:
         return { success: false, error: `Unknown tool: ${name}` };

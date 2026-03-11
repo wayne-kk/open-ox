@@ -84,18 +84,37 @@ ai/
 ├── registry/                   # 注册表
 │   └── skillRegistry.ts        # Skill 集中管理
 │
-├── skills/                     # 技能定义
-│   ├── index.ts                # 集中导出（新增 skill 在此添加）
-│   ├── summarize/              # skill.ts + prompt.md
-│   ├── translate/
-│   ├── rewrite/
-│   └── code_generate/
 │
 ├── prompts/dsl/                # 全局 DSL 片段
 │   ├── system.md
 │   ├── memory.md
 │   ├── tools.md
 │   └── output_json.md
+│
+├── systems/                    # Prompt Engine: 系统角色（AI 建站）
+│   ├── planner.md              # 站点规划
+│   ├── frontend.md             # 前端代码生成
+│   ├── codefix.md              # 代码修复
+│   └── reviewer.md              # 代码审查
+│
+├── skills/                     # 技能定义
+│   ├── index.ts                # 集中导出（通用 skills）
+│   ├── summarize/              # skill.ts + prompt.md
+│   ├── section.hero.md         # Prompt Engine: Hero 区块
+│   ├── section.feature.md      # Prompt Engine: Feature 区块
+│   └── layout.landing.md       # Prompt Engine: Landing 布局
+│
+├── templates/                  # Prompt Engine: 组合模板
+│   ├── generate_section.md
+│   ├── generate_layout.md
+│   ├── plan_site.md
+│   ├── fix_code.md
+│   └── tool_call.md
+│
+├── dsl/                        # Prompt Engine: 输出与设计规则
+│   ├── output_json.md
+│   ├── output_tsx.md
+│   └── design_rules.md
 │
 ├── tools/                      # 系统工具（Code Agent）
 │   ├── systemTools.ts          # write_file, read_file, exec_shell, list_dir
@@ -120,14 +139,55 @@ ai/
 
 ---
 
-## 五、核心模块详解
+## 五、Prompt Engine（AI 建站）
 
-### 5.1 主入口 `ai/index.ts`
+专为 AI 建站 Agent 设计的提示词结构，与 composer/dslEngine 配合使用。
+
+### 5.1 systems/ - 系统角色
+
+| 文件 | 用途 |
+|------|------|
+| `planner.md` | 站点架构规划，输出 JSON 结构 |
+| `frontend.md` | 前端代码生成（React/Next.js/TSX） |
+| `codefix.md` | 根据 linter/TS 错误修复代码 |
+| `reviewer.md` | 代码审查，输出 approved + issues |
+
+### 5.2 skills/ - 区块与布局技能
+
+| 文件 | 用途 |
+|------|------|
+| `section.hero.md` | Hero 区块（headline, CTA, 变体） |
+| `section.feature.md` | Feature 区块（卡片网格） |
+| `layout.landing.md` | 完整 Landing 页面布局 |
+
+### 5.3 templates/ - 组合模板
+
+| 文件 | 用途 |
+|------|------|
+| `generate_section.md` | 生成单个 section 的 DSL 模板 |
+| `generate_layout.md` | 生成完整 layout 的 DSL 模板 |
+| `plan_site.md` | 规划站点的 DSL 模板 |
+| `fix_code.md` | 修复代码的 DSL 模板 |
+| `tool_call.md` | Tool 调用决策的 DSL 模板 |
+
+### 5.4 dsl/ - 输出与设计规则
+
+| 文件 | 用途 |
+|------|------|
+| `output_json.md` | JSON 输出格式约束 |
+| `output_tsx.md` | TSX 输出格式约束 |
+| `design_rules.md` | 间距、字体、颜色、响应式规则 |
+
+---
+
+## 六、核心模块详解
+
+### 6.1 主入口 `ai/index.ts`
 
 - **`processInput(userInput, options)`**：统一入口，根据 `mode` 分发到不同执行路径
 - **模式推断**：`flow` 或 `skill` 存在时自动推断，否则默认 `agent`
 
-### 5.2 Agent 执行器
+### 6.2 Agent 执行器
 
 #### `agentExecutor.ts`（通用 Agent）
 
@@ -146,7 +206,7 @@ ai/
   6. 若有 `write_file`：`verify`（lint）
   7. 校验失败：`rollbackAll` 回滚
 
-### 5.3 Planner（规划层）
+### 6.3 Planner（规划层）
 
 | 模块 | 职责 |
 |------|------|
@@ -156,7 +216,7 @@ ai/
 **ArchitectureNode**：`id`、`type`、`name`、`description`、`dependsOn`、`meta`  
 **TaskNode**：`id`、`type`、`skill`、`input`、`dependsOn`、`status`、`result`
 
-### 5.4 Router（意图路由）
+### 6.4 Router（意图路由）
 
 | 模块 | 职责 |
 |------|------|
@@ -165,42 +225,48 @@ ai/
 
 **两阶段**：`routeIntent` = `routeByEmbedding` + `selectSkillWithLLM`
 
-### 5.5 Composer（提示词组合）
+### 6.5 Composer（提示词组合）
 
 - **Prompt DSL**：支持 `{{var}}`、`{{#if var}}`、`{{#each arr}}`、`{{#unless var}}`
 - **`composePrompt(ctx)`**：从 `ai/prompts/dsl/` 加载 system、output_json 等，与 skill prompt、memory、tools 组合
 
-### 5.6 Tool System（系统工具）
+### 6.6 Tool System（系统工具）
+
+网站生成 Agent 常用工具：
 
 | Tool | 参数 | 说明 |
 |------|------|------|
-| `write_file` | `path`, `content` | 写入文件，自动创建目录 |
 | `read_file` | `path` | 读取文件内容 |
-| `exec_shell` | `command`, `cwd?` | 执行 shell（如 `pnpm add lodash`） |
+| `write_file` | `path`, `content` | 写入文件，自动创建目录 |
+| `search_code` | `pattern`, `path?` | 代码搜索（ripgrep） |
+| `exec_shell` | `command`, `cwd?` | 执行 shell 命令 |
+| `install_package` | `package`, `dev?` | 安装 npm 包（pnpm add） |
+| `format_code` | `path` | 格式化代码（Prettier） |
+| `run_build` | `script?` | 运行 build 脚本 |
 | `list_dir` | `path?` | 列出目录内容 |
 
 - **路径安全**：`resolvePath` 限制在 workspace 内，不允许跳出
 
-### 5.7 Verifier（代码校验）
+### 6.7 Verifier（代码校验）
 
 - **类型**：`lint`、`build`、`typecheck`
 - **命令**：`pnpm run lint`、`pnpm run build`、`pnpm exec tsc --noEmit`
 - **`formatErrorsForLLM`**：将失败结果格式化为可反馈给 LLM 的文本
 
-### 5.8 Memory（会话状态）
+### 6.8 Memory（会话状态）
 
 - **Session**：`sessionId`、`userRequest`、`events`、`writtenFiles`、`architecturePlan`、`taskGraph`、`retryCount`
 - **`appendEvent`**：记录 tool/skill/plan/error
 - **`recordWrittenFile`**：记录写入文件，用于 rollback
 - **`getContextSummary`**：生成供 LLM 使用的上下文摘要
 
-### 5.9 Recovery（失败恢复）
+### 6.9 Recovery（失败恢复）
 
 - **`backupBeforeWrite`**：写入前备份已存在文件
 - **`rollbackFile`** / **`rollbackAll`**：回滚到备份或删除新文件
 - **`withRetry`**：带重试的异步执行
 
-### 5.10 Skill 定义
+### 6.10 Skill 定义
 
 每个 skill 包含：
 
