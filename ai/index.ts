@@ -10,12 +10,12 @@ import { runCodeAgent } from "./agent/codeAgentExecutor";
 import { routeIntent } from "./router";
 import { runSkill } from "./executor/runSkill";
 import { runWorkflow } from "./executor/workflowEngine";
-import { flows } from "./flows";
+import { flows, runBuildLandingPage } from "./flows";
 import type { AgentOptions } from "./agent/agentExecutor";
 
 export interface ProcessInputOptions extends AgentOptions {
-  /** 模式: "agent" | "code_agent" | "skill" | "flow"。不传时由 flow/skill 推断 */
-  mode?: "agent" | "code_agent" | "skill" | "flow";
+  /** 模式: "agent" | "code_agent" | "skill" | "flow" | "build_site"。不传时由 flow/skill 推断 */
+  mode?: "agent" | "code_agent" | "skill" | "flow" | "build_site";
   /** 强制指定 skill（skill 模式） */
   skill?: string;
   /** 使用预定义 flow（flow 模式） */
@@ -38,6 +38,10 @@ export interface ProcessResult {
   architecturePlan?: unknown;
   /** CodeAgent 模式: 校验结果 */
   verified?: boolean;
+  /** build_site 模式: 生成的文件列表 */
+  generatedFiles?: string[];
+  /** build_site 模式: 各步执行状态 */
+  buildSteps?: Array<{ step: string; status: "ok" | "error"; detail?: string }>;
 }
 
 /**
@@ -51,6 +55,17 @@ export async function processInput(
   const mode =
     options.mode ??
     (options.flow ? "flow" : options.skill ? "skill" : "agent");
+
+  if (mode === "build_site") {
+    const result = await runBuildLandingPage(userInput);
+    return {
+      content: result.success
+        ? `建站完成。生成了 ${result.generatedFiles.length} 个文件：\n${result.generatedFiles.join("\n")}`
+        : `建站失败：${result.error}`,
+      generatedFiles: result.generatedFiles,
+      buildSteps: result.steps,
+    };
+  }
 
   if (mode === "code_agent") {
     const result = await runCodeAgent(userInput, {

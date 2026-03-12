@@ -8,9 +8,6 @@ export const MODELS = {
 export type ModelId = keyof typeof MODELS;
 
 export function getModelId(): ModelId {
-    const id = process.env.OPENAI_MODEL;
-    if (!id || !(id in MODELS)) {
-        throw new Error(`Invalid OPENAI_MODEL: ${id}. Must be one of: ${Object.keys(MODELS).join(', ')}`);
-    }
+    const id = process.env.OPENAI_MODEL || 'gpt-5.2';
     return id as ModelId;
 }
