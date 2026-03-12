@@ -1,56 +1,16 @@
 /**
- * Embedding Router - 用向量相似度选出 TopK skills
- * 流程: user input → embedding → vector search → top K skills
+ * Embedding Router（简化版）- 目前不依赖 embeddings API
+ *
+ * 由于当前环境不支持 embeddings 模型，这里先用一个「无向量、只裁剪数量」的 router：
+ * - 从 skillRegistry 取出所有 skill
+ * - 仅按声明顺序截取前 topK 个
+ * - score 统一返回 1，用作占位
+ *
+ * 这样可以保证 Agent / CodeAgent 的整体流程先跑通；后续如果接入
+ * embeddings，再把这里替换回真正的向量检索实现即可。
  */
 
-import OpenAI from "openai";
 import { getAllSkillMetadata } from "../registry/skillRegistry";
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  baseURL: process.env.OPENAI_API_URL,
-});
-
-/** 余弦相似度 */
-function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length) return 0;
-  let dot = 0,
-    normA = 0,
-    normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-  const denom = Math.sqrt(normA) * Math.sqrt(normB);
-  return denom === 0 ? 0 : dot / denom;
-}
-
-let _skillEmbeddings: { name: string; embedding: number[] }[] | null = null;
-
-async function getSkillEmbeddings(): Promise<{ name: string; embedding: number[] }[]> {
-  if (_skillEmbeddings) return _skillEmbeddings;
-
-  const metadata = getAllSkillMetadata();
-  const texts = metadata.map(
-    (m) => `${m.description}. Examples: ${m.examples.join("; ")}`
-  );
-
-  const embeddingModel =
-    process.env.OPENAI_EMBEDDING_MODEL ?? "text-embedding-3-small";
-
-  const res = await openai.embeddings.create({
-    model: embeddingModel,
-    input: texts,
-  });
-
-  _skillEmbeddings = metadata.map((m, i) => ({
-    name: m.name,
-    embedding: res.data[i]?.embedding ?? [],
-  }));
-
-  return _skillEmbeddings;
-}
 
 export interface EmbeddingRouterOptions {
   topK?: number;
@@ -65,21 +25,10 @@ export async function routeByEmbedding(
 ): Promise<{ name: string; score: number }[]> {
   const { topK = 5 } = options;
 
-  const [skillEmbs, inputRes] = await Promise.all([
-    getSkillEmbeddings(),
-    openai.embeddings.create({
-      model: process.env.OPENAI_EMBEDDING_MODEL ?? "text-embedding-3-small",
-      input: userInput,
-    }),
-  ]);
-
-  const inputEmb = inputRes.data[0]?.embedding ?? [];
-
-  const scored = skillEmbs.map((s) => ({
-    name: s.name,
-    score: cosineSimilarity(s.embedding, inputEmb),
+  // 当前仅做「数量裁剪」，不做真实相似度计算
+  const metadata = getAllSkillMetadata();
+  return metadata.slice(0, topK).map((m) => ({
+    name: m.name,
+    score: 1,
   }));
-
-  scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, topK);
 }
