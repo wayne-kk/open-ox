@@ -5,7 +5,7 @@ Shared design tokens and rules for AI-generated frontend code.
 ## Spacing
 
 - Section padding: `py-16` (md) to `py-24` (lg)
-- Container: `max-w-6xl` or `max-w-7xl`, `mx-auto`, `px-4` or `px-6`
+- Container: `container`, `mx-auto`, `px-8` or `px-6`
 - Gap between elements: `gap-4`, `gap-6`, `gap-8`
 
 ## Typography

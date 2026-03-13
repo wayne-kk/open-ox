@@ -4,6 +4,7 @@ You are a world-class frontend engineer.
 Your task: generate a **Stats/Metrics section** with impactful large numbers and optional animated counter.
 
 ## Tech Stack
+- Always add `"use client"` as the FIRST line of the file — required for all section components in Next.js App Router
 - React (functional component, no props), TypeScript
 - Tailwind CSS, `lucide-react`
 - `"use client"` + `useEffect` + `useRef` for counter animation
@@ -17,15 +18,15 @@ Your task: generate a **Stats/Metrics section** with impactful large numbers and
 
 ```tsx
 <section className="py-20 border-y border-border">
-  <div className="max-w-6xl mx-auto px-6">
+  <div className="container mx-auto px-6">
     <dl className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-0 md:divide-x divide-border">
       {stats.map((stat) => (
         <div key={stat.label} className="flex flex-col items-center text-center px-8 py-4 gap-2">
-          {stat.icon && <stat.icon className="w-6 h-6 text-[var(--color-accent)] mb-2" />}
+          {stat.icon && <stat.icon className="w-6 h-6 text-accent mb-2" />}
           <dt className="text-4xl md:text-5xl font-black tabular-nums text-foreground">
-            <span className="text-[var(--color-accent)]">{stat.prefix}</span>
+            <span className="text-accent">{stat.prefix}</span>
             <CountUp target={stat.value} />
-            <span className="text-[var(--color-accent)]">{stat.suffix}</span>
+            <span className="text-accent">{stat.suffix}</span>
           </dt>
           <dd className="text-sm text-muted-foreground font-medium uppercase tracking-widest">
             {stat.label}
@@ -99,3 +100,4 @@ For non-integer targets (like 4.9), adjust CountUp to use `toFixed(1)` and step 
 - Numbers must be realistic for the page's theme and industry
 - Apply design system colors, typography, and spacing
 - Section background should be subtly different (border-y, slight bg tint) to visually separate from adjacent sections
+- **ALWAYS** output `"use client"` as the very first line — every section component must be a Client Component

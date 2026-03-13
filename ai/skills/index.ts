@@ -7,7 +7,6 @@ import type { Skill } from "../types";
 import { skill as summarizeSkill } from "./summarize/skill";
 import { skill as translateSkill } from "./translate/skill";
 import { skill as rewriteSkill } from "./rewrite/skill";
-import { skill as codeGenerateSkill } from "./code_generate/skill";
 import { skill as landingAnalyzeSkill } from "./landing.analyze_requirement/skill";
 import { skill as landingDesignSystemSkill } from "./landing.generate_design_system/skill";
 import { skill as landingApplyTokensSkill } from "./landing.apply_design_tokens/skill";
@@ -21,6 +20,7 @@ import { skill as sectionFooterSkill } from "./section.footer/skill";
 import { skill as sectionStatsSkill } from "./section.stats/skill";
 import { skill as sectionTestimonialsSkill } from "./section.testimonials/skill";
 import { skill as sectionFaqSkill } from "./section.faq/skill";
+import { skill as sectionNavigationSkill } from "./section.navigation/skill";
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 
@@ -58,13 +58,6 @@ const skillList: [string, Skill][] = [
     {
       ...rewriteSkill,
       promptContent: loadPrompt("rewrite", rewriteSkill.promptVersion),
-    },
-  ],
-  [
-    "code_generate",
-    {
-      ...codeGenerateSkill,
-      promptContent: loadPrompt("code_generate", codeGenerateSkill.promptVersion),
     },
   ],
   [
@@ -156,6 +149,13 @@ const skillList: [string, Skill][] = [
     {
       ...sectionFaqSkill,
       promptContent: loadPrompt("section.faq", sectionFaqSkill.promptVersion),
+    },
+  ],
+  [
+    "section.navigation",
+    {
+      ...sectionNavigationSkill,
+      promptContent: loadPrompt("section.navigation", sectionNavigationSkill.promptVersion),
     },
   ],
 ];

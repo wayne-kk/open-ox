@@ -14,7 +14,7 @@ export function buildTaskGraphFromArchitecture(
   const tasks: TaskNode[] = plan.nodes.map((node) => ({
     id: `task-${node.id}`,
     type: "generate",
-    skill: options?.defaultSkill ?? "code_generate",
+    skill: options?.defaultSkill ?? "landing.generate_section",
     input: { target: node.name, description: node.description, meta: node.meta },
     dependsOn: (node.dependsOn ?? []).map((d) => `task-${d}`),
     architectureNodeId: node.id,

@@ -4,9 +4,9 @@ You are a world-class frontend engineer.
 Your task: generate a **Footer section** that provides clear navigation, brand identity, and legal information.
 
 ## Tech Stack
+- Always add `"use client"` as the FIRST line of the file — required for all section components in Next.js App Router
 - React (functional component, no props), TypeScript
 - Tailwind CSS, `lucide-react`
-- No `"use client"` needed unless newsletter email input is included
 
 ## Required Structure
 1. **Brand column** — logo/name, tagline (1 sentence), social media icons
@@ -17,15 +17,15 @@ Your task: generate a **Footer section** that provides clear navigation, brand i
 
 ```tsx
 <footer className="border-t border-border bg-card">
-  <div className="max-w-6xl mx-auto px-6 py-16">
+  <div className="container mx-auto px-6 py-16">
     {/* Main grid */}
     <div className="grid grid-cols-2 md:grid-cols-4 gap-12 mb-12">
       {/* Brand column */}
       <div className="col-span-2 md:col-span-1">
         <div className="flex items-center gap-2 mb-4">
           {/* Logo icon or text mark */}
-          <div className="w-8 h-8 rounded-md bg-[var(--color-accent)] flex items-center justify-center
-                          text-[var(--color-accent-foreground,#000)] font-black text-sm">
+          <div className="w-8 h-8 rounded-md bg-accent flex items-center justify-center
+                          text-accent-foreground font-black text-sm">
             B
           </div>
           <span className="font-bold text-lg">BrandName</span>
@@ -40,8 +40,8 @@ Your task: generate a **Footer section** that provides clear navigation, brand i
                href={s.href}
                aria-label={s.label}
                className="w-9 h-9 rounded-lg border border-border flex items-center justify-center
-                          text-muted-foreground hover:text-[var(--color-accent)]
-                          hover:border-[var(--color-accent)] transition-colors duration-200">
+                          text-muted-foreground hover:text-accent
+                          hover:border-accent transition-colors duration-200">
               <s.Icon className="w-4 h-4" />
             </a>
           ))}
@@ -58,7 +58,7 @@ Your task: generate a **Footer section** that provides clear navigation, brand i
             {col.links.map((link) => (
               <li key={link.label}>
                 <a href={link.href}
-                   className="text-sm text-muted-foreground hover:text-[var(--color-accent)]
+                   className="text-sm text-muted-foreground hover:text-accent
                               transition-colors duration-200">
                   {link.label}
                 </a>
@@ -127,3 +127,4 @@ const socialLinks = [
 - Apply design system colors, spacing, and typography
 - Footer background should be slightly different from the main page body (use `bg-card` or add `border-t`)
 - Import only the lucide icons you actually use
+- **ALWAYS** output `"use client"` as the very first line — every section component must be a Client Component

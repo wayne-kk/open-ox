@@ -48,11 +48,23 @@ export interface PageBlueprint {
   sections: SectionSpec[];
 }
 
+export interface BuildStep {
+  step: string;
+  status: "ok" | "error";
+  detail?: string;
+  /** wall-clock timestamp (ms since epoch) when this step completed */
+  timestamp: number;
+  /** duration of this step in ms */
+  duration: number;
+}
+
 export interface BuildLandingPageResult {
   success: boolean;
   blueprint?: PageBlueprint;
   generatedFiles: string[];
-  steps: Array<{ step: string; status: "ok" | "error"; detail?: string }>;
+  steps: BuildStep[];
+  /** total wall-clock duration in ms */
+  totalDuration?: number;
   error?: string;
 }
 
@@ -173,12 +185,10 @@ Generate the complete Design System for this website.`;
   return designSystem;
 }
 
-// ─── Step 3: Apply Design Tokens → globals.css + tailwind.config.ts ──────
+// ─── Step 3: Apply Design Tokens → globals.css (Tailwind v4) ────────────
 
 async function stepApplyDesignTokens(designSystem: string): Promise<void> {
   const currentGlobalsCss = readSiteFile("app/globals.css");
-  const currentTailwindConfig =
-    readSiteFile("tailwind.config.ts") || readSiteFile("tailwind.config.js");
 
   const systemPrompt = [
     loadSystem("frontend"),
@@ -194,17 +204,12 @@ ${designSystem}
 ${currentGlobalsCss}
 \`\`\`
 
-## Current tailwind.config.ts
-\`\`\`typescript
-${currentTailwindConfig}
-\`\`\`
-
-Generate the updated globals.css and tailwind.config.ts.`;
+Generate the updated globals.css using Tailwind CSS v4 syntax.`;
 
   const raw = await callLLM(systemPrompt, userMessage, 0.3);
   const jsonStr = extractJSON(raw);
 
-  let parsed: { globals_css: string; tailwind_config: string };
+  let parsed: { globals_css: string };
   try {
     parsed = JSON.parse(jsonStr);
   } catch {
@@ -212,7 +217,6 @@ Generate the updated globals.css and tailwind.config.ts.`;
   }
 
   await writeFile("app/globals.css", parsed.globals_css);
-  await writeFile("tailwind.config.ts", parsed.tailwind_config);
 }
 
 // ─── Section Skill Registry ───────────────────────────────────────────────
@@ -223,6 +227,7 @@ Generate the updated globals.css and tailwind.config.ts.`;
  * 没有命中的 type 回退到 landing.generate_section。
  */
 const SECTION_SKILL_MAP: Record<string, string[]> = {
+  navigation:   ["section.navigation"],
   hero:         ["section.hero"],
   features:     ["section.features"],
   pricing:      ["section.pricing"],
@@ -281,6 +286,14 @@ Available skills: ${candidates.join(", ")}`,
   return candidates.includes(chosen) ? chosen : candidates[0];
 }
 
+// ─── Layout vs Page Section Split ────────────────────────────────────────
+
+/**
+ * 这些 section 类型属于全局布局层，写入 layout.tsx 而非 page.tsx。
+ * Navigation 固定在顶部，Footer 固定在底部，由 layout 统一管理。
+ */
+const LAYOUT_SECTION_TYPES = new Set(["navigation", "footer"]);
+
 // ─── Step 4: Generate Sections × N (并发) ────────────────────────────────
 
 async function stepGenerateSection(
@@ -325,12 +338,59 @@ Generate the complete ${section.fileName}.tsx component.`;
   return filePath;
 }
 
-// ─── Step 5: Compose Page ────────────────────────────────────────────────
+// ─── Step 5a: Compose Layout (navigation + footer → layout.tsx) ──────────
+
+async function stepComposeLayout(
+  layoutSections: SectionSpec[],
+  blueprint: PageBlueprint
+): Promise<void> {
+  if (layoutSections.length === 0) return;
+
+  const currentLayout = readSiteFile("app/layout.tsx");
+
+  const imports = layoutSections
+    .map((s) => `import ${s.fileName} from "@/components/sections/${s.fileName}";`)
+    .join("\n");
+
+  const navSection = layoutSections.find((s) => s.type === "navigation");
+  const footerSection = layoutSections.find((s) => s.type === "footer");
+
+  // Deterministic update: inject imports and wrap children with nav/footer.
+  // We update the existing layout.tsx rather than replacing it wholesale,
+  // to preserve metadata, fonts, and other project-level configuration.
+  const systemPrompt = loadSystem("frontend");
+
+  const userMessage = `Update the existing Next.js \`app/layout.tsx\` to add the generated Navigation and Footer section components.
+
+## Current layout.tsx
+\`\`\`tsx
+${currentLayout}
+\`\`\`
+
+## Components to inject
+${imports}
+
+## Instructions
+1. Add the import statements above to the existing imports (do not duplicate if already present)
+2. ${navSection ? `Render <${navSection.fileName} /> as the very first child inside <body>, before {children}` : ""}
+3. ${footerSection ? `Render <${footerSection.fileName} /> as the last child inside <body>, after {children}` : ""}
+4. Preserve ALL existing content: metadata, font setup, className on <html>/<body>, etc.
+5. Output ONLY the complete updated layout.tsx — no markdown fences, no explanation
+6. Page: ${blueprint.title}`;
+
+  const raw = await callLLM(systemPrompt, userMessage, 0.2);
+  const tsx = extractContent(raw, "tsx");
+
+  await writeFile("app/layout.tsx", tsx);
+  await formatFile("app/layout.tsx");
+}
+
+// ─── Step 5b: Compose Page (content sections only → page.tsx) ────────────
 
 async function stepComposePage(
   blueprint: PageBlueprint,
   designSystem: string,
-  generatedFiles: string[]
+  pageSections: SectionSpec[]
 ): Promise<void> {
   const systemPrompt = [
     loadSystem("frontend"),
@@ -338,67 +398,115 @@ async function stepComposePage(
     loadPrompt("landing.compose_page"),
   ].join("");
 
-  const sectionNames = blueprint.sections.map((s) => s.fileName);
-
   const userMessage = `## Page Title
 ${blueprint.title}
 
 ## Page Description
 ${blueprint.description}
 
-## Sections to Compose (in order)
-${sectionNames.map((n, i) => `${i + 1}. ${n}`).join("\n")}
-
-## Generated Files
-${generatedFiles.join("\n")}
+## Content Sections to Compose (in order, navigation and footer are in layout.tsx — do NOT include them)
+${pageSections.map((s, i) => `${i + 1}. ${s.fileName}`).join("\n")}
 
 ## Design System (for global effects)
 ${designSystem}
 
-Generate the page.tsx that imports and assembles these sections.`;
+Generate the page.tsx that imports and assembles these content sections.`;
 
   const raw = await callLLM(systemPrompt, userMessage, 0.3);
   const tsx = extractContent(raw, "tsx");
-  const pagePath = "app/page.tsx";
 
-  await writeFile(pagePath, tsx);
-  await formatFile(pagePath);
+  await writeFile("app/page.tsx", tsx);
+  await formatFile("app/page.tsx");
 }
 
 // ─── Main Executor ───────────────────────────────────────────────────────
 
 export async function runBuildLandingPage(
-  userInput: string
+  userInput: string,
+  /** Called immediately when each step completes — use for SSE streaming */
+  onStep?: (step: BuildStep) => void
 ): Promise<BuildLandingPageResult> {
+  const flowStart = Date.now();
+
   const result: BuildLandingPageResult = {
     success: false,
     generatedFiles: [],
     steps: [],
   };
 
+  // ─── Step timer helpers ────────────────────────────────────────────────
+  const stepStarts = new Map<string, number>();
+
+  const startStep = (step: string) => stepStarts.set(step, Date.now());
+
   const log = (step: string, status: "ok" | "error", detail?: string) => {
-    result.steps.push({ step, status, detail });
-    console.log(`[build_landing_page] ${status === "ok" ? "✓" : "✗"} ${step}${detail ? `: ${detail}` : ""}`);
+    const now = Date.now();
+    const duration = now - (stepStarts.get(step) ?? now);
+    const entry: BuildStep = { step, status, detail, timestamp: now, duration };
+    result.steps.push(entry);
+    onStep?.(entry);
+    const icon = status === "ok" ? "✓" : "✗";
+    const ms = duration > 0 ? ` (+${(duration / 1000).toFixed(1)}s)` : "";
+    console.log(`[build_landing_page] ${icon} ${step}${detail ? `: ${detail}` : ""}${ms}`);
   };
+
+  // Wrap an async step with automatic timing
+  async function timed<T>(
+    stepName: string,
+    fn: () => Promise<T>,
+    onOk?: (val: T) => string | undefined
+  ): Promise<T> {
+    startStep(stepName);
+    try {
+      const val = await fn();
+      log(stepName, "ok", onOk?.(val));
+      return val;
+    } catch (err) {
+      log(stepName, "error", err instanceof Error ? err.message : String(err));
+      throw err;
+    }
+  }
 
   try {
     // Step 1: Analyze requirement
-    const blueprint = await stepAnalyzeRequirement(userInput);
+    const blueprint = await timed(
+      "analyze_requirement",
+      () => stepAnalyzeRequirement(userInput),
+      (bp) => `${bp.sections.length} sections planned`
+    );
     result.blueprint = blueprint;
-    log("analyze_requirement", "ok", `${blueprint.sections.length} sections planned`);
 
     // Step 2: Generate design system
-    const designSystem = await stepGenerateDesignSystem(blueprint);
+    const designSystem = await timed(
+      "generate_design_system",
+      () => stepGenerateDesignSystem(blueprint),
+      () => "design-system.md written"
+    );
     result.generatedFiles.push("design-system.md");
-    log("generate_design_system", "ok", "design-system.md written");
 
     // Step 3: Apply design tokens
-    await stepApplyDesignTokens(designSystem);
-    result.generatedFiles.push("app/globals.css", "tailwind.config.ts");
-    log("apply_design_tokens", "ok", "globals.css + tailwind.config.ts updated");
+    await timed(
+      "apply_design_tokens",
+      () => stepApplyDesignTokens(designSystem),
+      () => "globals.css + tailwind.config.ts updated"
+    );
+    result.generatedFiles.push("app/globals.css");
 
     // Step 4: Generate sections — 并发执行，互相独立，单个失败不阻塞其他
+    const layoutSections = blueprint.sections.filter((s) =>
+      LAYOUT_SECTION_TYPES.has(s.type)
+    );
+    const pageSections = blueprint.sections.filter(
+      (s) => !LAYOUT_SECTION_TYPES.has(s.type)
+    );
+
     const designStyle = blueprint.designIntent.keywords.join(", ");
+
+    // Start all section timers before concurrent execution
+    blueprint.sections.forEach((s) =>
+      startStep(`generate_section:${s.fileName}`)
+    );
+
     const sectionResults = await Promise.allSettled(
       blueprint.sections.map((section) =>
         stepGenerateSection(designSystem, section, designStyle)
@@ -418,12 +526,26 @@ export async function runBuildLandingPage(
       }
     }
 
-    // Step 5: Compose page
-    await stepComposePage(blueprint, designSystem, result.generatedFiles);
+    // Step 5a: 将 navigation/footer 注入 layout.tsx
+    if (layoutSections.length > 0) {
+      await timed(
+        "compose_layout",
+        () => stepComposeLayout(layoutSections, blueprint),
+        () => `layout.tsx updated (${layoutSections.map((s) => s.fileName).join(", ")})`
+      );
+      result.generatedFiles.push("app/layout.tsx");
+    }
+
+    // Step 5b: 将内容 sections 组合为 page.tsx
+    await timed(
+      "compose_page",
+      () => stepComposePage(blueprint, designSystem, pageSections),
+      () => `app/page.tsx written (${pageSections.length} sections)`
+    );
     result.generatedFiles.push("app/page.tsx");
-    log("compose_page", "ok", "app/page.tsx written");
 
     // Step 6: Run build to verify
+    startStep("run_build");
     const buildResult = await executeSystemTool("run_build", { script: "build" });
     const buildOutput =
       typeof buildResult === "string"
@@ -440,5 +562,6 @@ export async function runBuildLandingPage(
     result.success = false;
   }
 
+  result.totalDuration = Date.now() - flowStart;
   return result;
 }

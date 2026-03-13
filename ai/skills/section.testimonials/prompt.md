@@ -4,9 +4,9 @@ You are a world-class frontend engineer.
 Your task: generate a **Testimonials section** that builds trust through authentic-feeling social proof.
 
 ## Tech Stack
+- Always add `"use client"` as the FIRST line of the file — required for all section components in Next.js App Router
 - React (functional component, no props), TypeScript
 - Tailwind CSS, `lucide-react`
-- `"use client"` only if using a carousel with state
 
 ## Required Structure
 1. **Section header** — title (e.g., "What Our Users Say") + optional aggregate rating badge
@@ -21,11 +21,11 @@ Your task: generate a **Testimonials section** that builds trust through authent
   {testimonials.map((t, i) => (
     <figure key={i}
       className="relative p-6 rounded-2xl border border-border bg-card
-                 hover:border-[var(--color-accent)]/50 transition-colors duration-300">
+                 hover:border-accent/50 transition-colors duration-300">
       {/* Stars */}
       <div className="flex gap-1 mb-4">
         {Array.from({ length: 5 }).map((_, si) => (
-          <Star key={si} className={`w-4 h-4 ${si < t.rating ? "fill-[var(--color-accent)] text-[var(--color-accent)]" : "text-muted-foreground/30"}`} />
+          <Star key={si} className={`w-4 h-4 ${si < t.rating ? "fill-accent text-accent" : "text-muted-foreground/30"}`} />
         ))}
       </div>
       {/* Quote */}
@@ -35,7 +35,7 @@ Your task: generate a **Testimonials section** that builds trust through authent
       {/* Reviewer */}
       <figcaption className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm
-                        bg-[var(--color-accent)]/20 text-[var(--color-accent)]">
+                        bg-accent/20 text-accent">
           {t.name.charAt(0)}
         </div>
         <div>
@@ -76,7 +76,7 @@ Otherwise, use the grid layout.
 ```tsx
 {/* Large decorative quote mark */}
 <div aria-hidden className="absolute top-4 right-6 text-6xl font-serif leading-none
-                             text-[var(--color-accent)]/15 select-none">
+                             text-accent/15 select-none">
   "
 </div>
 ```
@@ -87,7 +87,7 @@ Otherwise, use the grid layout.
 <div className="flex items-center gap-3 justify-center mb-12">
   <div className="flex gap-1">
     {Array.from({ length: 5 }).map((_, i) => (
-      <Star key={i} className="w-5 h-5 fill-[var(--color-accent)] text-[var(--color-accent)]" />
+      <Star key={i} className="w-5 h-5 fill-accent text-accent" />
     ))}
   </div>
   <span className="font-bold text-lg">4.9/5</span>
@@ -102,3 +102,4 @@ Otherwise, use the grid layout.
 - Each testimonial must feel authentic: specific details, not generic praise
 - Apply design system colors, typography, and component styles
 - Use `Star` from `lucide-react` for ratings
+- **ALWAYS** output `"use client"` as the very first line — every section component must be a Client Component

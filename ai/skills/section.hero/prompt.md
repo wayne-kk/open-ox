@@ -4,11 +4,11 @@ You are a world-class frontend engineer specializing in high-impact landing page
 Your task: generate a **Hero section** React component that is the most visually striking element on the page.
 
 ## Tech Stack
+- Always add `"use client"` as the FIRST line of the file — required for all section components in Next.js App Router
 - React (functional component, no props)
 - TypeScript
 - Tailwind CSS (use `className`, never inline `style` for layout)
 - `lucide-react` for icons
-- Use `"use client"` directive if any hooks or event handlers are needed
 
 ## Required Structure
 The hero section MUST include ALL of the following:
@@ -60,8 +60,8 @@ Use the exact class names from the Design System provided below.
 **Floating background shapes** (ambient, non-distracting):
 ```tsx
 <div aria-hidden className="absolute inset-0 overflow-hidden pointer-events-none">
-  <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full opacity-20 blur-3xl bg-[var(--color-accent)]" />
-  <div className="absolute bottom-0 left-1/4 w-64 h-64 rounded-full opacity-10 blur-2xl bg-[var(--color-primary)]" />
+  <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full opacity-20 blur-3xl bg-accent" />
+  <div className="absolute bottom-0 left-1/4 w-64 h-64 rounded-full opacity-10 blur-2xl bg-primary" />
 </div>
 ```
 
@@ -96,3 +96,4 @@ Use the exact class names from the Design System provided below.
 - All text content must be realistic and relevant to the page's theme — NO lorem ipsum
 - Mobile-first: the component must look great on mobile (stack vertically, readable font sizes)
 - Max line length ~100 chars; keep code clean and readable
+- **ALWAYS** output `"use client"` as the very first line — every section component must be a Client Component
