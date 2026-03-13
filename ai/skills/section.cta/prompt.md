@@ -4,9 +4,9 @@ You are a world-class frontend engineer specializing in conversion rate optimiza
 Your task: generate a **CTA (Call-to-Action) section** that creates urgency and drives immediate action.
 
 ## Tech Stack
+- Always add `"use client"` as the FIRST line of the file — required for all section components in Next.js App Router
 - React (functional component, no props), TypeScript
 - Tailwind CSS, `lucide-react`
-- `"use client"` + `useState` only if countdown or email input is needed
 
 ## Required Structure
 1. **Background** — full-width, visually distinct from surrounding sections (gradient, solid accent, or textured dark panel)
@@ -21,18 +21,18 @@ Your task: generate a **CTA (Call-to-Action) section** that creates urgency and 
 ```tsx
 <section className="relative py-24 overflow-hidden">
   {/* Decorative background */}
-  <div aria-hidden className="absolute inset-0 bg-gradient-to-br from-[var(--color-accent)]/20 via-transparent to-[var(--color-primary)]/10" />
+  <div aria-hidden className="absolute inset-0 bg-gradient-to-br from-accent/20 via-transparent to-primary/10" />
   <div aria-hidden className="absolute inset-0 bg-[url('/noise.png')] opacity-5" /> {/* optional noise */}
 
   <div className="relative z-10 max-w-3xl mx-auto px-6 text-center">
     <h2 className="text-4xl md:text-5xl font-black mb-4 leading-tight">
-      Ready to <span className="text-[var(--color-accent)]">transform</span> your workflow?
+      Ready to <span className="text-accent">transform</span> your workflow?
     </h2>
     <p className="text-lg text-muted-foreground mb-10">
       Join 10,000+ teams already saving hours every week.
     </p>
     <div className="flex flex-col sm:flex-row gap-4 justify-center">
-      <button className="px-8 py-4 rounded-lg bg-[var(--color-accent)] text-[var(--color-accent-foreground,#000)]
+      <button className="px-8 py-4 rounded-lg bg-accent text-accent-foreground
                          font-bold text-lg hover:opacity-90 transition-opacity">
         Start Free Trial
       </button>
@@ -49,9 +49,9 @@ Your task: generate a **CTA (Call-to-Action) section** that creates urgency and 
     type="email"
     placeholder="Enter your email"
     className="flex-1 px-4 py-3 rounded-lg border border-border bg-background
-               focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+               focus:outline-none focus:border-accent transition-colors"
   />
-  <button className="px-6 py-3 rounded-lg bg-[var(--color-accent)] text-[var(--color-accent-foreground,#000)]
+  <button className="px-6 py-3 rounded-lg bg-accent text-accent-foreground
                      font-semibold whitespace-nowrap hover:opacity-90 transition-opacity">
     Get Early Access
   </button>
@@ -89,3 +89,4 @@ Only use this if the design system has a vibrant, energetic aesthetic.
 - Urgency copy must match the page theme (Halloween event ≠ "Start Free Trial")
 - All text is realistic and on-brand
 - Import `useState` and use controlled input if email capture pattern is used
+- **ALWAYS** output `"use client"` as the very first line — every section component must be a Client Component

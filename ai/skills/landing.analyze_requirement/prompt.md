@@ -30,23 +30,34 @@ Output a single valid JSON object — no markdown, no explanation, no code block
 
 ## Section Types
 
-Choose from these types (use only what makes sense for the page):
-- `hero` — Main opening section with headline and CTA (always required)
-- `features` — Key features or benefits grid
-- `stats` — Social proof numbers or key metrics
-- `testimonials` — Customer quotes and reviews
-- `pricing` — Pricing tiers or packages
-- `faq` — Frequently asked questions accordion
-- `cta` — Mid-page or bottom call-to-action banner
-- `gallery` — Image showcase or portfolio grid
-- `team` — Team members or organizers
-- `timeline` — Schedule, process steps, or roadmap
-- `newsletter` — Email signup section
-- `footer` — Page footer with links and copyright (always required)
+You are NOT limited to a fixed list. Invent any section type that best serves the page's content and conversion goal. Use a concise lowercase noun or noun phrase as the `type` value.
+
+Common types for reference (treat as examples, not constraints):
+- `navigation` — sticky top nav bar with logo and links
+- `hero` — main opening section with headline and CTA
+- `features` — key features or benefits grid
+- `stats` — social proof numbers or key metrics
+- `testimonials` — customer quotes and reviews
+- `pricing` — pricing tiers or packages
+- `faq` — frequently asked questions accordion
+- `cta` — mid-page or bottom call-to-action banner
+- `gallery` — image showcase or portfolio grid
+- `team` — team members or organizers
+- `timeline` — schedule, process steps, or event program
+- `newsletter` — email signup section
+- `comparison` — side-by-side comparison table
+- `video` — video embed with surrounding context
+- `map` — location map and venue info
+- `sponsors` — sponsor/partner logo grid
+- `awards` — achievements, certifications, press mentions
+- `process` — step-by-step how-it-works section
+- `footer` — page footer with links and copyright
+
+When none of the above fit, create an appropriate type name (e.g. `countdown`, `leaderboard`, `product_demo`, `case_studies`, `integration_logos`).
 
 ## Rules
 
-- Include between 3 and 7 sections (always start with `hero`, always end with `footer`)
+- Include between 4 and 8 sections (always start with `navigation`, then `hero`, always end with `footer`)
 - Each `fileName` must be PascalCase ending with "Section" (e.g. `HeroSection`, `FeaturesSection`, `CtaSection`)
 - `designIntent.keywords` should be 5–8 visual/emotional adjectives
 - Be specific in `contentHints` — describe actual UI elements, not just topics

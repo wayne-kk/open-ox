@@ -7,7 +7,7 @@
 
 ### Spacing
 - Section padding: py-16 to py-24
-- Container: max-w-6xl or max-w-7xl, mx-auto, px-4 sm:px-6
+- Container: container, mx-auto, px-4 sm:px-6
 - Gaps: gap-4, gap-6, gap-8 for grids
 
 ### Colors

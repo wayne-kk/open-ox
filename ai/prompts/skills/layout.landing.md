@@ -14,7 +14,7 @@ Generate a full landing page layout that composes multiple sections.
 
 - Single column, full width
 - Sections separated by py-16 or py-24
-- Consistent max-width container (max-w-6xl or max-w-7xl)
+- Consistent max-width container (container)
 - Sticky or fixed header optional
 
 ## Responsive

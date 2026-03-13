@@ -54,6 +54,7 @@ destructive:      #xxxxxx  // Description
 ### Typography
 
 **Font Stack** (use Google Fonts only):
+- **Display**: `"FontName", fallback` — [rationale]
 - **Headings**: `"FontName", fallback` — [rationale]
 - **Body**: `"FontName", fallback` — [rationale]
 - **Accent/Labels**: `"FontName", fallback` — [rationale]
@@ -152,7 +153,6 @@ All buttons use: [shared properties]
 
 ## 4. Layout Strategy
 
-**Max-Width**: [value and rationale]
 
 **Grid Patterns**:
 - [Section type]: [grid description]

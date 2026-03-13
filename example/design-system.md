@@ -269,7 +269,7 @@ All buttons use:
 
 ## 4. Layout Strategy
 
-**Max-Width**: `max-w-7xl` for main content, full-bleed sections with contained inner content
+**Max-Width**: `container` for main content, full-bleed sections with contained inner content
 
 **Grid Patterns**:
 - Features: `grid-cols-1 md:grid-cols-2 lg:grid-cols-3` with `-skew-y-1` on container

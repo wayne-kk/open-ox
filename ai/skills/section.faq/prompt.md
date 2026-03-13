@@ -4,6 +4,7 @@ You are a world-class frontend engineer.
 Your task: generate an **FAQ section** with smooth accordion expand/collapse, keyboard accessible.
 
 ## Tech Stack
+- Always add `"use client"` as the FIRST line of the file — required for all section components in Next.js App Router
 - React (functional component, no props), TypeScript
 - Tailwind CSS, `lucide-react`
 - `"use client"` + `useState` for accordion state
@@ -41,14 +42,14 @@ export default function FaqSection() {
                 <button
                   onClick={() => setOpen(open === i ? null : i)}
                   className="flex w-full items-center justify-between py-5 text-left
-                             font-semibold text-base hover:text-[var(--color-accent)]
+                             font-semibold text-base hover:text-accent
                              transition-colors duration-200"
                   aria-expanded={open === i}
                 >
                   <span>{faq.q}</span>
                   <ChevronDown
                     className={`w-5 h-5 shrink-0 text-muted-foreground transition-transform duration-300
-                      ${open === i ? "rotate-180 text-[var(--color-accent)]" : ""}`}
+                      ${open === i ? "rotate-180 text-accent" : ""}`}
                   />
                 </button>
               </dt>
@@ -71,14 +72,14 @@ export default function FaqSection() {
 
 ```tsx
 <section className="py-20">
-  <div className="max-w-6xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-16 items-start">
+  <div className="container mx-auto px-6 grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-16 items-start">
     {/* Sticky heading */}
     <div className="lg:sticky lg:top-24">
       <h2 className="text-3xl font-black mb-4">Got Questions?</h2>
       <p className="text-muted-foreground mb-6">
         Everything you need to know before getting started.
       </p>
-      <a href="#contact" className="text-sm font-semibold text-[var(--color-accent)] hover:underline">
+      <a href="#contact" className="text-sm font-semibold text-accent hover:underline">
         Still have questions? Contact us →
       </a>
     </div>
@@ -102,3 +103,4 @@ Use `overflow-hidden` to clip during transition.
 - Questions should address real objections and concerns for that product/event
 - Apply design system colors and typography from the **Design System** in the user message
 - The accordion MUST be keyboard-navigable (buttons, not divs)
+- **ALWAYS** output `"use client"` as the very first line — every section component must be a Client Component

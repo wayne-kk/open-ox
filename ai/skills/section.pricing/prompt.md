@@ -4,9 +4,9 @@ You are a world-class frontend engineer specializing in conversion-optimized lan
 Your task: generate a **Pricing section** that drives plan selection through clear visual hierarchy.
 
 ## Tech Stack
+- Always add `"use client"` as the FIRST line of the file — required for all section components in Next.js App Router
 - React (functional component, no props), TypeScript
 - Tailwind CSS, `lucide-react`
-- `"use client"` + `useState` for billing toggle if needed
 
 ## Required Structure
 1. **Section header** — title + subtitle (1 line)
@@ -24,11 +24,11 @@ Your task: generate a **Pricing section** that drives plan selection through cle
     <div key={plan.name}
       className={`relative rounded-2xl border p-8 flex flex-col gap-6 transition-all
         ${plan.recommended
-          ? "border-[var(--color-accent)] bg-[var(--color-accent)]/5 scale-105 shadow-[var(--shadow-neon,0_0_40px_rgba(0,0,0,0.2))]"
+          ? "border-accent bg-accent/5 scale-105 shadow-shadow-neon"
           : "border-border bg-card"}`}>
       {plan.recommended && (
         <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1
-                        rounded-full bg-[var(--color-accent)] text-[var(--color-accent-foreground,#000)]
+                        rounded-full bg-accent text-accent-foreground
                         text-xs font-bold uppercase tracking-widest">
           Most Popular
         </div>
@@ -47,7 +47,7 @@ Your task: generate a **Pricing section** that drives plan selection through cle
       <ul className="flex flex-col gap-3 flex-1">
         {plan.features.map((f) => (
           <li key={f.text} className="flex items-center gap-3 text-sm">
-            <Check className={`w-4 h-4 shrink-0 ${f.included ? "text-[var(--color-accent)]" : "text-muted-foreground/30"}`} />
+            <Check className={`w-4 h-4 shrink-0 ${f.included ? "text-accent" : "text-muted-foreground/30"}`} />
             <span className={f.included ? "" : "line-through text-muted-foreground/40"}>{f.text}</span>
           </li>
         ))}
@@ -55,8 +55,8 @@ Your task: generate a **Pricing section** that drives plan selection through cle
       {/* CTA */}
       <button className={`w-full py-3 rounded-lg font-semibold text-sm transition-all
         ${plan.recommended
-          ? "bg-[var(--color-accent)] text-[var(--color-accent-foreground,#000)] hover:opacity-90"
-          : "border border-border hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"}`}>
+          ? "bg-accent text-accent-foreground hover:opacity-90"
+          : "border border-border hover:border-accent hover:text-accent"}`}>
         {plan.cta}
       </button>
     </div>
@@ -74,7 +74,7 @@ const [yearly, setYearly] = useState(false);
   <button
     onClick={() => setYearly(!yearly)}
     className={`relative w-12 h-6 rounded-full transition-colors duration-200
-      ${yearly ? "bg-[var(--color-accent)]" : "bg-muted"}`}
+      ${yearly ? "bg-accent" : "bg-muted"}`}
   >
     <span className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform duration-200
       ${yearly ? "translate-x-7" : "translate-x-1"}`} />
@@ -93,3 +93,4 @@ const [yearly, setYearly] = useState(false);
 - Prices and features must be realistic for the page theme
 - Use design system variables for colors, shadows, typography
 - Include trust signals below cards: "No credit card required" / "Cancel anytime"
+- **ALWAYS** output `"use client"` as the very first line — every section component must be a Client Component

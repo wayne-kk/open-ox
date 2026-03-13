@@ -1,18 +1,16 @@
 /**
  * AI API - POST /api/ai
  *
- * 默认 Agent 模式（Tool-calling）: LLM 自主选择并调用 skills
+ * build_site 模式返回 text/event-stream (SSE)，每个 step 完成立即推送：
+ *   data: {"type":"step", ...BuildStep}\n\n
+ *   data: {"type":"done", "result": ProcessResult}\n\n
+ *   data: {"type":"error", "message": string}\n\n
  *
- * Body: {
- *   input: string,
- *   mode?: "agent" | "code_agent" | "skill" | "flow",
- *   skill?: string,   // skill 模式
- *   flow?: string,    // flow 模式
- *   memory?: string,
- * }
+ * 其他模式返回普通 JSON。
  */
 
 import { processInput } from "@/ai";
+import type { BuildStep } from "@/ai/flows/build_landing_page";
 import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
@@ -27,6 +25,45 @@ export async function POST(req: Request) {
       );
     }
 
+    // ── SSE streaming for build_site ──────────────────────────────────────
+    if (mode === "build_site") {
+      const encoder = new TextEncoder();
+
+      const stream = new ReadableStream({
+        async start(controller) {
+          const send = (obj: Record<string, unknown>) => {
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify(obj)}\n\n`)
+            );
+          };
+
+          try {
+            const result = await processInput(input, {
+              mode: "build_site",
+              onStep: (step: BuildStep) => send({ type: "step", ...step }),
+            });
+            send({ type: "done", result });
+          } catch (err) {
+            send({
+              type: "error",
+              message: err instanceof Error ? err.message : "Internal error",
+            });
+          } finally {
+            controller.close();
+          }
+        },
+      });
+
+      return new Response(stream, {
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        },
+      });
+    }
+
+    // ── Regular JSON for other modes ─────────────────────────────────────
     const result = await processInput(input, {
       mode: mode ?? undefined,
       skill: skill ?? undefined,

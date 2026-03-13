@@ -10,7 +10,7 @@ import { runCodeAgent } from "./agent/codeAgentExecutor";
 import { routeIntent } from "./router";
 import { runSkill } from "./executor/runSkill";
 import { runWorkflow } from "./executor/workflowEngine";
-import { flows, runBuildLandingPage } from "./flows";
+import { runBuildLandingPage } from "./flows";
 import type { AgentOptions } from "./agent/agentExecutor";
 
 export interface ProcessInputOptions extends AgentOptions {
@@ -18,8 +18,10 @@ export interface ProcessInputOptions extends AgentOptions {
   mode?: "agent" | "code_agent" | "skill" | "flow" | "build_site";
   /** 强制指定 skill（skill 模式） */
   skill?: string;
-  /** 使用预定义 flow（flow 模式） */
-  flow?: keyof typeof flows;
+  /** 使用预定义 flow 名称（flow 模式） */
+  flow?: string;
+  /** build_site 模式：每个步骤完成时的回调（用于 SSE 流式推送） */
+  onStep?: (step: import("./flows/build_landing_page").BuildStep) => void;
 }
 
 export interface ProcessResult {
@@ -41,7 +43,8 @@ export interface ProcessResult {
   /** build_site 模式: 生成的文件列表 */
   generatedFiles?: string[];
   /** build_site 模式: 各步执行状态 */
-  buildSteps?: Array<{ step: string; status: "ok" | "error"; detail?: string }>;
+  buildSteps?: import("./flows/build_landing_page").BuildStep[];
+  buildTotalDuration?: number;
 }
 
 /**
@@ -57,13 +60,14 @@ export async function processInput(
     (options.flow ? "flow" : options.skill ? "skill" : "agent");
 
   if (mode === "build_site") {
-    const result = await runBuildLandingPage(userInput);
+    const result = await runBuildLandingPage(userInput, options.onStep);
     return {
       content: result.success
         ? `建站完成。生成了 ${result.generatedFiles.length} 个文件：\n${result.generatedFiles.join("\n")}`
         : `建站失败：${result.error}`,
       generatedFiles: result.generatedFiles,
       buildSteps: result.steps,
+      buildTotalDuration: result.totalDuration,
     };
   }
 
@@ -99,15 +103,8 @@ export async function processInput(
     };
   }
 
-  if (mode === "flow" && options.flow) {
-    const flow = flows[options.flow];
-    if (!flow) throw new Error(`Flow not found: ${options.flow}`);
-    const result = await runWorkflow(flow, userInput);
-    return {
-      content: result.finalOutput,
-      skill: options.flow,
-      steps: result.steps.map((s) => ({ skill: s.skill, output: s.output })),
-    };
+  if (mode === "flow") {
+    throw new Error("Flow mode: no flows registered. Use build_site mode for landing page generation.");
   }
 
   // mode === "skill" 或显式指定 skill
