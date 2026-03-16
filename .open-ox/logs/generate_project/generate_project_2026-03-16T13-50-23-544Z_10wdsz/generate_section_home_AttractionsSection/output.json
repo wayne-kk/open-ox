@@ -1,0 +1,85 @@
+{
+  "outputFileRelative": "components/sections/home_AttractionsSection.tsx",
+  "generatedFile": "components/sections/home_AttractionsSection.tsx",
+  "section": {
+    "type": "features",
+    "intent": "Highlight key attractions or promotion details.",
+    "contentHints": "Grid of cards (e.g., Haunted House, Costume Contest, Midnight Feast) with spooky icons and short descriptions.",
+    "fileName": "AttractionsSection",
+    "primaryRoleIds": [
+      "visitor"
+    ],
+    "supportingCapabilityIds": [
+      "thematic-immersion"
+    ],
+    "sourceTaskLoopIds": [
+      "visitor-conversion-loop"
+    ],
+    "designPlan": {
+      "role": "Value proposition detailer",
+      "goal": "Showcase the specific benefits or attractions of the event",
+      "roleFit": "Answers the Visitor's question: 'What do I get?'",
+      "taskLoopFocus": "Review attractions step of the conversion loop",
+      "capabilityFocus": "Thematic immersion through custom icons and card styling",
+      "informationArchitecture": "3-column grid of feature cards",
+      "layoutIntent": "Clean grid with ample spacing",
+      "visualIntent": "Cards with subtle glowing borders and thematic icons (ghosts, bats, pumpkins)",
+      "interactionIntent": "Hover effects that 'lift' the card or intensify the glow",
+      "contentStrategy": "Descriptive, evocative titles paired with short, benefit-driven copy",
+      "hierarchy": [
+        "Section Heading",
+        "Feature Titles",
+        "Feature Icons"
+      ],
+      "guardrailIds": [
+        "section.core"
+      ],
+      "capabilityAssistIds": [
+        "pattern.features.grid",
+        "effect.motion.subtle"
+      ],
+      "constraints": [
+        "Icons must be consistent in style",
+        "Grid must stack on mobile"
+      ],
+      "rationale": "A grid layout allows for quick scanning of multiple attractions, keeping the visitor engaged."
+    }
+  },
+  "pageContext": {
+    "title": "Halloween Promotion Home",
+    "slug": "home",
+    "description": "The main landing page designed to immerse users in the Halloween spirit and drive conversions.",
+    "journeyStage": "entry",
+    "primaryRoleIds": [
+      "visitor"
+    ],
+    "supportingCapabilityIds": [
+      "thematic-immersion",
+      "lead-capture"
+    ],
+    "pageDesignPlan": {
+      "pageGoal": "The main landing page designed to immerse users in the Halloween spirit and drive conversions.",
+      "audienceFocus": "Design for Visitor.",
+      "roleFit": "This page primarily serves Visitor.",
+      "capabilityFocus": "This page should make Thematic Visual Storytelling, Conversion Engine understandable and actionable.",
+      "taskLoopCoverage": "Help users progress through Event Registration Loop, Event Registration Loop, Event Registration Loop, Event Registration Loop, Event Registration Loop.",
+      "narrativeArc": "Move from orientation to persuasion, then social proof, and finish with a decisive conversion close.",
+      "layoutStrategy": "Use section rhythm, spacing, and contrast to support the entry stage of the user journey rather than making every block equally loud.",
+      "hierarchy": [
+        "The first viewport should establish context and value quickly.",
+        "Mid-page sections should deepen trust or explain the offer.",
+        "Lower-page sections should reduce friction and reinforce action."
+      ],
+      "transitionStrategy": "Make transitions feel intentional through spacing, contrast shifts, and restrained motion rather than decorative separators.",
+      "sharedShellNotes": [
+        "Assume global layout sections frame the page experience.",
+        "Keep page-specific sections visually coherent with the shared shell."
+      ],
+      "constraints": [
+        "Preserve the given section order unless a wrapper or grouping is required for coherence.",
+        "Avoid repetitive section pacing; vary density and emphasis across the page."
+      ],
+      "rationale": "Default page planner framed Halloween Promotion Home around role needs and the MVP journey rather than isolated sections."
+    }
+  }
+}

@@ -1,30 +1,16 @@
 /**
- * System Tools - 网站生成 Agent 常用工具聚合
- * 这里只负责聚合各独立工具的 definition + executor
+ * System Tools - 网站生成流程使用的工具执行入口
  */
-
-import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import type { ToolResult, ToolExecutor } from "./types";
 
-import { writeFileTool, executeWriteFile } from "./system/writeFileTool";
-import { readFileTool, executeReadFile } from "./system/readFileTool";
-import { execShellTool, executeExecShell } from "./system/execShellTool";
-import { listDirTool, executeListDir } from "./system/listDirTool";
-import { searchCodeTool, executeSearchCode } from "./system/searchCodeTool";
-import { installPackageTool, executeInstallPackage } from "./system/installPackageTool";
-import { formatCodeTool, executeFormatCode } from "./system/formatCodeTool";
-import { runBuildTool, executeRunBuild } from "./system/runBuildTool";
-
-export const systemTools: ChatCompletionTool[] = [
-  writeFileTool,
-  readFileTool,
-  execShellTool,
-  listDirTool,
-  searchCodeTool,
-  installPackageTool,
-  formatCodeTool,
-  runBuildTool,
-];
+import { executeWriteFile } from "./system/writeFileTool";
+import { executeReadFile } from "./system/readFileTool";
+import { executeExecShell } from "./system/execShellTool";
+import { executeListDir } from "./system/listDirTool";
+import { executeSearchCode } from "./system/searchCodeTool";
+import { executeInstallPackage } from "./system/installPackageTool";
+import { executeFormatCode } from "./system/formatCodeTool";
+import { executeRunBuild } from "./system/runBuildTool";
 
 const executors: Record<string, ToolExecutor> = {
   write_file: executeWriteFile,

@@ -1,2 +1,31 @@
-export { runBuildLandingPage } from "./build_landing_page";
-export type { BuildLandingPageResult, PageBlueprint, SectionSpec } from "./build_landing_page";
+export { runGenerateProject } from "./generate_project";
+export type {
+  AutoInstalledDependency,
+  BuildRepairResult,
+  BuildStep,
+  CapabilityPriority,
+  CapabilityAssistId,
+  CapabilitySpec,
+  DependencyInstallFailure,
+  DependencyInstallTrigger,
+  DesignIntent,
+  GuardrailId,
+  GenerateProjectResult,
+  InformationArchitecture,
+  PageBlueprint,
+  PageDesignPlan,
+  PageMapEntry,
+  PlannedPageBlueprint,
+  PlannedProjectBlueprint,
+  PlannedSectionSpec,
+  ProductScope,
+  ProjectBlueprint,
+  RepairWrite,
+  RolePriority,
+  SectionDesignPlan,
+  SectionSpec,
+  ShellPlacement,
+  TaskLoop,
+  UserRole,
+  VerificationStatus,
+} from "./generate_project";

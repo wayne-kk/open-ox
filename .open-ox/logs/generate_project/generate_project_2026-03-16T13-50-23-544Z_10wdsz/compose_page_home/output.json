@@ -1,0 +1,12 @@
+{
+  "pagePath": "app/page.tsx",
+  "slug": "home",
+  "title": "Halloween Promotion Home",
+  "sections": [
+    "HeroSection",
+    "CountdownSection",
+    "AttractionsSection",
+    "TicketTiersSection",
+    "RegistrationFormSection"
+  ]
+}

@@ -1,2 +1,2 @@
-export { systemTools, executeSystemTool } from "./systemTools";
+export { executeSystemTool } from "./systemTools";
 export type { ToolDefinition, ToolResult } from "./types";
