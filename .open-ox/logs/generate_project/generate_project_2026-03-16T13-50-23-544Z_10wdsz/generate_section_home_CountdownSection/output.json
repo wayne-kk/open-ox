@@ -1,0 +1,84 @@
+{
+  "outputFileRelative": "components/sections/home_CountdownSection.tsx",
+  "generatedFile": "components/sections/home_CountdownSection.tsx",
+  "section": {
+    "type": "countdown",
+    "intent": "Create FOMO and urgency for the event/offer.",
+    "contentHints": "Digital timer showing Days/Hours/Minutes/Seconds until Halloween night, styled with flickering neon lights.",
+    "fileName": "CountdownSection",
+    "primaryRoleIds": [
+      "visitor"
+    ],
+    "supportingCapabilityIds": [
+      "thematic-immersion"
+    ],
+    "sourceTaskLoopIds": [
+      "visitor-conversion-loop"
+    ],
+    "designPlan": {
+      "role": "Urgency driver",
+      "goal": "Create a sense of scarcity and time-sensitivity",
+      "roleFit": "Encourages the Visitor to act now rather than later",
+      "taskLoopFocus": "Urgency step in the conversion loop",
+      "capabilityFocus": "Thematic immersion through 'flickering neon' visual style",
+      "informationArchitecture": "Four-unit timer (Days, Hours, Minutes, Seconds) with labels",
+      "layoutIntent": "Full-width horizontal bar or centered block",
+      "visualIntent": "High-contrast neon green or orange on midnight purple",
+      "interactionIntent": "Real-time ticking animation",
+      "contentStrategy": "Short, urgent heading like 'The Haunting Begins In...'",
+      "hierarchy": [
+        "Timer Digits",
+        "Urgency Heading"
+      ],
+      "guardrailIds": [
+        "section.core",
+        "section.interactive"
+      ],
+      "capabilityAssistIds": [
+        "effect.motion.energetic"
+      ],
+      "constraints": [
+        "Timer must be accurate to system time",
+        "Must be legible on mobile"
+      ],
+      "rationale": "Urgency is a key psychological trigger for seasonal events; the neon style fits the 'modern gothic' aesthetic."
+    }
+  },
+  "pageContext": {
+    "title": "Halloween Promotion Home",
+    "slug": "home",
+    "description": "The main landing page designed to immerse users in the Halloween spirit and drive conversions.",
+    "journeyStage": "entry",
+    "primaryRoleIds": [
+      "visitor"
+    ],
+    "supportingCapabilityIds": [
+      "thematic-immersion",
+      "lead-capture"
+    ],
+    "pageDesignPlan": {
+      "pageGoal": "The main landing page designed to immerse users in the Halloween spirit and drive conversions.",
+      "audienceFocus": "Design for Visitor.",
+      "roleFit": "This page primarily serves Visitor.",
+      "capabilityFocus": "This page should make Thematic Visual Storytelling, Conversion Engine understandable and actionable.",
+      "taskLoopCoverage": "Help users progress through Event Registration Loop, Event Registration Loop, Event Registration Loop, Event Registration Loop, Event Registration Loop.",
+      "narrativeArc": "Move from orientation to persuasion, then social proof, and finish with a decisive conversion close.",
+      "layoutStrategy": "Use section rhythm, spacing, and contrast to support the entry stage of the user journey rather than making every block equally loud.",
+      "hierarchy": [
+        "The first viewport should establish context and value quickly.",
+        "Mid-page sections should deepen trust or explain the offer.",
+        "Lower-page sections should reduce friction and reinforce action."
+      ],
+      "transitionStrategy": "Make transitions feel intentional through spacing, contrast shifts, and restrained motion rather than decorative separators.",
+      "sharedShellNotes": [
+        "Assume global layout sections frame the page experience.",
+        "Keep page-specific sections visually coherent with the shared shell."
+      ],
+      "constraints": [
+        "Preserve the given section order unless a wrapper or grouping is required for coherence.",
+        "Avoid repetitive section pacing; vary density and emphasis across the page."
+      ],
+      "rationale": "Default page planner framed Halloween Promotion Home around role needs and the MVP journey rather than isolated sections."
+    }
+  }
+}
