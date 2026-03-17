@@ -4,11 +4,13 @@ import {
   loadCapabilityAssist,
   loadGuardrail,
   loadSectionPrompt,
-  loadSkillPrompt,
   loadSystem,
   writeSiteFile,
 } from "../shared/files";
-import { selectComponentSkillId } from "../selectors/componentSkillSelector";
+import {
+  stepSelectComponentSkills,
+  loadSelectedSkillPrompt,
+} from "./selectComponentSkills";
 import { selectSectionPromptId } from "../selectors/sectionPromptSelector";
 import { callLLM, extractContent } from "../shared/llm";
 import type {
@@ -44,6 +46,7 @@ type GenerateSectionProjectContext = {
     description: string;
     journeyStage: string;
   }>;
+  designKeywords: string[];
 };
 
 type GenerateSectionPageContext = {
@@ -94,22 +97,28 @@ function buildSectionPromptBlocks(sectionType: string) {
     .join("\n\n");
 }
 
-function buildComponentSkillBlock(
+async function buildComponentSkillBlock(
   section: PlannedSectionSpec,
-  productScope: ProductScope
-): string {
-  const skillId = selectComponentSkillId({ section, productScope });
-  return skillId ? loadSkillPrompt(skillId) : "";
+  productScope: ProductScope,
+  designKeywords: string[]
+): Promise<string> {
+  const result = await stepSelectComponentSkills({
+    section,
+    productScope,
+    designKeywords,
+  });
+  return loadSelectedSkillPrompt(result.id);
 }
 
-function buildSystemPrompt(params: {
+async function buildSystemPrompt(params: {
   section: PlannedSectionSpec;
   projectGuardrailIds: GuardrailId[];
   designPlan: PlannedSectionSpec["designPlan"];
   productScope: ProductScope;
+  designKeywords: string[];
 }) {
-  const { section, projectGuardrailIds, designPlan, productScope } = params;
-  const componentSkillBlock = buildComponentSkillBlock(section, productScope);
+  const { section, projectGuardrailIds, designPlan, productScope, designKeywords } = params;
+  const componentSkillBlock = await buildComponentSkillBlock(section, productScope, designKeywords);
 
   return [
     loadSystem("frontend"),
@@ -345,11 +354,12 @@ export async function stepGenerateSection({
   pageContext,
 }: GenerateSectionParams): Promise<string> {
   const designPlan = buildSectionDesignPlan(section, projectContext);
-  const systemPrompt = buildSystemPrompt({
+  const systemPrompt = await buildSystemPrompt({
     section,
     projectGuardrailIds,
     designPlan,
     productScope: projectContext.productScope,
+    designKeywords: projectContext.designKeywords ?? [],
   });
   const userMessage = buildUserMessage({
     designSystem,

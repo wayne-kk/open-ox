@@ -1,0 +1,86 @@
+{
+  "outputFileRelative": "components/sections/home_RegistrationSection.tsx",
+  "generatedFile": "components/sections/home_RegistrationSection.tsx",
+  "section": {
+    "type": "form",
+    "intent": "Final conversion point for registration.",
+    "contentHints": "Input fields with glowing borders: Name, Email, Cyber-Alias (Optional). Submit button with glitch hover effect.",
+    "fileName": "RegistrationSection",
+    "primaryRoleIds": [
+      "visitor"
+    ],
+    "supportingCapabilityIds": [
+      "registration-capture"
+    ],
+    "sourceTaskLoopIds": [
+      "registration-loop"
+    ],
+    "designPlan": {
+      "role": "Conversion engine",
+      "goal": "Collect user data with minimal friction and high thematic consistency.",
+      "roleFit": "The final action for the visitor to 'Secure a spot'.",
+      "taskLoopFocus": "The success state of the entire registration-loop.",
+      "capabilityFocus": "Implements the 'Lead Capture System' with validation.",
+      "informationArchitecture": "Single-column form with clear labels and a prominent submit button.",
+      "layoutIntent": "Centered, contained form box with a 'data-pad' aesthetic.",
+      "visualIntent": "Input fields with neon focus states and a 'Submit' button that looks like a system override.",
+      "interactionIntent": "Real-time validation feedback with 'system error' or 'access granted' styling.",
+      "contentStrategy": "Action-oriented labels and a clear success message upon submission.",
+      "hierarchy": [
+        "Form Heading",
+        "Input Fields",
+        "Submit Button"
+      ],
+      "guardrailIds": [
+        "section.core",
+        "section.interactive",
+        "section.accessibility"
+      ],
+      "capabilityAssistIds": [
+        "effect.motion.energetic"
+      ],
+      "constraints": [
+        "Form must be fully accessible to screen readers",
+        "Submit button must be the most prominent element"
+      ],
+      "rationale": "The form is the most critical part of the page; it must be visually exciting but functionally perfect."
+    }
+  },
+  "pageContext": {
+    "title": "Cyber-Night Halloween Home",
+    "slug": "home",
+    "description": "The main landing page for the cyberpunk Halloween event.",
+    "journeyStage": "entry",
+    "primaryRoleIds": [
+      "visitor"
+    ],
+    "supportingCapabilityIds": [
+      "event-info-display",
+      "registration-capture"
+    ],
+    "pageDesignPlan": {
+      "pageGoal": "The main landing page for the cyberpunk Halloween event.",
+      "audienceFocus": "Design for Potential Attendee.",
+      "roleFit": "This page primarily serves Potential Attendee.",
+      "capabilityFocus": "This page should make Immersive Event Information, Lead Capture System understandable and actionable.",
+      "taskLoopCoverage": "Help users progress through Event Registration Journey, Event Registration Journey, Event Registration Journey, Event Registration Journey, Event Registration Journey.",
+      "narrativeArc": "Move from orientation to persuasion, then social proof, and finish with a decisive conversion close.",
+      "layoutStrategy": "Use section rhythm, spacing, and contrast to support the entry stage of the user journey rather than making every block equally loud.",
+      "hierarchy": [
+        "The first viewport should establish context and value quickly.",
+        "Mid-page sections should deepen trust or explain the offer.",
+        "Lower-page sections should reduce friction and reinforce action."
+      ],
+      "transitionStrategy": "Make transitions feel intentional through spacing, contrast shifts, and restrained motion rather than decorative separators.",
+      "sharedShellNotes": [
+        "Assume global layout sections frame the page experience.",
+        "Keep page-specific sections visually coherent with the shared shell."
+      ],
+      "constraints": [
+        "Preserve the given section order unless a wrapper or grouping is required for coherence.",
+        "Avoid repetitive section pacing; vary density and emphasis across the page."
+      ],
+      "rationale": "Default page planner framed Cyber-Night Halloween Home around role needs and the MVP journey rather than isolated sections."
+    }
+  }
+}

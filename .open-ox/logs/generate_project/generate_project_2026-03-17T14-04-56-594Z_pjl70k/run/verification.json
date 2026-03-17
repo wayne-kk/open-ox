@@ -1,0 +1,19 @@
+{
+  "status": "failed",
+  "output": "Command failed: pnpm run build\n⚠ You are using a non-standard \"NODE_ENV\" value in your environment. This creates inconsistencies in the project and is strongly advised against. Read more: https://nextjs.org/docs/messages/non-standard-node-env\n⚠ Warning: Next.js inferred your workspace root, but it may not be correct.\n We detected multiple lockfiles and selected the directory of /Users/magic/coding/open-ox/pnpm-lock.yaml as the root directory.\n To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.\n   See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.\n Detected additional lockfiles: \n   * /Users/magic/coding/open-ox/sites/template/pnpm-lock.yaml\n\nEach child in a list should have a unique \"key\" prop.\n\nCheck the top-level render call using <__next_viewport_boundary__>. See https://react.dev/link/warning-keys for more information.\nEach child in a list should have a unique \"key\" prop.\n\nCheck the top-level render call using <M>. See https://react.dev/link/warning-keys for more information.\nEach child in a list should have a unique \"key\" prop.\n\nCheck the top-level render call using <meta>. See https://react.dev/link/warning-keys for more information.\nEach child in a list should have a unique \"key\" prop.\n\nCheck the top-level render call using <head>. See https://react.dev/link/warning-keys for more information.\nEach child in a list should have a unique \"key\" prop.\n\nCheck the top-level render call using <html>. See https://react.dev/link/warning-keys for more information.\nEach child in a list should have a unique \"key\" prop.\n\nCheck the top-level render call using <i>. See https://react.dev/link/warning-keys for more information.\nEach child in a list should have a unique \"key\" prop.\n\nCheck the top-level render call using <meta>. See https://react.dev/link/warning-keys for more information.\nEach child in a list should have a unique \"key\" prop.\n\nCheck the top-level render call using <head>. See https://react.dev/link/warning-keys for more information.\nEach child in a list should have a unique \"key\" prop.\n\nCheck the top-level render call using <html>. See https://react.dev/link/warning-keys for more information.\nEach child in a list should have a unique \"key\" prop.\n\nCheck the top-level render call using <i>. See https://react.dev/link/warning-keys for more information.\nEach child in a list should have a unique \"key\" prop.\n\nCheck the top-level render call using <meta>. See https://react.dev/link/warning-keys for more information.\nEach child in a list should have a unique \"key\" prop.\n\nCheck the top-level render call using <head>. See https://react.dev/link/warning-keys for more information.\nError occurred prerendering page \"/_global-error\". Read more: https://nextjs.org/docs/messages/prerender-error\nTypeError: Cannot read properties of null (reading 'useContext')\n    at ignore-listed frames {\n  digest: '2087546208'\n}\nExport encountered an error on /_global-error/page: /_global-error, exiting the build.\n⨯ Next.js build worker exited with code: 1 and signal: null\n",
+  "unvalidatedFiles": [
+    "design-system.md",
+    "app/globals.css",
+    "components/sections/layout_NavigationSection.tsx",
+    "components/sections/layout_FooterSection.tsx",
+    "app/layout.tsx",
+    "components/sections/home_HeroSection.tsx",
+    "components/sections/home_IntroSection.tsx",
+    "components/sections/home_HighlightsSection.tsx",
+    "components/sections/home_ScheduleSection.tsx",
+    "components/sections/home_RegistrationSection.tsx",
+    "app/page.tsx"
+  ],
+  "installedDependencies": [],
+  "dependencyInstallFailures": []
+}

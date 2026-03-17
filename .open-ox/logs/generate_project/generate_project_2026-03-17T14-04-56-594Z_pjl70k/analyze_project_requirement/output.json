@@ -1,0 +1,264 @@
+{
+  "brief": {
+    "projectTitle": "Cyber-Night Halloween 2024",
+    "projectDescription": "An immersive cyberpunk-themed Halloween event landing page designed to drive registrations through high-impact visuals and clear event logistics.",
+    "productScope": {
+      "productType": "landing page",
+      "mvpDefinition": "A single-page high-conversion landing site featuring event storytelling, visual highlights, a chronological schedule, and a lead-capture registration form.",
+      "coreOutcome": "Convert visitors into registered event attendees.",
+      "businessGoal": "Generate buzz and secure a high volume of sign-ups for the physical event.",
+      "audienceSummary": "Young adults (18-35), tech enthusiasts, and fans of cyberpunk aesthetics and nightlife.",
+      "inScope": [
+        "Cyberpunk visual theme implementation",
+        "Event introduction and storytelling",
+        "Feature highlights section",
+        "Interactive event schedule",
+        "Registration form with validation",
+        "Mobile-responsive layout"
+      ],
+      "outOfScope": [
+        "Ticket payment processing",
+        "User account management",
+        "Live attendee chat",
+        "QR code generation for entry"
+      ]
+    },
+    "roles": [
+      {
+        "roleId": "visitor",
+        "roleName": "Potential Attendee",
+        "summary": "A person interested in attending a unique Halloween experience.",
+        "goals": [
+          "Understand the event theme and value",
+          "Check the event timing and location",
+          "Secure a spot via registration"
+        ],
+        "coreActions": [
+          "Browse event highlights",
+          "Review the schedule",
+          "Submit registration form"
+        ],
+        "permissions": [
+          "View public content",
+          "Submit registration data"
+        ],
+        "priority": "primary"
+      }
+    ],
+    "taskLoops": [
+      {
+        "loopId": "registration-loop",
+        "roleId": "visitor",
+        "name": "Event Registration Journey",
+        "summary": "The path from landing on the page to completing the sign-up.",
+        "entryTrigger": "Visitor lands on the page via social media or ad link.",
+        "steps": [
+          "View hero section and event hook",
+          "Scroll through highlights and schedule",
+          "Navigate to the registration section",
+          "Fill out name, contact, and preferences",
+          "Submit form and view confirmation"
+        ],
+        "successState": "User sees a 'Registration Successful' message and data is captured.",
+        "relatedCapabilityIds": [
+          "event-info-display",
+          "registration-capture"
+        ]
+      }
+    ],
+    "capabilities": [
+      {
+        "capabilityId": "event-info-display",
+        "name": "Immersive Event Information",
+        "summary": "Displaying event details with cyberpunk visual effects.",
+        "primaryRoleIds": [
+          "visitor"
+        ],
+        "supportingTaskLoopIds": [
+          "registration-loop"
+        ],
+        "priority": "must-have"
+      },
+      {
+        "capabilityId": "registration-capture",
+        "name": "Lead Capture System",
+        "summary": "A secure form to collect attendee information.",
+        "primaryRoleIds": [
+          "visitor"
+        ],
+        "supportingTaskLoopIds": [
+          "registration-loop"
+        ],
+        "priority": "must-have"
+      }
+    ]
+  },
+  "experience": {
+    "designIntent": {
+      "mood": [
+        "Futuristic",
+        "Gritty",
+        "Electric"
+      ],
+      "colorDirection": "Deep charcoal and obsidian backgrounds with high-contrast neon accents in magenta, cyan, and acid green.",
+      "style": "Cyberpunk 2077 inspired aesthetic with glitch effects, glowing borders, and industrial typography.",
+      "keywords": [
+        "Neon",
+        "Glitch",
+        "Dystopian-chic",
+        "High-tech",
+        "Nightlife",
+        "Immersive"
+      ]
+    }
+  },
+  "site": {
+    "informationArchitecture": {
+      "navigationModel": "Single-page scroll with anchor navigation.",
+      "pageMap": [
+        {
+          "slug": "home",
+          "title": "Cyber-Night Halloween",
+          "purpose": "Primary landing and conversion point.",
+          "primaryRoleIds": [
+            "visitor"
+          ],
+          "supportingCapabilityIds": [
+            "event-info-display",
+            "registration-capture"
+          ],
+          "journeyStage": "entry"
+        }
+      ],
+      "sharedShells": [
+        "Neon Navigation Bar",
+        "Cyber-Footer"
+      ],
+      "notes": [
+        "The page uses smooth scrolling to navigate between sections."
+      ]
+    },
+    "layoutSections": [
+      {
+        "type": "navigation",
+        "intent": "Provide quick access to event details and registration.",
+        "contentHints": "Logo (glitch style), Links: Intro, Highlights, Schedule, CTA: 'REGISTER NOW'.",
+        "fileName": "NavigationSection",
+        "primaryRoleIds": [
+          "visitor"
+        ],
+        "supportingCapabilityIds": [
+          "event-info-display"
+        ],
+        "sourceTaskLoopIds": [
+          "registration-loop"
+        ]
+      },
+      {
+        "type": "footer",
+        "intent": "Legal info and social links.",
+        "contentHints": "Social media icons (neon), Privacy Policy link, Event location address, Copyright.",
+        "fileName": "FooterSection",
+        "primaryRoleIds": [
+          "visitor"
+        ],
+        "supportingCapabilityIds": [
+          "event-info-display"
+        ],
+        "sourceTaskLoopIds": []
+      }
+    ],
+    "pages": [
+      {
+        "title": "Cyber-Night Halloween Home",
+        "slug": "home",
+        "description": "The main landing page for the cyberpunk Halloween event.",
+        "journeyStage": "entry",
+        "primaryRoleIds": [
+          "visitor"
+        ],
+        "supportingCapabilityIds": [
+          "event-info-display",
+          "registration-capture"
+        ],
+        "sections": [
+          {
+            "type": "hero",
+            "intent": "Immediate visual hook and event identity.",
+            "contentHints": "Animated background (neon rain/cityscape), H1: 'CYBER-HALLOWEEN 2024', Subtitle: 'Enter the Matrix of the Dead', Primary CTA: 'JOIN THE GRID'.",
+            "fileName": "HeroSection",
+            "primaryRoleIds": [
+              "visitor"
+            ],
+            "supportingCapabilityIds": [
+              "event-info-display"
+            ],
+            "sourceTaskLoopIds": [
+              "registration-loop"
+            ]
+          },
+          {
+            "type": "content",
+            "intent": "Introduce the event story and theme.",
+            "contentHints": "Narrative text about a futuristic ghost story, 'The Glitch in the Afterlife' theme description.",
+            "fileName": "IntroSection",
+            "primaryRoleIds": [
+              "visitor"
+            ],
+            "supportingCapabilityIds": [
+              "event-info-display"
+            ],
+            "sourceTaskLoopIds": [
+              "registration-loop"
+            ]
+          },
+          {
+            "type": "features",
+            "intent": "Showcase unique selling points.",
+            "contentHints": "Grid of cards: Neon Costume Contest, VR Ghost Hunt, Synthwave DJ Set, Cyber-Cocktail Bar.",
+            "fileName": "HighlightsSection",
+            "primaryRoleIds": [
+              "visitor"
+            ],
+            "supportingCapabilityIds": [
+              "event-info-display"
+            ],
+            "sourceTaskLoopIds": [
+              "registration-loop"
+            ]
+          },
+          {
+            "type": "schedule",
+            "intent": "Provide the event timeline.",
+            "contentHints": "Vertical timeline with neon glowing nodes: 20:00 Doors Open, 21:30 AI Ritual, 23:00 Costume Battle, 01:00 Midnight Glitch.",
+            "fileName": "ScheduleSection",
+            "primaryRoleIds": [
+              "visitor"
+            ],
+            "supportingCapabilityIds": [
+              "event-info-display"
+            ],
+            "sourceTaskLoopIds": [
+              "registration-loop"
+            ]
+          },
+          {
+            "type": "form",
+            "intent": "Final conversion point for registration.",
+            "contentHints": "Input fields with glowing borders: Name, Email, Cyber-Alias (Optional). Submit button with glitch hover effect.",
+            "fileName": "RegistrationSection",
+            "primaryRoleIds": [
+              "visitor"
+            ],
+            "supportingCapabilityIds": [
+              "registration-capture"
+            ],
+            "sourceTaskLoopIds": [
+              "registration-loop"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
