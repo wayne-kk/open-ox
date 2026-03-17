@@ -13,6 +13,7 @@ export interface ProcessResult {
   content: string;
   /** 生成的文件列表 */
   generatedFiles?: string[];
+  blueprint?: import("./flows").PlannedProjectBlueprint;
   verificationStatus?: import("./flows").VerificationStatus;
   unvalidatedFiles?: string[];
   installedDependencies?: import("./flows").AutoInstalledDependency[];
@@ -56,6 +57,7 @@ export async function processInput(
   return {
     content: result.success ? buildProcessContent(result) : `项目生成失败：${result.error}`,
     generatedFiles: result.generatedFiles,
+    blueprint: result.blueprint,
     verificationStatus: result.verificationStatus,
     unvalidatedFiles: result.unvalidatedFiles,
     installedDependencies: result.installedDependencies,
@@ -82,8 +84,12 @@ export type {
   PageBlueprint,
   PageDesignPlan,
   PageMapEntry,
+  PlannedProjectBlueprint,
+  ProjectBrief,
   ProductScope,
   ProjectBlueprint,
+  ProjectExperience,
+  ProjectSiteBlueprint,
   RolePriority,
   SectionDesignPlan,
   SectionSpec,

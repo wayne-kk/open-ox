@@ -37,23 +37,26 @@ function dedupeSectionsByFileName(sections: SectionSpec[]): SectionSpec[] {
 
 function normalizeBlueprint(blueprint: ProjectBlueprint): ProjectBlueprint {
   const layoutSections =
-    blueprint.layoutSections.length > 0
-      ? dedupeSectionsByFileName(blueprint.layoutSections)
+    blueprint.site.layoutSections.length > 0
+      ? dedupeSectionsByFileName(blueprint.site.layoutSections)
       : dedupeSectionsByFileName(
-          blueprint.pages
+          blueprint.site.pages
             .flatMap((page) => page.sections)
             .filter((section) => isLayoutSection(section.type))
         );
 
-  const pages = blueprint.pages.map((page) => ({
+  const pages = blueprint.site.pages.map((page) => ({
     ...page,
     sections: page.sections.filter((section) => !isLayoutSection(section.type)),
   }));
 
   return {
     ...blueprint,
-    layoutSections,
-    pages,
+    site: {
+      ...blueprint.site,
+      layoutSections,
+      pages,
+    },
   };
 }
 
@@ -134,12 +137,18 @@ function createInitialResult(logger: StepLogger): GenerateProjectResult {
 
 function buildProjectRuntimeContext(blueprint: PlannedProjectBlueprint): ProjectRuntimeContext {
   return {
-    projectTitle: blueprint.projectTitle,
-    projectDescription: blueprint.projectDescription,
-    productScope: blueprint.productScope,
-    roles: blueprint.roles,
-    taskLoops: blueprint.taskLoops,
-    capabilities: blueprint.capabilities,
+    projectTitle: blueprint.brief.projectTitle,
+    projectDescription: blueprint.brief.projectDescription,
+    productScope: blueprint.brief.productScope,
+    roles: blueprint.brief.roles,
+    taskLoops: blueprint.brief.taskLoops,
+    capabilities: blueprint.brief.capabilities,
+    pages: blueprint.site.pages.map((page) => ({
+      slug: page.slug,
+      title: page.title,
+      description: page.description,
+      journeyStage: page.journeyStage,
+    })),
     projectGuardrailIds: blueprint.projectGuardrailIds,
   };
 }
@@ -228,55 +237,64 @@ async function autoInstallDependenciesForFiles(params: {
   const uniqueFiles = Array.from(new Set(files));
 
   logger.startStep(stepName);
-  if (uniqueFiles.length === 0) {
-    logger.logStep(stepName, "ok", "no generated files to inspect");
-    await persistJsonArtifact(artifactLogger, stepName, "output", {
-      files: [],
-      installed: [],
-      failed: [],
+  try {
+    if (uniqueFiles.length === 0) {
+      logger.logStep(stepName, "ok", "no generated files to inspect");
+      await persistJsonArtifact(artifactLogger, stepName, "output", {
+        files: [],
+        installed: [],
+        failed: [],
+      });
+      return;
+    }
+
+    const installResult = await stepInstallDependencies({
+      files: uniqueFiles,
+      buildOutput,
     });
-    return;
-  }
+    appendInstalledDependencies(result, installResult.installed);
+    appendDependencyInstallFailures(result, installResult.failed);
 
-  const installResult = await stepInstallDependencies({
-    files: uniqueFiles,
-    buildOutput,
-  });
-  appendInstalledDependencies(result, installResult.installed);
-  appendDependencyInstallFailures(result, installResult.failed);
+    const detailParts: string[] = [];
+    if (installResult.installed.length > 0) {
+      detailParts.push(
+        `installed ${installResult.installed.map((item) => item.packageName).join(", ")}`
+      );
+    }
+    if (installResult.failed.length > 0) {
+      detailParts.push(
+        `failed ${installResult.failed.map((item) => item.packageName).join(", ")}`
+      );
+    }
+    if (installResult.skipped.length > 0) {
+      detailParts.push(
+        `skipped ${installResult.skipped.map((item) => item.packageName).join(", ")}`
+      );
+    }
+    if (detailParts.length === 0) {
+      detailParts.push(installResult.summary);
+    }
 
-  const detailParts: string[] = [];
-  if (installResult.installed.length > 0) {
-    detailParts.push(
-      `installed ${installResult.installed.map((item) => item.packageName).join(", ")}`
+    logger.logStep(
+      stepName,
+      installResult.failed.length > 0 ? "error" : "ok",
+      detailParts.join("; ")
     );
+    await persistJsonArtifact(artifactLogger, stepName, "output", {
+      files: uniqueFiles,
+      summary: installResult.summary,
+      installed: installResult.installed,
+      failed: installResult.failed,
+      skipped: installResult.skipped,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.logStep(stepName, "error", message);
+    await persistJsonArtifact(artifactLogger, stepName, "error", {
+      files: uniqueFiles,
+      error: message,
+    });
   }
-  if (installResult.failed.length > 0) {
-    detailParts.push(
-      `failed ${installResult.failed.map((item) => item.packageName).join(", ")}`
-    );
-  }
-  if (installResult.skipped.length > 0) {
-    detailParts.push(
-      `skipped ${installResult.skipped.map((item) => item.packageName).join(", ")}`
-    );
-  }
-  if (detailParts.length === 0) {
-    detailParts.push(installResult.summary);
-  }
-
-  logger.logStep(
-    stepName,
-    installResult.failed.length > 0 ? "error" : "ok",
-    detailParts.join("; ")
-  );
-  await persistJsonArtifact(artifactLogger, stepName, "output", {
-    files: uniqueFiles,
-    summary: installResult.summary,
-    installed: installResult.installed,
-    failed: installResult.failed,
-    skipped: installResult.skipped,
-  });
 }
 
 interface BuildLifecycleResult {
@@ -366,13 +384,13 @@ async function generateSharedLayoutSections(params: {
   logger: StepLogger;
 }): Promise<void> {
   const { blueprint, designSystem, runtimeContext, artifactLogger, result, logger } = params;
-  if (blueprint.layoutSections.length === 0) {
+  if (blueprint.site.layoutSections.length === 0) {
     return;
   }
 
   const generatedFiles = await runSectionBatch({
     batchLabel: "layout",
-    items: blueprint.layoutSections.map((section) => ({
+    items: blueprint.site.layoutSections.map((section) => ({
       scopeKey: "layout",
       section,
       outputFileRelative: buildSectionFilePath("layout", section.fileName),
@@ -386,14 +404,14 @@ async function generateSharedLayoutSections(params: {
 
   const layoutPath = await logger.timed(
     "compose_layout",
-    () => stepComposeLayout(blueprint.layoutSections, blueprint),
+    () => stepComposeLayout(blueprint.site.layoutSections, blueprint),
     (path) => path ?? "layout unchanged"
   );
   if (layoutPath) {
     appendGeneratedFiles(result, [layoutPath]);
     await persistJsonArtifact(artifactLogger, "compose_layout", "output", {
       layoutPath,
-      layoutSections: blueprint.layoutSections.map((section) => section.fileName),
+      layoutSections: blueprint.site.layoutSections.map((section) => section.fileName),
     });
     await persistSiteFileArtifact(artifactLogger, "compose_layout", layoutPath, "layout");
   }
@@ -409,7 +427,7 @@ async function generatePages(params: {
 }): Promise<void> {
   const { blueprint, designSystem, runtimeContext, artifactLogger, result, logger } = params;
 
-  for (const page of blueprint.pages) {
+  for (const page of blueprint.site.pages) {
     const generatedFiles = await runSectionBatch({
       batchLabel: `page ${page.slug}`,
       items: page.sections.map((section) => ({
@@ -552,7 +570,7 @@ export async function runGenerateProject(
     const rawBlueprint = await logger.timed(
       "analyze_project_requirement",
       () => stepAnalyzeProjectRequirement(userInput),
-      (blueprint) => `${blueprint.roles.length} roles, ${blueprint.pages.length} pages planned`
+      (blueprint) => `${blueprint.brief.roles.length} roles, ${blueprint.site.pages.length} pages planned`
     );
     await persistJsonArtifact(artifactLogger, "analyze_project_requirement", "output", rawBlueprint);
     const normalizedBlueprint = normalizeBlueprint(rawBlueprint);

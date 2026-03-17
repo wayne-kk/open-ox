@@ -90,7 +90,7 @@ ${readSiteFile(path)}
   ].join("");
 
   const userMessage = `## Project
-${blueprint.projectTitle}
+${blueprint.brief.projectTitle}
 
 ## Build Failure
 \`\`\`

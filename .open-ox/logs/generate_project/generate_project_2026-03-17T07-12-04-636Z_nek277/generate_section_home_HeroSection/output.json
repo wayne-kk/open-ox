@@ -1,0 +1,86 @@
+{
+  "outputFileRelative": "components/sections/home_HeroSection.tsx",
+  "generatedFile": "components/sections/home_HeroSection.tsx",
+  "section": {
+    "type": "hero",
+    "intent": "Immediate visual impact using acid graphics and the main headline.",
+    "contentHints": "Warped H1 text, 3D floating chrome pumpkin/skull, animated grain background, main 'Enter the Void' CTA.",
+    "fileName": "HeroSection",
+    "primaryRoleIds": [
+      "visitor"
+    ],
+    "supportingCapabilityIds": [
+      "visual-storytelling"
+    ],
+    "sourceTaskLoopIds": [
+      "visitor-conversion-loop"
+    ],
+    "designPlan": {
+      "role": "Page opener and value proposition anchor",
+      "goal": "Hook the user instantly with a 'trippy' and high-energy visual statement.",
+      "roleFit": "The Event Seeker immediately recognizes the 'vibe' they are looking for.",
+      "taskLoopFocus": "The first step of the conversion journey: landing and engagement.",
+      "capabilityFocus": "Primary showcase for distorted typography and chrome textures.",
+      "informationArchitecture": "Centered headline, floating 3D asset, primary CTA button.",
+      "layoutIntent": "Full-screen centered layout with depth created by overlapping elements.",
+      "visualIntent": "Maximalist, high-contrast, using neon green and grainy black.",
+      "interactionIntent": "Parallax movement on the 3D asset; hover effects on the CTA.",
+      "contentStrategy": "Short, punchy, and evocative copy ('Enter the Void').",
+      "hierarchy": [
+        "Warped Headline",
+        "3D Chrome Asset",
+        "Primary CTA"
+      ],
+      "guardrailIds": [
+        "section.core",
+        "section.above-fold"
+      ],
+      "capabilityAssistIds": [
+        "pattern.hero.centered",
+        "effect.motion.energetic"
+      ],
+      "constraints": [
+        "Headline must remain readable despite distortion",
+        "CTA must pop against the background"
+      ],
+      "rationale": "The hero section sets the entire aesthetic tone and establishes the 'Acid Halloween' brand identity."
+    }
+  },
+  "pageContext": {
+    "title": "Acid Halloween Experience",
+    "slug": "home",
+    "description": "The main immersive landing page for the Halloween event.",
+    "journeyStage": "entry",
+    "primaryRoleIds": [
+      "visitor"
+    ],
+    "supportingCapabilityIds": [
+      "visual-storytelling",
+      "conversion-engine"
+    ],
+    "pageDesignPlan": {
+      "pageGoal": "The main immersive landing page for the Halloween event.",
+      "audienceFocus": "Design for Event Seeker.",
+      "roleFit": "This page primarily serves Event Seeker.",
+      "capabilityFocus": "This page should make Acid Aesthetic Narrative, Direct Conversion Flow understandable and actionable.",
+      "taskLoopCoverage": "Help users progress through Quick Conversion Journey, Quick Conversion Journey, Quick Conversion Journey.",
+      "narrativeArc": "Move from orientation to persuasion, then social proof, and finish with a decisive conversion close.",
+      "layoutStrategy": "Use section rhythm, spacing, and contrast to support the entry stage of the user journey rather than making every block equally loud.",
+      "hierarchy": [
+        "The first viewport should establish context and value quickly.",
+        "Mid-page sections should deepen trust or explain the offer.",
+        "Lower-page sections should reduce friction and reinforce action."
+      ],
+      "transitionStrategy": "Make transitions feel intentional through spacing, contrast shifts, and restrained motion rather than decorative separators.",
+      "sharedShellNotes": [
+        "Assume global layout sections frame the page experience.",
+        "Keep page-specific sections visually coherent with the shared shell."
+      ],
+      "constraints": [
+        "Preserve the given section order unless a wrapper or grouping is required for coherence.",
+        "Avoid repetitive section pacing; vary density and emphasis across the page."
+      ],
+      "rationale": "Default page planner framed Acid Halloween Experience around role needs and the MVP journey rather than isolated sections."
+    }
+  }
+}

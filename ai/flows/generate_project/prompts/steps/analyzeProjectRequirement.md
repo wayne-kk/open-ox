@@ -14,103 +14,109 @@ Output a single valid JSON object. Do not include markdown, code fences, or expl
 
 ```json
 {
-  "projectTitle": "Human-readable website/project title",
-  "projectDescription": "One sentence summarizing the website goal, audience, and scope",
-  "productScope": {
-    "productType": "landing page / company website / content platform / dashboard / marketplace / internal system / etc.",
-    "mvpDefinition": "What the smallest coherent first version includes",
-    "coreOutcome": "What this MVP must successfully help users accomplish",
-    "businessGoal": "Why the business wants this MVP",
-    "audienceSummary": "Who the MVP is primarily for",
-    "inScope": ["What is definitely included in the MVP"],
-    "outOfScope": ["What is explicitly not included yet"]
-  },
-  "roles": [
-    {
-      "roleId": "visitor",
-      "roleName": "Visitor",
-      "summary": "Who this role is",
-      "goals": ["What this role wants"],
-      "coreActions": ["What this role does"],
-      "permissions": ["What access this role has"],
-      "priority": "primary"
-    }
-  ],
-  "taskLoops": [
-    {
-      "loopId": "visitor-core-loop",
-      "roleId": "visitor",
-      "name": "Visitor core journey",
-      "summary": "Smallest complete task loop for this role",
-      "entryTrigger": "What starts the loop",
-      "steps": ["Step 1", "Step 2", "Step 3"],
-      "successState": "What counts as a completed loop",
-      "relatedCapabilityIds": ["core-conversion"]
-    }
-  ],
-  "capabilities": [
-    {
-      "capabilityId": "core-conversion",
-      "name": "Core conversion flow",
-      "summary": "What the product must enable",
-      "primaryRoleIds": ["visitor"],
-      "supportingTaskLoopIds": ["visitor-core-loop"],
-      "priority": "must-have"
-    }
-  ],
-  "informationArchitecture": {
-    "navigationModel": "How the site/app should be organized at a high level",
-    "pageMap": [
+  "brief": {
+    "projectTitle": "Human-readable website/project title",
+    "projectDescription": "One sentence summarizing the website goal, audience, and scope",
+    "productScope": {
+      "productType": "landing page / company website / content platform / dashboard / marketplace / internal system / etc.",
+      "mvpDefinition": "What the smallest coherent first version includes",
+      "coreOutcome": "What this MVP must successfully help users accomplish",
+      "businessGoal": "Why the business wants this MVP",
+      "audienceSummary": "Who the MVP is primarily for",
+      "inScope": ["What is definitely included in the MVP"],
+      "outOfScope": ["What is explicitly not included yet"]
+    },
+    "roles": [
       {
-        "slug": "home",
-        "title": "Home",
-        "purpose": "Why this page exists in the product logic",
-        "primaryRoleIds": ["visitor"],
-        "supportingCapabilityIds": ["core-conversion"],
-        "journeyStage": "entry / evaluation / action / retention / support / admin"
+        "roleId": "visitor",
+        "roleName": "Visitor",
+        "summary": "Who this role is",
+        "goals": ["What this role wants"],
+        "coreActions": ["What this role does"],
+        "permissions": ["What access this role has"],
+        "priority": "primary"
       }
     ],
-    "sharedShells": ["Global navigation", "Global footer"],
-    "notes": ["High-level IA notes"]
+    "taskLoops": [
+      {
+        "loopId": "visitor-core-loop",
+        "roleId": "visitor",
+        "name": "Visitor core journey",
+        "summary": "Smallest complete task loop for this role",
+        "entryTrigger": "What starts the loop",
+        "steps": ["Step 1", "Step 2", "Step 3"],
+        "successState": "What counts as a completed loop",
+        "relatedCapabilityIds": ["core-conversion"]
+      }
+    ],
+    "capabilities": [
+      {
+        "capabilityId": "core-conversion",
+        "name": "Core conversion flow",
+        "summary": "What the product must enable",
+        "primaryRoleIds": ["visitor"],
+        "supportingTaskLoopIds": ["visitor-core-loop"],
+        "priority": "must-have"
+      }
+    ]
   },
-  "designIntent": {
-    "mood": ["mood keyword 1", "mood keyword 2", "mood keyword 3"],
-    "colorDirection": "Specific description of color palette",
-    "style": "Concise visual style",
-    "keywords": ["visual", "personality", "keywords", "for", "designer"]
-  },
-  "layoutSections": [
-    {
-      "type": "navigation",
-      "intent": "What the global navigation should communicate",
-      "contentHints": "Logo, page links, CTA button, mobile menu behavior, etc.",
-      "fileName": "NavigationSection",
-      "primaryRoleIds": ["visitor"],
-      "supportingCapabilityIds": ["core-conversion"],
-      "sourceTaskLoopIds": ["visitor-core-loop"]
+  "experience": {
+    "designIntent": {
+      "mood": ["mood keyword 1", "mood keyword 2", "mood keyword 3"],
+      "colorDirection": "Specific description of color palette",
+      "style": "Concise visual style",
+      "keywords": ["visual", "personality", "keywords", "for", "designer"]
     }
-  ],
-  "pages": [
-    {
-      "title": "Human-readable page title",
-      "slug": "home",
-      "description": "One sentence describing this page goal and target audience",
-      "journeyStage": "entry",
-      "primaryRoleIds": ["visitor"],
-      "supportingCapabilityIds": ["core-conversion"],
-      "sections": [
+  },
+  "site": {
+    "informationArchitecture": {
+      "navigationModel": "How the site/app should be organized at a high level",
+      "pageMap": [
         {
-          "type": "hero",
-          "intent": "What this section communicates",
-          "contentHints": "Concrete UI/content hints",
-          "fileName": "HeroSection",
+          "slug": "home",
+          "title": "Home",
+          "purpose": "Why this page exists in the product logic",
           "primaryRoleIds": ["visitor"],
           "supportingCapabilityIds": ["core-conversion"],
-          "sourceTaskLoopIds": ["visitor-core-loop"]
+          "journeyStage": "entry / evaluation / action / retention / support / admin"
         }
-      ]
-    }
-  ]
+      ],
+      "sharedShells": ["Global navigation", "Global footer"],
+      "notes": ["High-level IA notes"]
+    },
+    "layoutSections": [
+      {
+        "type": "navigation",
+        "intent": "What the global navigation should communicate",
+        "contentHints": "Logo, page links, CTA button, mobile menu behavior, etc.",
+        "fileName": "NavigationSection",
+        "primaryRoleIds": ["visitor"],
+        "supportingCapabilityIds": ["core-conversion"],
+        "sourceTaskLoopIds": ["visitor-core-loop"]
+      }
+    ],
+    "pages": [
+      {
+        "title": "Human-readable page title",
+        "slug": "home",
+        "description": "One sentence describing this page goal and target audience",
+        "journeyStage": "entry",
+        "primaryRoleIds": ["visitor"],
+        "supportingCapabilityIds": ["core-conversion"],
+        "sections": [
+          {
+            "type": "hero",
+            "intent": "What this section communicates",
+            "contentHints": "Concrete UI/content hints",
+            "fileName": "HeroSection",
+            "primaryRoleIds": ["visitor"],
+            "supportingCapabilityIds": ["core-conversion"],
+            "sourceTaskLoopIds": ["visitor-core-loop"]
+          }
+        ]
+      }
+    ]
+  }
 }
 ```
 

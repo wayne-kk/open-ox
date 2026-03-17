@@ -1,0 +1,11 @@
+{
+  "pagePath": "app/page.tsx",
+  "slug": "home",
+  "title": "Acid Halloween Experience",
+  "sections": [
+    "HeroSection",
+    "UrgencySection",
+    "LineupSection",
+    "ConversionSection"
+  ]
+}

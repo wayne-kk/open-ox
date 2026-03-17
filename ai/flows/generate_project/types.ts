@@ -130,24 +130,41 @@ export interface PlannedPageBlueprint extends Omit<PageBlueprint, "sections"> {
   sections: PlannedSectionSpec[];
 }
 
-export interface ProjectBlueprint {
+export interface ProjectBrief {
   projectTitle: string;
   projectDescription: string;
   productScope: ProductScope;
   roles: UserRole[];
   taskLoops: TaskLoop[];
   capabilities: CapabilitySpec[];
-  informationArchitecture: InformationArchitecture;
+}
+
+export interface ProjectExperience {
   designIntent: DesignIntent;
+}
+
+export interface ProjectSiteBlueprint {
+  informationArchitecture: InformationArchitecture;
   layoutSections: SectionSpec[];
   pages: PageBlueprint[];
 }
 
-export interface PlannedProjectBlueprint
-  extends Omit<ProjectBlueprint, "layoutSections" | "pages"> {
-  projectGuardrailIds: GuardrailId[];
+export interface ProjectBlueprint {
+  brief: ProjectBrief;
+  experience: ProjectExperience;
+  site: ProjectSiteBlueprint;
+}
+
+export interface PlannedProjectSiteBlueprint
+  extends Omit<ProjectSiteBlueprint, "layoutSections" | "pages"> {
   layoutSections: PlannedSectionSpec[];
   pages: PlannedPageBlueprint[];
+}
+
+export interface PlannedProjectBlueprint
+  extends Omit<ProjectBlueprint, "site"> {
+  projectGuardrailIds: GuardrailId[];
+  site: PlannedProjectSiteBlueprint;
 }
 
 export interface BuildStep {

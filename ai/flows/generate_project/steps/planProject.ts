@@ -67,25 +67,25 @@ export async function stepPlanProject(
 ): Promise<PlannedProjectBlueprint> {
   const defaultPlan = buildDefaultProjectPlan(blueprint);
   const systemPrompt = [loadStepPrompt("planProject"), "\n\n", loadGuardrail("outputJson")].join("");
-  const rolesSummary = blueprint.roles
+  const rolesSummary = blueprint.brief.roles
     .map(
       (role) =>
         `- ${role.roleName} (${role.roleId})\n  - Summary: ${role.summary}\n  - Goals: ${role.goals.join(" | ")}\n  - Core Actions: ${role.coreActions.join(" | ")}`
     )
     .join("\n");
-  const loopSummary = blueprint.taskLoops
+  const loopSummary = blueprint.brief.taskLoops
     .map(
       (loop) =>
         `- ${loop.name} (${loop.loopId})\n  - Role: ${loop.roleId}\n  - Trigger: ${loop.entryTrigger}\n  - Steps: ${loop.steps.join(" -> ")}\n  - Success: ${loop.successState}`
     )
     .join("\n");
-  const capabilitySummary = blueprint.capabilities
+  const capabilitySummary = blueprint.brief.capabilities
     .map(
       (capability) =>
         `- ${capability.name} (${capability.capabilityId})\n  - Summary: ${capability.summary}\n  - Roles: ${capability.primaryRoleIds.join(", ") || "none"}\n  - Priority: ${capability.priority}`
     )
     .join("\n");
-  const pageMapSummary = blueprint.informationArchitecture.pageMap
+  const pageMapSummary = blueprint.site.informationArchitecture.pageMap
     .map(
       (page) =>
         `- ${page.title} (${page.slug})\n  - Purpose: ${page.purpose}\n  - Roles: ${page.primaryRoleIds.join(", ") || "none"}\n  - Capabilities: ${page.supportingCapabilityIds.join(", ") || "none"}\n  - Journey Stage: ${page.journeyStage}`
@@ -96,13 +96,13 @@ export async function stepPlanProject(
 ${JSON.stringify(blueprint, null, 2)}
 
 ## Product Scope
-- Product Type: ${blueprint.productScope.productType}
-- MVP Definition: ${blueprint.productScope.mvpDefinition}
-- Core Outcome: ${blueprint.productScope.coreOutcome}
-- Business Goal: ${blueprint.productScope.businessGoal}
-- Audience Summary: ${blueprint.productScope.audienceSummary}
-- In Scope: ${blueprint.productScope.inScope.join(" | ")}
-- Out Of Scope: ${blueprint.productScope.outOfScope.join(" | ") || "none"}
+- Product Type: ${blueprint.brief.productScope.productType}
+- MVP Definition: ${blueprint.brief.productScope.mvpDefinition}
+- Core Outcome: ${blueprint.brief.productScope.coreOutcome}
+- Business Goal: ${blueprint.brief.productScope.businessGoal}
+- Audience Summary: ${blueprint.brief.productScope.audienceSummary}
+- In Scope: ${blueprint.brief.productScope.inScope.join(" | ")}
+- Out Of Scope: ${blueprint.brief.productScope.outOfScope.join(" | ") || "none"}
 
 ## Roles
 ${rolesSummary}
@@ -114,9 +114,9 @@ ${loopSummary}
 ${capabilitySummary || "- none"}
 
 ## Information Architecture
-- Navigation Model: ${blueprint.informationArchitecture.navigationModel}
-- Shared Shells: ${blueprint.informationArchitecture.sharedShells.join(" | ")}
-- Notes: ${blueprint.informationArchitecture.notes.join(" | ") || "none"}
+- Navigation Model: ${blueprint.site.informationArchitecture.navigationModel}
+- Shared Shells: ${blueprint.site.informationArchitecture.sharedShells.join(" | ")}
+- Notes: ${blueprint.site.informationArchitecture.notes.join(" | ") || "none"}
 
 ## Page Map
 ${pageMapSummary}
@@ -195,23 +195,29 @@ ${pageMapSummary}
     return {
       ...defaultPlan,
       projectGuardrailIds: parsed.projectGuardrailIds,
-      layoutSections: mergeSectionPlans(defaultPlan.layoutSections, parsed.layoutSections),
-      pages: defaultPlan.pages.map((page) => {
-        const incomingPage = Array.isArray(parsed.pages)
-          ? parsed.pages.find(
+      site: {
+        ...defaultPlan.site,
+        layoutSections: mergeSectionPlans(
+          defaultPlan.site.layoutSections,
+          parsed.site?.layoutSections
+        ),
+        pages: defaultPlan.site.pages.map((page) => {
+          const incomingPage = Array.isArray(parsed.site?.pages)
+            ? parsed.site.pages.find(
               (candidate) =>
                 candidate &&
                 typeof candidate === "object" &&
                 (candidate as { slug?: unknown }).slug === page.slug
             )
-          : undefined;
+            : undefined;
 
-        return {
-          ...page,
-          pageDesignPlan: mergePageDesignPlan(page.pageDesignPlan, incomingPage),
-          sections: mergeSectionPlans(page.sections, incomingPage?.sections),
-        };
-      }),
+          return {
+            ...page,
+            pageDesignPlan: mergePageDesignPlan(page.pageDesignPlan, incomingPage),
+            sections: mergeSectionPlans(page.sections, incomingPage?.sections),
+          };
+        }),
+      },
     };
   } catch {
     return defaultPlan;

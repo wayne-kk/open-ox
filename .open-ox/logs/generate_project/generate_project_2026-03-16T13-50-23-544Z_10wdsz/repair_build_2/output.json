@@ -1,9 +1,0 @@
-{
-  "success": true,
-  "output": "Replaced 'styled-jsx' with standard React style tags using 'dangerouslySetInnerHTML' to resolve build errors in Server and Client components.",
-  "touchedFiles": [
-    "components/sections/home_CountdownSection.tsx",
-    "components/sections/home_TicketTiersSection.tsx",
-    "components/sections/home_RegistrationFormSection.tsx"
-  ]
-}

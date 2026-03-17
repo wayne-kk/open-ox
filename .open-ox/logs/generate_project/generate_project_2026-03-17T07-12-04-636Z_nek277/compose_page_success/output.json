@@ -1,0 +1,8 @@
+{
+  "pagePath": "app/success/page.tsx",
+  "slug": "success",
+  "title": "You're In",
+  "sections": [
+    "SuccessMessageSection"
+  ]
+}

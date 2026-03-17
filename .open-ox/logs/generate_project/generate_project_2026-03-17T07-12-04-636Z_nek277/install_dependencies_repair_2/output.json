@@ -1,0 +1,22 @@
+{
+  "files": [
+    "components/sections/home_UrgencySection.tsx"
+  ],
+  "summary": "Verified that all imported third-party packages (react, framer-motion, lucide-react) are already present in package.json; the reported build error is a TypeScript type mismatch in framer-motion usage, not a missing dependency.",
+  "installed": [],
+  "failed": [],
+  "skipped": [
+    {
+      "packageName": "framer-motion",
+      "reason": "Already present in package.json"
+    },
+    {
+      "packageName": "lucide-react",
+      "reason": "Already present in package.json"
+    },
+    {
+      "packageName": "react",
+      "reason": "Already present in package.json"
+    }
+  ]
+}
