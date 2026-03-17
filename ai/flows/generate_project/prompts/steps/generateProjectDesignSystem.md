@@ -70,16 +70,22 @@ destructive:      #xxxxxx  // Description
 
 **Font Stack** (use Google Fonts only):
 - **Display**: `"FontName", fallback` — [rationale]
-- **Headings**: `"FontName", fallback` — [rationale]
+- **Header**: `"FontName", fallback` — [rationale]
 - **Body**: `"FontName", fallback` — [rationale]
-- **Accent/Labels**: `"FontName", fallback` — [rationale]
+- **Label**: `"FontName", fallback` — [rationale]
+
+Typography roles are strict:
+- **Display** is only for hero wordmarks, mastheads, or singular high-impact text.
+- **Header** is the default font for semantic headings `h1`-`h3`.
+- **Body** is for paragraph copy and long-form reading.
+- **Label** is for badges, eyebrow text, metadata, button labels, form labels, and other compact UI text.
 
 **Scale & Styling**:
 - H1: [tailwind classes], [text transform], [tracking]
 - H2: [tailwind classes], [text transform], [tracking]
 - H3: [tailwind classes]
 - Body: [tailwind classes]
-- Labels/Code: [tailwind classes]
+- Labels: [tailwind classes]
 
 ### Radius & Border
 
@@ -246,6 +252,9 @@ All buttons use: [shared properties]
 
 - [Tailwind-specific implementation tips]
 - [CSS variable usage notes]
+- All shared typography, `@keyframes`, textures, and special effects must live in `app/globals.css`.
+- Section components must consume global font/effect utilities instead of redefining them locally.
+- Do not rely on `styled-jsx`, component-scoped `<style>` tags, or in-component `@font-face`.
 - [Performance considerations]
 - [Any special setup required]
 
@@ -257,6 +266,10 @@ All buttons use: [shared properties]
 - All fonts must be from Google Fonts.
 - All CSS variable names use `--` prefix and kebab-case.
 - Tailwind custom class names use realistic, idiomatic naming.
+- The design system must define semantic font roles that can map cleanly to
+  `font-display`, `font-header`, `font-body`, and `font-label`.
+- Assume reusable animations and visual effects will be implemented globally,
+  not with component-local `styled-jsx`.
 - Be opinionated and specific. Avoid vague descriptions like "use nice colors".
 - The document must be detailed enough that a developer can implement it without asking questions.
 - Output only the Markdown document.

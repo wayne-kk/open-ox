@@ -24,9 +24,66 @@ interface BuildStep {
   duration: number;
 }
 
+interface PlannedProjectBlueprint {
+  brief: {
+    projectTitle: string;
+    projectDescription: string;
+    productScope: {
+      productType: string;
+      coreOutcome: string;
+      audienceSummary: string;
+    };
+    roles: Array<{
+      roleId: string;
+      roleName: string;
+    }>;
+    taskLoops: Array<{
+      loopId: string;
+      name: string;
+    }>;
+    capabilities: Array<{
+      capabilityId: string;
+      name: string;
+      priority: string;
+    }>;
+  };
+  experience: {
+    designIntent: {
+      mood: string[];
+      style: string;
+      colorDirection: string;
+      keywords: string[];
+    };
+  };
+  site: {
+    informationArchitecture: {
+      navigationModel: string;
+      pageMap: Array<{
+        slug: string;
+        title: string;
+        purpose: string;
+        journeyStage: string;
+      }>;
+    };
+    layoutSections: Array<{
+      fileName: string;
+      type: string;
+    }>;
+    pages: Array<{
+      slug: string;
+      title: string;
+      sections: Array<{
+        fileName: string;
+        type: string;
+      }>;
+    }>;
+  };
+}
+
 interface AiResponse {
   content: string;
   generatedFiles?: string[];
+  blueprint?: PlannedProjectBlueprint;
   verificationStatus?: "passed" | "failed";
   unvalidatedFiles?: string[];
   installedDependencies?: Array<{
@@ -75,6 +132,22 @@ function buildIndentedList(values: string[]): string {
   if (values.length === 0) return "";
 
   return values.map((value) => `  - ${value}`).join("\n");
+}
+
+function buildPageTree(
+  pages: PlannedProjectBlueprint["site"]["pages"]
+): string {
+  if (pages.length === 0) return "";
+
+  return pages
+    .map((page) => {
+      const sectionList =
+        page.sections.length > 0
+          ? page.sections.map((section) => `${section.fileName} <${section.type}>`).join(", ")
+          : "no sections";
+      return `  - ${page.title} (${page.slug})\n    ${sectionList}`;
+    })
+    .join("\n");
 }
 
 function TermLine({
@@ -581,6 +654,38 @@ export default function BuildStudioPage() {
                       </TermLine>
                       <pre className="mt-2 text-[11px] leading-6 text-muted-foreground">
                         {buildFileTree(response.generatedFiles)}
+                      </pre>
+                    </>
+                  ) : null}
+
+                  {response?.blueprint ? (
+                    <>
+                      <div className="my-3 border-t border-white/8" />
+                      <TermLine color="text-primary">
+                        blueprint.overview
+                      </TermLine>
+                      <pre className="mt-2 whitespace-pre-wrap text-[11px] leading-6 text-muted-foreground">
+                        {[
+                          `brief`,
+                          `  title: ${response.blueprint.brief.projectTitle}`,
+                          `  type: ${response.blueprint.brief.productScope.productType}`,
+                          `  audience: ${response.blueprint.brief.productScope.audienceSummary}`,
+                          `  outcome: ${response.blueprint.brief.productScope.coreOutcome}`,
+                          ``,
+                          `experience`,
+                          `  mood: ${response.blueprint.experience.designIntent.mood.join(", ") || "none"}`,
+                          `  style: ${response.blueprint.experience.designIntent.style}`,
+                          `  colors: ${response.blueprint.experience.designIntent.colorDirection}`,
+                          `  keywords: ${response.blueprint.experience.designIntent.keywords.join(", ") || "none"}`,
+                          ``,
+                          `site`,
+                          `  navigation: ${response.blueprint.site.informationArchitecture.navigationModel}`,
+                          `  layout sections: ${response.blueprint.site.layoutSections.map((section) => `${section.fileName} <${section.type}>`).join(", ") || "none"}`,
+                          `  pages: ${response.blueprint.site.pages.length}`,
+                          buildPageTree(response.blueprint.site.pages),
+                        ]
+                          .filter(Boolean)
+                          .join("\n")}
                       </pre>
                     </>
                   ) : null}

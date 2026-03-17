@@ -67,7 +67,7 @@ ${layoutSections
 4. Preserve ALL existing content: metadata, font setup, className on <html>/<body>, etc.
 5. Do not hardcode assumptions about only navigation/footer existing; respect the provided section list and order.
 6. Output ONLY the complete updated layout.tsx — no markdown fences, no explanation
-7. Project: ${blueprint.projectTitle}`;
+7. Project: ${blueprint.brief.projectTitle}`;
 
   const systemPrompt = [
     loadSystem("frontend"),

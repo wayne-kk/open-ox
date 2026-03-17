@@ -7,6 +7,9 @@ import type {
   PageMapEntry,
   ProductScope,
   ProjectBlueprint,
+  ProjectBrief,
+  ProjectExperience,
+  ProjectSiteBlueprint,
   SectionSpec,
   TaskLoop,
   UserRole,
@@ -50,7 +53,8 @@ function normalizeProductScope(value: unknown, projectDescription: string): Prod
     productType: typeof candidate.productType === "string" ? candidate.productType : "website",
     mvpDefinition:
       typeof candidate.mvpDefinition === "string" ? candidate.mvpDefinition : projectDescription,
-    coreOutcome: typeof candidate.coreOutcome === "string" ? candidate.coreOutcome : projectDescription,
+    coreOutcome:
+      typeof candidate.coreOutcome === "string" ? candidate.coreOutcome : projectDescription,
     businessGoal:
       typeof candidate.businessGoal === "string"
         ? candidate.businessGoal
@@ -237,7 +241,8 @@ function normalizePageBlueprint(value: unknown, index: number): PageBlueprint {
   const title = typeof candidate.title === "string" ? candidate.title : `Page ${index + 1}`;
   return {
     title,
-    slug: typeof candidate.slug === "string" ? candidate.slug : index === 0 ? "home" : `page-${index + 1}`,
+    slug:
+      typeof candidate.slug === "string" ? candidate.slug : index === 0 ? "home" : `page-${index + 1}`,
     description:
       typeof candidate.description === "string"
         ? candidate.description
@@ -252,38 +257,121 @@ function normalizePageBlueprint(value: unknown, index: number): PageBlueprint {
   };
 }
 
+function normalizeBrief(value: unknown): ProjectBrief {
+  if (!value || typeof value !== "object") {
+    throw new Error("analyze_project_requirement: brief is missing");
+  }
+
+  const candidate = value as Partial<ProjectBrief>;
+  if (
+    typeof candidate.projectTitle !== "string" ||
+    typeof candidate.projectDescription !== "string"
+  ) {
+    throw new Error(
+      "analyze_project_requirement: brief must include projectTitle and projectDescription"
+    );
+  }
+
+  const roles = normalizeRoles(candidate.roles);
+  return {
+    projectTitle: candidate.projectTitle,
+    projectDescription: candidate.projectDescription,
+    productScope: normalizeProductScope(candidate.productScope, candidate.projectDescription),
+    roles,
+    taskLoops: normalizeTaskLoops(candidate.taskLoops, roles),
+    capabilities: normalizeCapabilities(candidate.capabilities),
+  };
+}
+
+function normalizeExperience(value: unknown): ProjectExperience {
+  if (!value || typeof value !== "object") {
+    throw new Error("analyze_project_requirement: experience is missing");
+  }
+
+  const candidate = value as Partial<ProjectExperience>;
+  if (!candidate.designIntent) {
+    throw new Error("analyze_project_requirement: experience.designIntent is missing");
+  }
+
+  return {
+    designIntent: candidate.designIntent,
+  };
+}
+
+function normalizeSite(value: unknown): ProjectSiteBlueprint {
+  if (!value || typeof value !== "object") {
+    throw new Error("analyze_project_requirement: site is missing");
+  }
+
+  const candidate = value as Partial<ProjectSiteBlueprint>;
+  if (!Array.isArray(candidate.pages) || !isSectionSpecArray(candidate.layoutSections)) {
+    throw new Error("analyze_project_requirement: site must include layoutSections and pages");
+  }
+
+  const pages = candidate.pages.map((page, index) => normalizePageBlueprint(page, index));
+  return {
+    informationArchitecture: normalizeInformationArchitecture(candidate.informationArchitecture, pages),
+    layoutSections: candidate.layoutSections.map((section, index) =>
+      normalizeSectionSpec(section, index)
+    ),
+    pages,
+  };
+}
+
 function asProjectBlueprint(value: unknown): ProjectBlueprint {
   if (!value || typeof value !== "object") {
     throw new Error("analyze_project_requirement: output is not an object");
   }
 
   const candidate = value as Partial<ProjectBlueprint>;
-  if (
-    typeof candidate.projectTitle === "string" &&
-    typeof candidate.projectDescription === "string" &&
-    candidate.designIntent &&
-    isSectionSpecArray(candidate.layoutSections) &&
-    Array.isArray(candidate.pages)
-  ) {
-    const pages = candidate.pages.map((page, index) => normalizePageBlueprint(page, index));
-    const normalizedRoles = normalizeRoles(candidate.roles);
+  if (candidate.brief && candidate.experience && candidate.site) {
     return {
-      projectTitle: candidate.projectTitle,
-      projectDescription: candidate.projectDescription,
-      productScope: normalizeProductScope(candidate.productScope, candidate.projectDescription),
-      roles: normalizedRoles,
-      taskLoops: normalizeTaskLoops(candidate.taskLoops, normalizedRoles),
-      capabilities: normalizeCapabilities(candidate.capabilities),
-      informationArchitecture: normalizeInformationArchitecture(candidate.informationArchitecture, pages),
-      designIntent: candidate.designIntent,
-      layoutSections: candidate.layoutSections.map((section, index) =>
-        normalizeSectionSpec(section, index)
-      ),
-      pages,
+      brief: normalizeBrief(candidate.brief),
+      experience: normalizeExperience(candidate.experience),
+      site: normalizeSite(candidate.site),
     };
   }
 
-  const singlePage = value as Partial<PageBlueprint & { designIntent: ProjectBlueprint["designIntent"] }>;
+  const flatCandidate = value as {
+    projectTitle?: unknown;
+    projectDescription?: unknown;
+    productScope?: unknown;
+    roles?: unknown;
+    taskLoops?: unknown;
+    capabilities?: unknown;
+    informationArchitecture?: unknown;
+    designIntent?: unknown;
+    layoutSections?: unknown;
+    pages?: unknown;
+  };
+  if (
+    typeof flatCandidate.projectTitle === "string" &&
+    typeof flatCandidate.projectDescription === "string" &&
+    flatCandidate.designIntent &&
+    isSectionSpecArray(flatCandidate.layoutSections) &&
+    Array.isArray(flatCandidate.pages)
+  ) {
+    return {
+      brief: normalizeBrief({
+        projectTitle: flatCandidate.projectTitle,
+        projectDescription: flatCandidate.projectDescription,
+        productScope: flatCandidate.productScope,
+        roles: flatCandidate.roles,
+        taskLoops: flatCandidate.taskLoops,
+        capabilities: flatCandidate.capabilities,
+      }),
+      experience: normalizeExperience({
+        designIntent: flatCandidate.designIntent,
+      }),
+      site: normalizeSite({
+        informationArchitecture: flatCandidate.informationArchitecture,
+        layoutSections: flatCandidate.layoutSections,
+        pages: flatCandidate.pages,
+      }),
+    };
+  }
+
+  const singlePage = value as Partial<PageBlueprint & { designIntent: ProjectExperience["designIntent"] }>;
   if (
     typeof singlePage.title === "string" &&
     typeof singlePage.description === "string" &&
@@ -311,16 +399,22 @@ function asProjectBlueprint(value: unknown): ProjectBlueprint {
     ];
 
     return {
-      projectTitle: singlePage.title,
-      projectDescription: singlePage.description,
-      productScope: normalizeProductScope(undefined, singlePage.description),
-      roles: normalizedRoles,
-      taskLoops: normalizeTaskLoops(undefined, normalizedRoles),
-      capabilities: [],
-      informationArchitecture: normalizeInformationArchitecture(undefined, normalizedPages),
-      designIntent: singlePage.designIntent,
-      layoutSections: layoutSections.map((section, index) => normalizeSectionSpec(section, index)),
-      pages: normalizedPages,
+      brief: {
+        projectTitle: singlePage.title,
+        projectDescription: singlePage.description,
+        productScope: normalizeProductScope(undefined, singlePage.description),
+        roles: normalizedRoles,
+        taskLoops: normalizeTaskLoops(undefined, normalizedRoles),
+        capabilities: [],
+      },
+      experience: {
+        designIntent: singlePage.designIntent,
+      },
+      site: {
+        informationArchitecture: normalizeInformationArchitecture(undefined, normalizedPages),
+        layoutSections: layoutSections.map((section, index) => normalizeSectionSpec(section, index)),
+        pages: normalizedPages,
+      },
     };
   }
 

@@ -1,7 +1,0 @@
-{
-  "layoutPath": "app/layout.tsx",
-  "layoutSections": [
-    "NavigationSection",
-    "FooterSection"
-  ]
-}

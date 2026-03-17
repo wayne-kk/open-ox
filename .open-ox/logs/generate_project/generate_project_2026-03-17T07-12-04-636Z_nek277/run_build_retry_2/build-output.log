@@ -1,0 +1,26 @@
+Command failed: pnpm run build
+⚠ You are using a non-standard "NODE_ENV" value in your environment. This creates inconsistencies in the project and is strongly advised against. Read more: https://nextjs.org/docs/messages/non-standard-node-env
+⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of /Users/wangwei/coding/open-ox/pnpm-lock.yaml as the root directory.
+ To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+ Detected additional lockfiles: 
+   * /Users/wangwei/coding/open-ox/sites/template/pnpm-lock.yaml
+
+Failed to compile.
+
+./components/sections/layout_FooterSection.tsx:71:9
+Type error: Type '{ duration: number; repeat: number; ease: string; }' is not assignable to type 'Transition<any> | undefined'.
+  Type '{ duration: number; repeat: number; ease: string; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+    Type '{ duration: number; repeat: number; ease: string; }' is not assignable to type 'ValueAnimationTransition<any>'.
+      Types of property 'ease' are incompatible.
+        Type 'string' is not assignable to type 'Easing | Easing[] | undefined'.
+
+[0m [90m 69 |[39m           rotate[33m:[39m [[35m0[39m[33m,[39m [35m10[39m[33m,[39m [33m-[39m[35m10[39m[33m,[39m [35m0[39m][33m,[39m
+ [90m 70 |[39m         }}
+[31m[1m>[22m[39m[90m 71 |[39m         transition[33m=[39m{floatTransition}
+ [90m    |[39m         [31m[1m^[22m[39m
+ [90m 72 |[39m       [33m>[39m
+ [90m 73 |[39m         [33m<[39m[33mdiv[39m className[33m=[39m[32m"w-8 h-8 bg-[#2A2A2A] rounded-full relative"[39m[33m>[39m
+ [90m 74 |[39m           [33m<[39m[33mdiv[39m className[33m=[39m[32m"absolute top-2 left-1.5 w-2 h-2 bg-white rounded-full"[39m[33m>[39m[0m
+Next.js build worker exited with code: 1 and signal: null

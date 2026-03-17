@@ -293,26 +293,30 @@ export function buildDefaultProjectPlan(
   blueprint: ProjectBlueprint
 ): PlannedProjectBlueprint {
   const context: PlanningContext = {
-    roles: blueprint.roles,
-    taskLoops: blueprint.taskLoops,
-    capabilities: blueprint.capabilities,
-    designKeywords: blueprint.designIntent.keywords,
+    roles: blueprint.brief.roles,
+    taskLoops: blueprint.brief.taskLoops,
+    capabilities: blueprint.brief.capabilities,
+    designKeywords: blueprint.experience.designIntent.keywords,
   };
 
-  const layoutSections: PlannedSectionSpec[] = blueprint.layoutSections.map((section) =>
+  const layoutSections: PlannedSectionSpec[] = blueprint.site.layoutSections.map((section) =>
     planSection(section, context)
   );
 
-  const pages: PlannedPageBlueprint[] = blueprint.pages.map((page) => ({
+  const pages: PlannedPageBlueprint[] = blueprint.site.pages.map((page) => ({
     ...page,
     pageDesignPlan: buildDefaultPageDesignPlan(page, context),
     sections: page.sections.map((section) => planSection(section, context)),
   }));
 
   return {
-    ...blueprint,
+    brief: blueprint.brief,
+    experience: blueprint.experience,
     projectGuardrailIds: ["project.consistency", "project.accessibility"],
-    layoutSections,
-    pages,
+    site: {
+      informationArchitecture: blueprint.site.informationArchitecture,
+      layoutSections,
+      pages,
+    },
   };
 }
