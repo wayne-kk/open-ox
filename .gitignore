@@ -17,6 +17,9 @@
 /.next/
 /out/
 
+
+ .pnpm-store/
+
 # production
 /build
 

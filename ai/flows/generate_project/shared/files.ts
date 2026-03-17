@@ -29,6 +29,10 @@ export function getSectionPromptPath(promptId: string): string {
   return join(SECTION_PROMPTS_ROOT, `${promptId}.md`);
 }
 
+export function getSkillPromptsRoot(): string {
+  return SKILL_PROMPTS_ROOT;
+}
+
 export function getSkillPromptPath(promptId: string): string {
   return join(SKILL_PROMPTS_ROOT, `${promptId}.md`);
 }

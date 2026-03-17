@@ -1,0 +1,46 @@
+{
+  "outputFileRelative": "components/sections/layout_FooterSection.tsx",
+  "generatedFile": "components/sections/layout_FooterSection.tsx",
+  "section": {
+    "type": "footer",
+    "intent": "Legal info and social links.",
+    "contentHints": "Social media icons (neon), Privacy Policy link, Event location address, Copyright.",
+    "fileName": "FooterSection",
+    "primaryRoleIds": [
+      "visitor"
+    ],
+    "supportingCapabilityIds": [
+      "event-info-display"
+    ],
+    "sourceTaskLoopIds": [],
+    "designPlan": {
+      "role": "Information anchor",
+      "goal": "Provide final logistical details and social proof links.",
+      "roleFit": "Serves the visitor looking for physical location or social media validation.",
+      "taskLoopFocus": "Acts as the terminal point of the scroll journey.",
+      "capabilityFocus": "Displays static event info like address and social handles.",
+      "informationArchitecture": "Three-column layout: Brand/Social, Quick Links, Location/Legal.",
+      "layoutIntent": "Industrial, heavy-bottom layout with dark obsidian background.",
+      "visualIntent": "Gritty and utilitarian with subtle scan-line textures.",
+      "interactionIntent": "Standard link hovers with neon glow effects.",
+      "contentStrategy": "Clear, concise text with iconic social representation.",
+      "hierarchy": [
+        "Social Icons",
+        "Location Address",
+        "Legal Links"
+      ],
+      "guardrailIds": [
+        "section.core",
+        "section.accessibility"
+      ],
+      "capabilityAssistIds": [],
+      "constraints": [
+        "Use industrial/monospace fonts",
+        "Maintain high contrast for legal text"
+      ],
+      "shellPlacement": "afterPageContent",
+      "rationale": "The footer reinforces the gritty aesthetic while providing necessary logistical closure."
+    }
+  },
+  "pageContext": null
+}

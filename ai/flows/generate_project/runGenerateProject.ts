@@ -150,6 +150,7 @@ function buildProjectRuntimeContext(blueprint: PlannedProjectBlueprint): Project
       journeyStage: page.journeyStage,
     })),
     projectGuardrailIds: blueprint.projectGuardrailIds,
+    designKeywords: blueprint.experience.designIntent.keywords ?? [],
   };
 }
 

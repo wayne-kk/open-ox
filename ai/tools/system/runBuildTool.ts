@@ -31,6 +31,7 @@ export const executeRunBuild: ToolExecutor = async (
       cwd: SITE_ROOT,
       encoding: "utf-8",
       maxBuffer: 1024 * 1024,
+      env: { ...process.env, NODE_ENV: "production" },
     });
     return { success: true, output: output?.trim() ?? "" };
   } catch (err) {
