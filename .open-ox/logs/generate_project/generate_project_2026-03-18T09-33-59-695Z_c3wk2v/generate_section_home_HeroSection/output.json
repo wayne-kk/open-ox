@@ -1,0 +1,86 @@
+{
+  "outputFileRelative": "components/sections/home_HeroSection.tsx",
+  "generatedFile": "components/sections/home_HeroSection.tsx",
+  "section": {
+    "type": "hero",
+    "intent": "Immediate emotional immersion",
+    "contentHints": "Full-screen watercolor landscape video, floating title logo, 'Watch Trailer' play button.",
+    "fileName": "HeroSection",
+    "primaryRoleIds": [
+      "visitor"
+    ],
+    "supportingCapabilityIds": [
+      "visual-storytelling"
+    ],
+    "sourceTaskLoopIds": [
+      "discovery-to-ticket"
+    ],
+    "designPlan": {
+      "role": "Page opener and value proposition anchor",
+      "goal": "Transport the user into the film's world within seconds.",
+      "roleFit": "Immediately satisfies the visitor's goal to 'Experience the film's atmosphere'.",
+      "taskLoopFocus": "The 'View immersive hero animation' and 'Watch trailer' steps.",
+      "capabilityFocus": "Demonstrates the 'Immersive Visual Experience' capability through high-fidelity video.",
+      "informationArchitecture": "Centered title and primary action over a full-bleed background.",
+      "layoutIntent": "Centered editorial layout with minimal UI clutter.",
+      "visualIntent": "Cinematic, using a 'living painting' video background with soft ambient motion.",
+      "interactionIntent": "Large, inviting play button that opens a modal trailer.",
+      "contentStrategy": "Lead with the film's title and a poetic tagline.",
+      "hierarchy": [
+        "Film Title Logo",
+        "Watch Trailer Button",
+        "Scroll Indicator"
+      ],
+      "guardrailIds": [
+        "section.core",
+        "section.above-fold"
+      ],
+      "capabilityAssistIds": [
+        "pattern.hero.centered",
+        "effect.motion.ambient"
+      ],
+      "constraints": [
+        "Video must be muted and loop seamlessly",
+        "Title must be legible over moving video"
+      ],
+      "rationale": "A centered hero with ambient video is the most effective way to establish the Ghibli-esque 'sense of place'."
+    }
+  },
+  "pageContext": {
+    "title": "Home",
+    "slug": "home",
+    "description": "The main promotional gateway for the film.",
+    "journeyStage": "entry",
+    "primaryRoleIds": [
+      "visitor"
+    ],
+    "supportingCapabilityIds": [
+      "visual-storytelling",
+      "conversion-funnel"
+    ],
+    "pageDesignPlan": {
+      "pageGoal": "The main promotional gateway for the film.",
+      "audienceFocus": "Design for Potential Viewer.",
+      "roleFit": "This page primarily serves Potential Viewer.",
+      "capabilityFocus": "This page should make Immersive Visual Experience, Ticketing & Lead Gen understandable and actionable.",
+      "taskLoopCoverage": "Help users progress through Discovery to Conversion, Discovery to Conversion, Discovery to Conversion, Discovery to Conversion.",
+      "narrativeArc": "Move from orientation to persuasion, then social proof, and finish with a decisive conversion close.",
+      "layoutStrategy": "Use section rhythm, spacing, and contrast to support the entry stage of the user journey rather than making every block equally loud.",
+      "hierarchy": [
+        "The first viewport should establish context and value quickly.",
+        "Mid-page sections should deepen trust or explain the offer.",
+        "Lower-page sections should reduce friction and reinforce action."
+      ],
+      "transitionStrategy": "Make transitions feel intentional through spacing, contrast shifts, and restrained motion rather than decorative separators.",
+      "sharedShellNotes": [
+        "Assume global layout sections frame the page experience.",
+        "Keep page-specific sections visually coherent with the shared shell."
+      ],
+      "constraints": [
+        "Preserve the given section order unless a wrapper or grouping is required for coherence.",
+        "Avoid repetitive section pacing; vary density and emphasis across the page."
+      ],
+      "rationale": "Default page planner framed Home around role needs and the MVP journey rather than isolated sections."
+    }
+  }
+}

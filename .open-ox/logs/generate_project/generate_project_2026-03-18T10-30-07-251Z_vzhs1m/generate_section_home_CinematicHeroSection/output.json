@@ -1,0 +1,86 @@
+{
+  "outputFileRelative": "components/sections/home_CinematicHeroSection.tsx",
+  "generatedFile": "components/sections/home_CinematicHeroSection.tsx",
+  "skillId": "component.hero.impactful",
+  "section": {
+    "type": "hero",
+    "intent": "Immediate visual impact with the main trailer.",
+    "contentHints": "Auto-playing muted background video, large movie title logo, 'Watch Trailer' play button.",
+    "fileName": "CinematicHeroSection",
+    "primaryRoleIds": [
+      "visitor"
+    ],
+    "supportingCapabilityIds": [
+      "immersive-storytelling"
+    ],
+    "sourceTaskLoopIds": [
+      "ticket-purchase-loop"
+    ],
+    "designPlan": {
+      "role": "Page opener and value proposition anchor",
+      "goal": "Capture 100% of the user's attention with high-fidelity video.",
+      "roleFit": "Immediately satisfies the fan's desire for 'blockbuster' visuals.",
+      "taskLoopFocus": "The entry point of the Ticket Booking Journey.",
+      "capabilityFocus": "Demonstrates 'Immersive Content Delivery' through full-screen video.",
+      "informationArchitecture": "Centered movie logo, secondary 'Watch Trailer' button, and scroll indicator.",
+      "layoutIntent": "Full-bleed, viewport-height container.",
+      "visualIntent": "Dark, cinematic, and high-contrast with the Marvel Red logo.",
+      "interactionIntent": "Play button opens a high-res trailer in a modal.",
+      "contentStrategy": "Visuals first; minimal text to avoid cluttering the cinematic frame.",
+      "hierarchy": [
+        "Movie Title Logo",
+        "Watch Trailer Button",
+        "Scroll Indicator"
+      ],
+      "guardrailIds": [
+        "section.core",
+        "section.above-fold"
+      ],
+      "capabilityAssistIds": [
+        "effect.motion.ambient"
+      ],
+      "constraints": [
+        "Video must be muted and loop seamlessly.",
+        "Logo must be high-resolution SVG."
+      ],
+      "rationale": "The hero section sets the tone and establishes the 'superhero' scale of the experience."
+    }
+  },
+  "pageContext": {
+    "title": "Movie Home",
+    "slug": "home",
+    "description": "The main landing experience for the movie promotion.",
+    "journeyStage": "entry",
+    "primaryRoleIds": [
+      "visitor"
+    ],
+    "supportingCapabilityIds": [
+      "immersive-storytelling",
+      "conversion-engine"
+    ],
+    "pageDesignPlan": {
+      "pageGoal": "The main landing experience for the movie promotion.",
+      "audienceFocus": "Design for Movie Fan.",
+      "roleFit": "This page primarily serves Movie Fan.",
+      "capabilityFocus": "This page should make Immersive Content Delivery, Ticketing Integration understandable and actionable.",
+      "taskLoopCoverage": "Help users progress through Ticket Booking Journey, Ticket Booking Journey.",
+      "narrativeArc": "Move from orientation to persuasion, then social proof, and finish with a decisive conversion close.",
+      "layoutStrategy": "Use section rhythm, spacing, and contrast to support the entry stage of the user journey rather than making every block equally loud.",
+      "hierarchy": [
+        "The first viewport should establish context and value quickly.",
+        "Mid-page sections should deepen trust or explain the offer.",
+        "Lower-page sections should reduce friction and reinforce action."
+      ],
+      "transitionStrategy": "Make transitions feel intentional through spacing, contrast shifts, and restrained motion rather than decorative separators.",
+      "sharedShellNotes": [
+        "Assume global layout sections frame the page experience.",
+        "Keep page-specific sections visually coherent with the shared shell."
+      ],
+      "constraints": [
+        "Preserve the given section order unless a wrapper or grouping is required for coherence.",
+        "Avoid repetitive section pacing; vary density and emphasis across the page."
+      ],
+      "rationale": "Default page planner framed Movie Home around role needs and the MVP journey rather than isolated sections."
+    }
+  }
+}

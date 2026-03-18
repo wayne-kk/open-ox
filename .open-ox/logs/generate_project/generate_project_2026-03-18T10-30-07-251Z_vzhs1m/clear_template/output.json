@@ -1,0 +1,16 @@
+{
+  "removed": [
+    "components/sections/home_CharacterGallerySection.tsx",
+    "components/sections/home_HeroSection.tsx",
+    "components/sections/home_StorySynopsisSection.tsx",
+    "components/sections/home_TicketingCTASection.tsx",
+    "components/sections/layout_GlobalFooterSection.tsx",
+    "components/sections/layout_GlobalNavSection.tsx",
+    "components/sections/the-world_ArtShowcaseSection.tsx",
+    "app/page.tsx",
+    "app/layout.tsx",
+    "app/globals.css",
+    "design-system.md",
+    "app/the-world/page.tsx"
+  ]
+}

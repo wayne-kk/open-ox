@@ -1,0 +1,83 @@
+{
+  "outputFileRelative": "components/sections/home_TicketingCTASection.tsx",
+  "generatedFile": "components/sections/home_TicketingCTASection.tsx",
+  "section": {
+    "type": "cta-banner",
+    "intent": "Final push for ticket sales",
+    "contentHints": "Beautiful sunset background, 'Find a Theater' search bar or button, release date text.",
+    "fileName": "TicketingCTASection",
+    "primaryRoleIds": [
+      "visitor"
+    ],
+    "supportingCapabilityIds": [
+      "conversion-funnel"
+    ],
+    "sourceTaskLoopIds": [
+      "discovery-to-ticket"
+    ],
+    "designPlan": {
+      "role": "Conversion closer",
+      "goal": "Convert emotional interest into a concrete action (booking a ticket).",
+      "roleFit": "Directly serves the visitor's goal to 'Find where to watch'.",
+      "taskLoopFocus": "The final 'Check local showtimes' and 'Success' state.",
+      "capabilityFocus": "Primary implementation of the 'Ticketing & Lead Gen' capability.",
+      "informationArchitecture": "Bold headline, release date, and a prominent search/button group.",
+      "layoutIntent": "Full-width banner with a high-contrast visual anchor.",
+      "visualIntent": "Warm sunset palette to evoke a sense of 'coming home' or 'the end of a journey'.",
+      "interactionIntent": "Clear, high-feedback button states and a simple input for theater search.",
+      "contentStrategy": "Urgency and excitement: 'In Theaters This Summer'.",
+      "hierarchy": [
+        "Release Date",
+        "Primary CTA Button",
+        "Secondary 'Join Newsletter' link"
+      ],
+      "guardrailIds": [
+        "section.core",
+        "section.interactive"
+      ],
+      "capabilityAssistIds": [],
+      "constraints": [
+        "CTA must be the most visually prominent element on the page",
+        "Search bar must be functional or clearly labeled as a placeholder"
+      ],
+      "rationale": "The sunset visual provides a natural emotional climax that pairs perfectly with the final call to action."
+    }
+  },
+  "pageContext": {
+    "title": "Home",
+    "slug": "home",
+    "description": "The main promotional gateway for the film.",
+    "journeyStage": "entry",
+    "primaryRoleIds": [
+      "visitor"
+    ],
+    "supportingCapabilityIds": [
+      "visual-storytelling",
+      "conversion-funnel"
+    ],
+    "pageDesignPlan": {
+      "pageGoal": "The main promotional gateway for the film.",
+      "audienceFocus": "Design for Potential Viewer.",
+      "roleFit": "This page primarily serves Potential Viewer.",
+      "capabilityFocus": "This page should make Immersive Visual Experience, Ticketing & Lead Gen understandable and actionable.",
+      "taskLoopCoverage": "Help users progress through Discovery to Conversion, Discovery to Conversion, Discovery to Conversion, Discovery to Conversion.",
+      "narrativeArc": "Move from orientation to persuasion, then social proof, and finish with a decisive conversion close.",
+      "layoutStrategy": "Use section rhythm, spacing, and contrast to support the entry stage of the user journey rather than making every block equally loud.",
+      "hierarchy": [
+        "The first viewport should establish context and value quickly.",
+        "Mid-page sections should deepen trust or explain the offer.",
+        "Lower-page sections should reduce friction and reinforce action."
+      ],
+      "transitionStrategy": "Make transitions feel intentional through spacing, contrast shifts, and restrained motion rather than decorative separators.",
+      "sharedShellNotes": [
+        "Assume global layout sections frame the page experience.",
+        "Keep page-specific sections visually coherent with the shared shell."
+      ],
+      "constraints": [
+        "Preserve the given section order unless a wrapper or grouping is required for coherence.",
+        "Avoid repetitive section pacing; vary density and emphasis across the page."
+      ],
+      "rationale": "Default page planner framed Home around role needs and the MVP journey rather than isolated sections."
+    }
+  }
+}

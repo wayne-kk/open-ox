@@ -101,13 +101,16 @@ async function buildComponentSkillBlock(
   section: PlannedSectionSpec,
   productScope: ProductScope,
   designKeywords: string[]
-): Promise<string> {
+): Promise<{ block: string; skillId: string | null }> {
   const result = await stepSelectComponentSkills({
     section,
     productScope,
     designKeywords,
   });
-  return loadSelectedSkillPrompt(result.id);
+  return {
+    block: loadSelectedSkillPrompt(result.id),
+    skillId: result.id,
+  };
 }
 
 async function buildSystemPrompt(params: {
@@ -116,11 +119,15 @@ async function buildSystemPrompt(params: {
   designPlan: PlannedSectionSpec["designPlan"];
   productScope: ProductScope;
   designKeywords: string[];
-}) {
+}): Promise<{ prompt: string; skillId: string | null }> {
   const { section, projectGuardrailIds, designPlan, productScope, designKeywords } = params;
-  const componentSkillBlock = await buildComponentSkillBlock(section, productScope, designKeywords);
+  const { block: componentSkillBlock, skillId } = await buildComponentSkillBlock(
+    section,
+    productScope,
+    designKeywords
+  );
 
-  return [
+  const prompt = [
     loadSystem("frontend"),
     buildSectionPromptBlocks(section.type),
     componentSkillBlock,
@@ -130,6 +137,8 @@ async function buildSystemPrompt(params: {
   ]
     .filter(Boolean)
     .join("\n\n");
+
+  return { prompt, skillId };
 }
 
 function formatRolesBlock(roles: UserRole[]) {
@@ -345,6 +354,11 @@ Generate the complete ${section.fileName}.tsx component.
 Treat the design plan as the primary source of truth. Capability assists are optional helpers, not mandatory templates.`;
 }
 
+export interface GenerateSectionResult {
+  filePath: string;
+  skillId: string | null;
+}
+
 export async function stepGenerateSection({
   designSystem,
   projectGuardrailIds,
@@ -352,9 +366,9 @@ export async function stepGenerateSection({
   section,
   outputFileRelative,
   pageContext,
-}: GenerateSectionParams): Promise<string> {
+}: GenerateSectionParams): Promise<GenerateSectionResult> {
   const designPlan = buildSectionDesignPlan(section, projectContext);
-  const systemPrompt = await buildSystemPrompt({
+  const { prompt: systemPrompt, skillId } = await buildSystemPrompt({
     section,
     projectGuardrailIds,
     designPlan,
@@ -376,5 +390,5 @@ export async function stepGenerateSection({
   await writeSiteFile(filePath, tsx);
   await formatSiteFile(filePath);
 
-  return filePath;
+  return { filePath, skillId };
 }

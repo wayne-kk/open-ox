@@ -1,0 +1,7 @@
+{
+  "success": true,
+  "output": "Fixed Framer Motion type error by explicitly typing variants and using 'as const' for the transition type literal.",
+  "touchedFiles": [
+    "components/sections/characters_CharacterDetailSection.tsx"
+  ]
+}

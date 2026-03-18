@@ -6,7 +6,7 @@ import type { BuildStep } from "../types";
 export interface StepLogger {
   resultSteps: BuildStep[];
   startStep: (step: string) => void;
-  logStep: (step: string, status: "ok" | "error", detail?: string) => BuildStep;
+  logStep: (step: string, status: "ok" | "error", detail?: string, skillId?: string | null) => BuildStep;
   timed: <T>(
     stepName: string,
     fn: () => Promise<T>,
@@ -95,10 +95,10 @@ export function createStepLogger(options?: {
     stepStarts.set(step, Date.now());
   };
 
-  const logStep = (step: string, status: "ok" | "error", detail?: string) => {
+  const logStep = (step: string, status: "ok" | "error", detail?: string, skillId?: string | null) => {
     const now = Date.now();
     const duration = now - (stepStarts.get(step) ?? now);
-    const entry: BuildStep = { step, status, detail, timestamp: now, duration };
+    const entry: BuildStep = { step, status, detail, timestamp: now, duration, skillId };
 
     resultSteps.push(entry);
     options?.onStep?.(entry);

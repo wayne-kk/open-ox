@@ -1,0 +1,12 @@
+{
+  "pagePath": "app/page.tsx",
+  "slug": "home",
+  "title": "Movie Home",
+  "sections": [
+    "CinematicHeroSection",
+    "StorySynopsisSection",
+    "CharacterRosterSection",
+    "MediaGallerySection",
+    "TicketBookingSection"
+  ]
+}
