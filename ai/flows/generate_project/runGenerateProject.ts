@@ -1,3 +1,4 @@
+import { clearTemplate } from "@/lib/clearTemplate";
 import { isLayoutSection } from "./registry/layoutSections";
 import { syncSiteValidationMarkers, readSiteFile } from "./shared/files";
 import { createArtifactLogger, createStepLogger } from "./shared/logging";
@@ -340,11 +341,13 @@ async function runSectionBatch(params: {
     const stepName = getSectionStepName(item.scopeKey, item.section.fileName);
 
     if (result.status === "fulfilled") {
-      generatedFiles.push(result.value);
-      logger.logStep(stepName, "ok", result.value);
+      const { filePath, skillId } = result.value;
+      generatedFiles.push(filePath);
+      logger.logStep(stepName, "ok", filePath, skillId);
       await persistJsonArtifact(artifactLogger, stepName, "output", {
         outputFileRelative: item.outputFileRelative,
-        generatedFile: result.value,
+        generatedFile: result.value.filePath,
+        skillId: result.value.skillId,
         section: item.section,
         pageContext: item.pageContext ?? null,
       });
@@ -568,6 +571,20 @@ export async function runGenerateProject(
 
   try {
     await persistJsonArtifact(artifactLogger, "run", "input", { userInput });
+
+    logger.startStep("clear_template");
+    const clearResult = clearTemplate();
+    if (clearResult.error) {
+      logger.logStep("clear_template", "error", clearResult.error);
+    } else {
+      logger.logStep(
+        "clear_template",
+        "ok",
+        clearResult.removed.length > 0 ? `${clearResult.removed.length} files removed` : "nothing to clear"
+      );
+    }
+    await persistJsonArtifact(artifactLogger, "clear_template", "output", clearResult);
+
     const rawBlueprint = await logger.timed(
       "analyze_project_requirement",
       () => stepAnalyzeProjectRequirement(userInput),

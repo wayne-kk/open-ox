@@ -1,0 +1,18 @@
+{
+  "files": [
+    "design-system.md",
+    "app/globals.css",
+    "components/sections/layout_GlobalNavSection.tsx",
+    "components/sections/layout_GlobalFooterSection.tsx",
+    "app/layout.tsx",
+    "components/sections/home_CinematicHeroSection.tsx",
+    "components/sections/home_StorySynopsisSection.tsx",
+    "components/sections/home_CharacterRosterSection.tsx",
+    "components/sections/home_MediaGallerySection.tsx",
+    "components/sections/home_TicketBookingSection.tsx",
+    "app/page.tsx",
+    "components/sections/characters_CharacterDetailSection.tsx",
+    "app/characters/page.tsx"
+  ],
+  "error": "400 Provider API error: Unable to submit request because Thought signature is not valid.. Learn more: https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/gemini (request id: 202603181034219361025836PxUQhpx)"
+}

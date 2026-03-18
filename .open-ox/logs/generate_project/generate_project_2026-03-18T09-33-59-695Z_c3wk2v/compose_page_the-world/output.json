@@ -1,0 +1,8 @@
+{
+  "pagePath": "app/the-world/page.tsx",
+  "slug": "the-world",
+  "title": "The World",
+  "sections": [
+    "ArtShowcaseSection"
+  ]
+}

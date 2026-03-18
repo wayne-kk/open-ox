@@ -1,0 +1,82 @@
+{
+  "outputFileRelative": "components/sections/home_MediaGallerySection.tsx",
+  "generatedFile": "components/sections/home_MediaGallerySection.tsx",
+  "skillId": null,
+  "section": {
+    "type": "media-gallery",
+    "intent": "Provide shareable HD content.",
+    "contentHints": "Horizontal scroll of high-res stills and behind-the-scenes clips.",
+    "fileName": "MediaGallerySection",
+    "primaryRoleIds": [
+      "visitor"
+    ],
+    "supportingCapabilityIds": [
+      "immersive-storytelling"
+    ],
+    "sourceTaskLoopIds": [],
+    "designPlan": {
+      "role": "Visual proof and hype builder",
+      "goal": "Showcase the scale and quality of the film's production.",
+      "roleFit": "Satisfies the 'Watch trailers/stills' goal for the visitor.",
+      "taskLoopFocus": "Final visual push before the ticketing section.",
+      "capabilityFocus": "High-performance image and video rendering.",
+      "informationArchitecture": "Masonry or horizontal scroll gallery with lightbox functionality.",
+      "layoutIntent": "Edge-to-edge visual grid.",
+      "visualIntent": "Clean, dark UI that lets the colorful movie stills pop.",
+      "interactionIntent": "Clicking an image opens a full-screen high-res lightbox.",
+      "contentStrategy": "Curate the most action-packed and visually stunning frames.",
+      "hierarchy": [
+        "Featured Still",
+        "Thumbnail Grid"
+      ],
+      "guardrailIds": [
+        "section.interactive"
+      ],
+      "capabilityAssistIds": [
+        "effect.motion.subtle"
+      ],
+      "constraints": [
+        "Images must be lazy-loaded for performance.",
+        "Lightbox must support swipe gestures on mobile."
+      ],
+      "rationale": "A high-quality gallery provides the 'proof' that the movie is a must-see event."
+    }
+  },
+  "pageContext": {
+    "title": "Movie Home",
+    "slug": "home",
+    "description": "The main landing experience for the movie promotion.",
+    "journeyStage": "entry",
+    "primaryRoleIds": [
+      "visitor"
+    ],
+    "supportingCapabilityIds": [
+      "immersive-storytelling",
+      "conversion-engine"
+    ],
+    "pageDesignPlan": {
+      "pageGoal": "The main landing experience for the movie promotion.",
+      "audienceFocus": "Design for Movie Fan.",
+      "roleFit": "This page primarily serves Movie Fan.",
+      "capabilityFocus": "This page should make Immersive Content Delivery, Ticketing Integration understandable and actionable.",
+      "taskLoopCoverage": "Help users progress through Ticket Booking Journey, Ticket Booking Journey.",
+      "narrativeArc": "Move from orientation to persuasion, then social proof, and finish with a decisive conversion close.",
+      "layoutStrategy": "Use section rhythm, spacing, and contrast to support the entry stage of the user journey rather than making every block equally loud.",
+      "hierarchy": [
+        "The first viewport should establish context and value quickly.",
+        "Mid-page sections should deepen trust or explain the offer.",
+        "Lower-page sections should reduce friction and reinforce action."
+      ],
+      "transitionStrategy": "Make transitions feel intentional through spacing, contrast shifts, and restrained motion rather than decorative separators.",
+      "sharedShellNotes": [
+        "Assume global layout sections frame the page experience.",
+        "Keep page-specific sections visually coherent with the shared shell."
+      ],
+      "constraints": [
+        "Preserve the given section order unless a wrapper or grouping is required for coherence.",
+        "Avoid repetitive section pacing; vary density and emphasis across the page."
+      ],
+      "rationale": "Default page planner framed Movie Home around role needs and the MVP journey rather than isolated sections."
+    }
+  }
+}

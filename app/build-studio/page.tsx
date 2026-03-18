@@ -9,12 +9,15 @@ import {
   ChartNoAxesCombined,
   CircleCheckBig,
   Coins,
+  GitBranch,
   Package,
   Play,
   ShieldCheck,
   TerminalSquare,
+  Trash2,
   WandSparkles,
 } from "lucide-react";
+import { GenerationAtlas } from "./components/GenerationAtlas";
 
 interface BuildStep {
   step: string;
@@ -22,6 +25,7 @@ interface BuildStep {
   detail?: string;
   timestamp: number;
   duration: number;
+  skillId?: string | null;
 }
 
 interface PlannedProjectBlueprint {
@@ -179,6 +183,8 @@ export default function BuildStudioPage() {
   const [response, setResponse] = useState<AiResponse | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  const [viewMode, setViewMode] = useState<"log" | "atlas">("atlas");
+  const [clearing, setClearing] = useState(false);
 
   const terminalRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -202,6 +208,19 @@ export default function BuildStudioPage() {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [loading, startedAt]);
+
+  async function handleClear() {
+    setClearing(true);
+    try {
+      const res = await fetch("/api/clear-template", { method: "POST" });
+      const data = await res.json();
+      if (data.error) {
+        console.error("[clear-template]", data.error);
+      }
+    } finally {
+      setClearing(false);
+    }
+  }
 
   async function handleRun() {
     const t0 = Date.now();
@@ -291,6 +310,9 @@ export default function BuildStudioPage() {
       ? response.buildSteps[0].timestamp - response.buildSteps[0].duration
       : startedAt ?? 0;
 
+  const buildSteps = response?.buildSteps ?? [];
+  const showAtlas = viewMode === "atlas" && (buildSteps.length > 0 || loading);
+
   return (
     <main className="relative min-h-screen overflow-hidden bg-background">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(247,147,26,0.14),transparent_28%),radial-gradient(circle_at_top_right,rgba(255,214,0,0.1),transparent_24%),radial-gradient(circle_at_bottom,rgba(234,88,12,0.1),transparent_30%)]" />
@@ -328,7 +350,7 @@ export default function BuildStudioPage() {
           </div>
         </header>
 
-        <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-6 py-6 lg:flex-row lg:px-8">
+        <div className="mx-auto flex w-full container flex-1 flex-col gap-6 px-6 py-6 lg:flex-row lg:px-8">
           <aside className="defi-panel flex w-full shrink-0 flex-col gap-5 p-5 lg:w-[380px]">
             <div className="space-y-3">
               <div className="flex items-center gap-3">
@@ -410,24 +432,39 @@ export default function BuildStudioPage() {
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={handleRun}
-              disabled={loading}
-              className="defi-button mt-auto px-6 py-3 text-sm font-semibold uppercase tracking-[0.16em] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {loading ? (
-                <>
+            <div className="mt-auto flex gap-2">
+              <button
+                type="button"
+                onClick={handleClear}
+                disabled={loading || clearing}
+                className="defi-button-outline flex flex-1 items-center justify-center gap-2 px-4 py-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {clearing ? (
                   <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                  Running {formatMs(elapsed)}
-                </>
-              ) : (
-                <>
-                  <Play className="h-4 w-4" />
-                  Run Build Flow
-                </>
-              )}
-            </button>
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                Clear Template
+              </button>
+              <button
+                type="button"
+                onClick={handleRun}
+                disabled={loading}
+                className="defi-button flex flex-1 items-center justify-center gap-2 px-6 py-3 text-sm font-semibold uppercase tracking-[0.16em] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {loading ? (
+                  <>
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    Running {formatMs(elapsed)}
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-4 w-4" />
+                    Run Build Flow
+                  </>
+                )}
+              </button>
+            </div>
           </aside>
 
           <section className="defi-glass flex min-h-[520px] flex-1 flex-col overflow-hidden">
@@ -451,6 +488,34 @@ export default function BuildStudioPage() {
               </div>
 
               <div className="flex items-center gap-2 text-[11px]">
+                {(buildSteps.length > 0 || loading) ? (
+                  <div className="flex rounded-lg border border-white/10 p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setViewMode("atlas")}
+                      className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider transition-colors ${
+                        viewMode === "atlas"
+                          ? "bg-primary/20 text-primary"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <GitBranch className="h-3.5 w-3.5" />
+                      Atlas
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setViewMode("log")}
+                      className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider transition-colors ${
+                        viewMode === "log"
+                          ? "bg-primary/20 text-primary"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <TerminalSquare className="h-3.5 w-3.5" />
+                      Log
+                    </button>
+                  </div>
+                ) : null}
                 {loading ? (
                   <span className="defi-badge px-3 py-1 text-primary">network live</span>
                 ) : response ? (
@@ -483,7 +548,17 @@ export default function BuildStudioPage() {
               ref={terminalRef}
               className="flex-1 overflow-auto bg-[linear-gradient(180deg,rgba(255,255,255,0.02),rgba(0,0,0,0.16))] px-5 py-4 font-mono text-[12px]"
             >
-              {!response && !loading ? (
+              {showAtlas ? (
+                <div className="flex h-full min-h-[480px] flex-col p-4">
+                  <GenerationAtlas
+                    steps={buildSteps}
+                    flowStart={flowStart}
+                    loading={loading}
+                    verificationStatus={response?.verificationStatus}
+                    totalDuration={response?.buildTotalDuration}
+                  />
+                </div>
+              ) : !response && !loading ? (
                 <div className="flex h-full min-h-[420px] items-center justify-center">
                   <div className="max-w-md text-center">
                     <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/30 bg-primary/10 text-primary shadow-[0_0_30px_-8px_rgba(247,147,26,0.45)]">
@@ -499,7 +574,7 @@ export default function BuildStudioPage() {
                 </div>
               ) : null}
 
-              {response || loading ? (
+              {!showAtlas && (response || loading) ? (
                 <div className="space-y-1">
                   <TermLine prefix="$" color="text-white">
                     run build_site{" "}
@@ -534,6 +609,11 @@ export default function BuildStudioPage() {
                           }`}
                         >
                           {stepLabel}
+                          {step.skillId ? (
+                            <span className="ml-1.5 font-mono text-[10px] text-accent-tertiary/80">
+                              [{step.skillId}]
+                            </span>
+                          ) : null}
                         </span>
                         {step.detail ? (
                           <span className="truncate text-muted-foreground">{step.detail}</span>

@@ -1,0 +1,7 @@
+{
+  "status": "passed",
+  "output": "> template@0.1.0 build /Users/wangwei/coding/open-ox/sites/template\n> next build\n\n▲ Next.js 16.1.6 (Turbopack)\n\n  Creating an optimized production build ...\n✓ Compiled successfully in 3.2s\n  Running TypeScript ...\n  Collecting page data using 7 workers ...\n  Generating static pages using 7 workers (0/5) ...\n  Generating static pages using 7 workers (1/5) \r\n  Generating static pages using 7 workers (2/5) \r\n  Generating static pages using 7 workers (3/5) \r\n✓ Generating static pages using 7 workers (5/5) in 392.3ms\n  Finalizing page optimization ...\n\nRoute (app)\n┌ ○ /\n├ ○ /_not-found\n└ ○ /the-world\n\n\n○  (Static)  prerendered as static content",
+  "unvalidatedFiles": [],
+  "installedDependencies": [],
+  "dependencyInstallFailures": []
+}

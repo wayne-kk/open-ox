@@ -1,0 +1,7 @@
+{
+  "layoutPath": "app/layout.tsx",
+  "layoutSections": [
+    "GlobalNavSection",
+    "GlobalFooterSection"
+  ]
+}

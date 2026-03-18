@@ -174,6 +174,8 @@ export interface BuildStep {
   detail?: string;
   timestamp: number;
   duration: number;
+  /** For generate_section steps: the component skill ID that was applied */
+  skillId?: string | null;
 }
 
 export type VerificationStatus = "passed" | "failed";

@@ -1,0 +1,48 @@
+{
+  "outputFileRelative": "components/sections/layout_GlobalFooterSection.tsx",
+  "generatedFile": "components/sections/layout_GlobalFooterSection.tsx",
+  "section": {
+    "type": "footer",
+    "intent": "Legal and social connectivity",
+    "contentHints": "Studio logo, social icons (nature-themed), copyright, privacy policy, newsletter signup.",
+    "fileName": "GlobalFooterSection",
+    "primaryRoleIds": [
+      "visitor"
+    ],
+    "supportingCapabilityIds": [
+      "conversion-funnel"
+    ],
+    "sourceTaskLoopIds": [
+      "discovery-to-ticket"
+    ],
+    "designPlan": {
+      "role": "Informational anchor and lead capture",
+      "goal": "Close the experience with a sense of studio heritage and a way to stay connected.",
+      "roleFit": "Captures visitors who aren't ready to buy tickets but want to follow the project.",
+      "taskLoopFocus": "Final success state for the 'joins the mailing list' outcome.",
+      "capabilityFocus": "Supports lead generation through a thematic newsletter signup.",
+      "informationArchitecture": "Three-column layout: Studio info, Links, Newsletter.",
+      "layoutIntent": "Wide, grounded footer with a hand-painted top border (e.g., rolling hills).",
+      "visualIntent": "Deep forest greens or sunset oranges to provide a 'grounding' contrast to the airy site.",
+      "interactionIntent": "Simple, clean interactions for form fields and social icons.",
+      "contentStrategy": "Studio-first branding to build trust and prestige.",
+      "hierarchy": [
+        "Newsletter Signup",
+        "Studio Credits",
+        "Social Links"
+      ],
+      "guardrailIds": [
+        "section.core",
+        "section.accessibility"
+      ],
+      "capabilityAssistIds": [],
+      "constraints": [
+        "Newsletter form must be accessible and clearly validated",
+        "Social icons should use custom nature-themed variants"
+      ],
+      "shellPlacement": "afterPageContent",
+      "rationale": "The footer acts as a thematic 'end of the journey' that transitions the user back to the studio's broader world."
+    }
+  },
+  "pageContext": null
+}
