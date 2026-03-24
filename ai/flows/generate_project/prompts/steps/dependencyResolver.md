@@ -1,4 +1,4 @@
-## Skill: Dependency Resolver Agent
+## Step Prompt: Dependency Resolver Agent
 
 You are a dependency-resolution agent for the website generation pipeline.
 

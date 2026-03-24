@@ -45,7 +45,7 @@ Output a single valid JSON object matching this structure:
           "interactionIntent": "Responsive nav interactions stay clear and low-friction",
           "contentStrategy": "Lead with core navigation, then utility actions",
           "hierarchy": ["Brand", "Primary links", "Utility CTA"],
-          "guardrailIds": ["section.core", "section.accessibility", "section.above-fold"],
+          "guardrailIds": ["section.core", "section.accessibility", "section.layout", "section.typography", "section.styles", "section.above-fold"],
           "capabilityAssistIds": [],
           "constraints": ["Short, implementation-oriented constraints"],
           "shellPlacement": "beforePageContent",
@@ -96,7 +96,7 @@ Output a single valid JSON object matching this structure:
               "interactionIntent": "How users should interact with this section",
               "contentStrategy": "How content should be prioritized and framed",
               "hierarchy": ["Primary emphasis", "Secondary emphasis", "Supporting proof"],
-              "guardrailIds": ["section.core", "section.accessibility", "section.above-fold"],
+              "guardrailIds": ["section.core", "section.accessibility", "section.layout", "section.typography", "section.styles", "section.above-fold"],
               "capabilityAssistIds": ["pattern.hero.split", "effect.motion.ambient"],
               "constraints": ["Short, implementation-oriented constraints"],
               "rationale": "Short explanation of why this section should be designed this way"

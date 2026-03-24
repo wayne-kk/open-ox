@@ -9,13 +9,13 @@ import {
   ChartNoAxesCombined,
   CircleCheckBig,
   Coins,
-  GitBranch,
-  Package,
   Play,
   ShieldCheck,
   TerminalSquare,
   Trash2,
   WandSparkles,
+  GitBranch,
+  Package
 } from "lucide-react";
 import { GenerationAtlas } from "./components/GenerationAtlas";
 

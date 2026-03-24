@@ -1,6 +1,6 @@
 import { getSystemToolDefinitions } from "../../../tools/systemToolCatalog";
 import {
-  loadSkillPrompt,
+  loadStepPrompt,
   loadSystem,
   readSiteFile,
 } from "../shared/files";
@@ -110,7 +110,7 @@ export async function stepInstallDependencies({
     };
   }
 
-  const systemPrompt = [loadSystem("frontend"), loadSkillPrompt("dependencyResolver")].join("\n\n");
+  const systemPrompt = [loadSystem("frontend"), loadStepPrompt("dependencyResolver")].join("\n\n");
   const userMessage = `## Goal
 Inspect generated files and resolve real third-party package gaps through tools.
 

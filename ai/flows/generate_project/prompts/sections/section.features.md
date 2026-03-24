@@ -11,8 +11,6 @@ Generate a features section that communicates value through visually distinct ca
 
 ## Rules
 
-- Output only raw TSX code.
-- The component has no props.
 - Use design system classes, colors, and motion language.
 - Default to six features unless content hints imply otherwise.
 - Keep the layout mobile-first and responsive.

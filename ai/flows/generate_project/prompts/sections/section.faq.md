@@ -12,8 +12,6 @@ to realistic objections or questions.
 
 ## Rules
 
-- Output only raw TSX code.
-- The component has no props.
 - Use buttons for accordion triggers.
 - Questions and answers must be specific to the page context.
 - Keep interaction accessible and readable on mobile.

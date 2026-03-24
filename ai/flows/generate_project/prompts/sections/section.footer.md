@@ -11,8 +11,6 @@ Generate a footer that provides clear navigation, brand identity, and legal info
 
 ## Rules
 
-- Output only raw TSX code.
-- The component has no props.
 - Links and labels must match the product and the known pages or routes provided in the prompt context.
 - Do not invent navigation destinations or legal/footer links that do not correspond to the generated site structure unless they are clearly external links.
 - Reuse the same route vocabulary as the navigation where appropriate.

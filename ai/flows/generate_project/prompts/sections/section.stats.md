@@ -11,8 +11,6 @@ Generate a stats or metrics section with impactful large numbers and compact exp
 
 ## Rules
 
-- Output only raw TSX code.
-- The component has no props.
 - Values must be realistic for the page context.
 - Use simple client-side animation only if it materially improves the result.
 - Keep the section scannable and high contrast.

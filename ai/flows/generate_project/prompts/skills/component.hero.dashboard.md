@@ -67,5 +67,4 @@ Use this skill when generating a hero section that should showcase a digital pro
 - Default to Server Component unless client-only behavior is clearly needed.
 - Use realistic, domain-appropriate sample data and labels. Avoid “Chart title” or “123k users” without context.
 - Design mobile-first: product previews must remain legible and not degrade into tiny, unreadable thumbnails.
-- All shared effects, keyframes, and font roles must live in `app/globals.css`; reference tokens and utilities instead of redefining them locally.
 

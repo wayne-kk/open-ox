@@ -11,8 +11,6 @@ Generate a testimonials section that builds trust through believable social proo
 
 ## Rules
 
-- Output only raw TSX code.
-- The component has no props.
 - Testimonials must feel specific and authentic, not generic praise.
 - Use visually varied but consistent card treatments.
 - Avoid invalid JSX text such as unescaped quote characters in plain text nodes.

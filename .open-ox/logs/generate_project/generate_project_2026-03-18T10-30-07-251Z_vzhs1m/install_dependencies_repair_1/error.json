@@ -1,6 +1,0 @@
-{
-  "files": [
-    "components/sections/characters_CharacterDetailSection.tsx"
-  ],
-  "error": "400 Provider API error: Unable to submit request because Thought signature is not valid.. Learn more: https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/gemini (request id: 20260318103503998392694xiIKW62W)"
-}

@@ -19,9 +19,6 @@ Generate a hero section that is the most visually striking element on the page.
 
 ## Rules
 
-- Output only raw TSX code.
-- Import React/hooks/icons as needed.
-- The component has no props.
 - Apply the visual language from the provided design system.
 - Use realistic copy; never use placeholder text.
 - Keep the hero readable and compelling on mobile.

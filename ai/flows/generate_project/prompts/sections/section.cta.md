@@ -13,8 +13,6 @@ focuses the user on one primary next step.
 
 ## Rules
 
-- Output only raw TSX code.
-- The component has no props.
 - The CTA copy must match the page theme.
 - Background contrast should clearly separate this section from adjacent sections.
 - Use input state only if an email capture pattern is explicitly appropriate.

@@ -13,8 +13,6 @@ sticky-friendly, and visually aligned with the design system.
 
 ## Rules
 
-- Output only raw TSX code.
-- The component has no props.
 - Use hooks only for real interactive needs such as menu state or scroll state.
 - Navigation links must map exactly to the known pages or routes provided in the prompt context.
 - Do not invent new destinations such as made-up pages or section anchors unless they were explicitly provided.

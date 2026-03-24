@@ -69,5 +69,4 @@ Use this skill when generating a hero section that should feel like a premium ed
 - Default to Server Component unless hooks, `framer-motion`, or browser APIs are clearly required.
 - Use realistic, editorially plausible copy. No lorem ipsum, no generic “Hero headline”.
 - Design mobile-first, ensuring headlines wrap gracefully and CTAs remain legible.
-- All shared effects, keyframes, and font roles must live in `app/globals.css`; reference tokens instead of redefining them.
 

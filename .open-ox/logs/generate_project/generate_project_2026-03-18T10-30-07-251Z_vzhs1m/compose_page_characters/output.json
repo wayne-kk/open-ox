@@ -1,8 +1,0 @@
-{
-  "pagePath": "app/characters/page.tsx",
-  "slug": "characters",
-  "title": "Character Dossier",
-  "sections": [
-    "CharacterDetailSection"
-  ]
-}

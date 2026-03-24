@@ -87,7 +87,7 @@ function inferCapabilityAssistIds(section: SectionSpec, context: PlanningContext
 }
 
 function inferGuardrailIds(section: SectionSpec): string[] {
-  const guardrailIds = ["section.core", "section.accessibility"];
+  const guardrailIds = ["section.core", "section.accessibility", "section.layout", "section.typography", "section.styles"];
 
   if (section.type === "hero" || section.type === "navigation") {
     guardrailIds.push("section.above-fold");

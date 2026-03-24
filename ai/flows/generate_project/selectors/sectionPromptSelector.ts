@@ -1,22 +1,11 @@
 import { hasSectionPrompt } from "../shared/files";
 
-export const SECTION_PROMPT_IDS: Record<string, string> = {
-  navigation: "section.navigation",
-  hero: "section.hero",
-  features: "section.features",
-  pricing: "section.pricing",
-  cta: "section.cta",
-  footer: "section.footer",
-  stats: "section.stats",
-  testimonials: "section.testimonials",
-  faq: "section.faq",
-};
-
+/**
+ * Select section prompt by convention: section.{type}.md
+ * If section.{type}.md exists, use it; otherwise fall back to section.default.
+ * No manual registration required — add a file to use it.
+ */
 export function selectSectionPromptId(sectionType: string): string {
-  const promptId = SECTION_PROMPT_IDS[sectionType];
-  if (!promptId) {
-    return "section.default";
-  }
-
+  const promptId = `section.${sectionType}`;
   return hasSectionPrompt(promptId) ? promptId : "section.default";
 }
