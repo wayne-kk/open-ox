@@ -39,8 +39,25 @@ interface StepInstallDependenciesResult {
   skipped: AgentSkipRecord[];
 }
 
+/** Signals that installing an npm package might fix the build (vs TS/syntax/layout-only failures). */
+const MISSING_PACKAGE_RE =
+  /cannot find module|can't resolve|module not found|err_module_not_found|failed to resolve|package subpath|did you mean to install|is not installed|no package found|npm err!|pnpm.*not found|404.*package/i;
+
 function unique(values: string[]): string[] {
   return Array.from(new Set(values));
+}
+
+/**
+ * When `buildOutput` is present (e.g. after a failed build), skip the heavy LLM+tools
+ * agent if nothing suggests a missing third-party package. This avoids multi-minute runs
+ * that only "skip" already-present deps. When `buildOutput` is absent, we still run
+ * the agent to reconcile imports vs package.json after generation.
+ */
+function shouldRunDependencyAgent(buildOutput: string | undefined): boolean {
+  if (buildOutput === undefined || buildOutput.trim().length === 0) {
+    return true;
+  }
+  return MISSING_PACKAGE_RE.test(buildOutput);
 }
 
 function buildRelatedFilesBlock(files: string[]): string {
@@ -110,6 +127,16 @@ export async function stepInstallDependencies({
     };
   }
 
+  if (!shouldRunDependencyAgent(buildOutput)) {
+    return {
+      summary:
+        "skipped dependency agent: build output does not suggest a missing npm package (avoids slow LLM+tools when failure is types/syntax/Next config)",
+      installed: [],
+      failed: [],
+      skipped: [],
+    };
+  }
+
   const systemPrompt = [loadSystem("frontend"), loadStepPrompt("dependencyResolver")].join("\n\n");
   const userMessage = `## Goal
 Inspect generated files and resolve real third-party package gaps through tools.
@@ -138,7 +165,7 @@ Remember: this step may inspect and install packages, but must not rewrite sourc
       "exec_shell",
     ]),
     temperature: 0.1,
-    maxIterations: 8,
+    maxIterations: 5,
   });
 
   let parsed: DependencyAgentOutput = {};

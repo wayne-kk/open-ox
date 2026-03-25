@@ -13,7 +13,8 @@ const openai = new OpenAI({
 export async function callLLM(
   systemPrompt: string,
   userMessage: string,
-  temperature = 0.7
+  temperature = 0.7,
+  maxTokens?: number
 ): Promise<string> {
   const model = getModelId();
   const res = await openai.chat.completions.create({
@@ -23,6 +24,7 @@ export async function callLLM(
       { role: "user", content: userMessage },
     ],
     temperature,
+    ...(maxTokens != null && maxTokens > 0 ? { max_tokens: maxTokens } : {}),
   });
 
   return res.choices[0]?.message?.content?.trim() ?? "";

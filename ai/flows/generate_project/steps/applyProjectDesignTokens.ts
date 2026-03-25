@@ -1,11 +1,58 @@
 import {
-  loadGuardrail,
   loadStepPrompt,
   loadSystem,
   readSiteFile,
   writeSiteFile,
 } from "../shared/files";
-import { callLLM, extractJSON } from "../shared/llm";
+import { callLLM, extractContent, extractJSON } from "../shared/llm";
+
+function looksLikeGlobalsCss(text: string): boolean {
+  const t = text.trim();
+  if (t.length < 20) return false;
+  return (
+    /@import|@theme|@layer|@tailwindcss|@keyframes/.test(t) ||
+    (t.includes("{") && t.includes("}") && /:\s*root|--color-|--font-/.test(t))
+  );
+}
+
+/**
+ * Prefer a ```css fence: embedding full CSS inside JSON breaks on quotes, braces,
+ * and long output; fenced CSS avoids escaping and truncation confusion.
+ * Fallback: legacy `{ "globals_css": "..." }` for older prompts.
+ */
+function parseDesignTokensResponse(raw: string): string {
+  const trimmed = raw.trim();
+
+  const fromCssFence = extractContent(trimmed, "css");
+  if (looksLikeGlobalsCss(fromCssFence)) {
+    return fromCssFence.trim();
+  }
+
+  // Try generic fence if model used ``` without css tag
+  const anyFence = extractContent(trimmed, "");
+  if (anyFence !== trimmed && looksLikeGlobalsCss(anyFence)) {
+    return anyFence.trim();
+  }
+
+  if (looksLikeGlobalsCss(trimmed)) {
+    return trimmed;
+  }
+
+  try {
+    const jsonStr = extractJSON(trimmed);
+    const parsed = JSON.parse(jsonStr) as { globals_css?: unknown };
+    if (typeof parsed.globals_css === "string" && parsed.globals_css.trim().length > 0) {
+      return parsed.globals_css.trim();
+    }
+  } catch {
+    /* fall through */
+  }
+
+  const preview = trimmed.length > 400 ? `${trimmed.slice(0, 400)}…` : trimmed;
+  throw new Error(
+    `apply_project_design_tokens: could not parse model output as CSS or JSON globals_css.\nPreview:\n${preview}`
+  );
+}
 
 export async function stepApplyProjectDesignTokens(
   designSystem: string
@@ -16,8 +63,6 @@ export async function stepApplyProjectDesignTokens(
     loadSystem("frontend"),
     "\n\n",
     loadStepPrompt("applyProjectDesignTokens"),
-    "\n\n",
-    loadGuardrail("outputJson"),
   ].join("");
 
   const userMessage = `## Design System
@@ -30,16 +75,10 @@ ${currentGlobalsCss}
 
 Generate the updated globals.css using Tailwind CSS v4 syntax.`;
 
-  const raw = await callLLM(systemPrompt, userMessage, 0.3);
-  const jsonStr = extractJSON(raw);
+  // Large CSS + design system context; allow a generous completion budget
+  const raw = await callLLM(systemPrompt, userMessage, 0.3, 24_000);
+  const globalsCss = parseDesignTokensResponse(raw);
 
-  let parsed: { globals_css: string };
-  try {
-    parsed = JSON.parse(jsonStr) as { globals_css: string };
-  } catch {
-    throw new Error(`apply_project_design_tokens: failed to parse JSON output.\nRaw:\n${raw}`);
-  }
-
-  await writeSiteFile("app/globals.css", parsed.globals_css);
+  await writeSiteFile("app/globals.css", globalsCss);
   return ["app/globals.css"];
 }

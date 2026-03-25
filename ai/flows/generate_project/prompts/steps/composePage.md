@@ -9,6 +9,23 @@ the provided content section components into a complete page.
 are already handled in `app/layout.tsx`.
 Do not import or render layout-level sections in `page.tsx`.
 
+## Section Layout Contract (Critical)
+
+Each section component already implements its own layout: an outer full-width layer
+for background and an inner `container mx-auto px-* py-*` for content (per project
+section layout rules). **Do not** wrap section imports in extra `<section>`,
+`container`, `mx-auto`, `px-*`, `py-*`, or `max-w-*` — that duplicates padding and
+width constraints and breaks rhythm.
+
+- Render sections **directly** as siblings inside `<main>`: `<HeroSection />`,
+  `<FeaturesSection />`, etc.
+- Page-level composition may add **only**: global fixed overlays outside `<main>`,
+  optional decorative non-layout elements, or a minimal wrapper when an effect truly
+  requires a positioned ancestor (e.g. one absolute child next to the hero). Never
+  use `border-t` / `border-b` / `divide-*` / `<hr />` between sections on the page
+  file; spacing and separation belong inside section components or via background
+  contrast.
+
 ## Design Responsibility
 
 - Use the provided page design plan as the composition strategy for rhythm, hierarchy, and pacing.
@@ -20,7 +37,8 @@ Do not import or render layout-level sections in `page.tsx`.
 - Output only the raw TSX code.
 - Use the provided import statements exactly as given.
 - Render all sections inside a single `<main>` element in the provided order.
-- Use wrappers, groups, spacing, and supporting decorative structure when needed to express the page strategy.
+- Use only global overlays or minimal decorative structure when needed; do not add
+  per-section spacing or container wrappers (see Section Layout Contract above).
 - If the design system specifies a global page-level overlay, add it as a fixed
   `pointer-events-none` element outside `<main>`.
 - The page component is pure composition: no business logic, no state, no
@@ -48,7 +66,7 @@ export default function Page() {
         className="pointer-events-none fixed inset-0 z-50 [background:repeating-linear-gradient(0deg,transparent,transparent_2px,rgba(0,0,0,0.15)_2px,rgba(0,0,0,0.15)_4px)]"
         aria-hidden="true"
       />
-      <main>
+      <main className="relative min-h-screen">
         <HeroSection />
         <FeaturesSection />
         <PricingSection />

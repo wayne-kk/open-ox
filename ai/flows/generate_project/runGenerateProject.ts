@@ -431,48 +431,57 @@ async function generatePages(params: {
 }): Promise<void> {
   const { blueprint, designSystem, runtimeContext, artifactLogger, result, logger } = params;
 
-  for (const page of blueprint.site.pages) {
-    const generatedFiles = await runSectionBatch({
-      batchLabel: `page ${page.slug}`,
-      items: page.sections.map((section) => ({
-        scopeKey: page.slug,
-        section,
-        outputFileRelative: buildSectionFilePath(page.slug, section.fileName),
-        pageContext: {
-          title: page.title,
-          slug: page.slug,
-          description: page.description,
-          journeyStage: page.journeyStage,
-          primaryRoleIds: page.primaryRoleIds,
-          supportingCapabilityIds: page.supportingCapabilityIds,
-          pageDesignPlan: page.pageDesignPlan,
-        },
-      })),
-      designSystem,
-      runtimeContext,
-      artifactLogger,
-      logger,
-    });
-    appendGeneratedFiles(result, generatedFiles);
+  // Pages are independent (distinct output paths per slug); run in parallel for wall-clock time.
+  const pageOutcomes = await Promise.all(
+    blueprint.site.pages.map(async (page) => {
+      const generatedFiles = await runSectionBatch({
+        batchLabel: `page ${page.slug}`,
+        items: page.sections.map((section) => ({
+          scopeKey: page.slug,
+          section,
+          outputFileRelative: buildSectionFilePath(page.slug, section.fileName),
+          pageContext: {
+            title: page.title,
+            slug: page.slug,
+            description: page.description,
+            journeyStage: page.journeyStage,
+            primaryRoleIds: page.primaryRoleIds,
+            supportingCapabilityIds: page.supportingCapabilityIds,
+            pageDesignPlan: page.pageDesignPlan,
+          },
+        })),
+        designSystem,
+        runtimeContext,
+        artifactLogger,
+        logger,
+      });
 
-    const pagePath = await logger.timed(
-      getComposePageStepName(page.slug),
-      () => stepComposePage(page, designSystem, page.sections),
-      (path) => path
-    );
+      const pagePath = await logger.timed(
+        getComposePageStepName(page.slug),
+        () => stepComposePage(page, designSystem, page.sections),
+        (path) => path
+      );
+
+      await persistJsonArtifact(artifactLogger, getComposePageStepName(page.slug), "output", {
+        pagePath,
+        slug: page.slug,
+        title: page.title,
+        sections: page.sections.map((section) => section.fileName),
+      });
+      await persistSiteFileArtifact(
+        artifactLogger,
+        getComposePageStepName(page.slug),
+        pagePath,
+        "page"
+      );
+
+      return { generatedFiles, pagePath };
+    })
+  );
+
+  for (const { generatedFiles, pagePath } of pageOutcomes) {
+    appendGeneratedFiles(result, generatedFiles);
     appendGeneratedFiles(result, [pagePath]);
-    await persistJsonArtifact(artifactLogger, getComposePageStepName(page.slug), "output", {
-      pagePath,
-      slug: page.slug,
-      title: page.title,
-      sections: page.sections.map((section) => section.fileName),
-    });
-    await persistSiteFileArtifact(
-      artifactLogger,
-      getComposePageStepName(page.slug),
-      pagePath,
-      "page"
-    );
   }
 }
 

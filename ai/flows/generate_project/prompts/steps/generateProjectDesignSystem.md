@@ -52,18 +52,26 @@ and specific in every section.
 ### Colors (provide hex values for all)
 
 ```text
-background:       #xxxxxx  // Description
-foreground:       #xxxxxx  // Description
-card:             #xxxxxx  // Description
-muted:            #xxxxxx  // Description
-mutedForeground:  #xxxxxx  // Description
-accent:           #xxxxxx  // PRIMARY accent — Description
-accentSecondary:  #xxxxxx  // SECONDARY accent — Description
-accentTertiary:   #xxxxxx  // TERTIARY accent — Description
-border:           #xxxxxx  // Description
-input:            #xxxxxx  // Description
-ring:             #xxxxxx  // Description
-destructive:      #xxxxxx  // Description
+
+--color-background
+--color-foreground
+--color-primary
+--color-primary-foreground
+--color-secondary
+--color-secondary-foreground
+--color-accent
+--color-accent-foreground
+--color-muted
+--color-muted-foreground
+--color-destructive
+--color-destructive-foreground
+--color-card
+--color-card-foreground
+--color-popover
+--color-popover-foreground
+--color-border
+--color-input
+--color-ring
 ```
 
 ### Typography
