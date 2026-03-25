@@ -65,6 +65,7 @@ export async function callLLMWithTools(params: {
     }
 
     messages.push({
+      ...(message as unknown as Record<string, unknown>),
       role: "assistant",
       content: message.content ?? "",
       tool_calls: message.tool_calls ?? undefined,

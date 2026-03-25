@@ -14,6 +14,8 @@ interface GenerationAtlasProps {
   loading?: boolean;
   verificationStatus?: "passed" | "failed";
   totalDuration?: number;
+  /** Render only topology canvas + stage columns (no textual event stream). */
+  showEventStream?: boolean;
 }
 
 export function GenerationAtlas({
@@ -22,6 +24,7 @@ export function GenerationAtlas({
   loading = false,
   verificationStatus,
   totalDuration,
+  showEventStream = true,
 }: GenerationAtlasProps) {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -86,7 +89,7 @@ export function GenerationAtlas({
               />
               {stageIndex < graph.stages.length - 1 ? (
                 <div className="flex shrink-0 items-center px-1">
-                  <div className="h-px w-6 bg-gradient-to-r from-white/20 to-white/5" />
+                  <div className="bg-linear-to-r h-px w-6 from-white/20 to-white/5" />
                   <svg
                     className="h-4 w-4 shrink-0 text-white/30"
                     fill="none"
@@ -120,17 +123,19 @@ export function GenerationAtlas({
       />
 
       {/* Bottom: event stream */}
-      <div
-        ref={scrollRef}
-        className="shrink-0 rounded-lg border border-white/10 bg-black/40 px-4 py-3 backdrop-blur-sm"
-      >
-        <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-          Event Stream · {steps.length} steps
-          {totalDuration ? ` · ${(totalDuration / 1000).toFixed(1)}s total` : ""}
-          {verificationStatus ? ` · ${verificationStatus}` : ""}
+      {showEventStream ? (
+        <div
+          ref={scrollRef}
+          className="shrink-0 rounded-lg border border-white/10 bg-black/40 px-4 py-3 backdrop-blur-sm"
+        >
+          <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+            Event Stream · {steps.length} steps
+            {totalDuration ? ` · ${(totalDuration / 1000).toFixed(1)}s total` : ""}
+            {verificationStatus ? ` · ${verificationStatus}` : ""}
+          </div>
+          <EventStream nodes={graph.nodes} flowStart={flowStart} />
         </div>
-        <EventStream nodes={graph.nodes} flowStart={flowStart} />
-      </div>
+      ) : null}
     </div>
   );
 }
