@@ -6,20 +6,21 @@ priority: 75
 fallback: false
 when:
   designKeywords:
-    any: ["lightning", "shader", "webgl", "glow", "neon", "tech", "futuristic", "cyber", "ambient", "animated"]
-    none: []
+    any: ["lightning", "shader", "webgl", "plasma", "particle-field", "generative-art"]
+    none: ["editorial", "magazine", "luxury", "minimal", "clean", "nature", "organic", "warm", "festive", "celebration"]
   capabilityAssists:
-    any: ["effect.motion.ambient", "effect.motion.energetic", "pattern.hero.centered"]
+    any: ["effect.motion.ambient", "effect.motion.energetic"]
     none: []
   journeyStages:
-    any: ["acquisition", "campaign", "launch", "activation"]
+    any: ["activation", "launch"]
     none: []
   productTypes:
-    any: ["marketing-site", "campaign-site", "saas-app", "developer-tool"]
-    none: []
+    any: ["developer-tool", "saas-app"]
+    none: ["campaign-site", "marketing-site", "brand-site", "portfolio", "publication"]
 notes: |
-  Use for heroes with WebGL lightning/shimmer effects. Requires framer-motion and
-  client-side rendering. Best when design calls for dramatic, code-generated visuals.
+  Use ONLY for heroes where WebGL lightning/shader is the explicit design intent.
+  Requires framer-motion and client-side rendering. Do NOT use for general tech,
+  neon, or cyber aesthetics — use impactful instead.
 ---
 
 # Component Skill: Hero — Lighting / Shader

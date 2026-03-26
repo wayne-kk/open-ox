@@ -168,6 +168,33 @@ export interface PlannedProjectBlueprint
   site: PlannedProjectSiteBlueprint;
 }
 
+export interface StepTraceInput {
+  [key: string]: unknown;
+}
+
+export interface StepTraceOutput {
+  [key: string]: unknown;
+}
+
+export interface StepLlmCall {
+  model?: string;
+  systemPrompt?: string;
+  userMessage?: string;
+  rawResponse?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+}
+
+export interface StepTrace {
+  input?: StepTraceInput;
+  output?: StepTraceOutput;
+  llmCall?: StepLlmCall;
+  validationResult?: {
+    passed: boolean;
+    checks: Array<{ name: string; passed: boolean; detail?: string }>;
+  };
+}
+
 export interface BuildStep {
   step: string;
   status: "ok" | "error";
@@ -176,6 +203,7 @@ export interface BuildStep {
   duration: number;
   /** For generate_section steps: the component skill ID that was applied */
   skillId?: string | null;
+  trace?: StepTrace;
 }
 
 export type VerificationStatus = "passed" | "failed";

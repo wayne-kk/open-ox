@@ -17,3 +17,4 @@ shared layout section components around page content.
 - Keep `<html>` and `<body>` attributes intact unless the current file is invalid.
 - Respect the placement instructions provided for each shared section.
 - Support multiple shared sections before or after `{children}` when requested.
+- **Do not add `overflow-hidden` or `overflow-auto` to `<html>` or `<body>`**. These break `sticky` positioning on child elements like the navigation bar. If scroll containment is needed, apply it to a specific inner wrapper, not the root elements.

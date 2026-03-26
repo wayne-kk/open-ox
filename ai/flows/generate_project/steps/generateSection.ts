@@ -12,7 +12,8 @@ import {
   loadSelectedSkillPrompt,
 } from "./selectComponentSkills";
 import { selectSectionPromptId } from "../selectors/sectionPromptSelector";
-import { callLLM, extractContent } from "../shared/llm";
+import { callLLMWithMeta } from "../shared/llm";
+import { extractContent } from "../shared/llm";
 import type {
   CapabilitySpec,
   GuardrailId,
@@ -21,6 +22,7 @@ import type {
   TaskLoop,
   UserRole,
   PlannedSectionSpec,
+  StepTrace,
 } from "../types";
 import { buildDefaultSectionDesignPlan } from "../planners/defaultProjectPlanner";
 
@@ -321,6 +323,7 @@ ${taskLoopsBlock || "- none"}
 ${capabilitiesBlock || "- none"}
 
 ## Known Routes
+**These are the ONLY valid routes in this project. Navigation components must use exactly these routes and no others.**
 ${knownRoutesBlock || "- / (home)"}
 
 ${pageContextBlock}
@@ -357,6 +360,46 @@ Treat the design plan as the primary source of truth. Capability assists are opt
 export interface GenerateSectionResult {
   filePath: string;
   skillId: string | null;
+  trace: StepTrace;
+}
+
+function validateSectionExports(
+  tsx: string,
+  componentName: string
+): StepTrace["validationResult"] {
+  const checks: Array<{ name: string; passed: boolean; detail?: string }> = [];
+
+  // Check: file is non-empty
+  checks.push({
+    name: "non_empty",
+    passed: tsx.trim().length > 0,
+    detail: tsx.trim().length === 0 ? "Generated content is empty" : undefined,
+  });
+
+  // Check: has named export matching component name
+  const hasNamedExport = new RegExp(
+    `export\\s+(function|const|class)\\s+${componentName}\\b`
+  ).test(tsx);
+  const hasDefaultExport = /export\s+default\s+/.test(tsx);
+  checks.push({
+    name: "has_export",
+    passed: hasNamedExport || hasDefaultExport,
+    detail:
+      !hasNamedExport && !hasDefaultExport
+        ? `No export found for "${componentName}". File may be truncated.`
+        : undefined,
+  });
+
+  // Check: has JSX return
+  const hasJsx = /return\s*\(?\s*</.test(tsx);
+  checks.push({
+    name: "has_jsx",
+    passed: hasJsx,
+    detail: !hasJsx ? "No JSX return statement found" : undefined,
+  });
+
+  const passed = checks.every((c) => c.passed);
+  return { passed, checks };
 }
 
 export async function stepGenerateSection({
@@ -383,12 +426,56 @@ export async function stepGenerateSection({
     designPlan,
   });
 
-  const raw = await callLLM(systemPrompt, userMessage, 0.7);
-  const tsx = extractContent(raw, "tsx");
+  const llmResult = await callLLMWithMeta(systemPrompt, userMessage, 0.7);
+  const tsx = extractContent(llmResult.content, "tsx");
   const filePath = outputFileRelative;
 
   await writeSiteFile(filePath, tsx);
   await formatSiteFile(filePath);
 
-  return { filePath, skillId };
+  const componentName = section.fileName.replace(/\.tsx$/, "");
+  const validationResult = validateSectionExports(tsx, componentName);
+
+  const trace: StepTrace = {
+    input: {
+      sectionType: section.type,
+      componentName,
+      outputFile: outputFileRelative,
+      skillId,
+      designPlan: {
+        role: designPlan.role,
+        goal: designPlan.goal,
+        layoutIntent: designPlan.layoutIntent,
+        visualIntent: designPlan.visualIntent,
+        constraints: designPlan.constraints,
+      },
+      pageContext: pageContext
+        ? { slug: pageContext.slug, title: pageContext.title, journeyStage: pageContext.journeyStage }
+        : null,
+    },
+    output: {
+      filePath,
+      linesGenerated: tsx.split("\n").length,
+      validationPassed: validationResult.passed,
+    },
+    llmCall: {
+      model: llmResult.model,
+      systemPrompt,
+      userMessage,
+      rawResponse: llmResult.content,
+      inputTokens: llmResult.inputTokens,
+      outputTokens: llmResult.outputTokens,
+    },
+    validationResult,
+  };
+
+  if (!validationResult.passed) {
+    const failedChecks = validationResult.checks
+      .filter((c) => !c.passed)
+      .map((c) => c.detail ?? c.name)
+      .join("; ");
+    throw new Error(`Section validation failed for ${componentName}: ${failedChecks}`);
+  }
+
+  return { filePath, skillId, trace };
 }

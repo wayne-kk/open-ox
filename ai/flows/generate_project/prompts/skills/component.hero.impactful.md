@@ -2,24 +2,24 @@
 id: component.hero.impactful
 kind: component-skill
 sectionTypes: ["hero"]
-priority: 50
+priority: 60
 fallback: true
 when:
   designKeywords:
-    any: ["acid", "neon", "festival", "rave"]
-    none: []
+    any: ["bold", "vibrant", "energetic", "neon", "cyber", "futuristic", "tech", "glow", "festival", "rave", "acid", "dark", "dramatic", "immersive", "animated", "dynamic"]
+    none: ["editorial", "magazine", "luxury", "minimal", "dashboard", "analytics", "shader", "webgl"]
   capabilityAssists:
     any: ["effect.motion.energetic", "pattern.hero.centered", "pattern.hero.split"]
     none: []
   journeyStages:
-    any: ["acquisition", "campaign", "launch"]
+    any: ["acquisition", "campaign", "launch", "activation"]
     none: []
   productTypes:
-    any: ["marketing-site", "campaign-site"]
+    any: ["marketing-site", "campaign-site", "brand-site", "portfolio"]
     none: []
 notes: |
   Default high-impact hero skill. Use for energetic, bold, visually striking heroes
-  when no more specific hero skill clearly applies.
+  including neon/cyber/tech aesthetics. Fallback when no more specific skill applies.
 ---
 
 # Component Skill: Hero — High-Impact

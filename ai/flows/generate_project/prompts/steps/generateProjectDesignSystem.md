@@ -127,6 +127,14 @@ radius.base:   Xpx
 
 ### Textures & Patterns
 
+**Usage constraint**: Texture and pattern effects (grain, scanlines, noise, grid overlays) must be **purely decorative and non-intrusive**. They must never compete with content readability or make the page feel dirty or cluttered.
+
+- Grain/noise overlays: opacity must not exceed `0.03` (3%). If the effect is not visible at ≤3% opacity, do not use it.
+- Scanlines: opacity must not exceed `0.04` (4%).
+- Grid/dot patterns: opacity must not exceed `0.06` (6%).
+- These effects should only appear on full-bleed background layers, never on cards, text containers, or interactive elements.
+- When in doubt, omit the texture entirely. A clean surface is always better than a distracting one.
+
 1. **[Pattern Name]** ([implementation method]):
 ```css
 [CSS code]

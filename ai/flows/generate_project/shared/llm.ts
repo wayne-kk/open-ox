@@ -10,12 +10,28 @@ const openai = new OpenAI({
   baseURL: process.env.OPENAI_API_URL,
 });
 
+export interface LLMCallResult {
+  content: string;
+  model: string;
+  inputTokens?: number;
+  outputTokens?: number;
+}
+
 export async function callLLM(
   systemPrompt: string,
   userMessage: string,
   temperature = 0.7,
   maxTokens?: number
 ): Promise<string> {
+  return (await callLLMWithMeta(systemPrompt, userMessage, temperature, maxTokens)).content;
+}
+
+export async function callLLMWithMeta(
+  systemPrompt: string,
+  userMessage: string,
+  temperature = 0.7,
+  maxTokens?: number
+): Promise<LLMCallResult> {
   const model = getModelId();
   const res = await openai.chat.completions.create({
     model,
@@ -27,7 +43,12 @@ export async function callLLM(
     ...(maxTokens != null && maxTokens > 0 ? { max_tokens: maxTokens } : {}),
   });
 
-  return res.choices[0]?.message?.content?.trim() ?? "";
+  return {
+    content: res.choices[0]?.message?.content?.trim() ?? "",
+    model,
+    inputTokens: res.usage?.prompt_tokens,
+    outputTokens: res.usage?.completion_tokens,
+  };
 }
 
 export interface AgentToolCallRecord {
@@ -138,7 +159,12 @@ function sanitizeTsxContent(raw: string): string {
     return withoutFenceLines;
   }
 
-  const lines = withoutFenceLines.split("\n");
+  // If the LLM repeated itself, extract only the first complete module.
+  // A new module starts with "use client", an import, or an export at column 0
+  // after the first module has already begun.
+  const deduped = extractFirstModule(withoutFenceLines);
+
+  const lines = deduped.split("\n");
   for (let end = lines.length; end > 0; end -= 1) {
     const candidate = lines.slice(0, end).join("\n").trimEnd();
     if (!looksLikeTsxModule(candidate)) {
@@ -159,7 +185,40 @@ function sanitizeTsxContent(raw: string): string {
     }
   }
 
-  return withoutFenceLines;
+  return deduped;
+}
+
+/**
+ * When the LLM outputs the same component twice (or appends extra content after
+ * the closing of the first module), strip everything after the first complete
+ * export default / named export block ends.
+ *
+ * Strategy: find the second occurrence of a module-level declaration boundary
+ * (a line that starts a new "use client" / import block at column 0 after we've
+ * already seen at least one export). Everything from that line onward is noise.
+ */
+function extractFirstModule(content: string): string {
+  const lines = content.split("\n");
+  let seenExport = false;
+  let moduleEndLine = lines.length;
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+
+    if (/^export\s+(default|function|const|class)\b/.test(line)) {
+      seenExport = true;
+      continue;
+    }
+
+    // After we've seen an export, a new top-level "use client" or import
+    // signals the start of a second module.
+    if (seenExport && /^(?:"use client"|'use client'|import\s)/.test(line)) {
+      moduleEndLine = i;
+      break;
+    }
+  }
+
+  return lines.slice(0, moduleEndLine).join("\n").trimEnd();
 }
 
 function looksLikeTsxModule(content: string): boolean {

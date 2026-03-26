@@ -341,9 +341,10 @@ async function runSectionBatch(params: {
     const stepName = getSectionStepName(item.scopeKey, item.section.fileName);
 
     if (result.status === "fulfilled") {
-      const { filePath, skillId } = result.value;
+      const { filePath, skillId, trace } = result.value;
       generatedFiles.push(filePath);
       logger.logStep(stepName, "ok", filePath, skillId);
+      logger.attachTrace(stepName, trace);
       await persistJsonArtifact(artifactLogger, stepName, "output", {
         outputFileRelative: item.outputFileRelative,
         generatedFile: result.value.filePath,

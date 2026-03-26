@@ -1,15 +1,21 @@
 import { mkdir, writeFile } from "fs/promises";
 import { join } from "path";
 import { WORKSPACE_ROOT } from "../../../tools/system/common";
-import type { BuildStep } from "../types";
+import type { BuildStep, StepTrace } from "../types";
 
 export interface StepLogger {
   resultSteps: BuildStep[];
   startStep: (step: string) => void;
   logStep: (step: string, status: "ok" | "error", detail?: string, skillId?: string | null) => BuildStep;
+  attachTrace: (step: string, trace: StepTrace) => void;
   timed: <T>(
     stepName: string,
     fn: () => Promise<T>,
+    onOk?: (value: T) => string | undefined
+  ) => Promise<T>;
+  timedWithTrace: <T>(
+    stepName: string,
+    fn: (addTrace: (trace: StepTrace) => void) => Promise<T>,
     onOk?: (value: T) => string | undefined
   ) => Promise<T>;
 }
@@ -95,7 +101,7 @@ export function createStepLogger(options?: {
     stepStarts.set(step, Date.now());
   };
 
-  const logStep = (step: string, status: "ok" | "error", detail?: string, skillId?: string | null) => {
+  const logStep = (step: string, status: "ok" | "error", detail?: string, skillId?: string | null): BuildStep => {
     const now = Date.now();
     const duration = now - (stepStarts.get(step) ?? now);
     const entry: BuildStep = { step, status, detail, timestamp: now, duration, skillId };
@@ -110,6 +116,14 @@ export function createStepLogger(options?: {
     return entry;
   };
 
+  const attachTrace = (step: string, trace: StepTrace): void => {
+    const entry = resultSteps.findLast((s) => s.step === step);
+    if (!entry) return;
+    entry.trace = { ...entry.trace, ...trace };
+    // re-emit so the SSE stream gets the updated trace
+    options?.onStep?.(entry);
+  };
+
   const timed = async <T>(
     stepName: string,
     fn: () => Promise<T>,
@@ -121,11 +135,35 @@ export function createStepLogger(options?: {
       logStep(stepName, "ok", onOk?.(value));
       return value;
     } catch (error) {
-      logStep(
-        stepName,
-        "error",
-        error instanceof Error ? error.message : String(error)
-      );
+      logStep(stepName, "error", error instanceof Error ? error.message : String(error));
+      throw error;
+    }
+  };
+
+  const timedWithTrace = async <T>(
+    stepName: string,
+    fn: (addTrace: (trace: StepTrace) => void) => Promise<T>,
+    onOk?: (value: T) => string | undefined
+  ): Promise<T> => {
+    startStep(stepName);
+    let pendingTrace: StepTrace = {};
+    const addTrace = (trace: StepTrace) => {
+      pendingTrace = { ...pendingTrace, ...trace };
+    };
+    try {
+      const value = await fn(addTrace);
+      const entry = logStep(stepName, "ok", onOk?.(value));
+      if (Object.keys(pendingTrace).length > 0) {
+        entry.trace = pendingTrace;
+        options?.onStep?.(entry);
+      }
+      return value;
+    } catch (error) {
+      const entry = logStep(stepName, "error", error instanceof Error ? error.message : String(error));
+      if (Object.keys(pendingTrace).length > 0) {
+        entry.trace = pendingTrace;
+        options?.onStep?.(entry);
+      }
       throw error;
     }
   };
@@ -134,6 +172,8 @@ export function createStepLogger(options?: {
     resultSteps,
     startStep,
     logStep,
+    attachTrace,
     timed,
+    timedWithTrace,
   };
 }
