@@ -5,7 +5,7 @@
 
 import { existsSync, readdirSync, rmSync } from "fs";
 import { join } from "path";
-import { SITE_ROOT } from "@/ai/tools/system/common";
+import { getSiteRoot } from "@/ai/tools/system/common";
 
 export interface ClearTemplateResult {
   removed: string[];
@@ -17,7 +17,7 @@ export function clearTemplate(): ClearTemplateResult {
 
   try {
     // 1. Section components
-    const sectionsDir = join(SITE_ROOT, "components", "sections");
+    const sectionsDir = join(getSiteRoot(), "components", "sections");
     if (existsSync(sectionsDir)) {
       for (const f of readdirSync(sectionsDir)) {
         if (f.endsWith(".tsx") || f.endsWith(".ts")) {
@@ -29,7 +29,7 @@ export function clearTemplate(): ClearTemplateResult {
 
     // 2. Single files
     for (const rel of ["app/page.tsx", "app/layout.tsx", "app/globals.css", "design-system.md"]) {
-      const abs = join(SITE_ROOT, rel);
+      const abs = join(getSiteRoot(), rel);
       if (existsSync(abs)) {
         rmSync(abs);
         removed.push(rel);
@@ -37,7 +37,7 @@ export function clearTemplate(): ClearTemplateResult {
     }
 
     // 3. app/[slug]/page.tsx (non-home pages)
-    const appDir = join(SITE_ROOT, "app");
+    const appDir = join(getSiteRoot(), "app");
     if (existsSync(appDir)) {
       for (const e of readdirSync(appDir, { withFileTypes: true })) {
         if (e.isDirectory() && e.name !== "api") {

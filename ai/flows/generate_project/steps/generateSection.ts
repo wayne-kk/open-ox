@@ -5,6 +5,7 @@ import {
   loadGuardrail,
   loadSectionPrompt,
   loadSystem,
+  readSiteFile,
   writeSiteFile,
 } from "../shared/files";
 import {
@@ -38,6 +39,7 @@ export interface GenerateSectionParams {
 type GenerateSectionProjectContext = {
   projectTitle: string;
   projectDescription: string;
+  language: string;
   productScope: ProductScope;
   roles: UserRole[];
   taskLoops: TaskLoop[];
@@ -210,36 +212,7 @@ function filterRelevantCapabilities(
   );
 }
 
-function extractMarkdownSection(markdown: string, heading: string) {
-  const escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const regex = new RegExp(
-    `${escapedHeading}\\n([\\s\\S]*?)(?=\\n##\\s|\\n#\\s|$)`,
-    "i"
-  );
-  return markdown.match(regex)?.[1]?.trim() ?? "";
-}
 
-function buildDesignSystemSummary(designSystem: string) {
-  const sections = [
-    { label: "Typography", heading: "## 2. Design Token System (The DNA)" },
-    { label: "Component Stylings", heading: "## 3. Component Stylings" },
-    { label: "Layout Strategy", heading: "## 4. Layout Strategy" },
-    { label: "Effects & Animation", heading: "## 6. Effects & Animation" },
-    { label: "Implementation Notes", heading: "## 10. Implementation Notes" },
-  ]
-    .map(({ label, heading }) => {
-      const content = extractMarkdownSection(designSystem, heading);
-      if (!content) {
-        return "";
-      }
-
-      return `### ${label}\n${content}`;
-    })
-    .filter(Boolean)
-    .join("\n\n");
-
-  return sections || designSystem.slice(0, 2000);
-}
 
 function formatKnownRoutesBlock(
   pages: GenerateSectionProjectContext["pages"]
@@ -284,12 +257,13 @@ ${formatBulletList(pageContext.pageDesignPlan.constraints)}`;
 
 function buildUserMessage(params: {
   designSystem: string;
+  globalsCss: string;
   projectContext: GenerateSectionProjectContext;
   pageContext?: GenerateSectionPageContext;
   section: PlannedSectionSpec;
   designPlan: PlannedSectionSpec["designPlan"];
 }) {
-  const { designSystem, projectContext, pageContext, section, designPlan } = params;
+  const { designSystem, globalsCss, projectContext, pageContext, section, designPlan } = params;
   const relevantRoles = filterRelevantRoles(section, projectContext, pageContext);
   const relevantTaskLoops = filterRelevantTaskLoops(section, projectContext);
   const relevantCapabilities = filterRelevantCapabilities(section, projectContext, pageContext);
@@ -298,14 +272,18 @@ function buildUserMessage(params: {
   const capabilitiesBlock = formatCapabilitiesBlock(relevantCapabilities);
   const knownRoutesBlock = formatKnownRoutesBlock(projectContext.pages);
   const pageContextBlock = buildPageContextBlock(pageContext);
-  const designSystemSummary = buildDesignSystemSummary(designSystem);
 
-  return `## Design System Summary
-${designSystemSummary}
+  return `## Design System
+${designSystem}
 
+## globals.css (already applied — DO NOT redefine any of these classes or keyframes)
+\`\`\`css
+${globalsCss}
+\`\`\`
 ## Project Context
 - **Project**: ${projectContext.projectTitle}
 - **Description**: ${projectContext.projectDescription}
+- **Language**: ${projectContext.language} — ALL user-facing text in this component MUST be in this language. Do not use English placeholders if the language is not English.
 - **Product Type**: ${projectContext.productScope.productType}
 - **MVP Definition**: ${projectContext.productScope.mvpDefinition}
 - **Core Outcome**: ${projectContext.productScope.coreOutcome}
@@ -420,6 +398,7 @@ export async function stepGenerateSection({
   });
   const userMessage = buildUserMessage({
     designSystem,
+    globalsCss: readSiteFile("app/globals.css"),
     projectContext,
     pageContext,
     section,

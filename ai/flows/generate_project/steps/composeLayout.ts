@@ -67,7 +67,8 @@ ${layoutSections
 4. Preserve ALL existing content: metadata, font setup, className on <html>/<body>, etc.
 5. Do not hardcode assumptions about only navigation/footer existing; respect the provided section list and order.
 6. Output ONLY the complete updated layout.tsx — no markdown fences, no explanation
-7. Project: ${blueprint.brief.projectTitle}`;
+7. Project: ${blueprint.brief.projectTitle}
+8. **Set the \`lang\` attribute on the \`<html>\` tag to: \`${blueprint.brief.language}\`** — this is the detected language of the website content.`;
 
   const systemPrompt = [
     loadSystem("frontend"),

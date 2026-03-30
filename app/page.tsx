@@ -82,10 +82,10 @@ export default function Home() {
               <ArrowRight className="h-4 w-4" />
             </Link>
             <Link
-              href="#highlights"
+              href="/projects"
               className="defi-button-outline px-6 py-3 text-sm font-medium"
             >
-              What you get
+              My Projects
             </Link>
           </div>
 

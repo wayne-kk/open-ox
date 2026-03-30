@@ -1,7 +1,7 @@
 import { execSync } from "child_process";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import type { ToolResult, ToolExecutor } from "../types";
-import { SITE_ROOT } from "./common";
+import { getSiteRoot } from "./common";
 
 export const installPackageTool: ChatCompletionTool = {
   type: "function",
@@ -35,7 +35,7 @@ export const executeInstallPackage: ToolExecutor = async (
   const cmd = dev ? `pnpm add -D ${pkg}` : `pnpm add ${pkg}`;
   try {
     const output = execSync(cmd, {
-      cwd: SITE_ROOT,
+      cwd: getSiteRoot(),
       encoding: "utf-8",
       maxBuffer: 1024 * 1024,
     });

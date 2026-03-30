@@ -1,7 +1,7 @@
 import { execSync } from "child_process";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import type { ToolResult, ToolExecutor } from "../types";
-import { SITE_ROOT } from "./common";
+import { getSiteRoot } from "./common";
 
 export const runBuildTool: ChatCompletionTool = {
   type: "function",
@@ -28,7 +28,7 @@ export const executeRunBuild: ToolExecutor = async (
   const script = (args.script as string) || "build";
   try {
     const output = execSync(`pnpm run ${script}`, {
-      cwd: SITE_ROOT,
+      cwd: getSiteRoot(),
       encoding: "utf-8",
       maxBuffer: 1024 * 1024,
       env: { ...process.env, NODE_ENV: "production" },

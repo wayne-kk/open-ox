@@ -1,4 +1,6 @@
 import { clearTemplate } from "@/lib/clearTemplate";
+import { getSiteRoot as projectManagerGetSiteRoot } from "@/lib/projectManager";
+import { setSiteRoot } from "@/ai/tools/system/common";
 import { isLayoutSection } from "./registry/layoutSections";
 import { syncSiteValidationMarkers, readSiteFile } from "./shared/files";
 import { createArtifactLogger, createStepLogger } from "./shared/logging";
@@ -140,6 +142,7 @@ function buildProjectRuntimeContext(blueprint: PlannedProjectBlueprint): Project
   return {
     projectTitle: blueprint.brief.projectTitle,
     projectDescription: blueprint.brief.projectDescription,
+    language: blueprint.brief.language ?? "en",
     productScope: blueprint.brief.productScope,
     roles: blueprint.brief.roles,
     taskLoops: blueprint.brief.taskLoops,
@@ -571,7 +574,8 @@ async function runBuildWithRepair(params: {
 
 export async function runGenerateProject(
   userInput: string,
-  onStep?: (step: BuildStep) => void
+  onStep?: (step: BuildStep) => void,
+  options?: { projectId?: string }
 ): Promise<GenerateProjectResult> {
   const flowStart = Date.now();
   const logger = createStepLogger({ onStep, prefix: "generate_project" });
@@ -579,21 +583,31 @@ export async function runGenerateProject(
   const result = createInitialResult(logger);
   result.logDirectory = artifactLogger.runDirRelative;
 
+  // When a projectId is provided, point SITE_ROOT at the project directory and
+  // skip clearing the template (the project dir was already initialised by the
+  // Project_Manager).  Without a projectId we fall back to the existing
+  // SITE_ROOT env-var behaviour and run clearTemplate() as before.
+  if (options?.projectId) {
+    setSiteRoot(projectManagerGetSiteRoot(options.projectId));
+  }
+
   try {
     await persistJsonArtifact(artifactLogger, "run", "input", { userInput });
 
-    logger.startStep("clear_template");
-    const clearResult = clearTemplate();
-    if (clearResult.error) {
-      logger.logStep("clear_template", "error", clearResult.error);
-    } else {
-      logger.logStep(
-        "clear_template",
-        "ok",
-        clearResult.removed.length > 0 ? `${clearResult.removed.length} files removed` : "nothing to clear"
-      );
+    if (!options?.projectId) {
+      logger.startStep("clear_template");
+      const clearResult = clearTemplate();
+      if (clearResult.error) {
+        logger.logStep("clear_template", "error", clearResult.error);
+      } else {
+        logger.logStep(
+          "clear_template",
+          "ok",
+          clearResult.removed.length > 0 ? `${clearResult.removed.length} files removed` : "nothing to clear"
+        );
+      }
+      await persistJsonArtifact(artifactLogger, "clear_template", "output", clearResult);
     }
-    await persistJsonArtifact(artifactLogger, "clear_template", "output", clearResult);
 
     const rawBlueprint = await logger.timed(
       "analyze_project_requirement",

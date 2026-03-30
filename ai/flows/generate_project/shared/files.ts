@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync } from "fs";
 import { dirname, join } from "path";
 import { executeSystemTool } from "../../../tools";
-import { SITE_ROOT } from "../../../tools/system/common";
+import { getSiteRoot } from "../../../tools/system/common";
 
 const FLOW_ROOT = join(process.cwd(), "ai", "flows", "generate_project");
 const STEP_PROMPTS_ROOT = join(FLOW_ROOT, "prompts", "steps");
@@ -133,7 +133,7 @@ export function loadSystem(name: string): string {
 }
 
 export function readSiteFile(relativePath: string): string {
-  const fullPath = join(SITE_ROOT, relativePath);
+  const fullPath = join(getSiteRoot(), relativePath);
   if (!existsSync(fullPath)) {
     return "";
   }
@@ -142,7 +142,7 @@ export function readSiteFile(relativePath: string): string {
 }
 
 export function ensureSiteDir(relativeDir: string): void {
-  const dirPath = join(SITE_ROOT, relativeDir);
+  const dirPath = join(getSiteRoot(), relativeDir);
   if (!existsSync(dirPath)) {
     mkdirSync(dirPath, { recursive: true });
   }

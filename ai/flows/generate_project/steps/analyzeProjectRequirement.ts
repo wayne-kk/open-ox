@@ -276,6 +276,9 @@ function normalizeBrief(value: unknown): ProjectBrief {
   return {
     projectTitle: candidate.projectTitle,
     projectDescription: candidate.projectDescription,
+    language: typeof candidate.language === "string" && candidate.language.trim()
+      ? candidate.language.trim()
+      : "en",
     productScope: normalizeProductScope(candidate.productScope, candidate.projectDescription),
     roles,
     taskLoops: normalizeTaskLoops(candidate.taskLoops, roles),

@@ -17,6 +17,7 @@ Output a single valid JSON object. Do not include markdown, code fences, or expl
   "brief": {
     "projectTitle": "Human-readable website/project title",
     "projectDescription": "One sentence summarizing the website goal, audience, and scope",
+    "language": "BCP 47 language tag of the website content — detect from the user's input language or explicit request. Examples: 'zh-CN' for Simplified Chinese, 'en' for English, 'ja' for Japanese, 'ko' for Korean, 'fr' for French. If the user writes in Chinese, use 'zh-CN'. If in English, use 'en'. If they explicitly request a language, use that.",
     "productScope": {
       "productType": "landing page / company website / content platform / dashboard / marketplace / internal system / etc.",
       "mvpDefinition": "What the smallest coherent first version includes",

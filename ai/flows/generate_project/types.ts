@@ -134,6 +134,7 @@ export interface PlannedPageBlueprint extends Omit<PageBlueprint, "sections"> {
 export interface ProjectBrief {
   projectTitle: string;
   projectDescription: string;
+  language: string; // e.g. "zh-CN", "en", "ja" — detected from user input
   productScope: ProductScope;
   roles: UserRole[];
   taskLoops: TaskLoop[];
