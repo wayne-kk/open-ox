@@ -1,3 +1,5 @@
+import { readFileSync, existsSync } from "fs";
+import { join } from "path";
 import { getSystemToolDefinitions } from "../../../tools/systemToolCatalog";
 import {
   loadStepPrompt,
@@ -5,6 +7,7 @@ import {
   readSiteFile,
 } from "../shared/files";
 import { callLLMWithTools, extractJSON } from "../shared/llm";
+import { WORKSPACE_ROOT } from "../../../tools/system/common";
 import type {
   AutoInstalledDependency,
   DependencyInstallFailure,
@@ -69,6 +72,24 @@ ${readSiteFile(path)}
 \`\`\``
     )
     .join("\n\n");
+}
+
+/** Read all package names already available via sites/template/node_modules symlink. */
+function getTemplatePackageNames(): string[] {
+  const pkgPath = join(WORKSPACE_ROOT, "sites", "template", "package.json");
+  if (!existsSync(pkgPath)) return [];
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+    return [
+      ...Object.keys(pkg.dependencies ?? {}),
+      ...Object.keys(pkg.devDependencies ?? {}),
+    ];
+  } catch {
+    return [];
+  }
 }
 
 function getInstallFailureRecords(
@@ -138,10 +159,15 @@ export async function stepInstallDependencies({
   }
 
   const systemPrompt = [loadSystem("frontend"), loadStepPrompt("dependencyResolver")].join("\n\n");
+  const templatePackages = getTemplatePackageNames();
+  const sharedPackagesNote = templatePackages.length > 0
+    ? `## Already Available Packages\nThe following packages are already installed via the shared node_modules symlink (sites/template/node_modules). DO NOT install these — they are already resolvable:\n${templatePackages.map((p) => `- ${p}`).join("\n")}\n\nOnly install packages that are NOT in this list.\n\n`
+    : "";
+
   const userMessage = `## Goal
 Inspect generated files and resolve real third-party package gaps through tools.
 
-## Files To Inspect
+${sharedPackagesNote}## Files To Inspect
 ${targetFiles.map((file) => `- ${file}`).join("\n")}
 
 ## Related File Contents

@@ -280,6 +280,22 @@ export async function initProjectDir(projectId: string): Promise<void> {
         }
 
         await fs.writeFile(pkgPath, JSON.stringify(projPkg, null, 2) + "\n", "utf-8");
+
+        // Create a node_modules symlink pointing to the template's node_modules.
+        // This lets the project resolve all shared dependencies without a separate
+        // pnpm install, and without polluting the root pnpm-lock.yaml.
+        const templateNodeModules = path.join(templateDir, "node_modules");
+        const projectNodeModules = path.join(projectDir, "node_modules");
+        try {
+            await fs.access(templateNodeModules);
+            await fs.symlink(templateNodeModules, projectNodeModules, "dir");
+        } catch (symlinkErr: unknown) {
+            // Non-fatal: if template node_modules doesn't exist yet, the project
+            // will still work once the user runs pnpm install in sites/template.
+            console.warn(
+                `[initProjectDir] Could not create node_modules symlink: ${symlinkErr instanceof Error ? symlinkErr.message : String(symlinkErr)}`
+            );
+        }
     } catch (err: unknown) {
         // Clean up partially-created directory
         await fs.rm(projectDir, { recursive: true, force: true });
