@@ -1,0 +1,216 @@
+@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..800;1,400..800&family=Lora:ital,wght@0,400..700;1,400..700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Quicksand:wght@300..700&display=swap');
+
+@import "tailwindcss";
+
+@theme {
+  /* Colors */
+  --color-background: #FDFBF7;
+  --color-foreground: #2D3436;
+  --color-primary: #3E5C41;
+  --color-primary-foreground: #FDFBF7;
+  --color-secondary: #8ECAE6;
+  --color-secondary-foreground: #2D3436;
+  --color-accent: #E07A5F;
+  --color-accent-foreground: #FDFBF7;
+  --color-muted: #E9E4D9;
+  --color-muted-foreground: #636E72;
+  --color-destructive: #D63031;
+  --color-destructive-foreground: #FDFBF7;
+  --color-card: #FAF7F2;
+  --color-card-foreground: #2D3436;
+  --color-popover: #FDFBF7;
+  --color-popover-foreground: #2D3436;
+  --color-border: #D1CEC5;
+  --color-input: #E9E4D9;
+  --color-ring: #3E5C41;
+
+  /* Fonts */
+  --font-display: "Playfair Display", serif;
+  --font-header: "EB Garamond", serif;
+  --font-body: "Lora", serif;
+  --font-label: "Quicksand", sans-serif;
+
+  /* Shadows */
+  --shadow-ghibli: 0 10px 30px -10px rgba(62, 92, 65, 0.15);
+  --shadow-ghibli-sm: 0 4px 12px rgba(0, 0, 0, 0.05);
+  --shadow-ghibli-lg: 0 20px 50px -15px rgba(0, 0, 0, 0.1);
+  --shadow-inner-paper: inset 0 2px 4px 0 rgba(0, 0, 0, 0.02);
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-base: 12px;
+  --radius-lg: 24px;
+
+  /* Animations */
+  --animate-float: float 3s ease-in-out infinite alternate;
+  --animate-watercolor-bleed: watercolor-bleed 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@layer base {
+  :root {
+    --background: #FDFBF7;
+    --foreground: #2D3436;
+    --card: #FAF7F2;
+    --card-foreground: #2D3436;
+    --popover: #FDFBF7;
+    --popover-foreground: #2D3436;
+    --primary: #3E5C41;
+    --primary-foreground: #FDFBF7;
+    --secondary: #8ECAE6;
+    --secondary-foreground: #2D3436;
+    --muted: #E9E4D9;
+    --muted-foreground: #636E72;
+    --accent: #E07A5F;
+    --accent-foreground: #FDFBF7;
+    --destructive: #D63031;
+    --destructive-foreground: #FDFBF7;
+    --border: #D1CEC5;
+    --input: #E9E4D9;
+    --ring: #3E5C41;
+    --radius: 12px;
+
+    /* Non-theme variables */
+    --radius-organic: 40% 60% 70% 30% / 40% 50% 60% 40%;
+    --text-shadow-glow: 0 0 15px rgba(253, 251, 247, 0.8);
+    --transition-soft: all 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  html, body {
+    background-color: theme(--color-background);
+    color: theme(--color-foreground);
+    font-family: theme(--font-body);
+    -webkit-font-smoothing: antialiased;
+    scroll-behavior: smooth;
+  }
+
+  /* Paper Grain Overlay */
+  body::after {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+    opacity: 0.025;
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  * {
+    border-color: theme(--color-border);
+  }
+
+  .focus-ring {
+    outline: 2px solid theme(--color-primary);
+    outline-offset: 4px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, ::before, ::after {
+      animation-delay: -1ms !important;
+      animation-duration: 1ms !important;
+      animation-iteration-count: 1 !important;
+      background-attachment: initial !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0s !important;
+      transition-delay: 0s !important;
+    }
+    .ds-animate-float {
+      animation: none !important;
+    }
+    .ds-animate-watercolor-bleed {
+      animation: none !important;
+      opacity: 1 !important;
+      filter: none !important;
+    }
+  }
+}
+
+@keyframes float {
+  from { transform: translateY(0px) rotate(0deg); }
+  to { transform: translateY(-15px) rotate(2deg); }
+}
+
+@keyframes watercolor-bleed {
+  from { opacity: 0; filter: blur(20px); }
+  to { opacity: 1; filter: blur(0px); }
+}
+
+@layer utilities {
+  /* Font Utilities */
+  .ds-font-display { font-family: theme(--font-display); }
+  .ds-font-header { font-family: theme(--font-header); }
+  .ds-font-body { font-family: theme(--font-body); }
+  .ds-font-label { font-family: theme(--font-label); }
+
+  /* Shadow Utilities */
+  .ds-shadow-ghibli { box-shadow: theme(--shadow-ghibli); }
+  .ds-shadow-ghibli-sm { box-shadow: theme(--shadow-ghibli-sm); }
+  .ds-shadow-ghibli-lg { box-shadow: theme(--shadow-ghibli-lg); }
+  .ds-shadow-inner-paper { box-shadow: theme(--shadow-inner-paper); }
+
+  /* Animation Utilities */
+  .ds-animate-float { animation: theme(--animate-float); }
+  .ds-animate-watercolor-bleed { animation: theme(--animate-watercolor-bleed); }
+
+  /* Color Utilities */
+  .ds-text-primary { color: theme(--color-primary); }
+  .ds-bg-primary { background-color: theme(--color-primary); }
+  .ds-border-primary { border-color: theme(--color-primary); }
+  .ds-text-accent { color: theme(--color-accent); }
+  .ds-bg-card { background-color: theme(--color-card); }
+
+  /* Design Specific Effects */
+  .ds-radius-organic { border-radius: var(--radius-organic); }
+  .ds-text-glow { text-shadow: var(--text-shadow-glow); }
+  .ds-transition-soft { transition: var(--transition-soft); }
+  
+  .ds-bg-watercolor {
+    background: radial-gradient(circle at top left, theme(--color-secondary), transparent 40%),
+                radial-gradient(circle at bottom right, theme(--color-primary), transparent 40%),
+                theme(--color-background);
+    background-blend-mode: soft-light;
+  }
+
+  .ds-vertical-text {
+    writing-mode: vertical-rl;
+  }
+
+  .ds-py-ghibli {
+    padding-top: 10vh;
+    padding-bottom: 10vh;
+  }
+
+  /* Layout & Spacing */
+  .ds-ma-spacing {
+    margin-top: 120px;
+    margin-bottom: 120px;
+  }
+
+  .ds-storybook-column {
+    max-width: 800px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* Component Specifics */
+  .ds-button-base {
+    transition: var(--transition-soft);
+    font-family: theme(--font-label);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  .ds-input-base {
+    background-color: rgba(233, 228, 217, 0.5);
+    border-bottom: 1px solid theme(--color-border);
+    font-family: theme(--font-body);
+    transition: all 0.3s ease;
+  }
+  .ds-input-base:focus {
+    outline: none;
+    border-color: theme(--color-primary);
+    background-color: theme(--color-muted);
+  }
+}
