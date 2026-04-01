@@ -15,6 +15,7 @@ import { stepInstallDependencies } from "./steps/installDependencies";
 import { stepPlanProject } from "./steps/planProject";
 import { stepRepairBuild } from "./steps/repairBuild";
 import { stepRunBuild } from "./steps/runBuild";
+import { stepSelectComponentSkills } from "./steps/selectComponentSkills";
 import type {
   BuildStep,
   GenerateProjectResult,
@@ -43,10 +44,10 @@ function normalizeBlueprint(blueprint: ProjectBlueprint): ProjectBlueprint {
     blueprint.site.layoutSections.length > 0
       ? dedupeSectionsByFileName(blueprint.site.layoutSections)
       : dedupeSectionsByFileName(
-          blueprint.site.pages
-            .flatMap((page) => page.sections)
-            .filter((section) => isLayoutSection(section.type))
-        );
+        blueprint.site.pages
+          .flatMap((page) => page.sections)
+          .filter((section) => isLayoutSection(section.type))
+      );
 
   const pages = blueprint.site.pages.map((page) => ({
     ...page,
@@ -124,6 +125,7 @@ interface SectionBatchItem {
   section: PlannedSectionSpec;
   outputFileRelative: string;
   pageContext?: GenerateSectionParams["pageContext"];
+  preselectedSkillId?: string | null;
 }
 
 function createInitialResult(logger: StepLogger): GenerateProjectResult {
@@ -331,6 +333,7 @@ async function runSectionBatch(params: {
         section: item.section,
         outputFileRelative: item.outputFileRelative,
         pageContext: item.pageContext,
+        preselectedSkillId: item.preselectedSkillId,
       })
     )
   );
@@ -383,6 +386,33 @@ async function runSectionBatch(params: {
   return generatedFiles;
 }
 
+/**
+ * Pre-select component skills for all sections in parallel.
+ * Returns a map of fileName → skillId (null = no skill matched).
+ * This eliminates N serial LLM calls inside each stepGenerateSection.
+ */
+async function preselectSkillsForSections(
+  sections: PlannedSectionSpec[],
+  runtimeContext: ProjectRuntimeContext
+): Promise<Map<string, string | null>> {
+  const results = await Promise.allSettled(
+    sections.map((section) =>
+      stepSelectComponentSkills({
+        section,
+        productScope: runtimeContext.productScope,
+        designKeywords: runtimeContext.designKeywords ?? [],
+      }).then((r) => ({ fileName: section.fileName, skillId: r.id }))
+    )
+  );
+  const map = new Map<string, string | null>();
+  for (const result of results) {
+    if (result.status === "fulfilled") {
+      map.set(result.value.fileName, result.value.skillId);
+    }
+  }
+  return map;
+}
+
 async function generateSharedLayoutSections(params: {
   blueprint: PlannedProjectBlueprint;
   designSystem: string;
@@ -390,8 +420,9 @@ async function generateSharedLayoutSections(params: {
   artifactLogger: ArtifactLogger;
   result: GenerateProjectResult;
   logger: StepLogger;
+  skillMap: Map<string, string | null>;
 }): Promise<void> {
-  const { blueprint, designSystem, runtimeContext, artifactLogger, result, logger } = params;
+  const { blueprint, designSystem, runtimeContext, artifactLogger, result, logger, skillMap } = params;
   if (blueprint.site.layoutSections.length === 0) {
     return;
   }
@@ -402,6 +433,7 @@ async function generateSharedLayoutSections(params: {
       scopeKey: "layout",
       section,
       outputFileRelative: buildSectionFilePath("layout", section.fileName),
+      preselectedSkillId: skillMap.get(section.fileName),
     })),
     designSystem,
     runtimeContext,
@@ -432,8 +464,9 @@ async function generatePages(params: {
   artifactLogger: ArtifactLogger;
   result: GenerateProjectResult;
   logger: StepLogger;
+  skillMap: Map<string, string | null>;
 }): Promise<void> {
-  const { blueprint, designSystem, runtimeContext, artifactLogger, result, logger } = params;
+  const { blueprint, designSystem, runtimeContext, artifactLogger, result, logger, skillMap } = params;
 
   // Pages are independent (distinct output paths per slug); run in parallel for wall-clock time.
   const pageOutcomes = await Promise.all(
@@ -444,6 +477,7 @@ async function generatePages(params: {
           scopeKey: page.slug,
           section,
           outputFileRelative: buildSectionFilePath(page.slug, section.fileName),
+          preselectedSkillId: skillMap.get(section.fileName),
           pageContext: {
             title: page.title,
             slug: page.slug,
@@ -625,15 +659,31 @@ export async function runGenerateProject(
     );
     await persistJsonArtifact(artifactLogger, "analyze_project_requirement", "output", rawBlueprint);
     const normalizedBlueprint = normalizeBlueprint(rawBlueprint);
-    const blueprint = await logger.timed(
-      "plan_project",
-      () => stepPlanProject(normalizedBlueprint),
-      () => "section generation plans prepared"
-    );
+
+    // plan_project and generate_design_system both depend only on the blueprint —
+    // run them in parallel to save one full LLM round-trip on the critical path.
+    logger.startStep("plan_project");
+    logger.startStep("generate_project_design_system");
+    const [blueprint, designSystem] = await Promise.all([
+      stepPlanProject(normalizedBlueprint).then((bp) => {
+        logger.logStep("plan_project", "ok", "section generation plans prepared");
+        return bp;
+      }),
+      stepGenerateProjectDesignSystem(normalizedBlueprint).then((ds) => {
+        logger.logStep("generate_project_design_system", "ok", "design-system.md written");
+        return ds;
+      }),
+    ]);
     await persistJsonArtifact(artifactLogger, "plan_project", "output", blueprint);
+    await persistTextArtifact(
+      artifactLogger,
+      "generate_project_design_system",
+      "design-system",
+      designSystem,
+      "md"
+    );
 
     // Safety: move any non-layout sections that planProject mistakenly put in layoutSections
-    // back to the home page's sections array
     const trueLayoutSections = blueprint.site.layoutSections.filter((s) => isLayoutSection(s.type));
     const misplacedSections = blueprint.site.layoutSections.filter((s) => !isLayoutSection(s.type));
     if (misplacedSections.length > 0) {
@@ -647,19 +697,6 @@ export async function runGenerateProject(
 
     result.blueprint = blueprint;
     const runtimeContext = buildProjectRuntimeContext(blueprint);
-
-    const designSystem = await logger.timed(
-      "generate_project_design_system",
-      () => stepGenerateProjectDesignSystem(blueprint),
-      () => "design-system.md written"
-    );
-    await persistTextArtifact(
-      artifactLogger,
-      "generate_project_design_system",
-      "design-system",
-      designSystem,
-      "md"
-    );
     appendGeneratedFiles(result, ["design-system.md"]);
 
     const tokenFiles = await logger.timed(
@@ -680,6 +717,16 @@ export async function runGenerateProject(
     }
     appendGeneratedFiles(result, tokenFiles);
 
+    // Pre-select component skills for all sections in parallel before generation starts.
+    // This eliminates N serial LLM calls (one per section) from the critical path.
+    const allSections = [
+      ...blueprint.site.layoutSections,
+      ...blueprint.site.pages.flatMap((p) => p.sections),
+    ];
+    logger.startStep("preselect_skills");
+    const skillMap = await preselectSkillsForSections(allSections, runtimeContext);
+    logger.logStep("preselect_skills", "ok", `${skillMap.size} sections → skills resolved`);
+
     await generateSharedLayoutSections({
       blueprint,
       designSystem,
@@ -687,6 +734,7 @@ export async function runGenerateProject(
       artifactLogger,
       result,
       logger,
+      skillMap,
     });
     await generatePages({
       blueprint,
@@ -695,6 +743,7 @@ export async function runGenerateProject(
       artifactLogger,
       result,
       logger,
+      skillMap,
     });
     await autoInstallDependenciesForFiles({
       scope: "generated",

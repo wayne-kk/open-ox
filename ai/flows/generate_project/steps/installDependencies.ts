@@ -92,6 +92,37 @@ function getTemplatePackageNames(): string[] {
   }
 }
 
+/**
+ * Statically scan generated files for third-party imports that are NOT in the
+ * template node_modules. Returns the list of unknown package names.
+ * If the list is empty, the LLM dependency agent can be skipped entirely.
+ */
+function findUnknownImports(files: string[], templatePackages: Set<string>): string[] {
+  const unknown = new Set<string>();
+  // Match: import ... from 'pkg' / import ... from "pkg"
+  // Also: require('pkg')
+  const importRe = /(?:from|require)\s*\(\s*['"]([^'"./][^'"]*)['"]\s*\)|import\s+['"]([^'"./][^'"]*)['"]/g;
+
+  for (const relPath of files) {
+    const content = readSiteFile(relPath);
+    if (!content) continue;
+    let match: RegExpExecArray | null;
+    importRe.lastIndex = 0;
+    while ((match = importRe.exec(content)) !== null) {
+      const pkg = match[1] ?? match[2];
+      if (!pkg) continue;
+      // Normalize scoped packages: @scope/pkg/sub → @scope/pkg
+      const normalized = pkg.startsWith("@")
+        ? pkg.split("/").slice(0, 2).join("/")
+        : pkg.split("/")[0];
+      if (normalized && !templatePackages.has(normalized)) {
+        unknown.add(normalized);
+      }
+    }
+  }
+  return Array.from(unknown);
+}
+
 function getInstallFailureRecords(
   toolCalls: Awaited<ReturnType<typeof callLLMWithTools>>["toolCalls"]
 ): DependencyInstallFailure[] {
@@ -160,6 +191,22 @@ export async function stepInstallDependencies({
 
   const systemPrompt = [loadSystem("frontend"), loadStepPrompt("dependencyResolver")].join("\n\n");
   const templatePackages = getTemplatePackageNames();
+  const templatePackageSet = new Set(templatePackages);
+
+  // Static pre-check: if all imports are already in template node_modules,
+  // skip the LLM agent entirely — it would only "skip" everything anyway.
+  if (!buildOutput) {
+    const unknownImports = findUnknownImports(targetFiles, templatePackageSet);
+    if (unknownImports.length === 0) {
+      return {
+        summary: "skipped dependency agent: static analysis found no unknown imports (all packages available via template node_modules)",
+        installed: [],
+        failed: [],
+        skipped: [],
+      };
+    }
+  }
+
   const sharedPackagesNote = templatePackages.length > 0
     ? `## Already Available Packages\nThe following packages are already installed via the shared node_modules symlink (sites/template/node_modules). DO NOT install these — they are already resolvable:\n${templatePackages.map((p) => `- ${p}`).join("\n")}\n\nOnly install packages that are NOT in this list.\n\n`
     : "";

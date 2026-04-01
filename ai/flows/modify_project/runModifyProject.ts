@@ -13,10 +13,11 @@
 import fs from "fs/promises";
 import path from "path";
 import { structuredPatch } from "diff";
-import { setSiteRoot } from "@/ai/tools/system/common";
+import { setSiteRoot, clearSiteRoot } from "@/ai/tools/system/common";
 import { getProject, getSiteRoot, updateProjectStatus } from "@/lib/projectManager";
 import type { ModificationRecord } from "@/lib/projectManager";
 import { callLLM, extractContent } from "@/ai/flows/generate_project/shared/llm";
+import { stepRunBuild } from "@/ai/flows/generate_project/steps/runBuild";
 import { createArtifactLogger } from "@/ai/flows/generate_project/shared/logging";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -65,10 +66,24 @@ async function readProjectContext(projectDir: string, blueprint: unknown): Promi
     const content = await tryReadFile(path.join(projectDir, relPath));
     if (content) parts.push(`### ${relPath}\n\`\`\`\n${content}\n\`\`\``);
   }
+
+  // Read all sub-page files (app/[slug]/page.tsx) — not just home
+  const appDir = path.join(projectDir, "app");
+  try {
+    const entries = await fs.readdir(appDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name === "api") continue;
+      const pagePath = path.join(appDir, entry.name, "page.tsx");
+      const content = await tryReadFile(pagePath);
+      if (content) parts.push(`### app/${entry.name}/page.tsx\n\`\`\`tsx\n${content}\n\`\`\``);
+    }
+  } catch { /* no sub-pages */ }
+
+  // Read all section components (no arbitrary slice limit)
   const sectionsDir = path.join(projectDir, "components", "sections");
   try {
     const files = await fs.readdir(sectionsDir);
-    for (const file of files.slice(0, 10)) {
+    for (const file of files) {
       const content = await tryReadFile(path.join(sectionsDir, file));
       if (content) parts.push(`### components/sections/${file}\n\`\`\`tsx\n${content}\n\`\`\``);
     }
@@ -197,7 +212,7 @@ async function generateNewContent(
   const designSystem = await tryReadFile(path.join(projectDir, "design-system.md")) ?? "";
   const globalsCss = await tryReadFile(path.join(projectDir, "app/globals.css")) ?? "";
   const styleContext = (designSystem || globalsCss)
-    ? `\n\n## Design System\n${designSystem.slice(0, 3000)}\n\n## Available CSS utilities\n\`\`\`css\n${globalsCss.slice(0, 2000)}\n\`\`\``
+    ? `\n\n## Design System\n${designSystem}\n\n## Available CSS utilities\n\`\`\`css\n${globalsCss}\n\`\`\``
     : "";
 
   if (change.action === "create") {
@@ -266,108 +281,127 @@ export async function runModifyProject(
   setSiteRoot(projectDir);
   onEvent({ type: "step", name: "resolve_project", status: "done" });
 
-  // Step 2: Read context
-  onEvent({ type: "step", name: "read_context", status: "running" });
-  const contextStr = await readProjectContext(projectDir, project.blueprint ?? null);
-  await artifactLogger.writeText("read_context", "context", contextStr, "md");
-  onEvent({ type: "step", name: "read_context", status: "done" });
+  // Wrap everything in try/finally so setSiteRoot is always reset,
+  // even if the flow throws mid-way (problem 1 fix).
+  try {
+    // Step 2: Read context
+    onEvent({ type: "step", name: "read_context", status: "running" });
+    const contextStr = await readProjectContext(projectDir, project.blueprint ?? null);
+    await artifactLogger.writeText("read_context", "context", contextStr, "md");
+    onEvent({ type: "step", name: "read_context", status: "done" });
 
-  // Step 3: Plan
-  onEvent({ type: "step", name: "plan", status: "running" });
-  const plan = await generatePlan(contextStr, userInstruction);
-  await artifactLogger.writeJson("plan", "plan", plan);
-  onEvent({ type: "plan", plan });
-  onEvent({
-    type: "step", name: "plan", status: "done",
-    message: `${plan.analysis}\n→ ${plan.changes.length} file(s)`,
-  });
+    // Step 3: Plan
+    onEvent({ type: "step", name: "plan", status: "running" });
+    const plan = await generatePlan(contextStr, userInstruction);
+    await artifactLogger.writeJson("plan", "plan", plan);
+    onEvent({ type: "plan", plan });
+    onEvent({
+      type: "step", name: "plan", status: "done",
+      message: `${plan.analysis}\n→ ${plan.changes.length} file(s)`,
+    });
 
-  if (plan.changes.length === 0) {
-    onEvent({ type: "step", name: "plan", status: "error", message: "No changes planned" });
-    return;
-  }
-
-  // Step 4: Execute changes (in dependency order)
-  const sortedChanges = topoSort(plan.changes);
-  const touchedFiles: string[] = [];
-  const completedChanges = new Map<string, string>(); // path → new content
-
-  for (const change of sortedChanges) {
-    const stepName = `${change.action}:${change.path}`;
-    onEvent({ type: "step", name: stepName, status: "running", message: change.reasoning });
-
-    try {
-      const absPath = path.resolve(projectDir, change.path);
-      if (!absPath.startsWith(projectDir + path.sep) && absPath !== projectDir) {
-        onEvent({ type: "step", name: stepName, status: "error", message: "Path traversal blocked" });
-        continue;
-      }
-
-      if (change.action === "delete") {
-        await fs.rm(absPath, { force: true });
-        onEvent({
-          type: "diff", file: change.path, reasoning: change.reasoning,
-          patch: `File deleted`, stats: { additions: 0, deletions: 0 },
-        });
-        touchedFiles.push(change.path);
-        onEvent({ type: "step", name: stepName, status: "done", message: "Deleted" });
-        continue;
-      }
-
-      // Read old content (empty string for new files)
-      const oldContent = await tryReadFile(absPath) ?? "";
-
-      // LLM generates complete new content (with context from completed deps)
-      const newContent = await generateNewContent(projectDir, change, userInstruction, completedChanges);
-
-      // Compute real diff
-      const { patch, stats } = computeDiff(change.path, oldContent, newContent);
-
-      // Log everything
-      const safeStepName = stepName.replace(/[/\\:]/g, "_");
-      await artifactLogger.writeText(safeStepName, "old", oldContent, "tsx");
-      await artifactLogger.writeText(safeStepName, "new", newContent, "tsx");
-      await artifactLogger.writeText(safeStepName, "diff", patch, "diff");
-
-      // Stream diff to client
-      onEvent({ type: "diff", file: change.path, reasoning: change.reasoning, patch, stats });
-
-      // Write file
-      await fs.mkdir(path.dirname(absPath), { recursive: true });
-      await fs.writeFile(absPath, newContent, "utf-8");
-
-      touchedFiles.push(change.path);
-      completedChanges.set(change.path, newContent);
-      onEvent({
-        type: "step", name: stepName, status: "done",
-        message: `+${stats.additions} -${stats.deletions} lines`,
-      });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      await artifactLogger.writeJson(stepName.replace(/[/\\:]/g, "_"), "error", { error: msg });
-      onEvent({ type: "step", name: stepName, status: "error", message: msg });
+    if (plan.changes.length === 0) {
+      onEvent({ type: "step", name: "plan", status: "error", message: "No changes planned" });
+      return;
     }
+
+    // Step 4: Execute changes (in dependency order)
+    const sortedChanges = topoSort(plan.changes);
+    const touchedFiles: string[] = [];
+    const completedChanges = new Map<string, string>(); // path → new content
+
+    for (const change of sortedChanges) {
+      const stepName = `${change.action}:${change.path}`;
+      onEvent({ type: "step", name: stepName, status: "running", message: change.reasoning });
+
+      try {
+        const absPath = path.resolve(projectDir, change.path);
+        if (!absPath.startsWith(projectDir + path.sep) && absPath !== projectDir) {
+          onEvent({ type: "step", name: stepName, status: "error", message: "Path traversal blocked" });
+          continue;
+        }
+
+        if (change.action === "delete") {
+          await fs.rm(absPath, { force: true });
+          onEvent({
+            type: "diff", file: change.path, reasoning: change.reasoning,
+            patch: `File deleted`, stats: { additions: 0, deletions: 0 },
+          });
+          touchedFiles.push(change.path);
+          onEvent({ type: "step", name: stepName, status: "done", message: "Deleted" });
+          continue;
+        }
+
+        // Read old content (empty string for new files)
+        const oldContent = await tryReadFile(absPath) ?? "";
+
+        // LLM generates complete new content (with context from completed deps)
+        const newContent = await generateNewContent(projectDir, change, userInstruction, completedChanges);
+
+        // Compute real diff
+        const { patch, stats } = computeDiff(change.path, oldContent, newContent);
+
+        // Log everything
+        const safeStepName = stepName.replace(/[/\\:]/g, "_");
+        await artifactLogger.writeText(safeStepName, "old", oldContent, "tsx");
+        await artifactLogger.writeText(safeStepName, "new", newContent, "tsx");
+        await artifactLogger.writeText(safeStepName, "diff", patch, "diff");
+
+        // Stream diff to client
+        onEvent({ type: "diff", file: change.path, reasoning: change.reasoning, patch, stats });
+
+        // Write file
+        await fs.mkdir(path.dirname(absPath), { recursive: true });
+        await fs.writeFile(absPath, newContent, "utf-8");
+
+        touchedFiles.push(change.path);
+        completedChanges.set(change.path, newContent);
+        onEvent({
+          type: "step", name: stepName, status: "done",
+          message: `+${stats.additions} -${stats.deletions} lines`,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        await artifactLogger.writeJson(stepName.replace(/[/\\:]/g, "_"), "error", { error: msg });
+        onEvent({ type: "step", name: stepName, status: "error", message: msg });
+      }
+    }
+
+    // Step 5: Build verification (problem 5 fix)
+    onEvent({ type: "step", name: "run_build", status: "running" });
+    const buildResult = await stepRunBuild();
+    await artifactLogger.writeText("run_build", "output", buildResult.output, "log");
+    onEvent({
+      type: "step", name: "run_build",
+      status: buildResult.success ? "done" : "error",
+      message: buildResult.output.slice(0, 300),
+    });
+
+    // Step 6: Update registry
+    onEvent({ type: "step", name: "update_registry", status: "running" });
+    const record: ModificationRecord = {
+      instruction: userInstruction,
+      modifiedAt: new Date().toISOString(),
+      touchedFiles,
+    };
+    const existingHistory = project.modificationHistory ?? [];
+    await updateProjectStatus(projectId, "ready", {
+      modificationHistory: [...existingHistory, record],
+      verificationStatus: buildResult.success ? "passed" : "failed",
+    });
+
+    await artifactLogger.writeJson("run", "result", {
+      projectId, instruction: userInstruction, touchedFiles,
+      buildPassed: buildResult.success,
+      logDirectory: artifactLogger.runDirRelative,
+    });
+
+    onEvent({
+      type: "step", name: "update_registry", status: "done",
+      message: `${touchedFiles.length} file(s): ${touchedFiles.join(", ")}`,
+    });
+  } finally {
+    // Always reset SITE_ROOT regardless of success or failure (problem 1 fix)
+    clearSiteRoot();
   }
-
-  // Step 5: Update registry
-  onEvent({ type: "step", name: "update_registry", status: "running" });
-  const record: ModificationRecord = {
-    instruction: userInstruction,
-    modifiedAt: new Date().toISOString(),
-    touchedFiles,
-  };
-  const existingHistory = project.modificationHistory ?? [];
-  await updateProjectStatus(projectId, "ready", {
-    modificationHistory: [...existingHistory, record],
-  });
-
-  await artifactLogger.writeJson("run", "result", {
-    projectId, instruction: userInstruction, touchedFiles,
-    logDirectory: artifactLogger.runDirRelative,
-  });
-
-  onEvent({
-    type: "step", name: "update_registry", status: "done",
-    message: `${touchedFiles.length} file(s): ${touchedFiles.join(", ")}`,
-  });
 }

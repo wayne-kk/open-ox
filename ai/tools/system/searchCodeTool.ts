@@ -1,4 +1,4 @@
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import type { ToolResult, ToolExecutor } from "../types";
 import { resolvePath } from "./common";
@@ -33,22 +33,27 @@ export const executeSearchCode: ToolExecutor = async (
   const searchPath = (args.path as string) || ".";
   const fullPath = resolvePath(searchPath);
   try {
-    const output = execSync(
-      `rg "${pattern.replace(/"/g, '\\"')}" "${fullPath}" --no-heading -n 2>/dev/null || true`,
-      {
-        encoding: "utf-8",
-        maxBuffer: 512 * 1024,
-      }
-    );
+    // Use execFileSync with args array to avoid shell injection (s02 principle)
+    const output = execFileSync("rg", [pattern, fullPath, "--no-heading", "-n"], {
+      encoding: "utf-8",
+      maxBuffer: 512 * 1024,
+      timeout: 15_000,
+    });
     return {
       success: true,
       output: output?.trim() || "(no matches)",
       meta: { pattern },
     };
-  } catch {
+  } catch (err) {
+    // rg exits with code 1 when no matches — not a real error
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("exited with code 1") || msg.includes("status 1")) {
+      return { success: true, output: "(no matches)", meta: { pattern } };
+    }
+    // rg not installed or other error
     return {
-      success: true,
-      output: "(search_code: rg not available, placeholder)",
+      success: false,
+      error: `search_code failed: ${msg.slice(0, 200)}`,
       meta: { pattern },
     };
   }

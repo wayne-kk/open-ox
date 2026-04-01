@@ -1,4 +1,4 @@
-import { existsSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, writeFileSync } from "fs";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import type { ToolResult, ToolExecutor } from "../types";
 import { resolvePath } from "./common";
@@ -33,7 +33,6 @@ export const executeWriteFile: ToolExecutor = async (
   const path = args.path as string;
   const content = args.content as string;
   const fullPath = resolvePath(path);
-  const { mkdirSync } = await import("fs");
   const dir = fullPath.replace(/\/[^/]+$/, "");
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   writeFileSync(fullPath, content, "utf-8");

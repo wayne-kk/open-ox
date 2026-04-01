@@ -1,17 +1,12 @@
-import { loadGuardrail, loadStepPrompt, loadSystem, writeSiteFile } from "../shared/files";
+import { loadStepPrompt, loadSystem, writeSiteFile } from "../shared/files";
 import { callLLM } from "../shared/llm";
-import type { PlannedProjectBlueprint } from "../types";
+import type { ProjectBlueprint } from "../types";
 
 export async function stepGenerateProjectDesignSystem(
-  blueprint: PlannedProjectBlueprint
+  blueprint: ProjectBlueprint
 ): Promise<string> {
-  const projectGuardrails = blueprint.projectGuardrailIds
-    .map((guardrailId) => loadGuardrail(guardrailId))
-    .join("\n\n");
   const systemPrompt = [
     loadSystem("frontend"),
-    "\n\n",
-    projectGuardrails,
     "\n\n",
     loadStepPrompt("generateProjectDesignSystem"),
   ].join("");

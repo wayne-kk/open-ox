@@ -115,18 +115,18 @@ function BuildStudioInner() {
                 {loading ? (
                   <span className="defi-badge px-3 py-1 text-primary">network live</span>
                 ) : response ? (
-                    <span className={`defi-badge px-3 py-1 ${response.error
-                      ? "border border-red-400/35 text-red-400"
-                      : response.verificationStatus === "failed"
-                        ? "border border-amber-400/35 text-amber-300"
-                        : "text-accent-tertiary"
-                      }`}>
-                      {response.error ? "failed"
-                        : response.verificationStatus === "failed" ? "unvalidated"
-                          : response.buildTotalDuration ? `done · ${formatMs(response.buildTotalDuration)}` : "done"}
+                  <span className={`defi-badge px-3 py-1 ${response.error
+                    ? "border border-red-400/35 text-red-400"
+                    : response.verificationStatus === "failed"
+                      ? "border border-amber-400/35 text-amber-300"
+                      : "text-accent-tertiary"
+                    }`}>
+                    {response.error ? "failed"
+                      : response.verificationStatus === "failed" ? "unvalidated"
+                        : response.buildTotalDuration ? `done · ${formatMs(response.buildTotalDuration)}` : "done"}
                   </span>
                 ) : (
-                      <span className="font-mono uppercase tracking-[0.26em] text-muted-foreground">standby</span>
+                  <span className="font-mono uppercase tracking-[0.26em] text-muted-foreground">standby</span>
                 )}
               </div>
             </div>
@@ -134,17 +134,15 @@ function BuildStudioInner() {
             {/* Right panel content */}
             <div className="flex-1 min-h-0 overflow-hidden">
               {rightPanel === "topology" ? (
-                <div className="h-full bg-[linear-gradient(180deg,rgba(255,255,255,0.02),rgba(0,0,0,0.16))] px-5 py-4 font-mono text-[12px]">
-                  <div className="flex h-full min-h-0 flex-col p-4">
-                    <GenerationAtlas
-                      steps={buildSteps}
-                      flowStart={studio.flowStart}
-                      loading={loading}
-                      verificationStatus={response?.verificationStatus}
-                      totalDuration={response?.buildTotalDuration}
-                      showEventStream={false}
-                    />
-                  </div>
+                <div className="h-full overflow-hidden bg-[linear-gradient(180deg,rgba(255,255,255,0.02),rgba(0,0,0,0.16))]">
+                  <GenerationAtlas
+                    steps={buildSteps}
+                    flowStart={studio.flowStart}
+                    loading={loading}
+                    verificationStatus={response?.verificationStatus}
+                    totalDuration={response?.buildTotalDuration}
+                    showEventStream={false}
+                  />
                 </div>
               ) : (
                 /* Preview panel */

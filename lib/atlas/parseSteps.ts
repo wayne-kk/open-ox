@@ -75,7 +75,7 @@ function formatStepLabel(step: string): string {
 export function parseStepsToTopology(steps: BuildStep[], flowStart: number): TopologyGraph {
   const nodes: GraphNode[] = steps.map((s, index) => {
     const stage = inferStage(s.step);
-    const stepWithSkill = s as { skillId?: string | null };
+    const stepWithExtra = s as { skillId?: string | null; trace?: GraphNode["trace"] };
     return {
       id: `${s.step}-${index}`,
       step: s.step,
@@ -86,7 +86,8 @@ export function parseStepsToTopology(steps: BuildStep[], flowStart: number): Top
       duration: s.duration,
       timestamp: s.timestamp,
       index,
-      skillHint: stepWithSkill.skillId ?? undefined,
+      skillHint: stepWithExtra.skillId ?? undefined,
+      trace: stepWithExtra.trace,
     };
   });
 

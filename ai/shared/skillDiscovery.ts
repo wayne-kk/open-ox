@@ -3,6 +3,11 @@
  *
  * 扫描指定目录下的 .md 文件，解析 YAML frontmatter，返回可用的 skill metadata。
  * 不依赖具体 flow，不读取 prompt 正文。
+ *
+ * rootPath 由调用方传入，例如：
+ *   - generate_project flow: ai/flows/generate_project/prompts/skills/
+ *   - 未来其他 agent: ai/skills/<agent-name>/
+ * ai/skills/ 目录本身是空的，skill 文件由各 flow 自行管理。
  */
 
 import { existsSync, readFileSync, readdirSync } from "fs";
@@ -119,7 +124,7 @@ export function toCompactMetadata(skill: SkillMetadata): Record<string, unknown>
 
 /**
  * 根据 rootPath + id 加载 skill 完整内容（含 prompt 正文）
- * 任何 agent 均可调用，不依赖具体 flow
+ * rootPath 由调用方传入，与 discoverSkills 保持一致。
  */
 export function loadSkillContent(rootPath: string, skillId: string): string {
   const path = join(rootPath, `${skillId}.md`);

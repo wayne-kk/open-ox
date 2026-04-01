@@ -21,6 +21,8 @@ export type StageId =
   | "verify"
   | "repair";
 
+import type { StepTrace } from "@/app/build-studio/types/build-studio";
+
 export interface GraphNode {
   id: string;
   step: string;
@@ -31,8 +33,8 @@ export interface GraphNode {
   duration: number;
   timestamp: number;
   index: number;
-  /** For generate_section steps: inferred skill hint (when we have data) */
   skillHint?: string;
+  trace?: StepTrace;
 }
 
 export interface Stage {

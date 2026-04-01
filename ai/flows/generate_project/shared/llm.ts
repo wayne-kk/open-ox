@@ -196,6 +196,11 @@ export async function callLLMWithTools(params: {
     const message = res.choices[0]?.message;
     if (!message) break;
 
+    // Truncated response means the model ran out of tokens mid-generation
+    if (res.choices[0]?.finish_reason === "length") {
+      throw new Error(`LLM response truncated (finish_reason=length) at iteration ${iteration}. Reduce prompt size or increase max_tokens.`);
+    }
+
     messages.push({
       role: "assistant",
       content: message.content ?? "",
@@ -231,6 +236,10 @@ export async function callLLMWithTools(params: {
     }
   }
 
+  // maxIterations exhausted without a final non-tool response — surface this
+  // clearly instead of silently returning empty string (s01 principle: loops
+  // must have a visible exit condition).
+  console.warn(`[callLLMWithTools] maxIterations (${maxIterations}) exhausted without a final response. Returning last tool call results.`);
   return { content: "", toolCalls };
 }
 

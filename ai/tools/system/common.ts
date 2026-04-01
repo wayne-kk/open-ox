@@ -38,6 +38,17 @@ export function setSiteRoot(path: string): void {
 }
 
 /**
+ * Reset the site root back to the value derived from the SITE_ROOT env var
+ * (or WORKSPACE_ROOT if unset).  Call this in a finally block after any flow
+ * that calls setSiteRoot() to prevent state leaking between requests.
+ */
+export function clearSiteRoot(): void {
+  _siteRoot = process.env.SITE_ROOT
+    ? join(WORKSPACE_ROOT, process.env.SITE_ROOT)
+    : WORKSPACE_ROOT;
+}
+
+/**
  * 安全路径：不允许跳出当前 SITE_ROOT
  * Uses the current dynamic _siteRoot so it always reflects the latest setSiteRoot() call.
  */

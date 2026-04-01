@@ -34,6 +34,8 @@ export interface GenerateSectionParams {
   section: PlannedSectionSpec;
   outputFileRelative: string;
   pageContext?: GenerateSectionPageContext;
+  /** Pre-selected skill id — skips the LLM skill selection call if provided. */
+  preselectedSkillId?: string | null;
 }
 
 type GenerateSectionProjectContext = {
@@ -101,35 +103,22 @@ function buildSectionPromptBlocks(sectionType: string) {
     .join("\n\n");
 }
 
-async function buildComponentSkillBlock(
-  section: PlannedSectionSpec,
-  productScope: ProductScope,
-  designKeywords: string[]
-): Promise<{ block: string; skillId: string | null }> {
-  const result = await stepSelectComponentSkills({
-    section,
-    productScope,
-    designKeywords,
-  });
-  return {
-    block: loadSelectedSkillPrompt(result.id),
-    skillId: result.id,
-  };
-}
-
 async function buildSystemPrompt(params: {
   section: PlannedSectionSpec;
   projectGuardrailIds: GuardrailId[];
   designPlan: PlannedSectionSpec["designPlan"];
   productScope: ProductScope;
   designKeywords: string[];
+  preselectedSkillId?: string | null;
 }): Promise<{ prompt: string; skillId: string | null }> {
-  const { section, projectGuardrailIds, designPlan, productScope, designKeywords } = params;
-  const { block: componentSkillBlock, skillId } = await buildComponentSkillBlock(
-    section,
-    productScope,
-    designKeywords
-  );
+  const { section, projectGuardrailIds, designPlan, productScope, designKeywords, preselectedSkillId } = params;
+
+  // Use pre-selected skill if available, otherwise run LLM selection
+  const skillId = preselectedSkillId !== undefined
+    ? preselectedSkillId
+    : (await stepSelectComponentSkills({ section, productScope, designKeywords })).id;
+
+  const componentSkillBlock = loadSelectedSkillPrompt(skillId);
 
   const prompt = [
     loadSystem("frontend"),
@@ -387,6 +376,7 @@ export async function stepGenerateSection({
   section,
   outputFileRelative,
   pageContext,
+  preselectedSkillId,
 }: GenerateSectionParams): Promise<GenerateSectionResult> {
   const designPlan = buildSectionDesignPlan(section, projectContext);
   const { prompt: systemPrompt, skillId } = await buildSystemPrompt({
@@ -395,6 +385,7 @@ export async function stepGenerateSection({
     designPlan,
     productScope: projectContext.productScope,
     designKeywords: projectContext.designKeywords ?? [],
+    preselectedSkillId,
   });
   const userMessage = buildUserMessage({
     designSystem,
