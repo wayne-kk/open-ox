@@ -611,7 +611,16 @@ export async function runGenerateProject(
 
     const rawBlueprint = await logger.timed(
       "analyze_project_requirement",
-      () => stepAnalyzeProjectRequirement(userInput),
+      () => stepAnalyzeProjectRequirement(userInput, (name, args, result) => {
+        // Stream tool calls to the UI in real-time
+        onStep?.({
+          step: `tool_call:${name}`,
+          status: "ok",
+          detail: JSON.stringify({ tool: name, args, result: result.slice(0, 500) }),
+          timestamp: Date.now(),
+          duration: 0,
+        });
+      }),
       (blueprint) => `${blueprint.brief.roles.length} roles, ${blueprint.site.pages.length} pages planned`
     );
     await persistJsonArtifact(artifactLogger, "analyze_project_requirement", "output", rawBlueprint);
@@ -622,6 +631,20 @@ export async function runGenerateProject(
       () => "section generation plans prepared"
     );
     await persistJsonArtifact(artifactLogger, "plan_project", "output", blueprint);
+
+    // Safety: move any non-layout sections that planProject mistakenly put in layoutSections
+    // back to the home page's sections array
+    const trueLayoutSections = blueprint.site.layoutSections.filter((s) => isLayoutSection(s.type));
+    const misplacedSections = blueprint.site.layoutSections.filter((s) => !isLayoutSection(s.type));
+    if (misplacedSections.length > 0) {
+      console.warn(`[plan_project] ${misplacedSections.length} non-layout sections found in layoutSections, moving to home page`);
+      blueprint.site.layoutSections = trueLayoutSections;
+      const homePage = blueprint.site.pages.find((p) => p.slug === "home") ?? blueprint.site.pages[0];
+      if (homePage) {
+        homePage.sections = [...misplacedSections, ...homePage.sections];
+      }
+    }
+
     result.blueprint = blueprint;
     const runtimeContext = buildProjectRuntimeContext(blueprint);
 

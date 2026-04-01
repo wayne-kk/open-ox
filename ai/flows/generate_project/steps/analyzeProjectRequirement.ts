@@ -1,5 +1,6 @@
 import { loadGuardrail, loadStepPrompt } from "../shared/files";
-import { callLLM, extractJSON } from "../shared/llm";
+import { callLLMWithTools, extractJSON } from "../shared/llm";
+import { webSearchTool, executeWebSearch } from "../../../tools/system/webSearchTool";
 import type {
   CapabilitySpec,
   InformationArchitecture,
@@ -251,6 +252,7 @@ function normalizePageBlueprint(value: unknown, index: number): PageBlueprint {
       typeof candidate.journeyStage === "string" ? candidate.journeyStage : "core journey",
     primaryRoleIds: normalizeStringArray(candidate.primaryRoleIds, []),
     supportingCapabilityIds: normalizeStringArray(candidate.supportingCapabilityIds, []),
+    // sections are intentionally empty here — planProject will derive them from page descriptions
     sections: Array.isArray(candidate.sections)
       ? candidate.sections.map((section, sectionIndex) => normalizeSectionSpec(section, sectionIndex))
       : [],
@@ -405,6 +407,7 @@ function asProjectBlueprint(value: unknown): ProjectBlueprint {
       brief: {
         projectTitle: singlePage.title,
         projectDescription: singlePage.description,
+        language: "en",
         productScope: normalizeProductScope(undefined, singlePage.description),
         roles: normalizedRoles,
         taskLoops: normalizeTaskLoops(undefined, normalizedRoles),
@@ -425,15 +428,37 @@ function asProjectBlueprint(value: unknown): ProjectBlueprint {
 }
 
 export async function stepAnalyzeProjectRequirement(
-  userInput: string
+  userInput: string,
+  onToolCall?: (name: string, args: Record<string, unknown>, result: string) => void
 ): Promise<ProjectBlueprint> {
   const systemPrompt = [
+    `You are a senior product strategist and MVP architect.
+
+Before analyzing the user's request, check if it contains any proper nouns, brand names, people, products, or domain-specific terms you are unfamiliar with.
+If so, use the web_search tool to look them up first, then proceed with the analysis.
+
+After gathering any needed context, produce a structured ProjectBlueprint JSON.`,
+    "\n\n",
     loadStepPrompt("analyzeProjectRequirement"),
     "\n\n",
     loadGuardrail("outputJson"),
   ].join("");
 
-  const raw = await callLLM(systemPrompt, userInput, 0.5);
+  const { content: raw, toolCalls } = await callLLMWithTools({
+    systemPrompt,
+    userMessage: userInput,
+    tools: [webSearchTool],
+    temperature: 0.5,
+    maxIterations: 4,
+    executeToolOverrides: { web_search: executeWebSearch },
+  });
+
+  // Notify caller about tool calls so they can be streamed to the UI
+  for (const tc of toolCalls) {
+    const resultStr = typeof tc.result === "string" ? tc.result : JSON.stringify(tc.result);
+    onToolCall?.(tc.name, tc.args, resultStr);
+  }
+
   const jsonStr = extractJSON(raw);
 
   try {

@@ -9,6 +9,6 @@ export const MODELS = {
 export type ModelId = keyof typeof MODELS;
 
 export function getModelId(): ModelId {
-    const id = process.env.OPENAI_MODEL || 'gemini-3.1-pro-preview';
+    const id = process.env.OPENAI_MODEL || 'gemini-3-flash-preview';
     return id as ModelId;
 }

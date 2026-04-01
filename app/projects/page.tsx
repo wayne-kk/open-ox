@@ -72,7 +72,7 @@ export default function ProjectsPage() {
 
   const handleProjectClick = (project: ProjectMetadata) => {
     if (project.status === "ready") {
-      router.push(`/projects/${project.id}`);
+      router.push(`/build-studio?projectId=${project.id}`);
     }
   };
 

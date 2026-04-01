@@ -85,24 +85,16 @@ export async function stepPlanProject(
         `- ${capability.name} (${capability.capabilityId})\n  - Summary: ${capability.summary}\n  - Roles: ${capability.primaryRoleIds.join(", ") || "none"}\n  - Priority: ${capability.priority}`
     )
     .join("\n");
-  const pageMapSummary = blueprint.site.informationArchitecture.pageMap
-    .map(
-      (page) =>
-        `- ${page.title} (${page.slug})\n  - Purpose: ${page.purpose}\n  - Roles: ${page.primaryRoleIds.join(", ") || "none"}\n  - Capabilities: ${page.supportingCapabilityIds.join(", ") || "none"}\n  - Journey Stage: ${page.journeyStage}`
-    )
-    .join("\n");
 
-  const userMessage = `## Blueprint JSON
-${JSON.stringify(blueprint, null, 2)}
+  const userMessage = `## Project: ${blueprint.brief.projectTitle}
+${blueprint.brief.projectDescription}
 
 ## Product Scope
-- Product Type: ${blueprint.brief.productScope.productType}
-- MVP Definition: ${blueprint.brief.productScope.mvpDefinition}
-- Core Outcome: ${blueprint.brief.productScope.coreOutcome}
-- Business Goal: ${blueprint.brief.productScope.businessGoal}
-- Audience Summary: ${blueprint.brief.productScope.audienceSummary}
+- Type: ${blueprint.brief.productScope.productType}
+- MVP: ${blueprint.brief.productScope.mvpDefinition}
+- Outcome: ${blueprint.brief.productScope.coreOutcome}
+- Audience: ${blueprint.brief.productScope.audienceSummary}
 - In Scope: ${blueprint.brief.productScope.inScope.join(" | ")}
-- Out Of Scope: ${blueprint.brief.productScope.outOfScope.join(" | ") || "none"}
 
 ## Roles
 ${rolesSummary}
@@ -113,13 +105,17 @@ ${loopSummary}
 ## Capabilities
 ${capabilitySummary || "- none"}
 
-## Information Architecture
-- Navigation Model: ${blueprint.site.informationArchitecture.navigationModel}
-- Shared Shells: ${blueprint.site.informationArchitecture.sharedShells.join(" | ")}
-- Notes: ${blueprint.site.informationArchitecture.notes.join(" | ") || "none"}
+## Pages to plan sections for
+${blueprint.site.pages.map((page) =>
+  `### ${page.title} (/${page.slug}) — ${page.journeyStage}
+- Description: ${page.description}
+- Roles: ${page.primaryRoleIds.join(", ") || "none"}
+- Capabilities: ${page.supportingCapabilityIds.join(", ") || "none"}
+- Existing sections: ${page.sections.length > 0 ? page.sections.map((s) => s.type).join(", ") : "NONE — derive from page description and capabilities"}`
+).join("\n\n")}
 
-## Page Map
-${pageMapSummary}
+## Layout Sections (shared shells)
+${blueprint.site.layoutSections.map((s) => `- ${s.type}: ${s.intent}`).join("\n")}
 
 ## Allowed Project Guardrail IDs
 - project.consistency

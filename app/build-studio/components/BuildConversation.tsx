@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { AlertTriangle, CircleCheckBig, Play, Trash2 } from "lucide-react";
+import { AlertTriangle, CircleCheckBig, Play, Trash2, Send, Wand2 } from "lucide-react";
 import { ChatBubble } from "./ui/ChatBubble";
 import { LogSection } from "./ui/LogSection";
 import { TermLine } from "./ui/TermLine";
 import { StepRow } from "./StepRow";
 import { BlueprintOverview } from "./BlueprintOverview";
-import type { BuildStudioState } from "../hooks/useBuildStudio";
+import type { BuildStudioState, ModifyRecord } from "../hooks/useBuildStudio";
 
 function formatMs(ms: number): string {
     if (ms < 1000) return `${ms}ms`;
@@ -27,6 +27,82 @@ function buildIndentedList(values: string[]): string {
     return values.map((value) => `  - ${value}`).join("\n");
 }
 
+function ModifyBubble({ record }: { record: ModifyRecord }) {
+    return (
+        <ChatBubble role="user">
+            <div className="text-[11px] font-medium text-foreground">You</div>
+            <pre className="mt-2 whitespace-pre-wrap font-body text-[14px] leading-7 text-foreground">
+                {record.instruction}
+            </pre>
+        </ChatBubble>
+    );
+}
+
+function ModifyResultBubble({ record }: { record: ModifyRecord }) {
+    return (
+        <ChatBubble role="assistant">
+            <div className="text-[11px] font-medium text-foreground">修改助手</div>
+            <div className="mt-3 space-y-3">
+                {/* AI Analysis */}
+                {record.plan && (
+                    <LogSection title="Analysis">
+                        <div className="space-y-1 text-[12px] leading-6 text-foreground/80">
+                            <p>{record.plan.analysis}</p>
+                        </div>
+                        <div className="mt-2 space-y-1">
+                            {record.plan.changes.map((c) => (
+                                <div key={c.path} className="flex items-start gap-2 font-mono text-[10px]">
+                                    <span className={c.action === "create" ? "text-green-400" : c.action === "delete" ? "text-red-400" : "text-amber-300"}>
+                                        {c.action === "create" ? "NEW" : c.action === "delete" ? "DEL" : "MOD"}
+                                    </span>
+                                    <div>
+                                        <span className="text-foreground/60">{c.path}</span>
+                                        <p className="text-muted-foreground/40">{c.reasoning}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </LogSection>
+                )}
+
+                {/* Modified files with diffs */}
+                {record.diffs.length > 0 && (
+                    <LogSection title="Changed Files">
+                        <div className="space-y-2">
+                            {record.diffs.map((diff) => (
+                                <div key={diff.file} className="rounded-lg border border-white/6 overflow-hidden">
+                                    <div className="bg-white/3 px-3 py-1.5 flex items-center justify-between">
+                                        <span className="font-mono text-[10px] text-foreground/60">{diff.file}</span>
+                                        <span className="font-mono text-[9px]">
+                                            <span className="text-green-400/70">+{diff.stats.additions}</span>{" "}
+                                            <span className="text-red-400/70">-{diff.stats.deletions}</span>
+                                        </span>
+                                    </div>
+                                    <div className="px-3 py-1.5">
+                                        <p className="font-mono text-[9px] text-primary/50 italic">{diff.reasoning}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </LogSection>
+                )}
+
+                {record.error && (
+                    <LogSection title="Error">
+                        <TermLine color="text-red-400">error: {record.error}</TermLine>
+                    </LogSection>
+                )}
+
+                {!record.error && (
+                    <div className="px-1 text-[12px] text-muted-foreground">
+                        修改完成。共更新 {record.diffs.length} 个文件。
+                    </div>
+                )}
+            </div>
+        </ChatBubble>
+    );
+}
+
 export function BuildConversation({
     input,
     setInput,
@@ -38,6 +114,13 @@ export function BuildConversation({
     flowStart,
     handleRun,
     handleClear,
+    projectId,
+    setProjectId,
+    modifyInstruction,
+    setModifyInstruction,
+    modifying,
+    handleModify,
+    modifyHistory,
 }: BuildStudioState) {
     const chatRef = useRef<HTMLDivElement>(null);
 
@@ -209,62 +292,143 @@ export function BuildConversation({
                             </div>
                         </ChatBubble>
                     ) : null}
+
+                    {/* Modify history — each modify run as a conversation pair */}
+                    {modifyHistory.map((record, i) => (
+                        <div key={i} className="space-y-5">
+                            <ModifyBubble record={record} />
+                            <ModifyResultBubble record={record} />
+                        </div>
+                    ))}
+
+                    {/* In-progress modify */}
+                    {modifying && (
+                        <ChatBubble role="assistant">
+                            <div className="text-[11px] font-medium text-foreground">修改助手</div>
+                            <div className="mt-3">
+                                <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-3">
+                                    <TermLine color="text-primary">
+                                        <span className="animate-pulse">[modifying]</span>
+                                        <span className="ml-2 text-muted-foreground">分析并应用修改中...</span>
+                                    </TermLine>
+                                </div>
+                            </div>
+                        </ChatBubble>
+                    )}
                 </div>
             </div>
 
             {/* Input area */}
             <div className="border-t border-white/8 px-4 py-4">
-                <div className="rounded-[24px] border border-white/10 bg-black/25 p-3">
-                    <label className="sr-only" htmlFor="build-studio-input">输入站点需求</label>
-                    <textarea
-                        id="build-studio-input"
-                        rows={2}
-                        className="w-full resize-none border-0 bg-transparent px-1 py-1 font-body text-[14px] leading-7 text-foreground outline-none placeholder:text-white/30"
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={(e) => {
-                            if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !loading) {
-                                e.preventDefault();
-                                void handleRun();
-                            }
-                        }}
-                        placeholder="Describe the page, app, or design system you want to generate..."
-                    />
-                    <div className="mt-3 flex items-center justify-between gap-3">
-                        <button
-                            type="button"
-                            onClick={handleClear}
-                            disabled={loading || clearing}
-                            className="defi-button-outline flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            {clearing ? (
-                                <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                            ) : (
-                                <Trash2 className="h-4 w-4" />
-                            )}
-                            Clear
-                        </button>
-                        <div className="hidden text-xs text-muted-foreground sm:block">Cmd/Ctrl + Enter to run</div>
-                        <button
-                            type="button"
-                            onClick={handleRun}
-                            disabled={loading}
-                            className="defi-button flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            {loading ? (
-                                <>
-                                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                                    Running {formatMs(elapsed)}
-                                </>
-                            ) : (
-                                <>
-                                    <Play className="h-4 w-4" />
-                                    Run
-                                </>
-                            )}
-                        </button>
+                {projectId && !loading ? (
+                    /* Modify mode — project exists */
+                    <div className="rounded-[24px] border border-white/10 bg-black/25 p-3">
+                        <div className="mb-2 flex items-center gap-2">
+                            <Wand2 className="h-3 w-3 text-primary/60" />
+                            <span className="font-mono text-[9px] uppercase tracking-widest text-primary/60">Modify project</span>
+                        </div>
+                        <label className="sr-only" htmlFor="modify-input">修改指令</label>
+                        <textarea
+                            id="modify-input"
+                            rows={2}
+                            className="w-full resize-none border-0 bg-transparent px-1 py-1 font-body text-[14px] leading-7 text-foreground outline-none placeholder:text-white/30"
+                            value={modifyInstruction}
+                            onChange={(e) => setModifyInstruction(e.target.value)}
+                            onKeyDown={(e) => {
+                                if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !modifying) {
+                                    e.preventDefault();
+                                    void handleModify();
+                                }
+                            }}
+                            placeholder="描述要修改的内容..."
+                        />
+                        <div className="mt-3 flex items-center justify-between gap-3">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setProjectId(null);
+                                    window.history.replaceState(null, "", "/build-studio");
+                                }}
+                                className="defi-button-outline flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-medium"
+                            >
+                                <Play className="h-3.5 w-3.5" />
+                                New build
+                            </button>
+                            <div className="hidden text-xs text-muted-foreground sm:block">Cmd/Ctrl + Enter</div>
+                            <button
+                                type="button"
+                                onClick={handleModify}
+                                disabled={modifying || !modifyInstruction.trim()}
+                                className="defi-button flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                {modifying ? (
+                                    <>
+                                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                                        Modifying…
+                                    </>
+                                ) : (
+                                    <>
+                                        <Send className="h-4 w-4" />
+                                        Apply
+                                    </>
+                                )}
+                            </button>
+                        </div>
                     </div>
-                </div>
+                ) : (
+                /* Generate mode */
+                        <div className="rounded-[24px] border border-white/10 bg-black/25 p-3">
+                            <label className="sr-only" htmlFor="build-studio-input">输入站点需求</label>
+                            <textarea
+                                id="build-studio-input"
+                                rows={2}
+                                className="w-full resize-none border-0 bg-transparent px-1 py-1 font-body text-[14px] leading-7 text-foreground outline-none placeholder:text-white/30"
+                                value={input}
+                                onChange={(e) => setInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !loading) {
+                                        e.preventDefault();
+                                        void handleRun();
+                                    }
+                                }}
+                                placeholder="Describe the page, app, or design system you want to generate..."
+                            />
+                            <div className="mt-3 flex items-center justify-between gap-3">
+                                <button
+                                    type="button"
+                                    onClick={handleClear}
+                                    disabled={loading || clearing}
+                                    className="defi-button-outline flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {clearing ? (
+                                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                                    ) : (
+                                        <Trash2 className="h-4 w-4" />
+                                    )}
+                                    Clear
+                                </button>
+                                <div className="hidden text-xs text-muted-foreground sm:block">Cmd/Ctrl + Enter to run</div>
+                                <button
+                                    type="button"
+                                    onClick={handleRun}
+                                    disabled={loading}
+                                    className="defi-button flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {loading ? (
+                                        <>
+                                            <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                                            Running {formatMs(elapsed)}
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Play className="h-4 w-4" />
+                                            Run
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                )}
             </div>
         </aside>
     );

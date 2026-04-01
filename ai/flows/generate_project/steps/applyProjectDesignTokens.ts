@@ -75,8 +75,8 @@ ${currentGlobalsCss}
 
 Generate the updated globals.css using Tailwind CSS v4 syntax.`;
 
-  // Large CSS + design system context; allow a generous completion budget
-  const raw = await callLLM(systemPrompt, userMessage, 0.3, 24_000);
+  // No max_tokens limit — let the model output the complete CSS without truncation
+  const raw = await callLLM(systemPrompt, userMessage, 0.3);
   const globalsCss = parseDesignTokensResponse(raw);
 
   await writeSiteFile("app/globals.css", globalsCss);

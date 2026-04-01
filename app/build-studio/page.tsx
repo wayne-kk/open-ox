@@ -1,7 +1,9 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 import Link from "next/link";
-import { ArrowLeft, GitBranch } from "lucide-react";
+import { ArrowLeft, GitBranch, Monitor, RefreshCw, ExternalLink } from "lucide-react";
 import { useBuildStudio } from "./hooks/useBuildStudio";
 import { BuildConversation } from "./components/BuildConversation";
 import { GenerationAtlas } from "./components/GenerationAtlas";
@@ -11,10 +13,15 @@ function formatMs(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
-export default function BuildStudioPage() {
-  const studio = useBuildStudio();
-  const { loading, response, elapsed } = studio;
+function BuildStudioInner() {
+  const searchParams = useSearchParams();
+  const initialProjectId = searchParams.get("projectId") ?? null;
+
+  const studio = useBuildStudio(initialProjectId);
+  const { loading, response, elapsed, rightPanel, setRightPanel, projectId,
+    previewUrl, previewState, previewError, startPreview, iframeRef } = studio;
   const buildSteps = response?.buildSteps ?? [];
+  const canPreview = !!projectId && !loading;
 
   return (
     <main className="relative h-screen overflow-hidden bg-background">
@@ -29,38 +36,37 @@ export default function BuildStudioPage() {
                 Home
               </Link>
               <div>
-                <div className="font-mono text-[11px] uppercase tracking-[0.3em] text-primary">
-                  Build Studio
-                </div>
+                <div className="font-mono text-[11px] uppercase tracking-[0.3em] text-primary">Build Studio</div>
                 <h1 className="mt-1 text-lg font-semibold tracking-tight text-foreground sm:text-xl">
                   OPEN-OX DEFI BUILD CONSOLE
                 </h1>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2 text-[11px]">
+              <Link href="/projects" className="defi-button-outline px-3 py-1.5 text-[10px] font-medium">
+                My Projects
+              </Link>
               <span className="defi-badge px-3 py-1 text-primary">build_site</span>
               <span className="defi-badge px-3 py-1 text-accent-tertiary">live telemetry</span>
-              <span className="hidden font-mono uppercase tracking-[0.26em] text-muted-foreground sm:inline">
-                bounded planning + repair branch
-              </span>
             </div>
           </div>
         </header>
 
-        <div className="mx-auto flex w-full min-h-0 flex-1 flex-col  overflow-hidden lg:flex-row ">
+        <div className="mx-auto flex w-full min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
           <BuildConversation {...studio} />
 
           <section className="defi-glass flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="flex items-center justify-between border-b border-white/8 px-5 py-4">
+            {/* Right panel header with toggle */}
+            <div className="flex items-center justify-between border-b border-white/8 px-5 py-3">
               <div className="flex items-center gap-3">
                 <div className="rounded-xl border border-primary/30 bg-primary/10 p-2 text-primary">
-                  <GitBranch className="h-4 w-4" />
+                  {rightPanel === "topology" ? <GitBranch className="h-4 w-4" /> : <Monitor className="h-4 w-4" />}
                 </div>
                 <div>
                   <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-                    topology only
+                    {rightPanel === "topology" ? "topology" : "preview"}
                   </div>
-                  <div className="mt-1 font-mono text-xs uppercase tracking-[0.16em] text-foreground">
+                  <div className="mt-0.5 font-mono text-xs uppercase tracking-[0.16em] text-foreground">
                     {loading
                       ? `running build_site · ${formatMs(elapsed)}`
                       : response
@@ -69,7 +75,43 @@ export default function BuildStudioPage() {
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2 text-[11px]">
+
+              <div className="flex items-center gap-2">
+                {/* Panel toggle */}
+                {canPreview && (
+                  <div className="flex items-center rounded-lg border border-white/8 overflow-hidden">
+                    <button
+                      onClick={() => setRightPanel("topology")}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 font-mono text-[9px] uppercase tracking-widest transition-colors ${rightPanel === "topology" ? "bg-primary/10 text-primary" : "text-muted-foreground/50 hover:text-foreground"}`}
+                    >
+                      <GitBranch className="h-3 w-3" />
+                      Topology
+                    </button>
+                    <button
+                      onClick={() => setRightPanel("preview")}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 font-mono text-[9px] uppercase tracking-widest transition-colors ${rightPanel === "preview" ? "bg-primary/10 text-primary" : "text-muted-foreground/50 hover:text-foreground"}`}
+                    >
+                      <Monitor className="h-3 w-3" />
+                      Preview
+                    </button>
+                  </div>
+                )}
+
+                {/* Open in new tab — only when preview is live */}
+                {previewState === "ready" && previewUrl && (
+                  <a
+                    href={previewUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="defi-button-outline flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-medium"
+                    title="Open in new tab"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Open
+                  </a>
+                )}
+
+                {/* Status badge */}
                 {loading ? (
                   <span className="defi-badge px-3 py-1 text-primary">network live</span>
                 ) : response ? (
@@ -79,13 +121,9 @@ export default function BuildStudioPage() {
                         ? "border border-amber-400/35 text-amber-300"
                         : "text-accent-tertiary"
                       }`}>
-                    {response.error
-                      ? "failed"
-                      : response.verificationStatus === "failed"
-                        ? "unvalidated"
-                        : response.buildTotalDuration
-                          ? `done · ${formatMs(response.buildTotalDuration)}`
-                          : "done"}
+                      {response.error ? "failed"
+                        : response.verificationStatus === "failed" ? "unvalidated"
+                          : response.buildTotalDuration ? `done · ${formatMs(response.buildTotalDuration)}` : "done"}
                   </span>
                 ) : (
                       <span className="font-mono uppercase tracking-[0.26em] text-muted-foreground">standby</span>
@@ -93,21 +131,72 @@ export default function BuildStudioPage() {
               </div>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-hidden bg-[linear-gradient(180deg,rgba(255,255,255,0.02),rgba(0,0,0,0.16))] px-5 py-4 font-mono text-[12px]">
-              <div className="flex h-full min-h-0 flex-col p-4">
-                <GenerationAtlas
-                  steps={buildSteps}
-                  flowStart={studio.flowStart}
-                  loading={loading}
-                  verificationStatus={response?.verificationStatus}
-                  totalDuration={response?.buildTotalDuration}
-                  showEventStream={false}
-                />
-              </div>
+            {/* Right panel content */}
+            <div className="flex-1 min-h-0 overflow-hidden">
+              {rightPanel === "topology" ? (
+                <div className="h-full bg-[linear-gradient(180deg,rgba(255,255,255,0.02),rgba(0,0,0,0.16))] px-5 py-4 font-mono text-[12px]">
+                  <div className="flex h-full min-h-0 flex-col p-4">
+                    <GenerationAtlas
+                      steps={buildSteps}
+                      flowStart={studio.flowStart}
+                      loading={loading}
+                      verificationStatus={response?.verificationStatus}
+                      totalDuration={response?.buildTotalDuration}
+                      showEventStream={false}
+                    />
+                  </div>
+                </div>
+              ) : (
+                /* Preview panel */
+                <div className="flex h-full flex-col">
+                  {previewState === "starting" && (
+                    <div className="flex flex-1 flex-col items-center justify-center gap-3">
+                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                      <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Starting dev server…</p>
+                      <p className="font-mono text-[10px] text-muted-foreground/50">First start may take 15–30s</p>
+                    </div>
+                  )}
+                  {previewState === "error" && (
+                    <div className="flex flex-1 flex-col items-center justify-center gap-3">
+                      <p className="font-mono text-xs uppercase tracking-widest text-red-400">Preview failed</p>
+                      <p className="font-mono text-[10px] text-muted-foreground max-w-sm text-center">{previewError}</p>
+                      <button onClick={startPreview} className="defi-button-outline px-4 py-2 text-[11px] font-medium flex items-center gap-1.5">
+                        <RefreshCw className="h-3 w-3" />
+                        Retry
+                      </button>
+                    </div>
+                  )}
+                  {previewState === "idle" && projectId && (
+                    <div className="flex flex-1 flex-col items-center justify-center gap-3">
+                      <button onClick={startPreview} className="defi-button-outline px-5 py-2.5 text-[11px] font-medium flex items-center gap-2">
+                        <Monitor className="h-4 w-4" />
+                        Start Preview
+                      </button>
+                    </div>
+                  )}
+                  {previewState === "ready" && previewUrl && (
+                    <iframe
+                      key={previewUrl}
+                      ref={iframeRef}
+                      src={previewUrl}
+                      className="flex-1 w-full border-0"
+                      title="Project Preview"
+                    />
+                  )}
+                </div>
+              )}
             </div>
           </section>
         </div>
       </div>
     </main>
+  );
+}
+
+export default function BuildStudioPage() {
+  return (
+    <Suspense>
+      <BuildStudioInner />
+    </Suspense>
   );
 }

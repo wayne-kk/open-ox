@@ -25,6 +25,9 @@ export interface ProjectMetadata {
     error?: string;
     verificationStatus?: "passed" | "failed";
     blueprint?: unknown;
+    buildSteps?: unknown[];
+    generatedFiles?: string[];
+    logDirectory?: string;
     modificationHistory: ModificationRecord[];
 }
 

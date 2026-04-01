@@ -85,6 +85,7 @@ export interface PlannedProjectBlueprint {
 
 export interface AiResponse {
     content: string;
+    projectId?: string;
     generatedFiles?: string[];
     blueprint?: PlannedProjectBlueprint;
     verificationStatus?: "passed" | "failed";

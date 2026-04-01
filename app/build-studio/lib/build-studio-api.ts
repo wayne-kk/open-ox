@@ -14,7 +14,7 @@ export async function runBuildSite(
   const res = await fetch("/api/ai", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ input }),
+    body: JSON.stringify({ userPrompt: input }),
     signal,
   });
 

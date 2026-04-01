@@ -35,7 +35,7 @@ width constraints and breaks rhythm.
 ## Output Rules
 
 - Output only the raw TSX code.
-- Use the provided import statements exactly as given.
+- **CRITICAL: Copy the provided import statements VERBATIM. Do not change the import paths, component names, or file names. The import paths are pre-computed and correct.**
 - Render all sections inside a single `<main>` element in the provided order.
 - Use only global overlays or minimal decorative structure when needed; do not add
   per-section spacing or container wrappers (see Section Layout Contract above).
@@ -50,9 +50,10 @@ width constraints and breaks rhythm.
 
 ```tsx
 import type { Metadata } from "next";
-import HeroSection from "@/components/sections/HeroSection";
-import FeaturesSection from "@/components/sections/FeaturesSection";
-import PricingSection from "@/components/sections/PricingSection";
+// Import paths follow the pattern: @/components/sections/{slug}_{ComponentName}
+import HeroSection from "@/components/sections/home_HeroSection";
+import FeaturesSection from "@/components/sections/home_FeaturesSection";
+import PricingSection from "@/components/sections/home_PricingSection";
 
 export const metadata: Metadata = {
   title: "Page Title",

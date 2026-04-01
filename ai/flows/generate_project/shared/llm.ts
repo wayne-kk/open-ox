@@ -1,14 +1,72 @@
-import OpenAI from "openai";
 import { getModelId } from "../../../../lib/config/models";
 import { executeSystemTool } from "../../../tools";
 import type { ToolResult } from "../../../tools";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import ts from "typescript";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  baseURL: process.env.OPENAI_API_URL,
-});
+// ── Native fetch LLM client ───────────────────────────────────────────────────
+// We intentionally avoid the OpenAI SDK's HTTP layer because it uses
+// agentkeepalive with a default socket timeout of 8s, which kills long LLM
+// responses. Native fetch (undici in Node 18+) has no such limit.
+
+function getApiConfig() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  const baseURL = (process.env.OPENAI_API_URL ?? "https://api.openai.com/v1").replace(/\/$/, "");
+  if (!apiKey) throw new Error("OPENAI_API_KEY is not set. Check .env.local");
+  return { apiKey, baseURL };
+}
+
+interface ChatMessage {
+  role: "system" | "user" | "assistant" | "tool";
+  content: string;
+  tool_calls?: unknown[];
+  tool_call_id?: string;
+}
+
+interface ChatCompletionResponse {
+  id: string;
+  model: string;
+  choices: Array<{
+    index: number;
+    message: { role: string; content: string | null; tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }> };
+    finish_reason: string;
+  }>;
+  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+}
+
+async function chatCompletion(params: {
+  model: string;
+  messages: ChatMessage[];
+  temperature?: number;
+  max_tokens?: number;
+  tools?: ChatCompletionTool[];
+  tool_choice?: string;
+}): Promise<ChatCompletionResponse> {
+  const { apiKey, baseURL } = getApiConfig();
+
+  const res = await fetch(`${baseURL}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: params.model,
+      messages: params.messages,
+      temperature: params.temperature,
+      ...(params.max_tokens ? { max_tokens: params.max_tokens } : {}),
+      ...(params.tools ? { tools: params.tools, tool_choice: params.tool_choice ?? "auto" } : {}),
+    }),
+    signal: AbortSignal.timeout(180_000),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`LLM HTTP ${res.status}: ${body.slice(0, 300)}`);
+  }
+
+  return res.json() as Promise<ChatCompletionResponse>;
+}
 
 export interface LLMCallResult {
   content: string;
@@ -33,22 +91,76 @@ export async function callLLMWithMeta(
   maxTokens?: number
 ): Promise<LLMCallResult> {
   const model = getModelId();
-  const res = await openai.chat.completions.create({
-    model,
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userMessage },
-    ],
-    temperature,
-    ...(maxTokens != null && maxTokens > 0 ? { max_tokens: maxTokens } : {}),
-  });
+  try {
+    const res = await chatCompletion({
+      model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMessage },
+      ],
+      temperature,
+      ...(maxTokens != null && maxTokens > 0 ? { max_tokens: maxTokens } : {}),
+    });
 
-  return {
-    content: res.choices[0]?.message?.content?.trim() ?? "",
-    model,
-    inputTokens: res.usage?.prompt_tokens,
-    outputTokens: res.usage?.completion_tokens,
-  };
+    const content = res.choices[0]?.message?.content?.trim() ?? "";
+    if (!content && res.choices[0]?.finish_reason === "length") {
+      throw new Error(`LLM response truncated (max_tokens reached). Model: ${model}`);
+    }
+
+    return {
+      content,
+      model,
+      inputTokens: res.usage?.prompt_tokens,
+      outputTokens: res.usage?.completion_tokens,
+    };
+  } catch (err: unknown) {
+    // Dig into the full error chain — OpenAI SDK wraps the real error in .cause
+    const errObj = err as { status?: number; code?: string; message?: string; type?: string; cause?: { code?: string; message?: string; cause?: { code?: string; message?: string } }; error?: { message?: string; type?: string; code?: string } };
+    const status = errObj.status;
+    const code = errObj.code ?? errObj.error?.code ?? errObj.cause?.code;
+    const type = errObj.type ?? errObj.error?.type;
+    const msg = errObj.error?.message ?? errObj.message ?? String(err);
+
+    // Walk the cause chain for the real error
+    const causes: string[] = [];
+    let cursor: { message?: string; code?: string; cause?: unknown } | undefined = errObj.cause as typeof errObj.cause;
+    for (let depth = 0; cursor && depth < 5; depth++) {
+      causes.push(`[cause${depth}] ${cursor.code ?? ""} ${cursor.message ?? ""}`);
+      cursor = cursor.cause as typeof cursor;
+    }
+    const causeChain = causes.length > 0 ? ` | causes: ${causes.join(" → ")}` : "";
+
+    // Log full error to server console for debugging
+    console.error(`[LLM ERROR] model=${model} status=${status} code=${code} msg=${msg}${causeChain}`);
+
+    const detail = [
+      `Model: ${model}`,
+      status ? `HTTP ${status}` : null,
+      code ? `code: ${code}` : null,
+      type ? `type: ${type}` : null,
+      `message: ${msg}`,
+      causeChain || null,
+    ].filter(Boolean).join(" | ");
+
+    // Classify the error for the caller
+    if (code === "ECONNREFUSED" || code === "ENOTFOUND" || code === "ETIMEDOUT" || code === "UND_ERR_CONNECT_TIMEOUT") {
+      throw new Error(`LLM connection failed — API endpoint unreachable. ${detail}`);
+    }
+    if (status === 401 || status === 403) {
+      throw new Error(`LLM auth error — check OPENAI_API_KEY. ${detail}`);
+    }
+    if (status === 429) {
+      throw new Error(`LLM rate limited — too many requests. ${detail}`);
+    }
+    if (status === 500 || status === 502 || status === 503) {
+      throw new Error(`LLM server error — API provider issue. ${detail}`);
+    }
+    if (msg.includes("timeout") || msg.includes("Timeout") || msg.includes("TIMEOUT")) {
+      throw new Error(`LLM request timed out (>180s). Prompt may be too large or API too slow. ${detail}`);
+    }
+
+    throw new Error(`LLM call failed. ${detail}`);
+  }
 }
 
 export interface AgentToolCallRecord {
@@ -63,40 +175,35 @@ export async function callLLMWithTools(params: {
   tools: ChatCompletionTool[];
   temperature?: number;
   maxIterations?: number;
+  executeToolOverrides?: Record<string, (args: Record<string, unknown>) => Promise<ToolResult | string>>;
 }): Promise<{ content: string; toolCalls: AgentToolCallRecord[] }> {
-  const { systemPrompt, userMessage, tools, temperature = 0.1, maxIterations = 8 } = params;
+  const { systemPrompt, userMessage, tools, temperature = 0.1, maxIterations = 8, executeToolOverrides = {} } = params;
   const model = getModelId();
-  const messages: Array<Record<string, unknown>> = [
+  const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
     { role: "user", content: userMessage },
   ];
   const toolCalls: AgentToolCallRecord[] = [];
 
   for (let iteration = 0; iteration < maxIterations; iteration += 1) {
-    const res = await openai.chat.completions.create({
+    const res = await chatCompletion({
       model,
-      messages: messages as never,
+      messages,
+      temperature,
       tools,
       tool_choice: tools.length > 0 ? "auto" : undefined,
-      temperature,
     });
     const message = res.choices[0]?.message;
-    if (!message) {
-      break;
-    }
+    if (!message) break;
 
     messages.push({
-      ...(message as unknown as Record<string, unknown>),
       role: "assistant",
       content: message.content ?? "",
-      tool_calls: message.tool_calls ?? undefined,
+      tool_calls: message.tool_calls,
     });
 
     if (!message.tool_calls || message.tool_calls.length === 0) {
-      return {
-        content: message.content?.trim() ?? "",
-        toolCalls,
-      };
+      return { content: message.content?.trim() ?? "", toolCalls };
     }
 
     for (const toolCall of message.tool_calls) {
@@ -108,12 +215,13 @@ export async function callLLMWithTools(params: {
         parsedArgs = {};
       }
 
-      const result = await executeSystemTool(toolCall.function.name, parsedArgs);
-      toolCalls.push({
-        name: toolCall.function.name,
-        args: parsedArgs,
-        result,
-      });
+      // Use override executor if provided, otherwise fall back to system tools
+      const overrideFn = executeToolOverrides[toolCall.function.name];
+      const result = overrideFn
+        ? await overrideFn(parsedArgs)
+        : await executeSystemTool(toolCall.function.name, parsedArgs);
+
+      toolCalls.push({ name: toolCall.function.name, args: parsedArgs, result });
 
       messages.push({
         role: "tool",
@@ -123,10 +231,7 @@ export async function callLLMWithTools(params: {
     }
   }
 
-  return {
-    content: "",
-    toolCalls,
-  };
+  return { content: "", toolCalls };
 }
 
 export function extractContent(raw: string, lang = ""): string {

@@ -52,6 +52,9 @@ export async function POST(req: Request) {
               completedAt: new Date().toISOString(),
               verificationStatus: result.verificationStatus,
               blueprint: result.blueprint,
+              buildSteps: result.steps,
+              generatedFiles: result.generatedFiles,
+              logDirectory: result.logDirectory,
             });
           } else {
             // Generation completed but reported failure

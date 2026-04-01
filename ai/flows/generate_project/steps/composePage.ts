@@ -94,7 +94,50 @@ Generate the page component source for this page route.
 Treat the page design plan as the composition strategy, not just a list of imports.`;
 
   const raw = await callLLM(systemPrompt, userMessage, 0.3);
-  const tsx = extractContent(raw, "tsx");
+  let tsx = extractContent(raw, "tsx");
+
+  // Post-process: ensure import paths match the actual generated files.
+  // LLM sometimes ignores the provided import statements and invents its own paths.
+  for (const section of pageSections) {
+    const correctPath = buildSectionImportPath(blueprint.slug, section.fileName);
+    tsx = tsx.replace(
+      new RegExp(`import\\s+${section.fileName}\\s+from\\s+["'][^"']+["']`, "g"),
+      `import ${section.fileName} from "${correctPath}"`
+    );
+  }
+
+  // Safety check: if LLM inlined components instead of importing them,
+  // rebuild the page from scratch using the correct imports.
+  const hasExpectedImports = pageSections.every((s) =>
+    tsx.includes(`from "${buildSectionImportPath(blueprint.slug, s.fileName)}"`)
+  );
+  const hasInlinedComponents = pageSections.some((s) =>
+    new RegExp(`(const|function)\\s+${s.fileName}\\s*[=(]`).test(tsx)
+  );
+
+  if (!hasExpectedImports || hasInlinedComponents) {
+    // Rebuild a minimal but correct page
+    const imports = pageSections
+      .map((s) => `import ${s.fileName} from "${buildSectionImportPath(blueprint.slug, s.fileName)}";`)
+      .join("\n");
+    const renders = pageSections.map((s) => `        <${s.fileName} />`).join("\n");
+    tsx = `import type { Metadata } from "next";
+${imports}
+
+export const metadata: Metadata = {
+  title: "${blueprint.title}",
+  description: "${blueprint.description}",
+};
+
+export default function Page() {
+  return (
+    <main className="relative min-h-screen bg-background">
+${renders}
+    </main>
+  );
+}
+`;
+  }
 
   await writeSiteFile(targetPagePath, tsx);
   await formatSiteFile(targetPagePath);
