@@ -16,6 +16,7 @@ import path from "path";
 import { Sandbox } from "e2b";
 import { supabase } from "./supabase";
 import { getSiteRoot, WORKSPACE_ROOT } from "./projectManager";
+import { restoreProjectFiles } from "./storage";
 
 /** Known deps baked into the E2B template — parsed from e2b-template/package.json at build time */
 const TEMPLATE_PKG_PATH = path.join(WORKSPACE_ROOT, "e2b-template", "package.json");
@@ -85,18 +86,36 @@ async function uploadProjectToSandbox(sandbox: Sandbox, projectId: string): Prom
   const templateDir = path.join(WORKSPACE_ROOT, "sites", "template");
   const files = await collectFiles(projectDir, projectDir);
 
+  // Template base files that must always be present in the sandbox.
+  // If the project dir is missing any (e.g. after a Storage restore that only
+  // contains AI-generated files), fall back to the local template copy.
+  const TEMPLATE_BASE_FILES = [
+    "next.config.ts",
+    "tsconfig.json",
+    "postcss.config.mjs",
+    "tailwind.config.ts",
+    "eslint.config.mjs",
+    "components.json",
+  ];
+  const fileSet = new Set(files);
+  for (const f of TEMPLATE_BASE_FILES) {
+    if (!fileSet.has(f)) files.push(f);
+  }
+
   const BATCH = 20;
   for (let i = 0; i < files.length; i += BATCH) {
     const batch = files.slice(i, i + BATCH);
     await Promise.all(
       batch.map(async (relPath) => {
+        // For package.json and template base files, prefer template copy
+        const useTemplate = relPath === "package.json" || TEMPLATE_BASE_FILES.includes(relPath);
         let localPath = path.join(projectDir, relPath);
-        if (relPath === "package.json") {
-          const templatePkg = path.join(templateDir, "package.json");
+        if (useTemplate) {
+          const templatePath = path.join(templateDir, relPath);
           try {
-            await fs.access(templatePkg);
-            localPath = templatePkg;
-          } catch { /* fallback */ }
+            await fs.access(templatePath);
+            localPath = templatePath;
+          } catch { /* fallback to project copy */ }
         }
         const content = await fs.readFile(localPath);
         const sandboxPath = `/home/user/app/${relPath}`;
@@ -114,7 +133,13 @@ async function uploadProjectToSandbox(sandbox: Sandbox, projectId: string): Prom
  */
 async function injectStaticExport(sandbox: Sandbox): Promise<void> {
   const configPath = "/home/user/app/next.config.ts";
-  const content = await sandbox.files.read(configPath);
+  let content: string;
+  try {
+    content = await sandbox.files.read(configPath);
+  } catch {
+    // File missing — nothing to patch (template already has output: 'export')
+    return;
+  }
   if (content.includes("output:") || content.includes("output :")) {
     return; // already has output config
   }
@@ -221,7 +246,13 @@ export async function startDevServer(
   try {
     await fs.access(projectDir);
   } catch {
-    throw new Error(`Project directory not found: ${projectDir}`);
+    // Directory missing — try restoring from Supabase Storage
+    console.log(`[devServerManager] Project dir missing, attempting restore from storage: ${projectId}`);
+    const restored = await restoreProjectFiles(projectId);
+    if (restored.length === 0) {
+      throw new Error(`Project directory not found: ${projectDir}`);
+    }
+    console.log(`[devServerManager] Restored ${restored.length} files from storage`);
   }
 
   // 1. Try reconnecting to existing sandbox

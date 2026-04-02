@@ -125,6 +125,7 @@ export function BuildConversation({
     modifying,
     handleModify,
     modifyHistory,
+    modifyToolCalls,
 }: BuildStudioState) {
     const chatRef = useRef<HTMLDivElement>(null);
 
@@ -319,11 +320,31 @@ export function BuildConversation({
                     {modifying && (
                         <ChatBubble role="assistant">
                             <div className="text-[11px] font-medium text-foreground">修改助手</div>
-                            <div className="mt-3">
+                            <div className="mt-3 space-y-1.5">
+                                {modifyToolCalls.map((tc, i) => (
+                                    <div key={i} className="flex items-start gap-2 font-mono text-[10px]">
+                                        <span className={
+                                            tc.tool === "edit_file" || tc.tool === "write_file" ? "text-amber-300" :
+                                                tc.tool === "run_build" ? "text-green-400" :
+                                                    "text-primary/60"
+                                        }>
+                                            {tc.tool}
+                                        </span>
+                                        <span className="text-muted-foreground/50 truncate max-w-[300px]">
+                                            {tc.tool === "read_file" || tc.tool === "edit_file" || tc.tool === "write_file"
+                                                ? (tc.args.path as string ?? "")
+                                                : tc.tool === "search_code"
+                                                    ? (tc.args.pattern as string ?? "")
+                                                    : tc.result.slice(0, 60)}
+                                        </span>
+                                    </div>
+                                ))}
                                 <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-3">
                                     <TermLine color="text-primary">
-                                        <span className="animate-pulse">[modifying]</span>
-                                        <span className="ml-2 text-muted-foreground">分析并应用修改中...</span>
+                                        <span className="animate-pulse">[agent]</span>
+                                        <span className="ml-2 text-muted-foreground">
+                                            {modifyToolCalls.length} tool calls...
+                                        </span>
                                     </TermLine>
                                 </div>
                             </div>
@@ -337,9 +358,24 @@ export function BuildConversation({
                 {projectId && !loading ? (
                     /* Modify mode — project exists */
                     <div className="rounded-[24px] border border-white/10 bg-black/25 p-3">
-                        <div className="mb-2 flex items-center gap-2">
-                            <Wand2 className="h-3 w-3 text-primary/60" />
-                            <span className="font-mono text-[9px] uppercase tracking-widest text-primary/60">Modify project</span>
+                        <div className="mb-2 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <Wand2 className="h-3 w-3 text-primary/60" />
+                                <span className="font-mono text-[9px] uppercase tracking-widest text-primary/60">Modify project</span>
+                            </div>
+                            <div className="relative">
+                                <select
+                                    value={selectedModel}
+                                    onChange={(e) => setSelectedModel(e.target.value)}
+                                    disabled={modifying}
+                                    className="appearance-none rounded-full border border-white/8 bg-white/5 pl-2.5 pr-6 py-1 font-mono text-[9px] text-muted-foreground/60 outline-none cursor-pointer hover:border-primary/30 transition-colors disabled:opacity-50"
+                                >
+                                    {availableModels.map((m) => (
+                                        <option key={m.id} value={m.id}>{m.displayName}</option>
+                                    ))}
+                                </select>
+                                <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-2.5 w-2.5 text-muted-foreground/30 pointer-events-none" />
+                            </div>
                         </div>
                         <label className="sr-only" htmlFor="modify-input">修改指令</label>
                         <textarea
@@ -394,68 +430,68 @@ export function BuildConversation({
                         </div>
                     </div>
                 ) : (
-                /* Generate mode */
-                        <div className="rounded-[20px] border border-white/10 bg-black/25 p-3">
-                            {/* Top bar: model selector + shortcut hint */}
-                            <div className="flex items-center justify-between mb-2 px-1">
-                                <div className="relative">
-                                    <select
-                                        value={selectedModel}
-                                        onChange={(e) => setSelectedModel(e.target.value)}
-                                        disabled={loading}
-                                        className="appearance-none rounded-full border border-white/8 bg-white/5 pl-2.5 pr-6 py-1 font-mono text-[9px] text-muted-foreground/60 outline-none cursor-pointer hover:border-primary/30 transition-colors disabled:opacity-50"
-                                    >
-                                        {availableModels.map((m) => (
-                                            <option key={m.id} value={m.id}>{m.displayName}</option>
-                                        ))}
-                                    </select>
-                                    <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-2.5 w-2.5 text-muted-foreground/30 pointer-events-none" />
-                                </div>
-                                <span className="font-mono text-[9px] text-muted-foreground/25">⌘+Enter</span>
-                            </div>
-
-                            <label className="sr-only" htmlFor="build-studio-input">输入站点需求</label>
-                            <textarea
-                                id="build-studio-input"
-                                rows={1}
-                                className="w-full resize-none border-0 bg-transparent px-1 py-1 font-body text-[14px] leading-7 text-foreground outline-none placeholder:text-white/30 max-h-[200px] overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-                                value={input}
-                                onChange={(e) => {
-                                    setInput(e.target.value);
-                                    e.target.style.height = "auto";
-                                    e.target.style.height = Math.min(e.target.scrollHeight, 200) + "px";
-                                }}
-                                onKeyDown={(e) => {
-                                    if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !loading) {
-                                        e.preventDefault();
-                                        void handleRun();
-                                    }
-                                }}
-                                placeholder="描述你想要生成的网站..."
-                            />
-
-                            {/* Bottom: Run button right-aligned */}
-                            <div className="mt-2 flex items-center justify-end">
-                                <button
-                                    type="button"
-                                    onClick={handleRun}
+                    /* Generate mode */
+                    <div className="rounded-[20px] border border-white/10 bg-black/25 p-3">
+                        {/* Top bar: model selector + shortcut hint */}
+                        <div className="flex items-center justify-between mb-2 px-1">
+                            <div className="relative">
+                                <select
+                                    value={selectedModel}
+                                    onChange={(e) => setSelectedModel(e.target.value)}
                                     disabled={loading}
-                                    className="defi-button flex items-center justify-center gap-2 px-5 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="appearance-none rounded-full border border-white/8 bg-white/5 pl-2.5 pr-6 py-1 font-mono text-[9px] text-muted-foreground/60 outline-none cursor-pointer hover:border-primary/30 transition-colors disabled:opacity-50"
                                 >
-                                    {loading ? (
-                                        <>
-                                            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                                            {formatMs(elapsed)}
-                                        </>
-                                    ) : (
-                                        <>
-                                                <Play className="h-3.5 w-3.5" />
-                                            Run
-                                        </>
-                                    )}
-                                </button>
+                                    {availableModels.map((m) => (
+                                        <option key={m.id} value={m.id}>{m.displayName}</option>
+                                    ))}
+                                </select>
+                                <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-2.5 w-2.5 text-muted-foreground/30 pointer-events-none" />
                             </div>
+                            <span className="font-mono text-[9px] text-muted-foreground/25">⌘+Enter</span>
                         </div>
+
+                        <label className="sr-only" htmlFor="build-studio-input">输入站点需求</label>
+                        <textarea
+                            id="build-studio-input"
+                            rows={1}
+                            className="w-full resize-none border-0 bg-transparent px-1 py-1 font-body text-[14px] leading-7 text-foreground outline-none placeholder:text-white/30 max-h-[200px] overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                            value={input}
+                            onChange={(e) => {
+                                setInput(e.target.value);
+                                e.target.style.height = "auto";
+                                e.target.style.height = Math.min(e.target.scrollHeight, 200) + "px";
+                            }}
+                            onKeyDown={(e) => {
+                                if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !loading) {
+                                    e.preventDefault();
+                                    void handleRun();
+                                }
+                            }}
+                            placeholder="描述你想要生成的网站..."
+                        />
+
+                        {/* Bottom: Run button right-aligned */}
+                        <div className="mt-2 flex items-center justify-end">
+                            <button
+                                type="button"
+                                onClick={handleRun}
+                                disabled={loading}
+                                className="defi-button flex items-center justify-center gap-2 px-5 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                {loading ? (
+                                    <>
+                                        <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                                        {formatMs(elapsed)}
+                                    </>
+                                ) : (
+                                    <>
+                                        <Play className="h-3.5 w-3.5" />
+                                        Run
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
                 )}
             </div>
         </aside>

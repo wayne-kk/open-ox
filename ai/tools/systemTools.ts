@@ -5,6 +5,7 @@ import type { ToolResult, ToolExecutor } from "./types";
 
 import { executeWriteFile } from "./system/writeFileTool";
 import { executeReadFile } from "./system/readFileTool";
+import { executeEditFile } from "./system/editFileTool";
 import { executeExecShell } from "./system/execShellTool";
 import { executeListDir } from "./system/listDirTool";
 import { executeSearchCode } from "./system/searchCodeTool";
@@ -15,6 +16,7 @@ import { executeRunBuild } from "./system/runBuildTool";
 const executors: Record<string, ToolExecutor> = {
   write_file: executeWriteFile,
   read_file: executeReadFile,
+  edit_file: executeEditFile,
   exec_shell: executeExecShell,
   list_dir: executeListDir,
   search_code: executeSearchCode,

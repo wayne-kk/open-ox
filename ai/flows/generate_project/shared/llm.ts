@@ -16,14 +16,14 @@ function getApiConfig() {
   return { apiKey, baseURL };
 }
 
-interface ChatMessage {
+export interface ChatMessage {
   role: "system" | "user" | "assistant" | "tool";
   content: string;
   tool_calls?: unknown[];
   tool_call_id?: string;
 }
 
-interface ChatCompletionResponse {
+export interface ChatCompletionResponse {
   id: string;
   model: string;
   choices: Array<{
@@ -34,7 +34,7 @@ interface ChatCompletionResponse {
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
 }
 
-async function chatCompletion(params: {
+export async function chatCompletion(params: {
   model: string;
   messages: ChatMessage[];
   temperature?: number;
@@ -195,6 +195,8 @@ export async function callLLMWithTools(params: {
     });
     const message = res.choices[0]?.message;
     if (!message) break;
+
+    console.log(`[callLLMWithTools] iteration=${iteration} finish_reason=${res.choices[0]?.finish_reason} tool_calls=${message.tool_calls?.length ?? 0} content_length=${message.content?.length ?? 0}`);
 
     // Truncated response means the model ran out of tokens mid-generation
     if (res.choices[0]?.finish_reason === "length") {

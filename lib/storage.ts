@@ -19,11 +19,21 @@ export async function uploadProjectFile(
 ): Promise<void> {
   const localPath = path.join(getSiteRoot(projectId), relativeFilePath);
   const content = await fs.readFile(localPath);
+  await uploadProjectFileContent(projectId, relativeFilePath, content);
+}
+
+/** Upload file content directly (no local file required) */
+export async function uploadProjectFileContent(
+  projectId: string,
+  relativeFilePath: string,
+  content: Buffer | string
+): Promise<void> {
   const storagePath = `${projectId}/${relativeFilePath}`;
+  const body = typeof content === "string" ? Buffer.from(content, "utf-8") : content;
 
   const { error } = await supabase.storage
     .from(BUCKET)
-    .upload(storagePath, content, { upsert: true });
+    .upload(storagePath, body, { upsert: true });
 
   if (error) {
     throw new Error(`[storage] Failed to upload ${storagePath}: ${error.message}`);

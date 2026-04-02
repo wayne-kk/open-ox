@@ -15,6 +15,7 @@ import { getProject } from "@/lib/projectManager";
 import { runModifyProject } from "@/ai/flows/modify_project/runModifyProject";
 import type { ModifySSEEvent } from "@/ai/flows/modify_project/runModifyProject";
 import { uploadGeneratedFiles } from "@/lib/storage";
+import { setRuntimeModelId, type ModelId } from "@/lib/config/models";
 
 export async function POST(
   req: Request,
@@ -29,9 +30,11 @@ export async function POST(
   }
 
   let userInstruction: string;
+  let modelOverride: string | undefined;
   try {
     const body = await req.json();
     userInstruction = body.userInstruction;
+    modelOverride = body.model;
     if (!userInstruction || typeof userInstruction !== "string") {
       return NextResponse.json(
         { error: "Missing or invalid 'userInstruction' field", code: "BAD_REQUEST" },
@@ -46,6 +49,9 @@ export async function POST(
   }
 
   const encoder = new TextEncoder();
+
+  // Set model override for this request
+  if (modelOverride) setRuntimeModelId(modelOverride as ModelId);
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -85,6 +91,7 @@ export async function POST(
         const message = err instanceof Error ? err.message : "Internal error";
         send({ type: "error", message });
       } finally {
+        setRuntimeModelId(null);
         controller.close();
       }
     },

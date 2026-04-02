@@ -19,9 +19,21 @@ function BuildStudioInner() {
 
   const studio = useBuildStudio(initialProjectId);
   const { loading, response, elapsed, rightPanel, setRightPanel, projectId,
-    previewUrl, previewState, previewError, startPreview, iframeRef } = studio;
+    previewUrl, previewState, previewError, startPreview, iframeRef, projectLoading } = studio;
   const buildSteps = response?.buildSteps ?? [];
   const canPreview = !!projectId && !loading;
+
+  if (projectLoading) {
+    return (
+      <main className="relative h-screen overflow-hidden bg-background flex items-center justify-center">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(247,147,26,0.14),transparent_28%),radial-gradient(circle_at_top_right,rgba(255,214,0,0.1),transparent_24%),radial-gradient(circle_at_bottom,rgba(234,88,12,0.1),transparent_30%)]" />
+        <div className="relative z-10 flex flex-col items-center gap-4">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Loading project...</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="relative h-screen overflow-hidden bg-background">

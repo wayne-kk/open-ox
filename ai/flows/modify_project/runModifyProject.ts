@@ -1,50 +1,39 @@
 /**
- * Modify Flow v3
+ * Modify Flow v6 — Stop Hook Architecture
  *
- * Architecture:
- *   Phase 1 — Plan: LLM analyzes instruction → outputs plan with reasoning per file
- *   Phase 2 — Execute: For each file, LLM outputs COMPLETE new content (not diffs)
- *   Phase 3 — Diff: Code computes real line-level diffs using `diff` library
- *
- * Key insight: LLM is good at writing code, bad at copying exact text.
- * So we let LLM write complete files, and compute diffs deterministically.
+ * Modeled after Claude Code's query() loop:
+ *   - LLM has FULL freedom: all tools available, tool_choice="auto"
+ *   - while(true) loop: LLM calls API → executes tools → feeds results back
+ *   - When LLM stops calling tools (wants to finish), stop hooks run
+ *   - Stop hooks do quality gates: did it edit? did build pass?
+ *   - If gates fail → inject error as message → loop continues
+ *   - LLM is never restricted — it's guided by stop hooks
  */
 
 import fs from "fs/promises";
 import path from "path";
 import { structuredPatch } from "diff";
 import { setSiteRoot, clearSiteRoot } from "@/ai/tools/system/common";
-import { getProject, getSiteRoot, updateProjectStatus } from "@/lib/projectManager";
+import { getProject, getSiteRoot as pmGetSiteRoot, updateProjectStatus } from "@/lib/projectManager";
 import type { ModificationRecord } from "@/lib/projectManager";
-import { callLLM, extractContent } from "@/ai/flows/generate_project/shared/llm";
-import { stepRunBuild } from "@/ai/flows/generate_project/steps/runBuild";
+import { getSystemToolDefinitions } from "@/ai/tools/systemToolCatalog";
+import { executeSystemTool } from "@/ai/tools";
+import { chatCompletion, type ChatMessage } from "@/ai/flows/generate_project/shared/llm";
+import { getModelId } from "@/lib/config/models";
 import { createArtifactLogger } from "@/ai/flows/generate_project/shared/logging";
+import type { ToolResult } from "@/ai/tools/types";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export type ModifySSEEvent =
   | { type: "step"; name: string; status: "running" | "done" | "error"; message?: string }
-  | { type: "plan"; plan: ModificationPlan }
+  | { type: "plan"; plan: { analysis: string; changes: Array<{ path: string; action: string; reasoning: string }> } }
   | { type: "diff"; file: string; reasoning: string; patch: string; stats: DiffStats }
+  | { type: "tool_call"; tool: string; args: Record<string, unknown>; result: string }
   | { type: "done" }
   | { type: "error"; message: string };
 
-interface PlannedFileChange {
-  path: string;
-  action: "modify" | "create" | "delete";
-  reasoning: string;
-  dependsOn?: string[]; // paths of files that must be processed first
-}
-
-interface ModificationPlan {
-  analysis: string;
-  changes: PlannedFileChange[];
-}
-
-interface DiffStats {
-  additions: number;
-  deletions: number;
-}
+interface DiffStats { additions: number; deletions: number }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -52,360 +41,187 @@ async function tryReadFile(filePath: string): Promise<string | null> {
   try { return await fs.readFile(filePath, "utf-8"); } catch { return null; }
 }
 
-const CONTEXT_FILES = [
-  "app/page.tsx", "app/globals.css", "app/layout.tsx", "design-system.md",
-];
-
-async function readProjectContext(projectDir: string, blueprint: unknown): Promise<string> {
-  const parts: string[] = [];
-  if (blueprint) {
-    parts.push(`## Project Blueprint\n\`\`\`json\n${JSON.stringify(blueprint, null, 2)}\n\`\`\``);
-  }
-  parts.push("## Project Files");
-  for (const relPath of CONTEXT_FILES) {
-    const content = await tryReadFile(path.join(projectDir, relPath));
-    if (content) parts.push(`### ${relPath}\n\`\`\`\n${content}\n\`\`\``);
-  }
-
-  // Read all sub-page files (app/[slug]/page.tsx) — not just home
-  const appDir = path.join(projectDir, "app");
-  try {
-    const entries = await fs.readdir(appDir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isDirectory() || entry.name === "api") continue;
-      const pagePath = path.join(appDir, entry.name, "page.tsx");
-      const content = await tryReadFile(pagePath);
-      if (content) parts.push(`### app/${entry.name}/page.tsx\n\`\`\`tsx\n${content}\n\`\`\``);
-    }
-  } catch { /* no sub-pages */ }
-
-  // Read all section components (no arbitrary slice limit)
-  const sectionsDir = path.join(projectDir, "components", "sections");
-  try {
-    const files = await fs.readdir(sectionsDir);
-    for (const file of files) {
-      const content = await tryReadFile(path.join(sectionsDir, file));
-      if (content) parts.push(`### components/sections/${file}\n\`\`\`tsx\n${content}\n\`\`\``);
-    }
-  } catch { /* no sections dir */ }
-  return parts.join("\n\n");
-}
-
 function computeDiff(filePath: string, oldContent: string, newContent: string): { patch: string; stats: DiffStats } {
-  const structured = structuredPatch(filePath, filePath, oldContent, newContent, "before", "after", { context: 3 });
+  const s = structuredPatch(filePath, filePath, oldContent, newContent, "before", "after", { context: 3 });
   const stats: DiffStats = { additions: 0, deletions: 0 };
-  const lines: string[] = [
-    `--- ${structured.oldHeader}`,
-    `+++ ${structured.newHeader}`,
-  ];
-  for (const hunk of structured.hunks) {
-    lines.push(`@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`);
-    for (const line of hunk.lines) {
-      lines.push(line);
-      if (line.startsWith("+")) stats.additions++;
-      else if (line.startsWith("-")) stats.deletions++;
-    }
+  const lines = [`--- ${s.oldHeader}`, `+++ ${s.newHeader}`];
+  for (const h of s.hunks) {
+    lines.push(`@@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@`);
+    for (const l of h.lines) { lines.push(l); if (l[0] === "+") stats.additions++; else if (l[0] === "-") stats.deletions++; }
   }
   return { patch: lines.join("\n"), stats };
 }
 
-// ── Phase 1: Plan ────────────────────────────────────────────────────────────
-
-const PLAN_SYSTEM_PROMPT = `You are an expert Next.js developer analyzing a modification request.
-
-Create a modification plan. For each file that needs to change, explain WHY.
-If files depend on each other (e.g. file B imports a new component from file A),
-declare the dependency so they are processed in the right order.
-
-## Project file conventions
-- Pages live in \`app/{slug}/page.tsx\` (Next.js App Router)
-- Section components live in \`components/sections/{scope}_{Name}Section.tsx\`
-  - scope = page slug (e.g. "home", "about") or "layout" for shared sections
-- Layout sections (nav, footer) are in \`components/sections/layout_*.tsx\`
-- The root layout is \`app/layout.tsx\` — it imports layout sections
-- Each page imports its section components and composes them
-- Styles are in \`app/globals.css\` (Tailwind v4)
-- Design system doc is \`design-system.md\`
-
-## When adding a new page
-You must create:
-1. Section component(s) in \`components/sections/{slug}_{Name}Section.tsx\`
-2. Page file \`app/{slug}/page.tsx\` that imports and renders the sections
-3. Modify the navigation section to add a link to the new page
-
-## When adding a new section to an existing page
-You must:
-1. Create the section component in \`components/sections/{slug}_{Name}Section.tsx\`
-2. Modify the page file \`app/{slug}/page.tsx\` (or \`app/page.tsx\` for home) to import and render it
-
-Output a JSON object:
-{
-  "analysis": "2-3 sentences: what the user wants and your approach",
-  "changes": [
-    {
-      "path": "relative/path/to/file.tsx",
-      "action": "modify" | "create" | "delete",
-      "reasoning": "1-2 sentences: why this file changes and what you'll do",
-      "dependsOn": ["path/of/file/that/must/be/done/first.tsx"]
+async function buildFileTree(dir: string): Promise<string> {
+  const r: string[] = [];
+  async function walk(d: string, p: string) {
+    for (const e of await fs.readdir(d, { withFileTypes: true })) {
+      if (["node_modules", ".next", ".git"].includes(e.name)) continue;
+      const rel = p ? `${p}/${e.name}` : e.name;
+      if (e.isDirectory()) { r.push(`${rel}/`); await walk(path.join(d, e.name), rel); }
+      else r.push(rel);
     }
-  ]
+  }
+  await walk(dir, "");
+  return r.join("\n");
 }
 
-Rules:
-- Only include files that actually need to change
-- Be specific: not "update styles" but "change hero gradient from dark to primary color"
-- dependsOn is optional — only include it when file B needs to see file A's new content
-- Output ONLY the JSON`;
-
-async function generatePlan(contextStr: string, instruction: string): Promise<ModificationPlan> {
-  const raw = await callLLM(PLAN_SYSTEM_PROMPT, `${contextStr}\n\n## Modification Instruction\n${instruction}`, 0.2);
-  try {
-    const start = raw.indexOf("{");
-    const end = raw.lastIndexOf("}");
-    if (start === -1 || end === -1) throw new Error("No JSON");
-    return JSON.parse(raw.slice(start, end + 1)) as ModificationPlan;
-  } catch {
-    return { analysis: "Failed to parse plan from LLM output", changes: [] };
+class FileSnapshotTracker {
+  private snapshots = new Map<string, string>();
+  constructor(private projectDir: string) { }
+  async capture(relPath: string) {
+    if (!this.snapshots.has(relPath))
+      this.snapshots.set(relPath, await tryReadFile(path.join(this.projectDir, relPath)) ?? "");
   }
-}
-
-// ── Phase 2: Generate complete file content ──────────────────────────────────
-
-const MODIFY_SYSTEM_PROMPT = `You are an expert Next.js/React developer.
-You will receive an existing file and a modification instruction.
-Output the COMPLETE updated file content.
-
-Rules:
-- Output ONLY the file content, no explanation
-- Preserve all existing functionality unless the instruction says to change it
-- Keep imports, types, and structure intact unless changes are needed
-- Do not wrap in markdown code fences`;
-
-const CREATE_SYSTEM_PROMPT = `You are an expert Next.js/React developer.
-Create a new file based on the instruction.
-
-Project conventions:
-- Use Tailwind CSS for styling, use design system utility classes (ds-*) from globals.css
-- Section components: export default function, accept no props, self-contained
-- Page files: import section components, compose them in order, can export metadata
-- Use "use client" only if the component needs hooks, event handlers, or browser APIs
-- NEVER use <style jsx> — use Tailwind classes or inline styles only
-
-Output ONLY the complete file content, no explanation, no markdown fences.`;
-
-async function generateNewContent(
-  projectDir: string,
-  change: PlannedFileChange,
-  instruction: string,
-  completedChanges: Map<string, string>
-): Promise<string> {
-  // Build context from already-completed files in this batch
-  const depContext = change.dependsOn?.length
-    ? change.dependsOn
-      .filter((dep) => completedChanges.has(dep))
-      .map((dep) => `### ${dep} (already modified)\n\`\`\`\n${completedChanges.get(dep)}\n\`\`\``)
-      .join("\n\n")
-    : "";
-  const depBlock = depContext ? `\n\n## Related files (already updated in this batch)\n${depContext}` : "";
-
-  // Read design system + globals for style context (especially for create)
-  const designSystem = await tryReadFile(path.join(projectDir, "design-system.md")) ?? "";
-  const globalsCss = await tryReadFile(path.join(projectDir, "app/globals.css")) ?? "";
-  const styleContext = (designSystem || globalsCss)
-    ? `\n\n## Design System\n${designSystem}\n\n## Available CSS utilities\n\`\`\`css\n${globalsCss}\n\`\`\``
-    : "";
-
-  if (change.action === "create") {
-    const raw = await callLLM(
-      CREATE_SYSTEM_PROMPT,
-      `Create file: ${change.path}\nPurpose: ${change.reasoning}\nInstruction: ${instruction}${styleContext}${depBlock}`,
-      0.3
-    );
-    return extractContent(raw, change.path.endsWith(".tsx") ? "tsx" : "");
-  }
-
-  const currentContent = await tryReadFile(path.join(projectDir, change.path));
-  if (!currentContent) {
-    const raw = await callLLM(
-      CREATE_SYSTEM_PROMPT,
-      `Create file: ${change.path}\nPurpose: ${change.reasoning}\nInstruction: ${instruction}${depBlock}`,
-      0.3
-    );
-    return extractContent(raw, change.path.endsWith(".tsx") ? "tsx" : "");
-  }
-
-  const raw = await callLLM(
-    MODIFY_SYSTEM_PROMPT,
-    `## File: ${change.path}\n\`\`\`\n${currentContent}\n\`\`\`\n\n## What to change\n${change.reasoning}\n\n## Instruction\n${instruction}${depBlock}`,
-    0.2
-  );
-  return extractContent(raw, change.path.endsWith(".tsx") ? "tsx" : "");
-}
-
-// ── Dependency ordering ──────────────────────────────────────────────────────
-
-function topoSort(changes: PlannedFileChange[]): PlannedFileChange[] {
-  const byPath = new Map(changes.map((c) => [c.path, c]));
-  const visited = new Set<string>();
-  const result: PlannedFileChange[] = [];
-
-  function visit(c: PlannedFileChange) {
-    if (visited.has(c.path)) return;
-    visited.add(c.path);
-    for (const dep of c.dependsOn ?? []) {
-      const depChange = byPath.get(dep);
-      if (depChange) visit(depChange);
+  async computeAllDiffs() {
+    const diffs: Array<{ file: string; patch: string; stats: DiffStats }> = [];
+    for (const [rel, old] of this.snapshots) {
+      const cur = await tryReadFile(path.join(this.projectDir, rel)) ?? "";
+      if (old !== cur) diffs.push({ file: rel, ...computeDiff(rel, old, cur) });
     }
-    result.push(c);
+    return diffs;
   }
-
-  for (const c of changes) visit(c);
-  return result;
+  get touchedFiles() { return Array.from(this.snapshots.keys()); }
 }
 
-// ── Main entry ───────────────────────────────────────────────────────────────
+// ── System Prompt ────────────────────────────────────────────────────────────
 
-export async function runModifyProject(
-  projectId: string,
-  userInstruction: string,
-  onEvent: (event: ModifySSEEvent) => void
-): Promise<void> {
-  const artifactLogger = createArtifactLogger("modify_project");
-  await artifactLogger.writeJson("run", "input", { projectId, userInstruction });
+const SYSTEM_PROMPT = `You are an expert Next.js/React developer. You modify existing projects by reading code, making precise edits, and verifying builds.
 
-  // Step 1: Resolve project
-  onEvent({ type: "step", name: "resolve_project", status: "running" });
-  const project = await getProject(projectId);
-  if (!project) throw new Error(`Project not found: ${projectId}`);
-  const projectDir = getSiteRoot(projectId);
-  setSiteRoot(projectDir);
-  onEvent({ type: "step", name: "resolve_project", status: "done" });
+You have these tools:
+- read_file: Read a file's content
+- search_code: Search for patterns across the codebase (ripgrep)
+- list_dir: List directory contents
+- edit_file: Make precise edits (old_string → new_string replacement)
+- write_file: Create new files
+- run_build: Run the project build to verify changes
 
-  // Wrap everything in try/finally so setSiteRoot is always reset,
-  // even if the flow throws mid-way (problem 1 fix).
-  try {
-    // Step 2: Read context
-    onEvent({ type: "step", name: "read_context", status: "running" });
-    const contextStr = await readProjectContext(projectDir, project.blueprint ?? null);
-    await artifactLogger.writeText("read_context", "context", contextStr, "md");
-    onEvent({ type: "step", name: "read_context", status: "done" });
+## How to work
+Read the files you need, understand the code, make your edits, then verify with run_build.
+Use edit_file for modifications (old_string must match exactly one location — include surrounding lines for uniqueness).
+Use write_file only for brand new files.
 
-    // Step 3: Plan
-    onEvent({ type: "step", name: "plan", status: "running" });
-    const plan = await generatePlan(contextStr, userInstruction);
-    await artifactLogger.writeJson("plan", "plan", plan);
-    onEvent({ type: "plan", plan });
-    onEvent({
-      type: "step", name: "plan", status: "done",
-      message: `${plan.analysis}\n→ ${plan.changes.length} file(s)`,
+## Project structure
+- Pages: app/{slug}/page.tsx
+- Sections: components/sections/{scope}_{Name}Section.tsx
+- Layout: app/layout.tsx, components/sections/layout_*.tsx
+- Styles: app/globals.css (Tailwind v4)
+- Design tokens: design-system.md`;
+
+// ── All tools, always available ──────────────────────────────────────────────
+
+const ALL_TOOLS = ["read_file", "search_code", "list_dir", "edit_file", "write_file", "run_build"];
+
+// ── Stop Hook: quality gate when LLM wants to stop ──────────────────────────
+
+interface LoopState {
+  hasEdited: boolean;
+  hasBuild: boolean;
+  buildPassed: boolean;
+  lastBuildOutput: string;
+}
+
+/**
+ * Runs when LLM stops calling tools. Returns null if task is complete,
+ * or a blocking error message that gets injected back into the conversation.
+ * This is the Claude Code "stop hook" pattern.
+ */
+function runStopHook(loopState: LoopState): string | null {
+  if (!loopState.hasEdited) {
+    return "You haven't made any changes yet. The user asked you to modify the project. Please read the relevant files and use edit_file to make the requested changes.";
+  }
+  if (!loopState.hasBuild) {
+    return "You've made changes but haven't verified them. Please call run_build to check that the project still compiles.";
+  }
+  if (!loopState.buildPassed) {
+    return `The build failed after your changes:\n\`\`\`\n${loopState.lastBuildOutput.slice(0, 2000)}\n\`\`\`\nPlease fix the errors using edit_file and run_build again.`;
+  }
+  // All gates passed — task is complete
+  return null;
+}
+
+// ── Agent Loop ───────────────────────────────────────────────────────────────
+
+const MAX_ITERATIONS = 40;
+const MAX_STOP_HOOK_RETRIES = 5; // max times stop hook can push back
+
+async function runAgentLoop(
+  messages: ChatMessage[],
+  tracker: FileSnapshotTracker,
+  onEvent: (event: ModifySSEEvent) => void,
+): Promise<{ messages: ChatMessage[]; loopState: LoopState; iterations: number }> {
+  const model = getModelId();
+  const tools = getSystemToolDefinitions(ALL_TOOLS);
+  const loopState: LoopState = { hasEdited: false, hasBuild: false, buildPassed: false, lastBuildOutput: "" };
+  let iterations = 0;
+  let stopHookRetries = 0;
+
+  while (iterations < MAX_ITERATIONS) {
+    iterations++;
+
+    // ── Call LLM — full freedom, all tools, auto choice ──────────────────
+    const res = await chatCompletion({
+      model,
+      messages,
+      temperature: 0.1,
+      tools,
+      tool_choice: "auto",
     });
 
-    if (plan.changes.length === 0) {
-      onEvent({ type: "step", name: "plan", status: "error", message: "No changes planned" });
-      return;
-    }
+    const choice = res.choices[0];
+    if (!choice?.message) break;
+    const msg = choice.message;
 
-    // Step 4: Execute changes (in dependency order)
-    const sortedChanges = topoSort(plan.changes);
-    const touchedFiles: string[] = [];
-    const completedChanges = new Map<string, string>(); // path → new content
-    const collectedDiffs: Array<{ file: string; reasoning: string; patch: string; stats: DiffStats }> = [];
+    console.log(`[agent] iter=${iterations} tools=${msg.tool_calls?.length ?? 0} content=${(msg.content?.length ?? 0)} edited=${loopState.hasEdited} built=${loopState.hasBuild}`);
 
-    for (const change of sortedChanges) {
-      const stepName = `${change.action}:${change.path}`;
-      onEvent({ type: "step", name: stepName, status: "running", message: change.reasoning });
+    messages.push({ role: "assistant", content: msg.content ?? "", tool_calls: msg.tool_calls });
 
-      try {
-        const absPath = path.resolve(projectDir, change.path);
-        if (!absPath.startsWith(projectDir + path.sep) && absPath !== projectDir) {
-          onEvent({ type: "step", name: stepName, status: "error", message: "Path traversal blocked" });
-          continue;
-        }
-
-        if (change.action === "delete") {
-          await fs.rm(absPath, { force: true });
-          onEvent({
-            type: "diff", file: change.path, reasoning: change.reasoning,
-            patch: `File deleted`, stats: { additions: 0, deletions: 0 },
-          });
-          touchedFiles.push(change.path);
-          onEvent({ type: "step", name: stepName, status: "done", message: "Deleted" });
-          continue;
-        }
-
-        // Read old content (empty string for new files)
-        const oldContent = await tryReadFile(absPath) ?? "";
-
-        // LLM generates complete new content (with context from completed deps)
-        const newContent = await generateNewContent(projectDir, change, userInstruction, completedChanges);
-
-        // Compute real diff
-        const { patch, stats } = computeDiff(change.path, oldContent, newContent);
-
-        // Log everything
-        const safeStepName = stepName.replace(/[/\\:]/g, "_");
-        await artifactLogger.writeText(safeStepName, "old", oldContent, "tsx");
-        await artifactLogger.writeText(safeStepName, "new", newContent, "tsx");
-        await artifactLogger.writeText(safeStepName, "diff", patch, "diff");
-
-        // Stream diff to client
-        onEvent({ type: "diff", file: change.path, reasoning: change.reasoning, patch, stats });
-        collectedDiffs.push({ file: change.path, reasoning: change.reasoning, patch, stats });
-
-        // Write file
-        await fs.mkdir(path.dirname(absPath), { recursive: true });
-        await fs.writeFile(absPath, newContent, "utf-8");
-
-        touchedFiles.push(change.path);
-        completedChanges.set(change.path, newContent);
-        onEvent({
-          type: "step", name: stepName, status: "done",
-          message: `+${stats.additions} -${stats.deletions} lines`,
-        });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        await artifactLogger.writeJson(stepName.replace(/[/\\:]/g, "_"), "error", { error: msg });
-        onEvent({ type: "step", name: stepName, status: "error", message: msg });
+    // ── LLM wants to stop (no tool calls) → run stop hook ────────────────
+    if (!msg.tool_calls || msg.tool_calls.length === 0) {
+      const blockingError = runStopHook(loopState);
+      if (blockingError && stopHookRetries < MAX_STOP_HOOK_RETRIES) {
+        stopHookRetries++;
+        console.log(`[agent] stop hook blocked (retry ${stopHookRetries}/${MAX_STOP_HOOK_RETRIES}): ${blockingError.slice(0, 100)}`);
+        messages.push({ role: "user", content: blockingError });
+        continue; // Loop continues — LLM sees the error and tries again
       }
+      break; // Either all gates passed, or we've retried enough
     }
 
-    // Step 5: Build verification (problem 5 fix)
-    onEvent({ type: "step", name: "run_build", status: "running" });
-    const buildResult = await stepRunBuild();
-    await artifactLogger.writeText("run_build", "output", buildResult.output, "log");
-    onEvent({
-      type: "step", name: "run_build",
-      status: buildResult.success ? "done" : "error",
-      message: buildResult.output.slice(0, 300),
-    });
+    // ── Execute tool calls ───────────────────────────────────────────────
+    for (const tc of msg.tool_calls) {
+      const name = tc.function.name;
+      let args: Record<string, unknown>;
+      try { args = JSON.parse(tc.function.arguments ?? "{}"); } catch { args = {}; }
 
-    // Step 6: Update registry
-    onEvent({ type: "step", name: "update_registry", status: "running" });
-    const record: ModificationRecord = {
-      instruction: userInstruction,
-      modifiedAt: new Date().toISOString(),
-      touchedFiles,
-      plan: { analysis: plan.analysis, changes: plan.changes },
-      diffs: collectedDiffs,
-    };
-    const existingHistory = project.modificationHistory ?? [];
-    await updateProjectStatus(projectId, "ready", {
-      modificationHistory: [...existingHistory, record],
-      verificationStatus: buildResult.success ? "passed" : "failed",
-    });
+      // Snapshot before writes
+      if ((name === "edit_file" || name === "write_file") && args.path) {
+        await tracker.capture(args.path as string);
+      }
 
-    await artifactLogger.writeJson("run", "result", {
-      projectId, instruction: userInstruction, touchedFiles,
-      buildPassed: buildResult.success,
-      logDirectory: artifactLogger.runDirRelative,
-    });
+      // Execute
+      const result = await executeSystemTool(name, args);
 
-    onEvent({
-      type: "step", name: "update_registry", status: "done",
-      message: `${touchedFiles.length} file(s): ${touchedFiles.join(", ")}`,
-    });
-  } finally {
-    // Always reset SITE_ROOT regardless of success or failure (problem 1 fix)
-    clearSiteRoot();
+      // Update loop state
+      if (name === "edit_file" || name === "write_file") {
+        if (typeof result === "object" ? result.success : true) loopState.hasEdited = true;
+      }
+      if (name === "run_build") {
+        loopState.hasBuild = true;
+        loopState.buildPassed = typeof result === "object" ? result.success : !String(result).includes("failed");
+        loopState.lastBuildOutput = typeof result === "object" ? (result.output ?? result.error ?? "") : String(result);
+      }
+
+      // Stream to client
+      const out = typeof result === "string" ? result : (result.success ? result.output ?? "ok" : result.error ?? "failed");
+      onEvent({ type: "tool_call", tool: name, args, result: out.slice(0, 500) });
+
+      // Feed result back to LLM
+      messages.push({ role: "tool", tool_call_id: tc.id, content: typeof result === "string" ? result : JSON.stringify(result) });
+    }
+
+    stopHookRetries = 0; // Reset after successful tool use
   }
+
+  return { messages, loopState, iterations };
 }

@@ -1,4 +1,5 @@
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
+import { editFileTool } from "./system/editFileTool";
 import { execShellTool } from "./system/execShellTool";
 import { formatCodeTool } from "./system/formatCodeTool";
 import { installPackageTool } from "./system/installPackageTool";
@@ -11,6 +12,7 @@ import { writeFileTool } from "./system/writeFileTool";
 const toolDefinitions: Record<string, ChatCompletionTool> = {
   write_file: writeFileTool,
   read_file: readFileTool,
+  edit_file: editFileTool,
   exec_shell: execShellTool,
   list_dir: listDirTool,
   search_code: searchCodeTool,

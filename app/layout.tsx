@@ -1,11 +1,17 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
-import { Footer } from "./components/Footer";
+import { Inter, JetBrains_Mono, Space_Grotesk, Syne } from "next/font/google";
+import { ConditionalFooter } from "./components/ConditionalFooter";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
   subsets: ["latin"],
+});
+
+const syne = Syne({
+  variable: "--font-syne",
+  subsets: ["latin"],
+  weight: ["700", "800"],
 });
 
 const jetBrainsMono = JetBrains_Mono({
@@ -23,6 +29,8 @@ export const metadata: Metadata = {
   description: "AI-powered website builder — describe your idea, get a live site in seconds.",
 };
 
+
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -31,10 +39,10 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" className="dark">
       <body
-        className={`${spaceGrotesk.variable} ${inter.variable} ${jetBrainsMono.variable} min-h-screen bg-background text-foreground antialiased`}
+        className={`${spaceGrotesk.variable} ${inter.variable} ${jetBrainsMono.variable} ${syne.variable} min-h-screen bg-background text-foreground antialiased`}
       >
         {children}
-        <Footer />
+        <ConditionalFooter />
       </body>
     </html>
   );

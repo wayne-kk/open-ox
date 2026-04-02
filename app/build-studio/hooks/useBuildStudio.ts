@@ -19,6 +19,12 @@ export interface ModifyDiff {
   stats: { additions: number; deletions: number };
 }
 
+export interface ModifyToolCall {
+  tool: string;
+  args: Record<string, unknown>;
+  result: string;
+}
+
 export interface ModifyPlan {
   analysis: string;
   changes: Array<{ path: string; action: string; reasoning: string }>;
@@ -55,6 +61,7 @@ export interface BuildStudioState {
   // Project
   projectId: string | null;
   setProjectId: (id: string | null) => void;
+  projectLoading: boolean;
 
   // Right panel toggle
   rightPanel: RightPanel;
@@ -74,6 +81,7 @@ export interface BuildStudioState {
   modifySteps: ModifyStep[];
   modifyPlan: ModifyPlan | null;
   modifyDiffs: ModifyDiff[];
+  modifyToolCalls: ModifyToolCall[];
   modifyError: string | null;
   handleModify: () => Promise<void>;
   modifyHistory: ModifyRecord[];
@@ -100,6 +108,7 @@ export function useBuildStudio(initialProjectId?: string | null): BuildStudioSta
   }, []);
 
   const [projectId, setProjectId] = useState<string | null>(initialProjectId ?? null);
+  const [projectLoading, setProjectLoading] = useState<boolean>(!!initialProjectId);
   const [rightPanel, setRightPanel] = useState<RightPanel>("topology");
 
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -111,6 +120,7 @@ export function useBuildStudio(initialProjectId?: string | null): BuildStudioSta
   const [modifySteps, setModifySteps] = useState<ModifyStep[]>([]);
   const [modifyPlan, setModifyPlan] = useState<ModifyPlan | null>(null);
   const [modifyDiffs, setModifyDiffs] = useState<ModifyDiff[]>([]);
+  const [modifyToolCalls, setModifyToolCalls] = useState<ModifyToolCall[]>([]);
   const [modifyError, setModifyError] = useState<string | null>(null);
   const [modifyHistory, setModifyHistory] = useState<ModifyRecord[]>([]);
 
@@ -162,7 +172,7 @@ export function useBuildStudio(initialProjectId?: string | null): BuildStudioSta
     fetch(`/api/projects/${projectId}`)
       .then((r) => r.ok ? r.json() : null)
       .then((project) => {
-        if (!project) return;
+        if (!project) { setProjectLoading(false); return; }
         setLastRunInput(project.userPrompt ?? null);
         if (project.modelId) setSelectedModel(project.modelId);
 
@@ -198,8 +208,9 @@ export function useBuildStudio(initialProjectId?: string | null): BuildStudioSta
           logDirectory: project.logDirectory,
           error: project.error,
         });
+        setProjectLoading(false);
       })
-      .catch(() => { /* ignore */ });
+      .catch(() => { setProjectLoading(false); /* ignore */ });
   }, [projectId]);
 
   async function handleRun() {
@@ -391,6 +402,7 @@ export function useBuildStudio(initialProjectId?: string | null): BuildStudioSta
     setModifySteps([]);
     setModifyPlan(null);
     setModifyDiffs([]);
+    setModifyToolCalls([]);
     setModifyError(null);
     modifyStepsRef.current = [];
     modifyPlanRef.current = null;
@@ -400,7 +412,7 @@ export function useBuildStudio(initialProjectId?: string | null): BuildStudioSta
       const res = await fetch(`/api/projects/${projectId}/modify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userInstruction: modifyInstruction }),
+        body: JSON.stringify({ userInstruction: modifyInstruction, model: selectedModel }),
       });
 
       if (!res.ok || !res.body) { setModifyError("Failed to start modification"); return; }
@@ -437,6 +449,8 @@ export function useBuildStudio(initialProjectId?: string | null): BuildStudioSta
                 modifyDiffsRef.current = next;
                 return next;
               });
+            } else if (event.type === "tool_call") {
+              setModifyToolCalls((prev) => [...prev, { tool: event.tool, args: event.args, result: event.result }]);
             } else if (event.type === "error") {
               setModifyError(event.message);
             } else if (event.type === "done") {
@@ -481,7 +495,7 @@ export function useBuildStudio(initialProjectId?: string | null): BuildStudioSta
     } finally {
       setModifying(false);
     }
-  }, [modifyInstruction, modifying, projectId]);
+  }, [modifyInstruction, modifying, projectId, selectedModel]);
 
   const flowStart =
     response?.buildSteps?.[0]?.timestamp != null
@@ -492,11 +506,11 @@ export function useBuildStudio(initialProjectId?: string | null): BuildStudioSta
     input, setInput, loading, clearing, response, lastRunInput, elapsed, flowStart,
     handleRun, handleClear, handleRetry,
     selectedModel, setSelectedModel, availableModels,
-    projectId, setProjectId,
+    projectId, setProjectId, projectLoading,
     rightPanel, setRightPanel,
     previewUrl, previewState, previewError, startPreview, rebuildPreview,
     modifyInstruction, setModifyInstruction, modifying,
-    modifySteps, modifyPlan, modifyDiffs, modifyError, handleModify,
+    modifySteps, modifyPlan, modifyDiffs, modifyToolCalls, modifyError, handleModify,
     modifyHistory,
     iframeRef,
   };
