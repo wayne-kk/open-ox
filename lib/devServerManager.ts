@@ -1,120 +1,215 @@
 /**
- * Dev Server Manager — Simplified & Reliable
+ * Dev Server Manager — E2B Cloud Sandboxes (Static Build)
  *
- * State is persisted to .open-ox/dev-servers.json.
- * On each startDevServer call:
- *   1. Check persisted state for this projectId
- *   2. If found and port is alive → reuse
- *   3. Otherwise → spawn new, persist
- *
- * No OS process scanning (unreliable). No in-memory-only state.
- * The persisted file is the single source of truth.
+ * Flow:
+ *   1. Check Supabase for existing sandboxId → try reconnect
+ *   2. Create sandbox from custom template (large memory)
+ *   3. Upload generated files + inject `output: 'export'` into next.config
+ *   4. npm install (if node_modules missing)
+ *   5. next build → static export to /home/user/app/out
+ *   6. npx serve out -l 3000 (background) → fast static file serving
+ *   7. Return sandbox.getHost(3000)
  */
 
 import fs from "fs/promises";
 import path from "path";
-import net from "net";
-import { spawn, ChildProcess } from "child_process";
-import { findAvailablePort } from "./portAllocator";
+import { Sandbox } from "e2b";
+import { supabase } from "./supabase";
 import { getSiteRoot, WORKSPACE_ROOT } from "./projectManager";
 
-const STATE_FILE = path.join(WORKSPACE_ROOT, ".open-ox", "dev-servers.json");
+/** Known deps baked into the E2B template — parsed from e2b-template/package.json at build time */
+const TEMPLATE_PKG_PATH = path.join(WORKSPACE_ROOT, "e2b-template", "package.json");
 
-interface PersistedEntry {
-  projectId: string;
-  port: number;
-  url: string;
-  pid: number;
+const SANDBOX_TIMEOUT_MS = 30 * 60 * 1000;
+const NEXTJS_TEMPLATE = "8e362hd4wmp7b8hev3do";
+const SERVE_PORT = 3000;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+async function getSandboxId(projectId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from("projects")
+    .select("sandbox_id")
+    .eq("id", projectId)
+    .single();
+  return (data as { sandbox_id: string | null } | null)?.sandbox_id ?? null;
 }
 
-// In-memory handles for processes we spawned in THIS module lifecycle
-const childProcesses = new Map<string, ChildProcess>();
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function isProcessAlive(pid: number): boolean {
-  try { process.kill(pid, 0); return true; } catch { return false; }
+async function saveSandboxId(projectId: string, sandboxId: string): Promise<void> {
+  await supabase
+    .from("projects")
+    .update({ sandbox_id: sandboxId, updated_at: new Date().toISOString() })
+    .eq("id", projectId);
 }
 
-function isPortListening(port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const socket = net.createConnection({ port, host: "127.0.0.1" });
-    const timer = setTimeout(() => { socket.destroy(); resolve(false); }, 1000);
-    socket.once("connect", () => { clearTimeout(timer); socket.destroy(); resolve(true); });
-    socket.once("error", () => { clearTimeout(timer); resolve(false); });
-  });
+async function clearSandboxId(projectId: string): Promise<void> {
+  await supabase
+    .from("projects")
+    .update({ sandbox_id: null, updated_at: new Date().toISOString() })
+    .eq("id", projectId);
 }
 
-async function waitForHttp(url: string, timeoutMs = 30_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(2000) });
-      if (res.status > 0) return;
-    } catch { /* not ready */ }
-    await new Promise((r) => setTimeout(r, 600));
+function e2bOpts() {
+  const apiKey = process.env.E2B_API_KEY;
+  if (!apiKey) throw new Error("E2B_API_KEY environment variable is not set");
+  return { apiKey };
+}
+
+const UPLOAD_EXCLUDE = new Set(["node_modules", ".next", ".git"]);
+
+async function collectFiles(dir: string, base: string): Promise<string[]> {
+  const entries = await fs.readdir(dir, { withFileTypes: true });
+  const files: string[] = [];
+  for (const entry of entries) {
+    if (UPLOAD_EXCLUDE.has(entry.name)) continue;
+    const full = path.join(dir, entry.name);
+    if (entry.isSymbolicLink()) {
+      try {
+        const stat = await fs.stat(full);
+        if (stat.isDirectory()) continue;
+        files.push(path.relative(base, full));
+      } catch { /* broken symlink */ }
+      continue;
+    }
+    if (entry.isDirectory()) {
+      files.push(...(await collectFiles(full, base)));
+    } else if (entry.isFile()) {
+      files.push(path.relative(base, full));
+    }
+  }
+  return files;
+}
+
+async function uploadProjectToSandbox(sandbox: Sandbox, projectId: string): Promise<void> {
+  const projectDir = getSiteRoot(projectId);
+  const templateDir = path.join(WORKSPACE_ROOT, "sites", "template");
+  const files = await collectFiles(projectDir, projectDir);
+
+  const BATCH = 20;
+  for (let i = 0; i < files.length; i += BATCH) {
+    const batch = files.slice(i, i + BATCH);
+    await Promise.all(
+      batch.map(async (relPath) => {
+        let localPath = path.join(projectDir, relPath);
+        if (relPath === "package.json") {
+          const templatePkg = path.join(templateDir, "package.json");
+          try {
+            await fs.access(templatePkg);
+            localPath = templatePkg;
+          } catch { /* fallback */ }
+        }
+        const content = await fs.readFile(localPath);
+        const sandboxPath = `/home/user/app/${relPath}`;
+        const dir = sandboxPath.substring(0, sandboxPath.lastIndexOf("/"));
+        await sandbox.files.makeDir(dir);
+        await sandbox.files.write(sandboxPath, content.buffer as ArrayBuffer);
+      })
+    );
   }
 }
 
-function waitForReady(child: ChildProcess, timeoutMs = 90_000): Promise<void> {
+/**
+ * Inject `output: 'export'` into next.config.ts inside the sandbox
+ * so `next build` produces a static /out directory.
+ */
+async function injectStaticExport(sandbox: Sandbox): Promise<void> {
+  const configPath = "/home/user/app/next.config.ts";
+  const content = await sandbox.files.read(configPath);
+  if (content.includes("output:") || content.includes("output :")) {
+    return; // already has output config
+  }
+  // Insert output: 'export' + images.unoptimized (required for static export)
+  const patched = content.replace(
+    /const nextConfig:\s*NextConfig\s*=\s*\{/,
+    `const nextConfig: NextConfig = {\n  output: 'export',\n  images: { unoptimized: true },`
+  );
+  await sandbox.files.write(configPath, patched);
+}
+
+/**
+ * Compare project package.json with template package.json.
+ * Returns a list of "pkg@version" strings for deps that are NOT in the template.
+ * If node_modules is completely missing, returns null → full install needed.
+ */
+async function getMissingDeps(sandbox: Sandbox): Promise<string[] | null> {
+  // If no node_modules at all, need full install
+  const check = await sandbox.commands.run(
+    "test -d /home/user/app/node_modules && echo EXISTS || echo MISSING"
+  );
+  if (check.stdout.trim() === "MISSING") return null;
+
+  // Read template deps (local file — what's baked into the E2B image)
+  let templateDeps: Record<string, string> = {};
+  try {
+    const raw = await fs.readFile(TEMPLATE_PKG_PATH, "utf-8");
+    const pkg = JSON.parse(raw);
+    templateDeps = { ...pkg.dependencies, ...pkg.devDependencies };
+  } catch {
+    // Can't read template pkg → fall back to full install
+    return null;
+  }
+
+  // Read project deps (inside sandbox)
+  let projectDeps: Record<string, string> = {};
+  try {
+    const content = await sandbox.files.read("/home/user/app/package.json");
+    const pkg = JSON.parse(content);
+    projectDeps = { ...pkg.dependencies, ...pkg.devDependencies };
+  } catch {
+    return null;
+  }
+
+  // Find deps in project but not in template
+  const missing: string[] = [];
+  for (const [name, version] of Object.entries(projectDeps)) {
+    if (!(name in templateDeps)) {
+      missing.push(`${name}@${version}`);
+    }
+  }
+  return missing;
+}
+
+/**
+ * Start a static file server on the built /out directory.
+ * Waits for the server to be ready by listening to stdout.
+ */
+async function startServeAndWait(sandbox: Sandbox, timeoutMs = 30_000): Promise<void> {
   return new Promise((resolve, reject) => {
-    const logs: string[] = [];
     const timer = setTimeout(() => {
-      reject(new Error(`Dev server timed out (${timeoutMs / 1000}s). Output:\n${logs.slice(-20).join("")}`));
+      reject(new Error(`Static server did not start within ${timeoutMs / 1000}s`));
     }, timeoutMs);
 
-    const onData = (chunk: Buffer) => {
-      const text = chunk.toString();
-      logs.push(text);
-      if (text.includes("Ready in") || text.includes("Local:") || text.includes("ready started")) {
+    const onOutput = (data: string) => {
+      console.log("[e2b serve]", data.trim());
+      // `serve` prints "Accepting connections at ..." when ready
+      if (data.includes("Accepting connections") || data.includes("Listening on")) {
         clearTimeout(timer);
-        child.stdout?.off("data", onData);
-        child.stderr?.off("data", onData);
         resolve();
       }
     };
-    child.stdout?.on("data", onData);
-    child.stderr?.on("data", onData);
-    child.once("exit", (code) => {
+
+    sandbox.commands.run(
+      `cd /home/user/app && npx serve out -l ${SERVE_PORT} --no-clipboard`,
+      { background: true, onStdout: onOutput, onStderr: onOutput }
+    ).catch((err: unknown) => {
       clearTimeout(timer);
-      reject(new Error(`Dev server exited (code ${code}).\n${logs.slice(-30).join("")}`));
+      reject(err);
     });
   });
 }
 
-// ── Persistence (single source of truth) ─────────────────────────────────────
-
-async function readState(): Promise<PersistedEntry[]> {
+/**
+ * Check if the static server is responding on the sandbox.
+ */
+async function isServerUp(sandbox: Sandbox): Promise<boolean> {
+  const previewUrl = `https://${sandbox.getHost(SERVE_PORT)}`;
   try {
-    const raw = await fs.readFile(STATE_FILE, "utf-8");
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch { return []; }
-}
-
-async function writeState(entries: PersistedEntry[]): Promise<void> {
-  try {
-    await fs.mkdir(path.dirname(STATE_FILE), { recursive: true });
-    await fs.writeFile(STATE_FILE, JSON.stringify(entries, null, 2), "utf-8");
-  } catch { /* non-fatal */ }
-}
-
-async function upsertEntry(entry: PersistedEntry): Promise<void> {
-  const entries = await readState();
-  const idx = entries.findIndex((e) => e.projectId === entry.projectId);
-  if (idx >= 0) entries[idx] = entry;
-  else entries.push(entry);
-  await writeState(entries);
-}
-
-async function removeEntry(projectId: string): Promise<void> {
-  const entries = await readState();
-  await writeState(entries.filter((e) => e.projectId !== projectId));
-}
-
-async function findEntry(projectId: string): Promise<PersistedEntry | null> {
-  const entries = await readState();
-  return entries.find((e) => e.projectId === projectId) ?? null;
+    const res = await fetch(previewUrl, { signal: AbortSignal.timeout(3000) });
+    const text = await res.text().catch(() => "");
+    return res.ok && !text.includes("Closed Port Error");
+  } catch {
+    return false;
+  }
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -123,101 +218,190 @@ export async function startDevServer(
   projectId: string
 ): Promise<{ url: string; port: number }> {
   const projectDir = getSiteRoot(projectId);
-  try { await fs.access(projectDir); } catch {
+  try {
+    await fs.access(projectDir);
+  } catch {
     throw new Error(`Project directory not found: ${projectDir}`);
   }
 
-  // 1. Check persisted state — verify BOTH pid alive AND port listening
-  const existing = await findEntry(projectId);
-  if (existing) {
-    const pidAlive = existing.pid > 0 && isProcessAlive(existing.pid);
-    const portUp = pidAlive && await isPortListening(existing.port);
-    if (pidAlive && portUp) {
-      return { url: existing.url, port: existing.port };
-    }
-    // Stale entry — kill orphan if pid alive but port wrong, then clean up
-    if (pidAlive) {
-      try { process.kill(existing.pid, "SIGTERM"); } catch { /* already dead */ }
-    }
-    await removeEntry(projectId);
+  // 1. Try reconnecting to existing sandbox
+  const existingSandboxId = await getSandboxId(projectId);
+  if (existingSandboxId) {
+    try {
+      const sandbox = await Sandbox.connect(existingSandboxId, e2bOpts());
+      const alive = await sandbox.isRunning();
+      if (alive) {
+        const previewUrl = `https://${sandbox.getHost(SERVE_PORT)}`;
+        if (await isServerUp(sandbox)) {
+          await sandbox.setTimeout(SANDBOX_TIMEOUT_MS);
+          return { url: previewUrl, port: SERVE_PORT };
+        }
+        // Sandbox alive but server not running — check if /out exists
+        const hasOut = await sandbox.commands.run("test -d /home/user/app/out && echo YES || echo NO");
+        if (hasOut.stdout.trim() === "YES") {
+          await startServeAndWait(sandbox);
+          await sandbox.setTimeout(SANDBOX_TIMEOUT_MS);
+          return { url: previewUrl, port: SERVE_PORT };
+        }
+        // No /out — need full rebuild, kill and recreate
+      }
+    } catch { /* expired or unreachable */ }
+    await clearSandboxId(projectId);
   }
 
-  // 2. Spawn new dev server
-  const port = await findAvailablePort();
-  const url = `http://localhost:${port}`;
-  const nextBin = path.join(process.cwd(), "node_modules", ".bin", "next");
-
-  const child = spawn(nextBin, ["dev", "--port", String(port)], {
-    cwd: projectDir,
-    stdio: "pipe",
-    env: { ...process.env, FORCE_COLOR: "0" },
-  });
-
-  childProcesses.set(projectId, child);
-
-  child.on("exit", () => {
-    childProcesses.delete(projectId);
-    removeEntry(projectId);
+  // 2. Create fresh sandbox
+  console.log("[e2b] Creating sandbox...");
+  const sandbox = await Sandbox.create(NEXTJS_TEMPLATE, {
+    timeoutMs: SANDBOX_TIMEOUT_MS,
+    metadata: { projectId },
+    ...e2bOpts(),
   });
 
   try {
-    await waitForReady(child);
-    await waitForHttp(url);
+    // 3. Upload project files
+    console.log("[e2b] Uploading project files...");
+    await uploadProjectToSandbox(sandbox, projectId);
+
+    // 4. Inject static export config
+    await injectStaticExport(sandbox);
+
+    // 5. Install deps — only missing ones if template has node_modules
+    const missingDeps = await getMissingDeps(sandbox);
+    if (missingDeps === null) {
+      // No node_modules at all → full install
+      console.log("[e2b] No node_modules found, running full npm install...");
+      const installResult = await sandbox.commands.run(
+        "cd /home/user/app && npm install --legacy-peer-deps 2>&1",
+        { timeoutMs: 120_000 }
+      );
+      if (installResult.exitCode !== 0) {
+        throw new Error(`npm install failed (exit ${installResult.exitCode}): ${installResult.stdout.slice(-500)}`);
+      }
+    } else if (missingDeps.length > 0) {
+      // Only install the new packages
+      console.log(`[e2b] Installing ${missingDeps.length} extra deps:`, missingDeps.join(", "));
+      const installResult = await sandbox.commands.run(
+        `cd /home/user/app && npm install --legacy-peer-deps ${missingDeps.join(" ")} 2>&1`,
+        { timeoutMs: 120_000 }
+      );
+      if (installResult.exitCode !== 0) {
+        throw new Error(`npm install (extras) failed (exit ${installResult.exitCode}): ${installResult.stdout.slice(-500)}`);
+      }
+    } else {
+      console.log("[e2b] All deps already in template, skipping install");
+    }
+
+    // 6. Static build
+    console.log("[e2b] Building static site...");
+    const buildResult = await sandbox.commands.run(
+      "cd /home/user/app && npx next build 2>&1",
+      { timeoutMs: 120_000 }
+    );
+    console.log("[e2b] next build exit code:", buildResult.exitCode);
+    if (buildResult.exitCode !== 0) {
+      throw new Error(`next build failed (exit ${buildResult.exitCode}): ${buildResult.stdout.slice(-500)}`);
+    }
+
+    // 7. Start static file server
+    console.log("[e2b] Starting static server...");
+    await startServeAndWait(sandbox);
+
+    const previewUrl = `https://${sandbox.getHost(SERVE_PORT)}`;
+    await saveSandboxId(projectId, sandbox.sandboxId);
+    return { url: previewUrl, port: SERVE_PORT };
   } catch (err) {
-    child.kill("SIGTERM");
-    childProcesses.delete(projectId);
-    await removeEntry(projectId);
+    await sandbox.kill().catch(() => { });
     throw err;
   }
-
-  await upsertEntry({ projectId, port, url, pid: child.pid ?? 0 });
-  return { url, port };
 }
 
 export async function stopDevServer(projectId: string): Promise<void> {
-  // Try in-memory handle first
-  const child = childProcesses.get(projectId);
-  if (child) {
-    child.kill("SIGTERM");
-    childProcesses.delete(projectId);
+  const sandboxId = await getSandboxId(projectId);
+  if (sandboxId) {
+    try { await Sandbox.kill(sandboxId, e2bOpts()); } catch { /* already dead */ }
+    await clearSandboxId(projectId);
+  }
+}
+
+/**
+ * Resync files to existing sandbox, rebuild, and restart serve.
+ * If no sandbox exists, falls back to startDevServer (full create).
+ */
+export async function rebuildDevServer(
+  projectId: string
+): Promise<{ url: string; port: number }> {
+  const sandboxId = await getSandboxId(projectId);
+  if (!sandboxId) {
+    // No existing sandbox — do a full start
+    return startDevServer(projectId);
   }
 
-  // Also try persisted PID
-  const entry = await findEntry(projectId);
-  if (entry?.pid) {
-    try { process.kill(entry.pid, "SIGTERM"); } catch { /* already dead */ }
+  let sandbox: Sandbox;
+  try {
+    sandbox = await Sandbox.connect(sandboxId, e2bOpts());
+    if (!(await sandbox.isRunning())) throw new Error("not running");
+  } catch {
+    await clearSandboxId(projectId);
+    return startDevServer(projectId);
   }
 
-  await removeEntry(projectId);
+  console.log("[e2b rebuild] Resyncing files to sandbox", sandboxId);
+
+  // 1. Kill existing serve process
+  await sandbox.commands.run("pkill -f 'serve out' || true");
+
+  // 2. Re-upload project files
+  await uploadProjectToSandbox(sandbox, projectId);
+
+  // 3. Inject static export config
+  await injectStaticExport(sandbox);
+
+  // 4. Install any new deps
+  const missingDeps = await getMissingDeps(sandbox);
+  if (missingDeps === null) {
+    console.log("[e2b rebuild] Full npm install...");
+    const r = await sandbox.commands.run("cd /home/user/app && npm install --legacy-peer-deps 2>&1", { timeoutMs: 120_000 });
+    if (r.exitCode !== 0) throw new Error(`npm install failed: ${r.stdout.slice(-300)}`);
+  } else if (missingDeps.length > 0) {
+    console.log(`[e2b rebuild] Installing ${missingDeps.length} extra deps`);
+    const r = await sandbox.commands.run(`cd /home/user/app && npm install --legacy-peer-deps ${missingDeps.join(" ")} 2>&1`, { timeoutMs: 120_000 });
+    if (r.exitCode !== 0) throw new Error(`npm install extras failed: ${r.stdout.slice(-300)}`);
+  }
+
+  // 5. Rebuild
+  console.log("[e2b rebuild] Building...");
+  const buildResult = await sandbox.commands.run("cd /home/user/app && npx next build 2>&1", { timeoutMs: 120_000 });
+  if (buildResult.exitCode !== 0) {
+    throw new Error(`next build failed (exit ${buildResult.exitCode}): ${buildResult.stdout.slice(-500)}`);
+  }
+
+  // 6. Restart serve
+  console.log("[e2b rebuild] Restarting serve...");
+  await startServeAndWait(sandbox);
+
+  const previewUrl = `https://${sandbox.getHost(SERVE_PORT)}`;
+  await sandbox.setTimeout(SANDBOX_TIMEOUT_MS);
+  return { url: previewUrl, port: SERVE_PORT };
 }
 
 export async function getDevServerStatus(
   projectId: string
 ): Promise<{ status: "running" | "stopped"; url?: string }> {
-  const entry = await findEntry(projectId);
-  if (!entry) return { status: "stopped" };
-  const alive = await isPortListening(entry.port);
-  if (!alive) {
-    await removeEntry(projectId);
-    return { status: "stopped" };
-  }
-  return { status: "running", url: entry.url };
+  const sandboxId = await getSandboxId(projectId);
+  if (!sandboxId) return { status: "stopped" };
+  try {
+    const sandbox = await Sandbox.connect(sandboxId, e2bOpts());
+    if (await sandbox.isRunning()) {
+      const url = `https://${sandbox.getHost(SERVE_PORT)}`;
+      return { status: "running", url };
+    }
+  } catch { /* unreachable */ }
+  await clearSandboxId(projectId);
+  return { status: "stopped" };
 }
 
 export async function listDevServers(): Promise<
   Array<{ projectId: string; port: number; url: string; status: string; alive: boolean }>
 > {
-  const entries = await readState();
-  const results = [];
-  for (const entry of entries) {
-    const alive = await isPortListening(entry.port);
-    results.push({
-      projectId: entry.projectId,
-      port: entry.port,
-      url: entry.url,
-      status: alive ? "running" : "stopped",
-      alive,
-    });
-  }
-  return results;
+  return [];
 }

@@ -309,6 +309,7 @@ export async function runModifyProject(
     const sortedChanges = topoSort(plan.changes);
     const touchedFiles: string[] = [];
     const completedChanges = new Map<string, string>(); // path → new content
+    const collectedDiffs: Array<{ file: string; reasoning: string; patch: string; stats: DiffStats }> = [];
 
     for (const change of sortedChanges) {
       const stepName = `${change.action}:${change.path}`;
@@ -349,6 +350,7 @@ export async function runModifyProject(
 
         // Stream diff to client
         onEvent({ type: "diff", file: change.path, reasoning: change.reasoning, patch, stats });
+        collectedDiffs.push({ file: change.path, reasoning: change.reasoning, patch, stats });
 
         // Write file
         await fs.mkdir(path.dirname(absPath), { recursive: true });
@@ -383,6 +385,8 @@ export async function runModifyProject(
       instruction: userInstruction,
       modifiedAt: new Date().toISOString(),
       touchedFiles,
+      plan: { analysis: plan.analysis, changes: plan.changes },
+      diffs: collectedDiffs,
     };
     const existingHistory = project.modificationHistory ?? [];
     await updateProjectStatus(projectId, "ready", {

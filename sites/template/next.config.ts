@@ -7,8 +7,10 @@ import type { NextConfig } from "next";
  * (reduces "multiple lockfiles / inferred workspace root" noise during `pnpm run build`).
  */
 const nextConfig: NextConfig = {
+  output: "export",
   outputFileTracingRoot: path.join(__dirname, "../.."),
   images: {
+    unoptimized: true,
     remotePatterns: [
       { protocol: "https", hostname: "images.unsplash.com" },
       { protocol: "https", hostname: "**.unsplash.com" },

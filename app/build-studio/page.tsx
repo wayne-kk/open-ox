@@ -38,7 +38,7 @@ function BuildStudioInner() {
               <div>
                 <div className="font-mono text-[11px] uppercase tracking-[0.3em] text-primary">Build Studio</div>
                 <h1 className="mt-1 text-lg font-semibold tracking-tight text-foreground sm:text-xl">
-                  OPEN-OX DEFI BUILD CONSOLE
+                  Open-OX Studio
                 </h1>
               </div>
             </div>
@@ -99,16 +99,26 @@ function BuildStudioInner() {
 
                 {/* Open in new tab — only when preview is live */}
                 {previewState === "ready" && previewUrl && (
-                  <a
-                    href={previewUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="defi-button-outline flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-medium"
-                    title="Open in new tab"
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    Open
-                  </a>
+                  <>
+                    <button
+                      onClick={studio.rebuildPreview}
+                      className="defi-button-outline flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-medium"
+                      title="Resync & Rebuild"
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                      Rebuild
+                    </button>
+                    <a
+                      href={previewUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="defi-button-outline flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-medium"
+                      title="Open in new tab"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      Open
+                    </a>
+                  </>
                 )}
 
                 {/* Status badge */}

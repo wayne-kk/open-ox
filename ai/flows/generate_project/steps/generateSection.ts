@@ -396,56 +396,78 @@ export async function stepGenerateSection({
     designPlan,
   });
 
-  const llmResult = await callLLMWithMeta(systemPrompt, userMessage, 0.7);
-  const tsx = extractContent(llmResult.content, "tsx");
-  const filePath = outputFileRelative;
-
-  await writeSiteFile(filePath, tsx);
-  await formatSiteFile(filePath);
-
   const componentName = section.fileName.replace(/\.tsx$/, "");
-  const validationResult = validateSectionExports(tsx, componentName);
+  const filePath = outputFileRelative;
+  const MAX_RETRIES = 1;
 
-  const trace: StepTrace = {
-    input: {
-      sectionType: section.type,
-      componentName,
-      outputFile: outputFileRelative,
-      skillId,
-      designPlan: {
-        role: designPlan.role,
-        goal: designPlan.goal,
-        layoutIntent: designPlan.layoutIntent,
-        visualIntent: designPlan.visualIntent,
-        constraints: designPlan.constraints,
-      },
-      pageContext: pageContext
-        ? { slug: pageContext.slug, title: pageContext.title, journeyStage: pageContext.journeyStage }
-        : null,
-    },
-    output: {
-      filePath,
-      linesGenerated: tsx.split("\n").length,
-      validationPassed: validationResult.passed,
-    },
-    llmCall: {
-      model: llmResult.model,
-      systemPrompt,
+  let lastTrace: StepTrace | undefined;
+  let lastError = "";
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const retryHint = attempt > 0
+      ? `\n\nIMPORTANT: Your previous response was truncated/incomplete — the component "${componentName}" was missing its export or JSX return. Make sure to output the COMPLETE component with a proper \`export function ${componentName}\` and a JSX return statement. Keep the component concise to avoid truncation.`
+      : "";
+
+    const llmResult = await callLLMWithMeta(
+      systemPrompt + retryHint,
       userMessage,
-      rawResponse: llmResult.content,
-      inputTokens: llmResult.inputTokens,
-      outputTokens: llmResult.outputTokens,
-    },
-    validationResult,
-  };
+      0.7
+    );
+    const tsx = extractContent(llmResult.content, "tsx");
 
-  if (!validationResult.passed) {
-    const failedChecks = validationResult.checks
+    await writeSiteFile(filePath, tsx);
+    await formatSiteFile(filePath);
+
+    const validationResult = validateSectionExports(tsx, componentName);
+
+    const trace: StepTrace = {
+      input: {
+        sectionType: section.type,
+        componentName,
+        outputFile: outputFileRelative,
+        skillId,
+        designPlan: {
+          role: designPlan.role,
+          goal: designPlan.goal,
+          layoutIntent: designPlan.layoutIntent,
+          visualIntent: designPlan.visualIntent,
+          constraints: designPlan.constraints,
+        },
+        pageContext: pageContext
+          ? { slug: pageContext.slug, title: pageContext.title, journeyStage: pageContext.journeyStage }
+          : null,
+      },
+      output: {
+        filePath,
+        linesGenerated: tsx.split("\n").length,
+        validationPassed: validationResult.passed,
+      },
+      llmCall: {
+        model: llmResult.model,
+        systemPrompt: systemPrompt + retryHint,
+        userMessage,
+        rawResponse: llmResult.content,
+        inputTokens: llmResult.inputTokens,
+        outputTokens: llmResult.outputTokens,
+      },
+      validationResult,
+    };
+    lastTrace = trace;
+
+    if (validationResult.passed) {
+      return { filePath, skillId, trace };
+    }
+
+    lastError = validationResult.checks
       .filter((c) => !c.passed)
       .map((c) => c.detail ?? c.name)
       .join("; ");
-    throw new Error(`Section validation failed for ${componentName}: ${failedChecks}`);
+
+    if (attempt < MAX_RETRIES) {
+      console.warn(`[generateSection] ${componentName} validation failed (attempt ${attempt + 1}), retrying: ${lastError}`);
+    }
   }
 
-  return { filePath, skillId, trace };
+  // All attempts failed
+  throw new Error(`Section validation failed for ${componentName}: ${lastError}`);
 }

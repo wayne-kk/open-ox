@@ -8,7 +8,9 @@
  */
 
 import { runGenerateProject } from "@/ai/flows";
-import { createProject, initProjectDir, updateProjectStatus } from "@/lib/projectManager";
+import { createProject, getProject, initProjectDir, updateProjectStatus, renameProject } from "@/lib/projectManager";
+import { uploadGeneratedFiles } from "@/lib/storage";
+import { setRuntimeModelId, type ModelId } from "@/lib/config/models";
 import type { BuildStep } from "@/ai/flows";
 import { NextResponse } from "next/server";
 
@@ -17,8 +19,30 @@ export async function POST(req: Request) {
     const body = await req.json();
     // Accept both "userPrompt" (new) and "input" (legacy) field names
     const userPrompt: unknown = body.userPrompt ?? body.input;
+    const modelOverride: string | undefined = body.model;
+    const retryProjectId: string | undefined = body.retryProjectId;
 
-    if (!userPrompt || typeof userPrompt !== "string") {
+    // For retry: load existing project's prompt and model
+    let effectivePrompt = userPrompt as string | undefined;
+    let effectiveModel = modelOverride;
+    if (retryProjectId) {
+      const existing = await getProject(retryProjectId);
+      if (!existing) {
+        return NextResponse.json({ error: "Project not found for retry" }, { status: 404 });
+      }
+      effectivePrompt = existing.userPrompt;
+      // Use the model from the request, or fall back to the project's saved model
+      if (!effectiveModel && existing.modelId) {
+        effectiveModel = existing.modelId;
+      }
+    }
+
+    // Set runtime model
+    if (effectiveModel) {
+      setRuntimeModelId(effectiveModel as ModelId);
+    }
+
+    if (!effectivePrompt || typeof effectivePrompt !== "string") {
       return NextResponse.json(
         { error: "Missing or invalid 'userPrompt' field" },
         { status: 400 }
@@ -35,19 +59,32 @@ export async function POST(req: Request) {
           );
         };
 
-        // Step 1: Create project record in registry
-        const project = await createProject(userPrompt);
-        const projectId = project.id;
+        // Step 1: Create or reuse project
+        let projectId: string;
+        if (retryProjectId) {
+          projectId = retryProjectId;
+          await updateProjectStatus(projectId, "generating", { error: undefined });
+        } else {
+          const project = await createProject(effectivePrompt, effectiveModel);
+          projectId = project.id;
+        }
 
         try {
-          // Step 2: Scaffold project directory from template
-          await initProjectDir(projectId);
+          // Step 2: Scaffold project directory from template (skip for retry — dir already exists)
+          if (!retryProjectId) {
+            await initProjectDir(projectId);
+          }
 
           // Step 3: Run generation, writing files into sites/{projectId}/
-          const result = await runGenerateProject(userPrompt, (step: BuildStep) => send({ type: "step", ...step }), { projectId });
+          const result = await runGenerateProject(effectivePrompt, (step: BuildStep) => send({ type: "step", ...step }), { projectId });
 
           if (result.success) {
-            // Step 4: Mark project as ready
+            // Step 4: Upload generated files to Supabase Storage (non-blocking)
+            uploadGeneratedFiles(projectId, result.generatedFiles ?? []).catch((err) =>
+              console.error("[AI API] Storage upload failed:", err)
+            );
+
+            // Step 5: Mark project as ready
             await updateProjectStatus(projectId, "ready", {
               completedAt: new Date().toISOString(),
               verificationStatus: result.verificationStatus,
@@ -56,6 +93,12 @@ export async function POST(req: Request) {
               generatedFiles: result.generatedFiles,
               logDirectory: result.logDirectory,
             });
+
+            // Step 6: Update project name from blueprint's projectTitle
+            const projectTitle = (result.blueprint as { brief?: { projectTitle?: string } })?.brief?.projectTitle;
+            if (projectTitle && projectTitle.trim()) {
+              await renameProject(projectId, projectTitle.trim());
+            }
           } else {
             // Generation completed but reported failure
             await updateProjectStatus(projectId, "failed", {
@@ -110,6 +153,7 @@ export async function POST(req: Request) {
           }
           send({ type: "error", message });
         } finally {
+          setRuntimeModelId(null);
           controller.close();
         }
       },

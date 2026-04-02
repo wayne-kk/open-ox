@@ -3,25 +3,25 @@
 import { useEffect, useState, useRef } from "react";
 
 const LINES = [
-    { text: '> open-ox generate "DeFi trading platform"', delay: 0, color: "text-muted-foreground" },
+    { text: '> open-ox create "咖啡品牌官网"', delay: 0, color: "text-muted-foreground" },
     { text: "  ✓ analyze_requirement", delay: 600, color: "text-primary" },
-    { text: "    roles: trader, liquidity_provider, admin", delay: 900, color: "text-muted-foreground/70" },
-    { text: "    pages: home, swap, pools, dashboard", delay: 1100, color: "text-muted-foreground/70" },
+    { text: "    pages: 首页, 产品, 关于我们, 联系", delay: 900, color: "text-muted-foreground/70" },
+    { text: "    style: 温暖 · 极简 · 品牌感", delay: 1100, color: "text-muted-foreground/70" },
     { text: "  ✓ plan_project", delay: 1600, color: "text-primary" },
-    { text: "    sections: 9 · layout: 2 · pages: 4", delay: 1900, color: "text-muted-foreground/70" },
+    { text: "    sections: 8 · layout: 2 · pages: 4", delay: 1900, color: "text-muted-foreground/70" },
     { text: "  ✓ generate_design_system", delay: 2400, color: "text-accent-tertiary" },
-    { text: "    skill: component.hero.impactful", delay: 2700, color: "text-muted-foreground/70" },
-    { text: "  ⟳ generate_sections ×9  [parallel]", delay: 3200, color: "text-primary" },
+    { text: "    palette: warm brown · cream · dark roast", delay: 2700, color: "text-muted-foreground/70" },
+    { text: "  ⟳ generate_sections ×8  [parallel]", delay: 3200, color: "text-primary" },
     { text: "    home_HeroSection        ✓", delay: 3500, color: "text-green-400/80" },
-    { text: "    home_SwapSection        ✓", delay: 3700, color: "text-green-400/80" },
-    { text: "    home_StatsSection       ✓", delay: 3900, color: "text-green-400/80" },
+    { text: "    home_ProductSection     ✓", delay: 3700, color: "text-green-400/80" },
+    { text: "    home_StorySection       ✓", delay: 3900, color: "text-green-400/80" },
     { text: "    layout_NavbarSection    ✓", delay: 4100, color: "text-green-400/80" },
     { text: "    layout_FooterSection    ✓", delay: 4200, color: "text-green-400/80" },
     { text: "  ✓ install_dependencies", delay: 4600, color: "text-primary" },
-    { text: "    + framer-motion  + recharts", delay: 4900, color: "text-muted-foreground/70" },
+    { text: "    + framer-motion  + lucide-react", delay: 4900, color: "text-muted-foreground/70" },
     { text: "  ✓ run_build  [passed]", delay: 5400, color: "text-green-400" },
     { text: "", delay: 5700, color: "" },
-    { text: "  ● ready  sites/2026-04-01_defi-trading/", delay: 5900, color: "text-accent-tertiary" },
+    { text: "  ● ready  → 预览已就绪", delay: 5900, color: "text-accent-tertiary" },
 ];
 
 export function HeroTerminal() {
@@ -75,7 +75,7 @@ export function HeroTerminal() {
                     <div className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
                     <div className="h-2.5 w-2.5 rounded-full bg-green-500/70" />
                     <span className="ml-3 font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground/60">
-                        open-ox · build engine
+                        open-ox · studio
                     </span>
                 </div>
 

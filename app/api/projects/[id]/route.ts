@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getProject, renameProject, deleteProject } from "@/lib/projectManager";
+import { deleteProjectFiles } from "@/lib/storage";
 import { getDevServerStatus, stopDevServer } from "@/lib/devServerManager";
 
 type Params = { params: Promise<{ id: string }> };
@@ -64,5 +65,9 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   }
 
   await deleteProject(id);
+  // Clean up Storage files (non-blocking)
+  deleteProjectFiles(id).catch((err) =>
+    console.error("[DELETE /api/projects/:id] Storage cleanup failed:", err)
+  );
   return new NextResponse(null, { status: 204 });
 }

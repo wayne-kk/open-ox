@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { startDevServer, stopDevServer } from "@/lib/devServerManager";
+import { startDevServer, stopDevServer, rebuildDevServer } from "@/lib/devServerManager";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -19,6 +19,22 @@ export async function POST(_req: NextRequest, { params }: Params) {
     console.error("[POST /api/projects/[id]/preview]", err);
     return NextResponse.json(
       { error: "Failed to start dev server", code: "DEV_SERVER_ERROR" },
+      { status: 500 }
+    );
+  }
+}
+
+/** PUT /api/projects/[id]/preview — resync files + rebuild + restart */
+export async function PUT(_req: NextRequest, { params }: Params) {
+  const { id } = await params;
+  try {
+    const result = await rebuildDevServer(id);
+    return NextResponse.json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[PUT /api/projects/[id]/preview]", err);
+    return NextResponse.json(
+      { error: message, code: "REBUILD_ERROR" },
       { status: 500 }
     );
   }

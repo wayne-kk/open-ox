@@ -98,7 +98,11 @@ export function createStepLogger(options?: {
   const prefix = options?.prefix ?? "generate_project";
 
   const startStep = (step: string) => {
-    stepStarts.set(step, Date.now());
+    const now = Date.now();
+    stepStarts.set(step, now);
+    // Emit an "active" event so the UI shows the step as in-progress immediately
+    const activeEntry: BuildStep = { step, status: "active", timestamp: now, duration: 0 };
+    options?.onStep?.(activeEntry);
   };
 
   const logStep = (step: string, status: "ok" | "error", detail?: string, skillId?: string | null): BuildStep => {

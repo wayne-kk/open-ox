@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { AlertTriangle, CircleCheckBig, Play, Trash2, Send, Wand2 } from "lucide-react";
+import { AlertTriangle, CircleCheckBig, Play, Trash2, Send, Wand2, RefreshCw, ChevronDown } from "lucide-react";
 import { ChatBubble } from "./ui/ChatBubble";
 import { LogSection } from "./ui/LogSection";
 import { TermLine } from "./ui/TermLine";
@@ -114,6 +114,10 @@ export function BuildConversation({
     flowStart,
     handleRun,
     handleClear,
+    handleRetry,
+    selectedModel,
+    setSelectedModel,
+    availableModels,
     projectId,
     setProjectId,
     modifyInstruction,
@@ -276,6 +280,16 @@ export function BuildConversation({
                                 {response?.error ? (
                                     <LogSection title="Error">
                                         <TermLine color="text-red-400">error: {response.error}</TermLine>
+                                        {projectId && !loading && (
+                                            <button
+                                                type="button"
+                                                onClick={handleRetry}
+                                                className="mt-3 defi-button-outline flex items-center gap-2 px-4 py-2 text-[11px] font-medium"
+                                            >
+                                                <RefreshCw className="h-3.5 w-3.5" />
+                                                重新生成
+                                            </button>
+                                        )}
                                     </LogSection>
                                 ) : null}
 
@@ -330,10 +344,14 @@ export function BuildConversation({
                         <label className="sr-only" htmlFor="modify-input">修改指令</label>
                         <textarea
                             id="modify-input"
-                            rows={2}
-                            className="w-full resize-none border-0 bg-transparent px-1 py-1 font-body text-[14px] leading-7 text-foreground outline-none placeholder:text-white/30"
+                            rows={1}
+                            className="w-full resize-none border-0 bg-transparent px-1 py-1 font-body text-[14px] leading-7 text-foreground outline-none placeholder:text-white/30 max-h-[200px] overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                             value={modifyInstruction}
-                            onChange={(e) => setModifyInstruction(e.target.value)}
+                            onChange={(e) => {
+                                setModifyInstruction(e.target.value);
+                                e.target.style.height = "auto";
+                                e.target.style.height = Math.min(e.target.scrollHeight, 200) + "px";
+                            }}
                             onKeyDown={(e) => {
                                 if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !modifying) {
                                     e.preventDefault();
@@ -377,51 +395,61 @@ export function BuildConversation({
                     </div>
                 ) : (
                 /* Generate mode */
-                        <div className="rounded-[24px] border border-white/10 bg-black/25 p-3">
+                        <div className="rounded-[20px] border border-white/10 bg-black/25 p-3">
+                            {/* Top bar: model selector + shortcut hint */}
+                            <div className="flex items-center justify-between mb-2 px-1">
+                                <div className="relative">
+                                    <select
+                                        value={selectedModel}
+                                        onChange={(e) => setSelectedModel(e.target.value)}
+                                        disabled={loading}
+                                        className="appearance-none rounded-full border border-white/8 bg-white/5 pl-2.5 pr-6 py-1 font-mono text-[9px] text-muted-foreground/60 outline-none cursor-pointer hover:border-primary/30 transition-colors disabled:opacity-50"
+                                    >
+                                        {availableModels.map((m) => (
+                                            <option key={m.id} value={m.id}>{m.displayName}</option>
+                                        ))}
+                                    </select>
+                                    <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-2.5 w-2.5 text-muted-foreground/30 pointer-events-none" />
+                                </div>
+                                <span className="font-mono text-[9px] text-muted-foreground/25">⌘+Enter</span>
+                            </div>
+
                             <label className="sr-only" htmlFor="build-studio-input">输入站点需求</label>
                             <textarea
                                 id="build-studio-input"
-                                rows={2}
-                                className="w-full resize-none border-0 bg-transparent px-1 py-1 font-body text-[14px] leading-7 text-foreground outline-none placeholder:text-white/30"
+                                rows={1}
+                                className="w-full resize-none border-0 bg-transparent px-1 py-1 font-body text-[14px] leading-7 text-foreground outline-none placeholder:text-white/30 max-h-[200px] overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                                 value={input}
-                                onChange={(e) => setInput(e.target.value)}
+                                onChange={(e) => {
+                                    setInput(e.target.value);
+                                    e.target.style.height = "auto";
+                                    e.target.style.height = Math.min(e.target.scrollHeight, 200) + "px";
+                                }}
                                 onKeyDown={(e) => {
                                     if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !loading) {
                                         e.preventDefault();
                                         void handleRun();
                                     }
                                 }}
-                                placeholder="Describe the page, app, or design system you want to generate..."
+                                placeholder="描述你想要生成的网站..."
                             />
-                            <div className="mt-3 flex items-center justify-between gap-3">
-                                <button
-                                    type="button"
-                                    onClick={handleClear}
-                                    disabled={loading || clearing}
-                                    className="defi-button-outline flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                    {clearing ? (
-                                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                                    ) : (
-                                        <Trash2 className="h-4 w-4" />
-                                    )}
-                                    Clear
-                                </button>
-                                <div className="hidden text-xs text-muted-foreground sm:block">Cmd/Ctrl + Enter to run</div>
+
+                            {/* Bottom: Run button right-aligned */}
+                            <div className="mt-2 flex items-center justify-end">
                                 <button
                                     type="button"
                                     onClick={handleRun}
                                     disabled={loading}
-                                    className="defi-button flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="defi-button flex items-center justify-center gap-2 px-5 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     {loading ? (
                                         <>
-                                            <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                                            Running {formatMs(elapsed)}
+                                            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                                            {formatMs(elapsed)}
                                         </>
                                     ) : (
                                         <>
-                                            <Play className="h-4 w-4" />
+                                                <Play className="h-3.5 w-3.5" />
                                             Run
                                         </>
                                     )}

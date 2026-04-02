@@ -9,12 +9,6 @@ function formatMs(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
-/** Shorten a detail string for the card preview — keep it readable, not truncated */
-function shortenDetail(detail: string): string {
-  // Remove file paths noise, keep the meaningful part
-  return detail.length > 80 ? detail.slice(0, 80) + "…" : detail;
-}
-
 /** Map stage/kind to an accent color class */
 function getAccentColor(node: GraphNode): string {
   if (node.status === "error") return "border-red-500/50 bg-red-500/5";
@@ -45,7 +39,7 @@ function getStatusIcon(node: GraphNode, isActive: boolean) {
       </div>
     );
   }
-  if (isActive) {
+  if (isActive || node.status === "active") {
     return (
       <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/20 ring-1 ring-primary/50">
         <Loader2 className="h-3 w-3 animate-spin text-primary" />
@@ -92,7 +86,7 @@ export function StepNode({
         hover:brightness-110
         ${accentBorder}
         ${isSelected ? "ring-2 ring-primary/60 ring-offset-1 ring-offset-background" : ""}
-        ${isActive ? "shadow-[0_0_18px_rgba(247,147,26,0.25)]" : ""}
+        ${isActive || node.status === "active" ? "shadow-[0_0_18px_rgba(247,147,26,0.25)]" : ""}
       `}
     >
       {/* Header row */}
@@ -101,16 +95,16 @@ export function StepNode({
           {getStatusIcon(node, isActive)}
         </div>
 
-        <div className="min-w-0 flex-1">
-          {/* Step label — full width, wraps if needed */}
-          <div className={`font-mono text-[11px] font-medium leading-tight tracking-[0.08em] uppercase ${getLabelColor(node)}`}>
+        <div className="min-w-0 flex-1 overflow-hidden">
+          {/* Step label — truncate to one line */}
+          <div className={`truncate font-mono text-[11px] font-medium leading-tight tracking-[0.08em] uppercase ${getLabelColor(node)}`}>
             {label}
           </div>
 
-          {/* Detail — show up to 80 chars, no truncation */}
+          {/* Detail — single line truncate */}
           {node.detail && (
-            <div className="mt-1 font-body text-[11px] leading-snug text-muted-foreground">
-              {shortenDetail(node.detail)}
+            <div className="mt-1 truncate font-body text-[11px] leading-snug text-muted-foreground">
+              {node.detail}
             </div>
           )}
         </div>

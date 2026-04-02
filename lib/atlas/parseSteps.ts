@@ -73,15 +73,23 @@ function formatStepLabel(step: string): string {
 }
 
 export function parseStepsToTopology(steps: BuildStep[], flowStart: number): TopologyGraph {
-  const nodes: GraphNode[] = steps.map((s, index) => {
+  // Deduplicate: for each step name, keep the last entry (active gets replaced by ok/error)
+  const deduped = new Map<string, { step: BuildStep; index: number }>();
+  steps.forEach((s, index) => {
+    deduped.set(s.step, { step: s, index });
+  });
+
+  const nodes: GraphNode[] = Array.from(deduped.values()).map(({ step: s, index }) => {
     const stage = inferStage(s.step);
     const stepWithExtra = s as { skillId?: string | null; trace?: GraphNode["trace"] };
+    const status: GraphNode["status"] =
+      s.status === "ok" ? "ok" : s.status === "active" ? "active" : "error";
     return {
-      id: `${s.step}-${index}`,
+      id: s.step,
       step: s.step,
       stage,
       kind: inferKind(s.step, stage),
-      status: s.status === "ok" ? "ok" : "error",
+      status,
       detail: s.detail,
       duration: s.duration,
       timestamp: s.timestamp,

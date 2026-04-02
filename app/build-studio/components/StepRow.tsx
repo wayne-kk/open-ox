@@ -44,8 +44,10 @@ export function StepRow({ step, flowStart }: { step: BuildStep; flowStart: numbe
         <span className="w-[68px] shrink-0 pt-0.5 font-mono text-[10px] text-muted-foreground">
           [{formatTimestamp(step.timestamp, flowStart)}]
         </span>
-        <span className={`shrink-0 pt-0.5 text-[11px] ${step.status === "ok" ? (isToolCall ? "text-blue-400" : "text-primary") : "text-red-400"}`}>
-          {step.status === "ok" ? ">" : "x"}
+        <span className={`shrink-0 pt-0.5 text-[11px] ${step.status === "ok" ? (isToolCall ? "text-blue-400" : "text-primary") : step.status === "active" ? "text-primary" : "text-red-400"}`}>
+          {step.status === "ok" ? ">" : step.status === "active" ? (
+            <span className="inline-block h-3 w-3 animate-spin rounded-full border-[1.5px] border-primary border-t-transparent" />
+          ) : "✗"}
         </span>
         <div className="min-w-0 flex-1 overflow-hidden">
           <div className={`break-all font-mono text-[11px] ${isSection ? "text-accent-tertiary" : isToolCall ? "text-blue-300" : "text-foreground"}`}>

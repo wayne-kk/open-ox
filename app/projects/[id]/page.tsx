@@ -383,8 +383,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                   {modifySteps.map((step) => (
                     <div key={step.name} className="group">
                       <div className="flex items-center gap-2 font-mono text-[10px]">
-                        <span className={`shrink-0 ${step.status === "done" ? "text-green-400" : step.status === "error" ? "text-red-400" : "text-amber-300 animate-pulse"}`}>
-                          {step.status === "done" ? "✓" : step.status === "error" ? "✗" : "◌"}
+                        <span className={`shrink-0 ${step.status === "done" ? "text-green-400" : step.status === "error" ? "text-red-400" : "text-primary"}`}>
+                          {step.status === "done" ? "✓" : step.status === "error" ? "✗" : (
+                            <span className="inline-block h-3 w-3 animate-spin rounded-full border-[1.5px] border-primary border-t-transparent" />
+                          )}
                         </span>
                         <span className="text-muted-foreground/60 truncate">{step.name.replace(/:/g, " › ").replace(/_/g, " ")}</span>
                         {step.status === "done" && step.message?.match(/^\+\d+ -\d+/) && (

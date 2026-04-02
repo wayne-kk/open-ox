@@ -19,7 +19,7 @@ export interface StepTrace {
 
 export interface BuildStep {
     step: string;
-    status: "ok" | "error";
+    status: "ok" | "error" | "active";
     detail?: string;
     timestamp: number;
     duration: number;

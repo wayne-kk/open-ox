@@ -57,7 +57,7 @@ async function chatCompletion(params: {
       ...(params.max_tokens ? { max_tokens: params.max_tokens } : {}),
       ...(params.tools ? { tools: params.tools, tool_choice: params.tool_choice ?? "auto" } : {}),
     }),
-    signal: AbortSignal.timeout(180_000),
+    signal: AbortSignal.timeout(100_000),
   });
 
   if (!res.ok) {
@@ -156,7 +156,7 @@ export async function callLLMWithMeta(
       throw new Error(`LLM server error — API provider issue. ${detail}`);
     }
     if (msg.includes("timeout") || msg.includes("Timeout") || msg.includes("TIMEOUT")) {
-      throw new Error(`LLM request timed out (>180s). Prompt may be too large or API too slow. ${detail}`);
+      throw new Error(`LLM request timed out (>100s). Prompt may be too large or API too slow. ${detail}`);
     }
 
     throw new Error(`LLM call failed. ${detail}`);

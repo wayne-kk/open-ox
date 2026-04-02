@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
+import { Footer } from "./components/Footer";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -18,8 +19,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Open-OX Build Studio",
-  description: "Bitcoin DeFi inspired AI website builder with fixed flow, bounded planning, and fast build feedback.",
+  title: "Open-OX Studio",
+  description: "AI-powered website builder — describe your idea, get a live site in seconds.",
 };
 
 export default function RootLayout({
@@ -33,6 +34,7 @@ export default function RootLayout({
         className={`${spaceGrotesk.variable} ${inter.variable} ${jetBrainsMono.variable} min-h-screen bg-background text-foreground antialiased`}
       >
         {children}
+        <Footer />
       </body>
     </html>
   );

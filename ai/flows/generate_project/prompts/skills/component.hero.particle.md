@@ -83,7 +83,8 @@ class Particle {
 
 ## Word Rendering
 
-Use an offscreen canvas to rasterize text, then sample lit pixels at every N steps to get particle targets:
+Use an offscreen canvas to rasterize text, then sample lit pixels at every N steps to get particle targets.
+**Position the text in the upper portion of the canvas** (roughly 30–40% from top) so the bottom half remains clear for overlay content:
 
 ```ts
 function getPixelTargets(word: string, canvas: HTMLCanvasElement, step = 5) {
@@ -92,10 +93,11 @@ function getPixelTargets(word: string, canvas: HTMLCanvasElement, step = 5) {
   off.height = canvas.height
   const ctx = off.getContext("2d")!
   ctx.fillStyle = "white"
-  ctx.font = `bold ${Math.floor(canvas.height * 0.28)}px Arial`
+  ctx.font = `bold ${Math.floor(canvas.height * 0.22)}px Arial`
   ctx.textAlign = "center"
   ctx.textBaseline = "middle"
-  ctx.fillText(word, canvas.width / 2, canvas.height / 2)
+  // Position text in upper third — NOT dead center
+  ctx.fillText(word, canvas.width / 2, canvas.height * 0.35)
   const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height)
   const coords: { x: number; y: number }[] = []
   for (let i = 0; i < data.length; i += step * 4) {
@@ -134,9 +136,21 @@ export default function HeroSection() {
   return (
     <section className="relative w-full h-screen bg-black overflow-hidden">
       <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
-      {/* Overlay: headline copy, CTA — positioned above canvas */}
-      <div className="relative z-10 flex flex-col items-center justify-end h-full pb-16 text-center px-4">
-        {/* eyebrow, subheading, CTA buttons */}
+      {/* Overlay layout — split into 3 vertical zones */}
+      <div className="relative z-10 flex flex-col h-full px-6 sm:px-12">
+        {/* Top zone: eyebrow / nav badge — small, hugs the top */}
+        <div className="pt-8 sm:pt-12">
+          {/* Optional: small eyebrow label or logo */}
+        </div>
+
+        {/* Middle zone: spacer — particle text renders in upper ~35% of canvas */}
+        <div className="flex-1" />
+
+        {/* Bottom zone: subheading + CTA — sits in lower half, below particle text */}
+        <div className="pb-16 sm:pb-24 flex flex-col items-center text-center gap-5 max-w-2xl mx-auto">
+          {/* Subheading: 1-2 lines, text-lg/text-xl, white or semi-transparent */}
+          {/* CTA buttons: 1-2 buttons in a row */}
+        </div>
       </div>
     </section>
   )
@@ -146,9 +160,17 @@ export default function HeroSection() {
 ## Content Rules
 
 - `words` array must contain **real project-relevant content**: brand name, headline, tagline, key value prop — derived from the project brief. Never use placeholder words like "HELLO" or "21st.dev".
-- Canvas is the hero visual. Keep overlay copy minimal: one subheading line + one CTA is enough.
+- **The particle text IS the headline.** The canvas renders the main title/brand name as animated particles — this replaces the traditional `<h1>` entirely. Do NOT duplicate the headline as regular HTML text in the overlay.
+- **The overlay should ONLY contain:**
+  - One short subheading or tagline (small text, positioned at the bottom)
+  - CTA buttons
+  - Optionally a small eyebrow label
+- **No `<h1>` or large headline text in the overlay.** The particles ARE the headline. Adding HTML text on top blocks the particle effect and defeats the entire purpose.
+- **Particle text position**: render in the **upper portion** of the canvas (~35% from top), NOT dead center. This leaves the bottom 50%+ free for overlay content.
+- Overlay content sits in the **lower half**: subheading at roughly 60–70% height, CTA buttons below that. This creates a natural top-to-bottom reading flow: particle headline → subheading → CTA.
 - Background: always `bg-black` or near-black. Particle colors should contrast.
 - Pick particle colors from the design system's primary/accent tokens or derive from the mood keywords.
+- The overlay `<div>` must be fully transparent — NO `bg-*`, NO `backdrop-blur`. Use `text-shadow` for readability if needed.
 
 ## Canvas Sizing
 

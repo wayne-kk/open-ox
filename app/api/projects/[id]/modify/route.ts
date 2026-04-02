@@ -52,8 +52,25 @@ export async function POST(
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
       };
 
+      // Collect plan and diffs for persistence
+      let collectedPlan: { analysis: string; changes: Array<{ path: string; action: string; reasoning: string }> } | null = null;
+      const collectedDiffs: Array<{ file: string; reasoning: string; patch: string; stats: { additions: number; deletions: number } }> = [];
+
       try {
-        await runModifyProject(id, userInstruction, send);
+        await runModifyProject(id, userInstruction, (event) => {
+          send(event);
+          // Capture plan and diffs for saving
+          if (event.type === "plan") {
+            collectedPlan = event.plan as typeof collectedPlan;
+          } else if (event.type === "diff") {
+            collectedDiffs.push({
+              file: (event as { file: string }).file,
+              reasoning: (event as { reasoning: string }).reasoning,
+              patch: (event as { patch: string }).patch,
+              stats: (event as { stats: { additions: number; deletions: number } }).stats,
+            });
+          }
+        });
         send({ type: "done" });
       } catch (err) {
         const message = err instanceof Error ? err.message : "Internal error";

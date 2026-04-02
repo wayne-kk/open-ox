@@ -9,12 +9,17 @@ interface BuildSiteCallbacks {
 export async function runBuildSite(
   input: string,
   callbacks: BuildSiteCallbacks,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options?: { model?: string; retryProjectId?: string }
 ): Promise<void> {
   const res = await fetch("/api/ai", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userPrompt: input }),
+    body: JSON.stringify({
+      userPrompt: input,
+      ...(options?.model ? { model: options.model } : {}),
+      ...(options?.retryProjectId ? { retryProjectId: options.retryProjectId } : {}),
+    }),
     signal,
   });
 

@@ -395,21 +395,85 @@ async function preselectSkillsForSections(
   sections: PlannedSectionSpec[],
   runtimeContext: ProjectRuntimeContext
 ): Promise<Map<string, string | null>> {
-  const results = await Promise.allSettled(
-    sections.map((section) =>
-      stepSelectComponentSkills({
-        section,
-        productScope: runtimeContext.productScope,
-        designKeywords: runtimeContext.designKeywords ?? [],
-      }).then((r) => ({ fileName: section.fileName, skillId: r.id }))
-    )
-  );
+  // Batch all sections into a single LLM call instead of N parallel calls.
+  const { callLLM, extractJSON } = await import("./shared/llm");
+  const { getSkillPromptsRoot } = await import("./shared/files");
+  const { discoverSkillsBySectionType, toCompactMetadata } = await import("../../shared/skillDiscovery");
+
+  const root = getSkillPromptsRoot();
   const map = new Map<string, string | null>();
-  for (const result of results) {
-    if (result.status === "fulfilled") {
-      map.set(result.value.fileName, result.value.skillId);
+
+  // Build per-section candidate lists and collect all valid skill ids
+  const sectionEntries: Array<{
+    fileName: string;
+    type: string;
+    intent: string;
+    candidates: Array<{ id: string; sectionTypes: string[]; priority: number; fallback: boolean; when?: unknown; notes: string }>;
+  }> = [];
+  const allValidIds = new Set<string>();
+
+  for (const section of sections) {
+    const candidates = discoverSkillsBySectionType(root, section.type);
+    if (candidates.length === 0) {
+      map.set(section.fileName, null);
+      continue;
+    }
+    const compact = candidates.map((c) => toCompactMetadata(c));
+    for (const c of candidates) allValidIds.add(c.id);
+    sectionEntries.push({
+      fileName: section.fileName,
+      type: section.type,
+      intent: section.intent,
+      candidates: compact as Array<{ id: string; sectionTypes: string[]; priority: number; fallback: boolean; when?: unknown; notes: string }>,
+    });
+  }
+
+  if (sectionEntries.length === 0) return map;
+
+  const systemPrompt = `You are a component skill selector. Given multiple sections and their candidate skills, pick the best skill id for each section (or null if none fit).
+Rules:
+- Match only when section context clearly aligns with skill metadata.
+- Prefer higher priority when multiple skills match.
+- Return null if no skill is a good fit.
+- Respond with JSON only: {"selections": {"SectionFileName.tsx": "skill.id.here", ...}}
+- Only use skill ids from the candidate lists provided.`;
+
+  const userMessage = JSON.stringify({
+    productType: runtimeContext.productScope.productType,
+    designKeywords: runtimeContext.designKeywords ?? [],
+    sections: sectionEntries.map((e) => ({
+      fileName: e.fileName,
+      type: e.type,
+      intent: e.intent,
+      candidates: e.candidates,
+    })),
+  }, null, 2);
+
+  try {
+    const raw = await callLLM(systemPrompt, userMessage, 0.2);
+    const json = extractJSON(raw);
+    const parsed = JSON.parse(json) as { selections?: Record<string, string | null> };
+
+    if (parsed.selections) {
+      for (const entry of sectionEntries) {
+        const selected = parsed.selections[entry.fileName];
+        if (typeof selected === "string" && allValidIds.has(selected)) {
+          map.set(entry.fileName, selected);
+        } else {
+          // Fallback: pick highest priority fallback candidate
+          const fallback = entry.candidates.find((c) => c.fallback);
+          map.set(entry.fileName, fallback?.id ?? null);
+        }
+      }
+    }
+  } catch {
+    // LLM failed — use fallback for all
+    for (const entry of sectionEntries) {
+      const fallback = entry.candidates.find((c) => c.fallback);
+      map.set(entry.fileName, fallback?.id ?? null);
     }
   }
+
   return map;
 }
 
@@ -701,7 +765,15 @@ export async function runGenerateProject(
 
     const tokenFiles = await logger.timed(
       "apply_project_design_tokens",
-      () => stepApplyProjectDesignTokens(designSystem),
+      () => stepApplyProjectDesignTokens(designSystem, (msg) => {
+        onStep?.({
+          step: "apply_project_design_tokens",
+          status: "active",
+          detail: msg,
+          timestamp: Date.now(),
+          duration: 0,
+        });
+      }),
       (files) => files.join(", ")
     );
     await persistJsonArtifact(artifactLogger, "apply_project_design_tokens", "output", {

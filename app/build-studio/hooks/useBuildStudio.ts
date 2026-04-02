@@ -45,6 +45,12 @@ export interface BuildStudioState {
   flowStart: number;
   handleRun: () => Promise<void>;
   handleClear: () => Promise<void>;
+  handleRetry: () => Promise<void>;
+
+  // Model
+  selectedModel: string;
+  setSelectedModel: (m: string) => void;
+  availableModels: Array<{ id: string; displayName: string }>;
 
   // Project
   projectId: string | null;
@@ -59,6 +65,7 @@ export interface BuildStudioState {
   previewState: "idle" | "starting" | "ready" | "error";
   previewError: string | null;
   startPreview: () => Promise<void>;
+  rebuildPreview: () => Promise<void>;
 
   // Modify
   modifyInstruction: string;
@@ -81,6 +88,16 @@ export function useBuildStudio(initialProjectId?: string | null): BuildStudioSta
   const [lastRunInput, setLastRunInput] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  const [selectedModel, setSelectedModel] = useState("gemini-3-flash-preview");
+
+  // Fetch available models
+  const [availableModels, setAvailableModels] = useState<Array<{ id: string; displayName: string }>>([]);
+  useEffect(() => {
+    fetch("/api/models").then(r => r.json()).then(data => {
+      if (data.models) setAvailableModels(data.models);
+      if (data.default && !selectedModel) setSelectedModel(data.default);
+    }).catch(() => { });
+  }, []);
 
   const [projectId, setProjectId] = useState<string | null>(initialProjectId ?? null);
   const [rightPanel, setRightPanel] = useState<RightPanel>("topology");
@@ -146,8 +163,26 @@ export function useBuildStudio(initialProjectId?: string | null): BuildStudioSta
       .then((r) => r.ok ? r.json() : null)
       .then((project) => {
         if (!project) return;
-        // Restore the original prompt as lastRunInput
         setLastRunInput(project.userPrompt ?? null);
+        if (project.modelId) setSelectedModel(project.modelId);
+
+        // Restore modification history
+        if (project.modificationHistory && project.modificationHistory.length > 0) {
+          setModifyHistory(project.modificationHistory.map((r: {
+            instruction: string;
+            plan?: { analysis: string; changes: Array<{ path: string; action: string; reasoning: string }> };
+            diffs?: Array<{ file: string; reasoning: string; patch: string; stats: { additions: number; deletions: number } }>;
+            error?: string;
+            modifiedAt: string;
+          }) => ({
+            instruction: r.instruction,
+            plan: r.plan ?? null,
+            steps: [],
+            diffs: r.diffs ?? [],
+            error: r.error ?? null,
+            completedAt: r.modifiedAt,
+          })));
+        }
         // Restore full response — same shape as what was shown during generation
         setResponse((prev) => prev ?? {
           content: project.status === "ready"
@@ -189,7 +224,6 @@ export function useBuildStudio(initialProjectId?: string | null): BuildStudioSta
           onStep: (step: BuildStep) =>
             setResponse((prev) => {
               const existing = prev?.buildSteps ?? [];
-              // Upsert: if a step with the same name already exists, replace it (handles trace re-emit)
               const idx = existing.findIndex((s) => s.step === step.step);
               const updated = idx >= 0
                 ? [...existing.slice(0, idx), step, ...existing.slice(idx + 1)]
@@ -208,17 +242,16 @@ export function useBuildStudio(initialProjectId?: string | null): BuildStudioSta
             }),
           onDone: (result) => {
             setResponse((prev) => ({ ...result, buildSteps: result.buildSteps ?? prev?.buildSteps }));
-            // Extract projectId from result if available
             if (result.projectId) {
               projectIdFromGenerationRef.current = result.projectId;
               setProjectId(result.projectId);
-              // Update URL so the page is bookmarkable and survives refresh
               window.history.replaceState(null, "", `/build-studio?projectId=${result.projectId}`);
             }
           },
           onError: (msg) => setResponse({ content: "", error: msg }),
         },
-        abortRef.current.signal
+        abortRef.current.signal,
+        { model: selectedModel }
       );
     } catch (err) {
       if ((err as Error).name !== "AbortError") {
@@ -240,6 +273,67 @@ export function useBuildStudio(initialProjectId?: string | null): BuildStudioSta
     }
   }
 
+  async function handleRetry() {
+    if (!projectId || loading) return;
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+
+    const t0 = Date.now();
+    setStartedAt(t0);
+    setElapsed(0);
+    setLoading(true);
+    setResponse(null);
+    setRightPanel("topology");
+    setPreviewUrl(null);
+    setPreviewState("idle");
+
+    const retryId = projectId;
+
+    try {
+      await runBuildSite(
+        "", // prompt comes from the existing project
+        {
+          onStep: (step: BuildStep) =>
+            setResponse((prev) => {
+              const existing = prev?.buildSteps ?? [];
+              const idx = existing.findIndex((s) => s.step === step.step);
+              const updated = idx >= 0
+                ? [...existing.slice(0, idx), step, ...existing.slice(idx + 1)]
+                : [...existing, step];
+              return {
+                content: prev?.content ?? "",
+                generatedFiles: prev?.generatedFiles,
+                verificationStatus: prev?.verificationStatus,
+                unvalidatedFiles: prev?.unvalidatedFiles,
+                installedDependencies: prev?.installedDependencies,
+                dependencyInstallFailures: prev?.dependencyInstallFailures,
+                buildTotalDuration: prev?.buildTotalDuration,
+                logDirectory: prev?.logDirectory,
+                buildSteps: updated,
+              };
+            }),
+          onDone: (result) => {
+            setResponse((prev) => ({ ...result, buildSteps: result.buildSteps ?? prev?.buildSteps }));
+            if (result.projectId) {
+              projectIdFromGenerationRef.current = result.projectId;
+              setProjectId(result.projectId);
+              window.history.replaceState(null, "", `/build-studio?projectId=${result.projectId}`);
+            }
+          },
+          onError: (msg) => setResponse({ content: "", error: msg }),
+        },
+        abortRef.current.signal,
+        { model: selectedModel, retryProjectId: retryId }
+      );
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        setResponse({ content: "", error: err instanceof Error ? err.message : String(err) });
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
   const startPreview = useCallback(async () => {
     if (!projectId) return;
     setPreviewUrl(null);
@@ -247,6 +341,28 @@ export function useBuildStudio(initialProjectId?: string | null): BuildStudioSta
     setPreviewError(null);
     try {
       const res = await fetch(`/api/projects/${projectId}/preview`, { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        setPreviewUrl(data.url);
+        setPreviewState("ready");
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setPreviewError(err.error ?? `HTTP ${res.status}`);
+        setPreviewState("error");
+      }
+    } catch (e) {
+      setPreviewError(e instanceof Error ? e.message : "Network error");
+      setPreviewState("error");
+    }
+  }, [projectId]);
+
+  const rebuildPreview = useCallback(async () => {
+    if (!projectId) return;
+    setPreviewUrl(null);
+    setPreviewState("starting");
+    setPreviewError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/preview`, { method: "PUT" });
       if (res.ok) {
         const data = await res.json();
         setPreviewUrl(data.url);
@@ -334,7 +450,11 @@ export function useBuildStudio(initialProjectId?: string | null): BuildStudioSta
                 error: null,
                 completedAt: new Date().toISOString(),
               }]);
-              if (iframeRef.current) iframeRef.current.src = iframeRef.current.src;
+              // Rebuild sandbox with updated files, then refresh preview
+              rebuildPreview().catch(() => {
+              // If rebuild fails, at least try refreshing the iframe
+                if (iframeRef.current) iframeRef.current.src = iframeRef.current.src;
+              });
             }
           } catch { /* ignore */ }
         }
@@ -362,10 +482,11 @@ export function useBuildStudio(initialProjectId?: string | null): BuildStudioSta
 
   return {
     input, setInput, loading, clearing, response, lastRunInput, elapsed, flowStart,
-    handleRun, handleClear,
+    handleRun, handleClear, handleRetry,
+    selectedModel, setSelectedModel, availableModels,
     projectId, setProjectId,
     rightPanel, setRightPanel,
-    previewUrl, previewState, previewError, startPreview,
+    previewUrl, previewState, previewError, startPreview, rebuildPreview,
     modifyInstruction, setModifyInstruction, modifying,
     modifySteps, modifyPlan, modifyDiffs, modifyError, handleModify,
     modifyHistory,

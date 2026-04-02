@@ -15,15 +15,15 @@ export function StageColumn({
   onSelectNode: (id: string) => void;
 }) {
   const isRepair = stage.id === "repair";
-
   return (
-    <div className="flex w-[200px] shrink-0 flex-col rounded-xl border border-white/10 bg-white/[0.02] transition-colors hover:border-white/15">
+    <div className="flex w-[220px] shrink-0 flex-col rounded-xl border border-white/10 bg-white/[0.02] transition-colors hover:border-white/15">
       <div
         className={`flex items-center justify-center gap-2 border-b border-white/10 px-3 py-2.5 font-mono text-[10px] uppercase tracking-[0.2em] ${
           isRepair ? "bg-amber-500/10 text-amber-400/90" : "bg-white/5 text-muted-foreground"
         }`}
       >
         {stage.label}
+        <span className="ml-auto opacity-40">{stage.nodes.length}</span>
       </div>
 
       <div className="flex flex-col gap-2 p-2">
