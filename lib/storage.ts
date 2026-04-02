@@ -3,9 +3,6 @@
  *
  * Layout:
  *   project-files/{projectId}/{relativePath}
- *
- * Used to persist generated site files so they survive server restarts
- * and can be restored to the local sites/ directory on demand.
  */
 
 import fs from "fs/promises";
@@ -43,40 +40,76 @@ export async function uploadGeneratedFiles(
   );
 }
 
-/** Download all files for a project from Storage to local sites/ directory */
-export async function restoreProjectFiles(projectId: string): Promise<void> {
-  const { data: files, error } = await supabase.storage
-    .from(BUCKET)
-    .list(projectId, { limit: 1000 });
+/** Recursively list all files in a storage prefix */
+async function listAllFiles(prefix: string): Promise<string[]> {
+  const result: string[] = [];
 
-  if (error) throw new Error(`[storage] Failed to list files: ${error.message}`);
-  if (!files || files.length === 0) return;
+  async function walk(currentPrefix: string) {
+    const { data, error } = await supabase.storage
+      .from(BUCKET)
+      .list(currentPrefix, { limit: 1000 });
+
+    if (error || !data) return;
+
+    for (const item of data) {
+      const fullPath = currentPrefix ? `${currentPrefix}/${item.name}` : item.name;
+      if (item.id) {
+        // It's a file
+        result.push(fullPath);
+      } else {
+        // It's a folder — recurse
+        await walk(fullPath);
+      }
+    }
+  }
+
+  await walk(prefix);
+  return result;
+}
+
+/** Download all files for a project from Storage to local sites/ directory */
+export async function restoreProjectFiles(projectId: string): Promise<string[]> {
+  const allPaths = await listAllFiles(projectId);
+  if (allPaths.length === 0) return [];
+
+  const restored: string[] = [];
 
   await Promise.all(
-    files.map(async (file) => {
-      const storagePath = `${projectId}/${file.name}`;
-      const { data, error: dlError } = await supabase.storage
+    allPaths.map(async (storagePath) => {
+      const { data, error } = await supabase.storage
         .from(BUCKET)
         .download(storagePath);
 
-      if (dlError || !data) return;
+      if (error || !data) return;
 
-      const localPath = path.join(getSiteRoot(projectId), file.name);
+      // storagePath = "projectId/components/sections/Foo.tsx"
+      // relativePath = "components/sections/Foo.tsx"
+      const relativePath = storagePath.slice(projectId.length + 1);
+      const localPath = path.join(getSiteRoot(projectId), relativePath);
       await fs.mkdir(path.dirname(localPath), { recursive: true });
       const buffer = Buffer.from(await data.arrayBuffer());
       await fs.writeFile(localPath, buffer);
+      restored.push(relativePath);
     })
   );
+
+  return restored;
 }
 
 /** Delete all stored files for a project */
 export async function deleteProjectFiles(projectId: string): Promise<void> {
-  const { data: files, error } = await supabase.storage
-    .from(BUCKET)
-    .list(projectId, { limit: 1000 });
+  const allPaths = await listAllFiles(projectId);
+  if (allPaths.length === 0) return;
 
-  if (error || !files || files.length === 0) return;
+  // Supabase remove accepts max 1000 paths at a time
+  for (let i = 0; i < allPaths.length; i += 1000) {
+    const batch = allPaths.slice(i, i + 1000);
+    await supabase.storage.from(BUCKET).remove(batch);
+  }
+}
 
-  const paths = files.map((f) => `${projectId}/${f.name}`);
-  await supabase.storage.from(BUCKET).remove(paths);
+/** List all files stored for a project (relative paths) */
+export async function listProjectFiles(projectId: string): Promise<string[]> {
+  const allPaths = await listAllFiles(projectId);
+  return allPaths.map((p) => p.slice(projectId.length + 1));
 }

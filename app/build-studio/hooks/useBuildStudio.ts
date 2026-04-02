@@ -441,7 +441,6 @@ export function useBuildStudio(initialProjectId?: string | null): BuildStudioSta
               setModifyError(event.message);
             } else if (event.type === "done") {
               setModifyInstruction("");
-              // Commit this modify run to history
               setModifyHistory((prev) => [...prev, {
                 instruction: modifyInstruction,
                 plan: modifyPlanRef.current,
@@ -450,11 +449,20 @@ export function useBuildStudio(initialProjectId?: string | null): BuildStudioSta
                 error: null,
                 completedAt: new Date().toISOString(),
               }]);
-              // Rebuild sandbox with updated files, then refresh preview
-              rebuildPreview().catch(() => {
-              // If rebuild fails, at least try refreshing the iframe
-                if (iframeRef.current) iframeRef.current.src = iframeRef.current.src;
-              });
+              // Switch to preview panel and rebuild sandbox
+              setRightPanel("preview");
+              setPreviewState("starting");
+              setPreviewUrl(null);
+              fetch(`/api/projects/${projectId}/preview`, { method: "PUT" })
+                .then((r) => r.ok ? r.json() : Promise.reject(r))
+                .then((data) => {
+                  setPreviewUrl(data.url);
+                  setPreviewState("ready");
+                })
+                .catch(() => {
+                  setPreviewState("error");
+                  setPreviewError("Rebuild failed");
+                });
             }
           } catch { /* ignore */ }
         }

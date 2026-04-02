@@ -14,6 +14,7 @@ import { NextResponse } from "next/server";
 import { getProject } from "@/lib/projectManager";
 import { runModifyProject } from "@/ai/flows/modify_project/runModifyProject";
 import type { ModifySSEEvent } from "@/ai/flows/modify_project/runModifyProject";
+import { uploadGeneratedFiles } from "@/lib/storage";
 
 export async function POST(
   req: Request,
@@ -59,7 +60,6 @@ export async function POST(
       try {
         await runModifyProject(id, userInstruction, (event) => {
           send(event);
-          // Capture plan and diffs for saving
           if (event.type === "plan") {
             collectedPlan = event.plan as typeof collectedPlan;
           } else if (event.type === "diff") {
@@ -71,6 +71,15 @@ export async function POST(
             });
           }
         });
+
+        // Upload modified files to Storage (non-blocking)
+        const touchedFiles = collectedDiffs.map((d) => d.file);
+        if (touchedFiles.length > 0) {
+          uploadGeneratedFiles(id, touchedFiles).catch((err) =>
+            console.error("[modify] Storage upload failed:", err)
+          );
+        }
+
         send({ type: "done" });
       } catch (err) {
         const message = err instanceof Error ? err.message : "Internal error";
