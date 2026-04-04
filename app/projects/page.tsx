@@ -56,7 +56,9 @@ function ProjectCard({
   deleting: boolean;
 }) {
   const isReady = project.status === "ready";
+  const isFailed = project.status === "failed";
   const isGenerating = project.status === "generating";
+  const isClickable = isReady || isFailed;
   const colors = hashColor(project.id);
   const initials = (project.name || "P")
     .split(/[\s-_]+/)
@@ -66,11 +68,13 @@ function ProjectCard({
 
   return (
     <div
-      onClick={isReady ? onClick : undefined}
+      onClick={isClickable ? onClick : undefined}
       className={`
         group relative rounded-2xl border overflow-hidden transition-all duration-300
         ${isReady
           ? "border-white/10 hover:border-primary/40 cursor-pointer hover:shadow-[0_0_50px_-12px_rgba(247,147,26,0.25)] hover:-translate-y-1"
+        : isFailed
+          ? "border-red-400/20 hover:border-red-400/40 cursor-pointer hover:shadow-[0_0_30px_-12px_rgba(248,113,113,0.2)] hover:-translate-y-1"
           : isGenerating
             ? "border-primary/20 cursor-default"
             : "border-white/8 cursor-default"
@@ -205,28 +209,7 @@ export default function ProjectsPage() {
   const generatingCount = projects.filter((p) => p.status === "generating").length;
 
   return (
-    <main className="relative min-h-screen">
-      <header className="relative z-10 border-b border-white/8 bg-background/75 backdrop-blur-xl">
-        <div className="mx-auto flex items-center justify-between gap-4 px-6 py-3 max-w-6xl lg:px-8">
-          <div className="flex items-center gap-4">
-            <Link href="/" className="defi-button-outline px-3 py-2 text-[11px] font-medium">
-              <ArrowLeft className="h-3.5 w-3.5" />
-            </Link>
-            <div>
-              <h1 className="text-lg font-semibold tracking-tight text-white">我的项目</h1>
-              <p className="font-mono text-[10px] text-white/40 tracking-wider">
-                {projects.length} 个项目
-                {readyCount > 0 && ` · ${readyCount} 就绪`}
-                {generatingCount > 0 && ` · ${generatingCount} 生成中`}
-              </p>
-            </div>
-          </div>
-          <Link href="/build-studio" className="defi-button px-5 py-2.5 text-[11px] font-semibold uppercase tracking-[0.14em]">
-            <Plus className="h-3.5 w-3.5" />
-            新建项目
-          </Link>
-        </div>
-      </header>
+    <main className="relative min-h-screen pt-[57px]">
 
       <div className="relative z-1 mx-auto max-w-6xl px-6 py-8 lg:px-8">
         {loading ? (
@@ -243,7 +226,7 @@ export default function ProjectsPage() {
                 <h2 className="text-lg font-semibold text-white">还没有项目</h2>
                 <p className="text-sm text-white/40">描述你的想法，AI 帮你生成完整网站</p>
               </div>
-              <Link href="/build-studio" className="defi-button px-6 py-3 text-sm font-semibold uppercase tracking-[0.14em]">
+              <Link href="/" className="defi-button px-6 py-3 text-sm font-semibold uppercase tracking-[0.14em]">
                 <Plus className="h-4 w-4" />
                 创建第一个项目
               </Link>
@@ -252,7 +235,7 @@ export default function ProjectsPage() {
               <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 {/* New project card */}
                 <Link
-                  href="/build-studio"
+                  href="/"
                   className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-white/10
                 bg-white/[0.01] p-8 transition-all hover:border-primary/30 hover:bg-primary/[0.03] group min-h-[260px]"
                 >
@@ -268,7 +251,7 @@ export default function ProjectsPage() {
               <ProjectCard
                 key={project.id}
                 project={project}
-                onClick={() => router.push(`/build-studio?projectId=${project.id}`)}
+                onClick={() => router.push(`/studio/${project.id}`)}
                 onDelete={(e) => handleDelete(e, project.id)}
                 deleting={deletingId === project.id}
               />

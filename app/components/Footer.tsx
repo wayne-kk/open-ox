@@ -1,58 +1,55 @@
 import Link from "next/link";
-
-const NAV = [
-    { label: "首页", href: "/" },
-    { label: "创建", href: "/build-studio" },
-    { label: "项目", href: "/projects" },
-];
+import { Github, Twitter } from "lucide-react";
 
 export function Footer() {
     return (
-        <footer className="border-t border-white/6 bg-background/80 backdrop-blur-sm">
-            <div className="mx-auto max-w-7xl px-6 py-10 lg:px-8">
-                <div className="flex flex-col gap-8 sm:flex-row sm:items-start sm:justify-between">
-                    {/* Brand */}
-                    <div className="space-y-3">
-                        <div className="flex items-center gap-2">
-                            <span className="font-mono text-[11px] font-semibold tracking-[0.2em] text-foreground">
-                                OPEN-OX
-                            </span>
-                            <span className="font-mono text-[10px] tracking-[0.2em] text-muted-foreground">
-                                Studio
-                            </span>
-                        </div>
-                        <p className="max-w-xs text-[13px] leading-relaxed text-muted-foreground/60">
-                            AI 驱动的建站平台。描述你的想法，自动生成完整网站。
-                        </p>
-                    </div>
+      <footer className="border-t border-white/6 bg-background">
+          <div className="mx-auto max-w-7xl px-6 py-8 lg:px-8">
+              <div className="flex flex-col items-center justify-between gap-6 sm:flex-row">
+                  {/* Brand */}
+                  <Link href="/" className="flex items-center gap-2.5 group">
+                      <div className="flex h-6 w-6 items-center justify-center rounded border border-primary/40 bg-primary/10">
+                          <span className="font-mono text-[9px] font-bold text-primary">OX</span>
+                      </div>
+                      <span className="font-mono text-[12px] font-bold tracking-[0.18em] text-muted-foreground group-hover:text-foreground transition-colors">
+                          OPEN-OX
+                      </span>
+                  </Link>
 
-                    {/* Nav */}
-                    <nav className="flex gap-6">
-                        {NAV.map(({ label, href }) => (
-                            <Link
-                                key={href}
-                                href={href}
-                                className="font-mono text-[11px] tracking-wide text-muted-foreground/50 transition-colors hover:text-foreground"
-                            >
-                                {label}
-                            </Link>
-                        ))}
-                    </nav>
-                </div>
+                  {/* Copyright */}
+                  <p className="font-mono text-[11px] text-muted-foreground/50 order-last sm:order-none">
+                      © {new Date().getFullYear()} Open-OX Studio
+                  </p>
 
-                {/* Bottom bar */}
-                <div className="mt-8 flex flex-col items-center justify-between gap-3 border-t border-white/5 pt-6 sm:flex-row">
-                    <p className="font-mono text-[10px] tracking-wide text-muted-foreground/30">
-                        © {new Date().getFullYear()} Open-OX. All rights reserved.
-                    </p>
-                    <div className="flex items-center gap-1.5">
-                        <span className="h-1.5 w-1.5 rounded-full bg-green-500/60 animate-pulse" />
-                        <span className="font-mono text-[10px] tracking-wide text-muted-foreground/30">
-                            系统运行中
-                        </span>
-                    </div>
-                </div>
-            </div>
-        </footer>
-    );
+                  {/* Right: status + social */}
+                  <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-1.5">
+                          <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+                          <span className="font-mono text-[11px] text-muted-foreground/60">All systems up</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                          <a
+                              href="https://github.com"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-muted-foreground/50 hover:text-foreground transition-colors"
+                              aria-label="GitHub"
+                          >
+                              <Github className="h-4 w-4" />
+                          </a>
+                          <a
+                              href="https://twitter.com"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-muted-foreground/50 hover:text-foreground transition-colors"
+                              aria-label="Twitter"
+                          >
+                              <Twitter className="h-4 w-4" />
+                          </a>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      </footer>
+  );
 }

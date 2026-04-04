@@ -85,6 +85,8 @@ async function uploadProjectToSandbox(sandbox: Sandbox, projectId: string): Prom
   const projectDir = getSiteRoot(projectId);
   const templateDir = path.join(WORKSPACE_ROOT, "sites", "template");
   const files = await collectFiles(projectDir, projectDir);
+  console.log(`[e2b upload] Project dir: ${projectDir}`);
+  console.log(`[e2b upload] Collected ${files.length} files from disk`);
 
   // Template base files that must always be present in the sandbox.
   // If the project dir is missing any (e.g. after a Storage restore that only
@@ -355,16 +357,109 @@ export async function stopDevServer(projectId: string): Promise<void> {
 }
 
 /**
- * Resync files to existing sandbox, rebuild, and restart serve.
- * If no sandbox exists, falls back to startDevServer (full create).
+ * Upload only specific changed files to an existing sandbox (incremental).
+ * Much faster than full uploadProjectToSandbox for small modifications.
  */
-export async function rebuildDevServer(
-  projectId: string
-): Promise<{ url: string; port: number }> {
+async function uploadFilesToSandbox(
+  sandbox: Sandbox,
+  projectId: string,
+  relPaths: string[]
+): Promise<void> {
+  const projectDir = getSiteRoot(projectId);
+  const BATCH = 20;
+  for (let i = 0; i < relPaths.length; i += BATCH) {
+    const batch = relPaths.slice(i, i + BATCH);
+    await Promise.all(
+      batch.map(async (relPath) => {
+        const localPath = path.join(projectDir, relPath);
+        try {
+          const content = await fs.readFile(localPath);
+          const sandboxPath = `/home/user/app/${relPath}`;
+          const dir = sandboxPath.substring(0, sandboxPath.lastIndexOf("/"));
+          await sandbox.files.makeDir(dir);
+          await sandbox.files.write(sandboxPath, content.buffer as ArrayBuffer);
+        } catch {
+          // File may have been deleted — skip
+        }
+      })
+    );
+  }
+}
+
+/**
+ * Classify modification diffs to determine if a full rebuild is needed
+ * or if a lightweight file-swap + browser refresh is sufficient.
+ */
+export type PreviewRefreshMode = "hot" | "rebuild";
+
+export function classifyModificationScope(
+  diffs: Array<{ file: string; patch: string; stats: { additions: number; deletions: number } }>
+): PreviewRefreshMode {
+  if (diffs.length === 0) return "hot";
+
+  for (const diff of diffs) {
+    const { file, patch } = diff;
+
+    // New or deleted files always need rebuild
+    if (diff.stats.additions > 0 && diff.stats.deletions === 0 && patch.includes("--- /dev/null")) {
+      return "rebuild";
+    }
+
+    // Changes to config files need rebuild
+    if (
+      file === "next.config.ts" ||
+      file === "tsconfig.json" ||
+      file === "package.json" ||
+      file === "postcss.config.mjs" ||
+      file === "tailwind.config.ts"
+    ) {
+      return "rebuild";
+    }
+
+    // Changes to layout.tsx need rebuild (affects all pages)
+    if (file === "app/layout.tsx") {
+      return "rebuild";
+    }
+
+    // Analyze the patch content for structural vs cosmetic changes
+    const patchLines = patch.split("\n");
+    for (const line of patchLines) {
+      if (!line.startsWith("+") || line.startsWith("+++")) continue;
+      const content = line.slice(1).trim();
+      if (!content) continue;
+
+      // Import changes need rebuild
+      if (content.startsWith("import ") || content.startsWith("export ")) {
+        // Exception: re-exports of existing components are fine
+        if (!content.includes("from ")) continue;
+        return "rebuild";
+      }
+
+      // New component definitions need rebuild
+      if (content.match(/^(export\s+)?(function|const|class)\s+\w+/)) {
+        return "rebuild";
+      }
+    }
+  }
+
+  // If we got here, changes are likely cosmetic (text, className, CSS values)
+  return "hot";
+}
+
+/**
+ * Hot-refresh: upload changed files to sandbox and trigger browser reload.
+ * No `next build` — just file swap + serve restart.
+ * Only works for cosmetic changes (text, CSS, className).
+ */
+export async function hotRefreshDevServer(
+  projectId: string,
+  changedFiles: string[]
+): Promise<{ url: string; port: number; mode: "hot" }> {
   const sandboxId = await getSandboxId(projectId);
   if (!sandboxId) {
-    // No existing sandbox — do a full start
-    return startDevServer(projectId);
+    // No sandbox — fall back to full start
+    const result = await startDevServer(projectId);
+    return { ...result, mode: "hot" };
   }
 
   let sandbox: Sandbox;
@@ -373,46 +468,132 @@ export async function rebuildDevServer(
     if (!(await sandbox.isRunning())) throw new Error("not running");
   } catch {
     await clearSandboxId(projectId);
-    return startDevServer(projectId);
+    const result = await startDevServer(projectId);
+    return { ...result, mode: "hot" };
   }
 
-  console.log("[e2b rebuild] Resyncing files to sandbox", sandboxId);
+  console.log(`[e2b hot] Uploading ${changedFiles.length} changed file(s) to sandbox ${sandboxId}`);
 
-  // 1. Kill existing serve process
+  // Upload only the changed files
+  await uploadFilesToSandbox(sandbox, projectId, changedFiles);
+
+  // For static export, we need to rebuild even for hot refresh
+  // But we can skip dependency installation since no imports changed
+  console.log("[e2b hot] Rebuilding static site (no dep install)...");
+
+  // Kill existing serve and clean stale build cache
   await sandbox.commands.run("pkill -f 'serve out' || true");
+  await sandbox.commands.run("cd /home/user/app && rm -rf .next out");
 
-  // 2. Re-upload project files
-  await uploadProjectToSandbox(sandbox, projectId);
+  // Rebuild
+  const buildResult = await sandbox.commands.run(
+    "cd /home/user/app && npx next build 2>&1",
+    { timeoutMs: 120_000 }
+  );
 
-  // 3. Inject static export config
-  await injectStaticExport(sandbox);
-
-  // 4. Install any new deps
-  const missingDeps = await getMissingDeps(sandbox);
-  if (missingDeps === null) {
-    console.log("[e2b rebuild] Full npm install...");
-    const r = await sandbox.commands.run("cd /home/user/app && npm install --legacy-peer-deps 2>&1", { timeoutMs: 120_000 });
-    if (r.exitCode !== 0) throw new Error(`npm install failed: ${r.stdout.slice(-300)}`);
-  } else if (missingDeps.length > 0) {
-    console.log(`[e2b rebuild] Installing ${missingDeps.length} extra deps`);
-    const r = await sandbox.commands.run(`cd /home/user/app && npm install --legacy-peer-deps ${missingDeps.join(" ")} 2>&1`, { timeoutMs: 120_000 });
-    if (r.exitCode !== 0) throw new Error(`npm install extras failed: ${r.stdout.slice(-300)}`);
-  }
-
-  // 5. Rebuild
-  console.log("[e2b rebuild] Building...");
-  const buildResult = await sandbox.commands.run("cd /home/user/app && npx next build 2>&1", { timeoutMs: 120_000 });
   if (buildResult.exitCode !== 0) {
-    throw new Error(`next build failed (exit ${buildResult.exitCode}): ${buildResult.stdout.slice(-500)}`);
+    // Hot refresh failed — fall back to full rebuild
+    console.warn("[e2b hot] Build failed, falling back to full rebuild");
+    const result = await rebuildDevServer(projectId);
+    return { ...result, mode: "hot" };
   }
 
-  // 6. Restart serve
-  console.log("[e2b rebuild] Restarting serve...");
+  // Restart serve
   await startServeAndWait(sandbox);
 
   const previewUrl = `https://${sandbox.getHost(SERVE_PORT)}`;
   await sandbox.setTimeout(SANDBOX_TIMEOUT_MS);
-  return { url: previewUrl, port: SERVE_PORT };
+  return { url: previewUrl, port: SERVE_PORT, mode: "hot" };
+}
+
+/**
+ * Resync files to existing sandbox, rebuild, and restart serve.
+ * If no sandbox exists or reconnect fails, creates a fresh one (skipping
+ * the reconnect-and-reuse shortcut in startDevServer that would serve stale content).
+ */
+export async function rebuildDevServer(
+  projectId: string
+): Promise<{ url: string; port: number }> {
+  const sandboxId = await getSandboxId(projectId);
+
+  let sandbox: Sandbox | null = null;
+
+  if (sandboxId) {
+    try {
+      const candidate = await Sandbox.connect(sandboxId, e2bOpts());
+      if (!(await candidate.isRunning())) throw new Error("not running");
+      // Quick health check
+      const healthCheck = await candidate.commands.run("echo OK", { timeoutMs: 5_000 });
+      if (healthCheck.exitCode !== 0 || !healthCheck.stdout.includes("OK")) {
+        throw new Error("sandbox unhealthy");
+      }
+      sandbox = candidate;
+    } catch {
+      await clearSandboxId(projectId);
+    }
+  }
+
+  // No usable sandbox — create a fresh one (do NOT call startDevServer which
+  // has a reconnect shortcut that skips file upload and serves stale content).
+  if (!sandbox) {
+    console.log("[e2b rebuild] No usable sandbox, creating fresh one...");
+    sandbox = await Sandbox.create(NEXTJS_TEMPLATE, {
+      timeoutMs: SANDBOX_TIMEOUT_MS,
+      metadata: { projectId },
+      ...e2bOpts(),
+    });
+  }
+
+  try {
+    console.log("[e2b rebuild] Resyncing files to sandbox", sandbox.sandboxId);
+
+    // 1. Kill existing serve process
+    await sandbox.commands.run("pkill -f 'serve out' || true");
+
+    // 2. Clean stale build artifacts — .next cache can cause next build to
+    //    serve old compiled output even after source files are updated.
+    await sandbox.commands.run("cd /home/user/app && rm -rf .next out");
+
+    // 3. Re-upload project files
+    await uploadProjectToSandbox(sandbox, projectId);
+
+    // 4. Inject static export config
+    await injectStaticExport(sandbox);
+
+    // 5. Install any new deps
+    const missingDeps = await getMissingDeps(sandbox);
+    if (missingDeps === null) {
+      console.log("[e2b rebuild] Full npm install...");
+      const r = await sandbox.commands.run("cd /home/user/app && npm install --legacy-peer-deps 2>&1", { timeoutMs: 120_000 });
+      if (r.exitCode !== 0) throw new Error(`npm install failed: ${r.stdout.slice(-300)}`);
+    } else if (missingDeps.length > 0) {
+      console.log(`[e2b rebuild] Installing ${missingDeps.length} extra deps`);
+      const r = await sandbox.commands.run(`cd /home/user/app && npm install --legacy-peer-deps ${missingDeps.join(" ")} 2>&1`, { timeoutMs: 120_000 });
+      if (r.exitCode !== 0) throw new Error(`npm install extras failed: ${r.stdout.slice(-300)}`);
+    }
+
+    // 6. Rebuild
+    console.log("[e2b rebuild] Building...");
+    const buildResult = await sandbox.commands.run("cd /home/user/app && npx next build 2>&1", { timeoutMs: 120_000 });
+    if (buildResult.exitCode !== 0) {
+      throw new Error(`next build failed (exit ${buildResult.exitCode}): ${buildResult.stdout.slice(-500)}`);
+    }
+
+    // 7. Restart serve
+    console.log("[e2b rebuild] Restarting serve...");
+    await startServeAndWait(sandbox);
+
+    const previewUrl = `https://${sandbox.getHost(SERVE_PORT)}`;
+    await saveSandboxId(projectId, sandbox.sandboxId);
+    await sandbox.setTimeout(SANDBOX_TIMEOUT_MS);
+    return { url: previewUrl, port: SERVE_PORT };
+  } catch (err) {
+    // If we created a fresh sandbox and it failed, kill it
+    if (!sandboxId || sandbox.sandboxId !== sandboxId) {
+      await sandbox.kill().catch(() => { });
+    }
+    throw err;
+  }
 }
 
 export async function getDevServerStatus(

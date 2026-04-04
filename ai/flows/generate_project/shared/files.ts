@@ -79,14 +79,6 @@ export function hasSkillPrompt(promptId: string): boolean {
   return existsSync(getSkillPromptPath(promptId));
 }
 
-export function hasGuardrail(guardrailId: string): boolean {
-  return existsSync(getGuardrailPath(guardrailId));
-}
-
-export function hasLayoutVariant(layoutId: string): boolean {
-  return existsSync(getLayoutVariantPath(layoutId));
-}
-
 export function hasCapabilityAssist(capabilityId: string): boolean {
   return existsSync(getCapabilityAssistPath(capabilityId));
 }

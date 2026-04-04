@@ -8,7 +8,8 @@
  */
 
 import { runGenerateProject } from "@/ai/flows";
-import { createProject, getProject, initProjectDir, updateProjectStatus, renameProject } from "@/lib/projectManager";
+import { detectCheckpoint } from "@/ai/flows/generate_project/shared/checkpoint";
+import { createProject, getProject, initProjectDir, updateProjectStatus, renameProject, appendBuildStep } from "@/lib/projectManager";
 import { uploadGeneratedFiles } from "@/lib/storage";
 import { setRuntimeModelId, type ModelId } from "@/lib/config/models";
 import type { BuildStep } from "@/ai/flows";
@@ -21,20 +22,21 @@ export async function POST(req: Request) {
     const userPrompt: unknown = body.userPrompt ?? body.input;
     const modelOverride: string | undefined = body.model;
     const retryProjectId: string | undefined = body.retryProjectId;
+    const preCreatedProjectId: string | undefined = body.projectId;
+    const styleGuide: string | undefined = body.styleGuide;
 
-    // For retry: load existing project's prompt and model
+    // For retry or pre-created project: load existing project's prompt and model
     let effectivePrompt = userPrompt as string | undefined;
     let effectiveModel = modelOverride;
-    if (retryProjectId) {
-      const existing = await getProject(retryProjectId);
+    if (retryProjectId || preCreatedProjectId) {
+      const lookupId = retryProjectId ?? preCreatedProjectId!;
+      const existing = await getProject(lookupId);
       if (!existing) {
-        return NextResponse.json({ error: "Project not found for retry" }, { status: 404 });
+        return NextResponse.json({ error: "Project not found" }, { status: 404 });
       }
-      effectivePrompt = existing.userPrompt;
-      // Use the model from the request, or fall back to the project's saved model
-      if (!effectiveModel && existing.modelId) {
-        effectiveModel = existing.modelId;
-      }
+      // For pre-created projects, use the stored prompt if none provided in body
+      if (!effectivePrompt) effectivePrompt = existing.userPrompt;
+      if (!effectiveModel && existing.modelId) effectiveModel = existing.modelId;
     }
 
     // Set runtime model
@@ -63,7 +65,11 @@ export async function POST(req: Request) {
         let projectId: string;
         if (retryProjectId) {
           projectId = retryProjectId;
-          await updateProjectStatus(projectId, "generating", { error: undefined });
+          // Clear stale buildSteps so old "active" nodes don't ghost in the UI
+          await updateProjectStatus(projectId, "generating", { error: undefined, buildSteps: [] });
+        } else if (preCreatedProjectId) {
+          // Project already created by the client — just scaffold the dir
+          projectId = preCreatedProjectId;
         } else {
           const project = await createProject(effectivePrompt, effectiveModel);
           projectId = project.id;
@@ -75,8 +81,27 @@ export async function POST(req: Request) {
             await initProjectDir(projectId);
           }
 
+          // Step 2.5: Detect checkpoint for resume (retry or interrupted generation)
+          let checkpoint;
+          if (retryProjectId || preCreatedProjectId) {
+            const existing = await getProject(projectId);
+            if (existing && existing.buildSteps && existing.buildSteps.length > 0) {
+              checkpoint = detectCheckpoint(existing);
+              if (checkpoint.hasCheckpoint) {
+                console.log(`[AI API] Checkpoint detected for ${projectId}: ${checkpoint.summary}`);
+              }
+            }
+          }
+
           // Step 3: Run generation, writing files into sites/{projectId}/
-          const result = await runGenerateProject(effectivePrompt, (step: BuildStep) => send({ type: "step", ...step }), { projectId });
+          const result = await runGenerateProject(
+            effectivePrompt,
+            async (step: BuildStep) => {
+              send({ type: "step", ...step });
+              try { await appendBuildStep(projectId, step); } catch { /* non-fatal */ }
+            },
+            { projectId, styleGuide, checkpoint }
+          );
 
           if (result.success) {
             // Step 4: Upload generated files to Supabase Storage (non-blocking)

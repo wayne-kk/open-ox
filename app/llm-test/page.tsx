@@ -112,12 +112,12 @@ function ModelManagement() {
                         <div key={m.id} className="flex items-center justify-between rounded-xl border border-white/8 bg-white/[0.02] px-4 py-3">
                             <div>
                                 <span className="font-mono text-[12px] font-semibold text-white">{m.displayName}</span>
-                                <span className="ml-3 font-mono text-[10px] text-muted-foreground/40">{m.id}</span>
-                                <span className="ml-3 font-mono text-[9px] text-muted-foreground/30">{(m.contextWindow / 1000).toFixed(0)}K ctx</span>
+                                <span className="ml-3 font-mono text-[10px] text-muted-foreground/70">{m.id}</span>
+                                <span className="ml-3 font-mono text-[10px] text-muted-foreground/60">{(m.contextWindow / 1000).toFixed(0)}K ctx</span>
                             </div>
                             <button
                                 onClick={() => handleDelete(m.id)}
-                                className="rounded-lg p-1.5 text-muted-foreground/30 hover:text-red-400 hover:bg-red-400/10 transition-colors"
+                                className="rounded-lg p-1.5 text-muted-foreground/60 hover:text-red-400 hover:bg-red-400/10 transition-colors"
                                 title="删除"
                             >
                                 <Trash2 className="h-3.5 w-3.5" />
@@ -128,7 +128,7 @@ function ModelManagement() {
 
                 {/* Add model form */}
                 <div className="mt-4 rounded-xl border border-dashed border-white/10 p-4">
-                    <div className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground/50 mb-3">添加自定义模型</div>
+                    <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70 mb-3">添加自定义模型</div>
                     <div className="grid grid-cols-3 gap-3">
                         <input
                             value={newId}
@@ -166,7 +166,7 @@ function ModelManagement() {
             {/* Step model assignment */}
             <div>
                 <h3 className="font-mono text-[10px] uppercase tracking-[0.3em] text-primary mb-4">步骤模型配置</h3>
-                <p className="font-mono text-[10px] text-muted-foreground/40 mb-4">为不同的生成步骤指定模型。留空则使用项目默认模型。</p>
+                <p className="font-mono text-[10px] text-muted-foreground/70 mb-4">为不同的生成步骤指定模型。留空则使用项目默认模型。</p>
                 <div className="space-y-2">
                     {steps.map((step) => (
                         <div key={step.id} className="flex items-center justify-between rounded-xl border border-white/8 bg-white/[0.02] px-4 py-3">
@@ -174,7 +174,7 @@ function ModelManagement() {
                                 <Zap className="h-3.5 w-3.5 text-primary/40" />
                                 <div>
                                     <span className="font-mono text-[11px] text-white">{step.label}</span>
-                                    <span className="ml-2 font-mono text-[9px] text-muted-foreground/30">{step.id}</span>
+                                    <span className="ml-2 font-mono text-[10px] text-muted-foreground/60">{step.id}</span>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -280,7 +280,7 @@ function LLMTestPanel() {
                   </button>
                   <button
                       onClick={() => setUseSDK((v) => !v)}
-                      className={`rounded-lg border px-3 py-2 font-mono text-[9px] uppercase tracking-widest transition-colors ${useSDK ? "border-primary/40 bg-primary/10 text-primary" : "border-white/10 text-muted-foreground/50 hover:text-foreground"}`}
+                        className={`rounded-lg border px-3 py-2 font-mono text-[10px] uppercase tracking-widest transition-colors ${useSDK ? "border-primary/40 bg-primary/10 text-primary" : "border-white/10 text-muted-foreground/70 hover:text-foreground"}`}
                   >
                       {useSDK ? "✓ OpenAI SDK" : "Native fetch"}
                   </button>
@@ -289,7 +289,7 @@ function LLMTestPanel() {
                       <button
                           key={p.label}
                           onClick={() => { setPrompt(p.prompt); setMaxTokens(p.maxTokens); }}
-                          className="rounded-lg border border-white/8 px-3 py-1.5 font-mono text-[9px] text-muted-foreground/60 hover:text-foreground hover:border-white/20 transition-colors"
+                          className="rounded-lg border border-white/8 px-3 py-1.5 font-mono text-[10px] text-muted-foreground/70 hover:text-foreground hover:border-white/20 transition-colors"
                       >
                           {p.label}
                       </button>
@@ -307,12 +307,12 @@ function LLMTestPanel() {
                               </span>
                         {r.method && <span className="font-mono text-[9px] text-blue-400/70 border border-blue-400/20 px-1.5 py-0.5 rounded">{r.method}</span>}
                         <span className="font-mono text-[10px] text-muted-foreground">{(r.elapsed / 1000).toFixed(1)}s</span>
-                        {r.model && <span className="font-mono text-[9px] text-muted-foreground/50">{r.model}</span>}
+                              {r.model && <span className="font-mono text-[10px] text-muted-foreground/70">{r.model}</span>}
                     </div>
-                    {r.usage && <span className="font-mono text-[9px] text-muted-foreground/40">{r.usage.prompt_tokens}→{r.usage.completion_tokens} tokens</span>}
+                          {r.usage && <span className="font-mono text-[10px] text-muted-foreground/60">{r.usage.prompt_tokens}→{r.usage.completion_tokens} tokens</span>}
                 </div>
                 <div className="px-4 py-3 space-y-2">
-                    {r.config && <p className="font-mono text-[9px] text-muted-foreground/30">{r.config.baseURL} · {r.config.model}</p>}
+                          {r.config && <p className="font-mono text-[10px] text-muted-foreground/60">{r.config.baseURL} · {r.config.model}</p>}
                     {r.content && (
                         <pre className="font-mono text-[10px] text-foreground/70 whitespace-pre-wrap leading-relaxed max-h-60 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                             {r.content}
@@ -321,7 +321,7 @@ function LLMTestPanel() {
                     {(r.error || r.code) && (
                         <div className="space-y-1">
                             {r.error && <p className="font-mono text-[10px] text-red-400 break-words">{typeof r.error === "string" ? r.error : JSON.stringify(r.error)}</p>}
-                            {r.code && <p className="font-mono text-[9px] text-red-400/60">code: {r.code}</p>}
+                                  {r.code && <p className="font-mono text-[10px] text-red-400/80">code: {r.code}</p>}
                         </div>
                     )}
                 </div>
@@ -339,8 +339,7 @@ export default function LLMTestPage() {
     const [tab, setTab] = useState<Tab>("test");
 
     return (
-        <main className="relative min-h-screen bg-background">
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(247,147,26,0.14),transparent_28%)]" />
+        <main className="relative min-h-screen bg-background pt-[57px]">
 
             <div className="relative z-1 mx-auto max-w-4xl px-6 py-8">
                 <div className="flex items-center justify-between mb-8">
@@ -358,14 +357,14 @@ export default function LLMTestPage() {
                     <div className="flex items-center rounded-xl border border-white/8 overflow-hidden">
                         <button
                             onClick={() => setTab("test")}
-                            className={`flex items-center gap-1.5 px-4 py-2 font-mono text-[10px] uppercase tracking-widest transition-colors ${tab === "test" ? "bg-primary/10 text-primary" : "text-muted-foreground/50 hover:text-foreground"}`}
+                            className={`flex items-center gap-1.5 px-4 py-2 font-mono text-[10px] uppercase tracking-widest transition-colors ${tab === "test" ? "bg-primary/10 text-primary" : "text-muted-foreground/70 hover:text-foreground"}`}
                         >
                             <Play className="h-3 w-3" />
                             测试
                         </button>
                         <button
                             onClick={() => setTab("models")}
-                            className={`flex items-center gap-1.5 px-4 py-2 font-mono text-[10px] uppercase tracking-widest transition-colors ${tab === "models" ? "bg-primary/10 text-primary" : "text-muted-foreground/50 hover:text-foreground"}`}
+                            className={`flex items-center gap-1.5 px-4 py-2 font-mono text-[10px] uppercase tracking-widest transition-colors ${tab === "models" ? "bg-primary/10 text-primary" : "text-muted-foreground/70 hover:text-foreground"}`}
                         >
                             <Settings className="h-3 w-3" />
                             模型管理

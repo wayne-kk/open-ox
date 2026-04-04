@@ -1,16 +1,13 @@
 import { buildDefaultProjectPlan } from "../planners/defaultProjectPlanner";
 import { loadGuardrail, loadStepPrompt } from "../shared/files";
 import { callLLM, extractJSON } from "../shared/llm";
+import { isStringArray } from "../shared/typeGuards";
 import type {
   PageDesignPlan,
   PlannedProjectBlueprint,
   ProjectBlueprint,
   SectionDesignPlan,
 } from "../types";
-
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
-}
 
 function isSectionDesignPlan(value: unknown): value is SectionDesignPlan {
   if (!value || typeof value !== "object") {

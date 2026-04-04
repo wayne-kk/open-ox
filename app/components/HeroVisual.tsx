@@ -73,30 +73,43 @@ export function HeroVisual() {
                         </div>
                     </div>
 
-                    {/* Page being built */}
-                    <div ref={containerRef} className="p-3 space-y-2 min-h-[220px]">
-                        {BLOCKS.slice(0, visibleBlocks).map((block, i) => (
-                            <div
-                                key={block.id}
-                                className={`
-                  ${block.h} rounded-lg bg-gradient-to-r ${block.color}
-                  border border-white/[0.06] overflow-hidden
-                  animate-[blockIn_0.5s_ease-out_forwards]
-                `}
-                            >
-                                {/* Shimmer effect */}
-                                <div className="h-full w-full relative overflow-hidden">
-                                    <div className="absolute inset-0 flex items-center justify-center">
-                                        <span className="font-mono text-[8px] text-white/20 tracking-wider">{block.label}</span>
+                    {/* Page being built — fixed height so animation never shifts layout */}
+                    <div ref={containerRef} className="relative h-[360px] overflow-hidden">
+                        {/* Static layout skeleton (always occupies space) */}
+                        <div className="absolute inset-0 p-3 flex flex-col gap-2 pointer-events-none">
+                            {BLOCKS.map((block) => (
+                                <div key={block.id} className={`${block.h} shrink-0`} />
+                            ))}
+                        </div>
+
+                        {/* Animated blocks rendered on top */}
+                        <div className="absolute inset-0 p-3 flex flex-col gap-2">
+                            {BLOCKS.map((block, i) => {
+                                const visible = i < visibleBlocks;
+                                const isLast = i === visibleBlocks - 1;
+                                return (
+                                    <div
+                                        key={block.id}
+                                        className={`${block.h} shrink-0 rounded-lg border border-white/[0.06] overflow-hidden transition-opacity duration-300 ${visible ? "opacity-100" : "opacity-0"
+                                            } bg-gradient-to-r ${block.color} animate-[blockIn_0.5s_ease-out_forwards]`}
+                                        style={{ animationPlayState: visible ? "running" : "paused" }}
+                                    >
+                                        <div className="relative h-full w-full overflow-hidden">
+                                            <div className="absolute inset-0 flex items-center justify-center">
+                                                <span className="font-mono text-[8px] text-white/20 tracking-wider">{block.label}</span>
+                                            </div>
+                                            {isLast && (
+                                                <div className="absolute inset-0 animate-[shimmer_1.5s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/[0.04] to-transparent" />
+                                            )}
+                                        </div>
                                     </div>
-                                    {i === visibleBlocks - 1 && (
-                                        <div className="absolute inset-0 animate-[shimmer_1.5s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/[0.04] to-transparent" />
-                                    )}
-                                </div>
-                            </div>
-                        ))}
+                                );
+                            })}
+                        </div>
+
+                        {/* Loading dots — absolutely positioned, no layout impact */}
                         {visibleBlocks < BLOCKS.length && (
-                            <div className="flex items-center gap-1.5 py-1">
+                            <div className="absolute bottom-3 left-3 flex items-center gap-1.5">
                                 <div className="h-1 w-1 rounded-full bg-primary animate-bounce" style={{ animationDelay: "0ms" }} />
                                 <div className="h-1 w-1 rounded-full bg-primary animate-bounce" style={{ animationDelay: "150ms" }} />
                                 <div className="h-1 w-1 rounded-full bg-primary animate-bounce" style={{ animationDelay: "300ms" }} />
@@ -111,27 +124,29 @@ export function HeroVisual() {
                         <span className="h-2 w-2 rounded-full bg-primary/60 animate-pulse" />
                         <span className="font-mono text-[8px] text-white/30 tracking-wider">AI ENGINE</span>
                     </div>
-                    <div className="p-2.5 space-y-1 min-h-[220px] overflow-hidden">
-                        {CODE_LINES.slice(0, visibleLines).map((line, i) => (
-                            <div
-                                key={i}
-                                className={`font-mono text-[9px] leading-relaxed ${line.color} animate-[fadeSlide_0.3s_ease-out]`}
-                            >
-                                {line.text}
-                            </div>
-                        ))}
-                        {visibleLines < CODE_LINES.length && (
-                            <span className="inline-block w-1.5 h-3 bg-primary/60 animate-[blink_1s_step-end_infinite]" />
-                        )}
-                        {visibleLines >= CODE_LINES.length && (
-                            <div className="mt-2 flex items-center gap-1.5 animate-[fadeSlide_0.4s_ease-out]">
-                                <span className="relative flex h-2 w-2">
-                                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-                                    <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
-                                </span>
-                                <span className="font-mono text-[9px] text-green-400/80">ready to preview</span>
-                            </div>
-                        )}
+                    <div className="relative h-[320px] overflow-hidden p-2.5">
+                        <div className="space-y-1">
+                            {CODE_LINES.slice(0, visibleLines).map((line, i) => (
+                                <div
+                                    key={i}
+                                    className={`font-mono text-[9px] leading-relaxed ${line.color} animate-[fadeSlide_0.3s_ease-out]`}
+                                >
+                                    {line.text}
+                                </div>
+                            ))}
+                            {visibleLines < CODE_LINES.length && (
+                                <span className="inline-block w-1.5 h-3 bg-primary/60 animate-[blink_1s_step-end_infinite]" />
+                            )}
+                            {visibleLines >= CODE_LINES.length && (
+                                <div className="mt-2 flex items-center gap-1.5 animate-[fadeSlide_0.4s_ease-out]">
+                                    <span className="relative flex h-2 w-2">
+                                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+                                        <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
+                                    </span>
+                                    <span className="font-mono text-[9px] text-green-400/80">ready to preview</span>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>

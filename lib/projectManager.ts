@@ -19,6 +19,13 @@ export interface ModificationRecord {
     patch: string;
     stats: { additions: number; deletions: number };
   }>;
+  toolCalls?: Array<{
+    tool: string;
+    args: Record<string, unknown>;
+    result: string;
+  }>;
+  thinking?: string[];
+  image?: string | null;
   error?: string;
 }
 
@@ -174,6 +181,27 @@ export async function deleteProject(id: string): Promise<void> {
   const { error } = await supabase.from("projects").delete().eq("id", id);
   if (error) throw new Error(`[projectManager] deleteProject failed: ${error.message}`);
   await fs.rm(getSiteRoot(id), { recursive: true, force: true });
+}
+
+export async function appendBuildStep(id: string, step: unknown): Promise<void> {
+  // Use a Supabase RPC or a read-modify-write to append a step to build_steps array
+  const { data: row, error: fetchErr } = await supabase
+    .from("projects")
+    .select("build_steps")
+    .eq("id", id)
+    .single();
+  if (fetchErr || !row) return; // non-fatal
+  const existing: unknown[] = (row as { build_steps: unknown[] | null }).build_steps ?? [];
+  // Replace or append based on step identity (step.step field)
+  const stepObj = step as { step?: string };
+  const idx = existing.findIndex((s) => (s as { step?: string }).step === stepObj.step);
+  const updated = idx >= 0
+    ? [...existing.slice(0, idx), step, ...existing.slice(idx + 1)]
+    : [...existing, step];
+  await supabase
+    .from("projects")
+    .update({ build_steps: updated, updated_at: new Date().toISOString() })
+    .eq("id", id);
 }
 
 export async function addModificationRecord(

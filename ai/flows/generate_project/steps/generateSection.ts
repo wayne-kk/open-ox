@@ -333,7 +333,7 @@ export interface GenerateSectionResult {
 function validateSectionExports(
   tsx: string,
   componentName: string
-): StepTrace["validationResult"] {
+): NonNullable<StepTrace["validationResult"]> {
   const checks: Array<{ name: string; passed: boolean; detail?: string }> = [];
 
   // Check: file is non-empty

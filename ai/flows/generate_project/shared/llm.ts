@@ -16,9 +16,16 @@ function getApiConfig() {
   return { apiKey, baseURL };
 }
 
+export type ChatMessageContent =
+  | string
+  | Array<
+    | { type: "text"; text: string }
+    | { type: "image_url"; image_url: { url: string; detail?: "low" | "high" | "auto" } }
+  >;
+
 export interface ChatMessage {
   role: "system" | "user" | "assistant" | "tool";
-  content: string;
+  content: ChatMessageContent;
   tool_calls?: unknown[];
   tool_call_id?: string;
 }
@@ -57,7 +64,7 @@ export async function chatCompletion(params: {
       ...(params.max_tokens ? { max_tokens: params.max_tokens } : {}),
       ...(params.tools ? { tools: params.tools, tool_choice: params.tool_choice ?? "auto" } : {}),
     }),
-    signal: AbortSignal.timeout(100_000),
+    signal: AbortSignal.timeout(300_000),
   });
 
   if (!res.ok) {

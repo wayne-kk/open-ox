@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono, Space_Grotesk, Syne } from "next/font/google";
 import { ConditionalFooter } from "./components/ConditionalFooter";
+import { ConditionalNav } from "./components/ConditionalNav";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -41,6 +42,7 @@ export default function RootLayout({
       <body
         className={`${spaceGrotesk.variable} ${inter.variable} ${jetBrainsMono.variable} ${syne.variable} min-h-screen bg-background text-foreground antialiased`}
       >
+        <ConditionalNav />
         {children}
         <ConditionalFooter />
       </body>

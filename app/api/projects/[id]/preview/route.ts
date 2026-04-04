@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { startDevServer, stopDevServer, rebuildDevServer } from "@/lib/devServerManager";
+import { startDevServer, stopDevServer, rebuildDevServer, hotRefreshDevServer, classifyModificationScope } from "@/lib/devServerManager";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -24,15 +24,46 @@ export async function POST(_req: NextRequest, { params }: Params) {
   }
 }
 
-/** PUT /api/projects/[id]/preview — resync files + rebuild + restart */
-export async function PUT(_req: NextRequest, { params }: Params) {
+/** PUT /api/projects/[id]/preview — resync files + rebuild + restart
+ *
+ * Accepts optional body:
+ *   { diffs?: Array<{ file, patch, stats }>, changedFiles?: string[] }
+ *
+ * If diffs are provided, classifies the modification scope:
+ *   - "hot": only upload changed files + rebuild (skip dep install)
+ *   - "rebuild": full resync + dep install + rebuild
+ */
+export async function PUT(req: NextRequest, { params }: Params) {
   const { id } = await params;
   try {
+    let body: {
+      diffs?: Array<{ file: string; patch: string; stats: { additions: number; deletions: number } }>;
+      changedFiles?: string[];
+    } = {};
+    try {
+      body = await req.json();
+    } catch {
+      // No body or invalid JSON — fall back to full rebuild
+    }
+
+    // If diffs are provided, try hot refresh for cosmetic changes
+    if (body.diffs && body.diffs.length > 0) {
+      const mode = classifyModificationScope(body.diffs);
+      if (mode === "hot" && body.changedFiles && body.changedFiles.length > 0) {
+        console.log(`[PUT /preview] Hot refresh for ${body.changedFiles.length} file(s)`);
+        const result = await hotRefreshDevServer(id, body.changedFiles);
+        return NextResponse.json({ ...result, refreshMode: "hot" });
+      }
+    }
+
+    // Full rebuild
+    console.log(`[PUT /preview] Full rebuild for project ${id}`);
     const result = await rebuildDevServer(id);
-    return NextResponse.json(result);
+    console.log(`[PUT /preview] Rebuild complete: ${result.url}`);
+    return NextResponse.json({ ...result, refreshMode: "rebuild" });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("[PUT /api/projects/[id]/preview]", err);
+    console.error("[PUT /api/projects/[id]/preview] Error:", message);
     return NextResponse.json(
       { error: message, code: "REBUILD_ERROR" },
       { status: 500 }

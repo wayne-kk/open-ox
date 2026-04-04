@@ -1,5 +1,6 @@
 import { loadGuardrail, loadStepPrompt } from "../shared/files";
 import { callLLMWithTools, extractJSON } from "../shared/llm";
+import { isStringArray } from "../shared/typeGuards";
 import { webSearchTool, executeWebSearch } from "../../../tools/system/webSearchTool";
 import type {
   CapabilitySpec,
@@ -18,10 +19,6 @@ import type {
 
 function isSectionSpecArray(value: unknown): value is SectionSpec[] {
   return Array.isArray(value);
-}
-
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
 function toPascalCase(value: string): string {

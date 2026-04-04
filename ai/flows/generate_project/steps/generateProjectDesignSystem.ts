@@ -3,7 +3,8 @@ import { callLLM } from "../shared/llm";
 import type { ProjectBlueprint } from "../types";
 
 export async function stepGenerateProjectDesignSystem(
-  blueprint: ProjectBlueprint
+  blueprint: ProjectBlueprint,
+  styleGuide?: string
 ): Promise<string> {
   const systemPrompt = [
     loadSystem("frontend"),
@@ -11,10 +12,13 @@ export async function stepGenerateProjectDesignSystem(
     loadStepPrompt("generateProjectDesignSystem"),
   ].join("");
 
-  // Compact user message — only essential info for design system generation
   const pagesList = blueprint.site.pages
     .map((page) => `- ${page.title} (/${page.slug}): ${page.sections.map((s) => s.type).join(", ")}`)
     .join("\n");
+
+  const styleGuideSection = styleGuide
+    ? `\n\n## Style Guide (follow this closely)\n${styleGuide.slice(0, 1200)}`
+    : "";
 
   const userMessage = `## ${blueprint.brief.projectTitle}
 ${blueprint.brief.projectDescription}
@@ -32,7 +36,7 @@ ${blueprint.brief.productScope.productType} — ${blueprint.brief.productScope.a
 ${pagesList}
 
 ## Layout Sections
-${blueprint.site.layoutSections.map((s) => `- ${s.type}: ${s.intent}`).join("\n")}
+${blueprint.site.layoutSections.map((s) => `- ${s.type}: ${s.intent}`).join("\n")}${styleGuideSection}
 
 Generate the complete shared Design System for this website project.`;
 
