@@ -611,9 +611,3 @@ export async function getDevServerStatus(
   await clearSandboxId(projectId);
   return { status: "stopped" };
 }
-
-export async function listDevServers(): Promise<
-  Array<{ projectId: string; port: number; url: string; status: string; alive: boolean }>
-> {
-  return [];
-}

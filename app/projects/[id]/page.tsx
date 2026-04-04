@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, useRef, use, useCallback } from "react";
+import { useEffect, useState, useRef, use } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Send, RefreshCw, Server, X, ExternalLink, Trash2 } from "lucide-react";
+import { ArrowLeft, Send, RefreshCw, Trash2 } from "lucide-react";
 
 interface ModifyStep {
   name: string;
@@ -31,120 +31,6 @@ type SSEEvent =
   | { type: "error"; message: string }
 
 type PreviewState = "idle" | "starting" | "ready" | "error";
-
-interface DevServerInfo {
-  projectId: string;
-  port: number;
-  url: string;
-  status: string;
-  alive: boolean;
-}
-
-function DevServerPanel({ currentId }: { currentId: string }) {
-  const [servers, setServers] = useState<DevServerInfo[]>([]);
-  const [open, setOpen] = useState(false);
-  const [killing, setKilling] = useState<string | null>(null);
-
-  const refresh = useCallback(async () => {
-    const res = await fetch("/api/dev-servers");
-    if (res.ok) setServers(await res.json());
-  }, []);
-
-  useEffect(() => {
-    if (open) refresh();
-  }, [open, refresh]);
-
-  const kill = async (projectId: string) => {
-    setKilling(projectId);
-    await fetch("/api/dev-servers", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ projectId }),
-    });
-    await refresh();
-    setKilling(null);
-  };
-
-  return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="defi-button-outline px-3 py-1.5 text-[10px] font-medium flex items-center gap-1.5"
-        title="Dev server manager"
-      >
-        <Server className="h-3 w-3" />
-        Servers
-        {servers.filter((s) => s.alive).length > 0 && (
-          <span className="ml-1 rounded-full bg-green-400/20 px-1.5 text-green-400">
-            {servers.filter((s) => s.alive).length}
-          </span>
-        )}
-      </button>
-
-      {open && (
-        <div className="absolute right-0 top-full mt-2 z-50 w-80 rounded-xl border border-white/10 bg-background/95 backdrop-blur-xl shadow-2xl">
-          <div className="flex items-center justify-between border-b border-white/8 px-4 py-2.5">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Dev Servers</span>
-            <div className="flex items-center gap-2">
-              <button onClick={refresh} className="text-muted-foreground hover:text-foreground transition-colors">
-                <RefreshCw className="h-3 w-3" />
-              </button>
-              <button onClick={() => setOpen(false)} className="text-muted-foreground hover:text-foreground transition-colors">
-                <X className="h-3 w-3" />
-              </button>
-            </div>
-          </div>
-
-          <div className="max-h-72 overflow-y-auto">
-            {servers.length === 0 ? (
-              <p className="px-4 py-6 text-center font-mono text-[10px] text-muted-foreground/50 uppercase tracking-widest">
-                No servers tracked
-              </p>
-            ) : (
-              servers.map((s) => (
-                <div
-                  key={s.projectId}
-                  className={`flex items-center gap-3 px-4 py-3 border-b border-white/5 last:border-0 ${s.projectId === currentId ? "bg-primary/5" : ""}`}
-                >
-                  <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${s.alive ? "bg-green-400" : "bg-red-400/60"}`} />
-                  <div className="min-w-0 flex-1">
-                    <p className="font-mono text-[10px] text-foreground truncate">
-                      :{s.port}
-                      {s.projectId === currentId && (
-                        <span className="ml-1.5 text-primary/60">← current</span>
-                      )}
-                    </p>
-                    <p className="font-mono text-[9px] text-muted-foreground truncate">{s.projectId}</p>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {s.alive && (
-                      <a
-                        href={s.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-muted-foreground hover:text-primary transition-colors"
-                      >
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                    )}
-                    <button
-                      onClick={() => kill(s.projectId)}
-                      disabled={killing === s.projectId}
-                      className="text-muted-foreground hover:text-red-400 transition-colors disabled:opacity-40"
-                      title="Kill server"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -290,7 +176,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 Restart
               </button>
             )}
-            <DevServerPanel currentId={id} />
             <button
               onClick={handleDelete}
               className="defi-button-outline px-3 py-1.5 text-[10px] font-medium flex items-center gap-1.5 text-red-400/70 hover:text-red-400 hover:border-red-400/30"
