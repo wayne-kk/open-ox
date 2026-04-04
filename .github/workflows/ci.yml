@@ -77,12 +77,10 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Save & compress image
-        run: docker save open-ox:${{ github.sha }} | gzip > /tmp/open-ox.tar.gz
-
-      - name: Generate .env.production
+      - name: Save image & generate env file
         run: |
-          cat > /tmp/.env.production << 'ENVEOF'
+          docker save open-ox:${{ github.sha }} | gzip > open-ox.tar.gz
+          cat > .env.production << 'EOF'
           NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY }}
           E2B_API_KEY=${{ secrets.E2B_API_KEY }}
@@ -90,8 +88,8 @@ jobs:
           OPENAI_API_URL=${{ secrets.OPENAI_API_URL }}
           DIFY_API_URL=${{ secrets.DIFY_API_URL }}
           DIFY_API_KEY=${{ secrets.DIFY_API_KEY }}
-          ENVEOF
-          sed -i 's/^          //' /tmp/.env.production
+          EOF
+          sed -i 's/^          //' .env.production
 
       - name: Copy files to server
         uses: appleboy/scp-action@v0.1.7
@@ -100,9 +98,8 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT }}
-          source: /tmp/open-ox.tar.gz,/tmp/.env.production
-          target: /tmp/
-          strip_components: 1
+          source: open-ox.tar.gz,.env.production
+          target: /tmp/open-ox-deploy
 
       - name: Deploy on server
         uses: appleboy/ssh-action@v1.2.0
@@ -115,13 +112,14 @@ jobs:
             set -e
 
             echo "==> Loading Docker image..."
-            docker load < /tmp/open-ox.tar.gz
-            rm -f /tmp/open-ox.tar.gz
+            docker load < /tmp/open-ox-deploy/open-ox.tar.gz
 
+            mkdir -p /opt/open-ox
             cd /opt/open-ox
 
-            mv /tmp/.env.production /opt/open-ox/.env.production
+            mv /tmp/open-ox-deploy/.env.production /opt/open-ox/.env.production
             chmod 600 /opt/open-ox/.env.production
+            rm -rf /tmp/open-ox-deploy
 
             docker tag open-ox:${{ github.sha }} open-ox:latest
 
