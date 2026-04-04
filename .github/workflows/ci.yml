@@ -52,7 +52,7 @@ jobs:
       - name: Run tests
         run: npx vitest --run
 
-  # ── CD: Build Docker & Deploy (only on push to main, after CI passes) ──────
+  # ── CD: Deploy (only on push to main, after CI passes) ──────────────────────
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
@@ -61,45 +61,59 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build Docker image
-        uses: docker/build-push-action@v6
+      - uses: pnpm/action-setup@v4
         with:
-          context: .
-          push: false
-          load: true
-          tags: open-ox:${{ github.sha }}
-          build-args: |
-            NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-            NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          version: 10.5.2
 
-      - name: Save image & generate env file
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Build with real env vars so NEXT_PUBLIC_ values are correctly inlined
+      - name: Build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY }}
+        run: pnpm build
+
+      - name: Generate .env.production
         run: |
-          docker save open-ox:${{ github.sha }} | gzip > open-ox.tar.gz
-          cat > .env.production << 'EOF'
-          NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY }}
-          E2B_API_KEY=${{ secrets.E2B_API_KEY }}
-          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-          OPENAI_API_URL=${{ secrets.OPENAI_API_URL }}
-          DIFY_API_URL=${{ secrets.DIFY_API_URL }}
-          DIFY_API_KEY=${{ secrets.DIFY_API_KEY }}
-          EOF
-          sed -i 's/^          //' .env.production
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}"
+            echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY }}"
+            echo "E2B_API_KEY=${{ secrets.E2B_API_KEY }}"
+            echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}"
+            echo "OPENAI_API_URL=${{ secrets.OPENAI_API_URL }}"
+            echo "DIFY_API_URL=${{ secrets.DIFY_API_URL }}"
+            echo "DIFY_API_KEY=${{ secrets.DIFY_API_KEY }}"
+          } > .env.production
 
-      - name: Copy files to server
+      # Pack: source + build output (no node_modules, no .git)
+      - name: Package artifacts
+        run: |
+          tar -czf deploy.tar.gz \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='sites/*/node_modules' \
+            --exclude='sites/*/.next' \
+            --exclude='.next/cache' \
+            --exclude='.planning' \
+            --exclude='.cursor' \
+            --exclude='.kiro' \
+            .
+
+      - name: Copy to server
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT }}
-          source: open-ox.tar.gz,.env.production
-          target: /tmp/open-ox-deploy
+          source: deploy.tar.gz
+          target: /sharedata/wayne/open-ox
 
       - name: Deploy on server
         uses: appleboy/ssh-action@v1.2.0
@@ -110,34 +124,22 @@ jobs:
           port: ${{ secrets.SERVER_PORT }}
           script: |
             set -e
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 
-            echo "==> Loading Docker image..."
-            docker load < /tmp/open-ox-deploy/open-ox.tar.gz
+            APP=/sharedata/wayne/open-ox
+            mkdir -p $APP/sites $APP/logs
 
-            mkdir -p /opt/open-ox
-            cd /opt/open-ox
+            echo "==> Extracting..."
+            cd $APP
+            tar -xzf deploy.tar.gz
+            rm deploy.tar.gz
 
-            mv /tmp/open-ox-deploy/.env.production /opt/open-ox/.env.production
-            chmod 600 /opt/open-ox/.env.production
-            rm -rf /tmp/open-ox-deploy
+            echo "==> Installing production deps..."
+            pnpm install --frozen-lockfile --prod
 
-            docker tag open-ox:${{ github.sha }} open-ox:latest
+            echo "==> Restarting..."
+            pm2 restart open-ox || pm2 start pnpm --name open-ox -- start
 
-            echo "==> Stopping old container..."
-            docker compose down --timeout 30 || true
-
-            echo "==> Starting new container..."
-            docker compose up -d
-
-            echo "==> Waiting for health check..."
-            for i in $(seq 1 30); do
-              if curl -sf http://localhost:3000/ > /dev/null 2>&1; then
-                echo "==> Healthy! Deploy complete."
-                exit 0
-              fi
-              sleep 2
-            done
-
-            echo "==> Health check failed!"
-            docker compose logs --tail 50
-            exit 1
+            pm2 save
+            echo "==> Deploy complete!"

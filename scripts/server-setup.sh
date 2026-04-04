@@ -4,7 +4,7 @@
 # ───────────────────────────────────────────────────────────────────────────────
 set -e
 
-APP_DIR="/opt/open-ox"
+APP_DIR="/sharedata/wayne/open-ox"
 
 echo "==> Setting up Open-OX deployment environment..."
 
@@ -29,7 +29,7 @@ cd "$APP_DIR"
 cat > docker-compose.yml << 'COMPOSE'
 services:
   open-ox:
-    image: open-ox:latest
+    image: ghcr.io/wayne-kk/open-ox:latest
     container_name: open-ox
     restart: unless-stopped
     ports:
