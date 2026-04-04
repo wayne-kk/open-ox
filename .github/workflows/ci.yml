@@ -94,7 +94,7 @@ jobs:
       # Pack: source + build output (no node_modules, no .git)
       - name: Package artifacts
         run: |
-          tar -czf deploy.tar.gz \
+          tar -czf /tmp/deploy.tar.gz \
             --exclude='.git' \
             --exclude='node_modules' \
             --exclude='sites/*/node_modules' \
@@ -104,6 +104,7 @@ jobs:
             --exclude='.cursor' \
             --exclude='.kiro' \
             .
+          mv /tmp/deploy.tar.gz deploy.tar.gz
 
       - name: Copy to server
         uses: appleboy/scp-action@v0.1.7
@@ -143,3 +144,67 @@ jobs:
 
             pm2 save
             echo "==> Deploy complete!"
+
+      - name: Notify Feishu (success)
+        if: success()
+        run: |
+          curl -X POST "${{ secrets.FEISHU_WEBHOOK }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "msg_type": "interactive",
+              "card": {
+                "header": {
+                  "title": { "tag": "plain_text", "content": "✅ 部署成功" },
+                  "template": "green"
+                },
+                "elements": [{
+                  "tag": "div",
+                  "fields": [
+                    { "is_short": true, "text": { "tag": "lark_md", "content": "**项目**\nopen-ox" }},
+                    { "is_short": true, "text": { "tag": "lark_md", "content": "**分支**\n${{ github.ref_name }}" }},
+                    { "is_short": true, "text": { "tag": "lark_md", "content": "**提交者**\n${{ github.actor }}" }},
+                    { "is_short": false, "text": { "tag": "lark_md", "content": "**提交信息**\n${{ github.event.head_commit.message }}" }}
+                  ]
+                }, {
+                  "tag": "action",
+                  "actions": [{
+                    "tag": "button",
+                    "text": { "tag": "plain_text", "content": "查看详情" },
+                    "url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+                    "type": "default"
+                  }]
+                }]
+              }
+            }'
+
+      - name: Notify Feishu (failure)
+        if: failure()
+        run: |
+          curl -X POST "${{ secrets.FEISHU_WEBHOOK }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "msg_type": "interactive",
+              "card": {
+                "header": {
+                  "title": { "tag": "plain_text", "content": "❌ 部署失败" },
+                  "template": "red"
+                },
+                "elements": [{
+                  "tag": "div",
+                  "fields": [
+                    { "is_short": true, "text": { "tag": "lark_md", "content": "**项目**\nopen-ox" }},
+                    { "is_short": true, "text": { "tag": "lark_md", "content": "**分支**\n${{ github.ref_name }}" }},
+                    { "is_short": true, "text": { "tag": "lark_md", "content": "**提交者**\n${{ github.actor }}" }},
+                    { "is_short": false, "text": { "tag": "lark_md", "content": "**提交信息**\n${{ github.event.head_commit.message }}" }}
+                  ]
+                }, {
+                  "tag": "action",
+                  "actions": [{
+                    "tag": "button",
+                    "text": { "tag": "plain_text", "content": "查看日志" },
+                    "url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+                    "type": "danger"
+                  }]
+                }]
+              }
+            }'
