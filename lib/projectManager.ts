@@ -183,16 +183,18 @@ export async function deleteProject(id: string): Promise<void> {
   await fs.rm(getSiteRoot(id), { recursive: true, force: true });
 }
 
+// appendBuildStep is retained for potential future use (e.g. checkpoint
+// persistence) but is NOT called during normal generation flow.
+// During generation, the SSE stream is the sole real-time channel;
+// final buildSteps are persisted once via updateProjectStatus.
 export async function appendBuildStep(id: string, step: unknown): Promise<void> {
-  // Use a Supabase RPC or a read-modify-write to append a step to build_steps array
   const { data: row, error: fetchErr } = await supabase
     .from("projects")
     .select("build_steps")
     .eq("id", id)
     .single();
-  if (fetchErr || !row) return; // non-fatal
+  if (fetchErr || !row) return;
   const existing: unknown[] = (row as { build_steps: unknown[] | null }).build_steps ?? [];
-  // Replace or append based on step identity (step.step field)
   const stepObj = step as { step?: string };
   const idx = existing.findIndex((s) => (s as { step?: string }).step === stepObj.step);
   const updated = idx >= 0

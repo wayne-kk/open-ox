@@ -58,6 +58,41 @@ function e2bOpts() {
 
 const UPLOAD_EXCLUDE = new Set(["node_modules", ".next", ".git"]);
 
+// ── Project fingerprint ───────────────────────────────────────────────────────
+// Lightweight hash of all project files (path + size + mtime).
+// Used to detect whether local files changed since the last sandbox upload,
+// so startDevServer can skip rebuild when nothing changed.
+
+async function computeProjectFingerprint(projectId: string): Promise<string> {
+  const { createHash } = await import("crypto");
+  const projectDir = getSiteRoot(projectId);
+  const files = await collectFiles(projectDir, projectDir);
+  files.sort(); // deterministic order
+  const hash = createHash("sha256");
+  for (const relPath of files) {
+    const fullPath = path.join(projectDir, relPath);
+    const stat = await fs.stat(fullPath);
+    hash.update(`${relPath}:${stat.size}:${stat.mtimeMs}\n`);
+  }
+  return hash.digest("hex").slice(0, 16); // 16 hex chars is plenty
+}
+
+async function getSavedFingerprint(projectId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from("projects")
+    .select("files_hash")
+    .eq("id", projectId)
+    .single();
+  return (data as { files_hash: string | null } | null)?.files_hash ?? null;
+}
+
+async function saveFingerprint(projectId: string, hash: string): Promise<void> {
+  await supabase
+    .from("projects")
+    .update({ files_hash: hash, updated_at: new Date().toISOString() })
+    .eq("id", projectId);
+}
+
 async function collectFiles(dir: string, base: string): Promise<string[]> {
   const entries = await fs.readdir(dir, { withFileTypes: true });
   const files: string[] = [];
@@ -257,6 +292,11 @@ export async function startDevServer(
     console.log(`[devServerManager] Restored ${restored.length} files from storage`);
   }
 
+  // Compute current file fingerprint
+  const currentHash = await computeProjectFingerprint(projectId);
+  const savedHash = await getSavedFingerprint(projectId);
+  const filesChanged = currentHash !== savedHash;
+
   // 1. Try reconnecting to existing sandbox
   const existingSandboxId = await getSandboxId(projectId);
   if (existingSandboxId) {
@@ -265,20 +305,60 @@ export async function startDevServer(
       const alive = await sandbox.isRunning();
       if (alive) {
         const previewUrl = `https://${sandbox.getHost(SERVE_PORT)}`;
-        if (await isServerUp(sandbox)) {
+
+        // Fast path: files unchanged + server still running → return immediately
+        if (!filesChanged && await isServerUp(sandbox)) {
+          console.log("[e2b] Files unchanged, reusing existing preview");
           await sandbox.setTimeout(SANDBOX_TIMEOUT_MS);
           return { url: previewUrl, port: SERVE_PORT };
         }
-        // Sandbox alive but server not running — check if /out exists
-        const hasOut = await sandbox.commands.run("test -d /home/user/app/out && echo YES || echo NO");
-        if (hasOut.stdout.trim() === "YES") {
-          await startServeAndWait(sandbox);
-          await sandbox.setTimeout(SANDBOX_TIMEOUT_MS);
-          return { url: previewUrl, port: SERVE_PORT };
+
+        // Files unchanged but server down — just restart serve if /out exists
+        if (!filesChanged) {
+          const hasOut = await sandbox.commands.run("test -d /home/user/app/out && echo YES || echo NO");
+          if (hasOut.stdout.trim() === "YES") {
+            console.log("[e2b] Files unchanged, restarting serve from existing /out");
+            await sandbox.commands.run("pkill -f 'serve out' || true");
+            await startServeAndWait(sandbox);
+            await sandbox.setTimeout(SANDBOX_TIMEOUT_MS);
+            return { url: previewUrl, port: SERVE_PORT };
+          }
         }
-        // No /out — need full rebuild, kill and recreate
+
+        // Files changed — reuse sandbox but do full resync + rebuild
+        console.log("[e2b] Files changed, rebuilding in existing sandbox");
+        await sandbox.commands.run("pkill -f 'serve out' || true");
+        await sandbox.commands.run("sleep 1 && ! pgrep -f 'serve out' || sleep 2");
+        await sandbox.commands.run("cd /home/user/app && rm -rf .next out");
+        await uploadProjectToSandbox(sandbox, projectId);
+        await injectStaticExport(sandbox);
+
+        const missingDeps = await getMissingDeps(sandbox);
+        if (missingDeps === null) {
+          const r = await sandbox.commands.run("cd /home/user/app && npm install --legacy-peer-deps 2>&1", { timeoutMs: 120_000 });
+          if (r.exitCode !== 0) throw new Error(`npm install failed: ${r.stdout.slice(-300)}`);
+        } else if (missingDeps.length > 0) {
+          const r = await sandbox.commands.run(`cd /home/user/app && npm install --legacy-peer-deps ${missingDeps.join(" ")} 2>&1`, { timeoutMs: 120_000 });
+          if (r.exitCode !== 0) throw new Error(`npm install extras failed: ${r.stdout.slice(-300)}`);
+        }
+
+        const buildResult = await sandbox.commands.run(
+          "cd /home/user/app && NODE_OPTIONS='--max-old-space-size=512' npx next build 2>&1",
+          { timeoutMs: 120_000 }
+        );
+        if (buildResult.exitCode !== 0) {
+          throw new Error(`next build failed (exit ${buildResult.exitCode}): ${buildResult.stdout.slice(-500)}`);
+        }
+
+        await startServeAndWait(sandbox);
+        await saveSandboxId(projectId, sandbox.sandboxId);
+        await saveFingerprint(projectId, currentHash);
+        await sandbox.setTimeout(SANDBOX_TIMEOUT_MS);
+        return { url: previewUrl, port: SERVE_PORT };
       }
-    } catch { /* expired or unreachable */ }
+    } catch (err) {
+      console.log("[e2b] Reconnect failed:", err instanceof Error ? err.message : err);
+    }
     await clearSandboxId(projectId);
   }
 
@@ -298,10 +378,9 @@ export async function startDevServer(
     // 4. Inject static export config
     await injectStaticExport(sandbox);
 
-    // 5. Install deps — only missing ones if template has node_modules
+    // 5. Install deps
     const missingDeps = await getMissingDeps(sandbox);
     if (missingDeps === null) {
-      // No node_modules at all → full install
       console.log("[e2b] No node_modules found, running full npm install...");
       const installResult = await sandbox.commands.run(
         "cd /home/user/app && npm install --legacy-peer-deps 2>&1",
@@ -311,7 +390,6 @@ export async function startDevServer(
         throw new Error(`npm install failed (exit ${installResult.exitCode}): ${installResult.stdout.slice(-500)}`);
       }
     } else if (missingDeps.length > 0) {
-      // Only install the new packages
       console.log(`[e2b] Installing ${missingDeps.length} extra deps:`, missingDeps.join(", "));
       const installResult = await sandbox.commands.run(
         `cd /home/user/app && npm install --legacy-peer-deps ${missingDeps.join(" ")} 2>&1`,
@@ -327,7 +405,7 @@ export async function startDevServer(
     // 6. Static build
     console.log("[e2b] Building static site...");
     const buildResult = await sandbox.commands.run(
-      "cd /home/user/app && npx next build 2>&1",
+      "cd /home/user/app && NODE_OPTIONS='--max-old-space-size=512' npx next build 2>&1",
       { timeoutMs: 120_000 }
     );
     console.log("[e2b] next build exit code:", buildResult.exitCode);
@@ -341,6 +419,8 @@ export async function startDevServer(
 
     const previewUrl = `https://${sandbox.getHost(SERVE_PORT)}`;
     await saveSandboxId(projectId, sandbox.sandboxId);
+    await saveFingerprint(projectId, currentHash);
+    await sandbox.setTimeout(SANDBOX_TIMEOUT_MS);
     return { url: previewUrl, port: SERVE_PORT };
   } catch (err) {
     await sandbox.kill().catch(() => { });
@@ -483,11 +563,12 @@ export async function hotRefreshDevServer(
 
   // Kill existing serve and clean stale build cache
   await sandbox.commands.run("pkill -f 'serve out' || true");
+  await sandbox.commands.run("sleep 1 && ! pgrep -f 'serve out' || sleep 2");
   await sandbox.commands.run("cd /home/user/app && rm -rf .next out");
 
   // Rebuild
   const buildResult = await sandbox.commands.run(
-    "cd /home/user/app && npx next build 2>&1",
+    "cd /home/user/app && NODE_OPTIONS='--max-old-space-size=512' npx next build 2>&1",
     { timeoutMs: 120_000 }
   );
 
@@ -547,8 +628,11 @@ export async function rebuildDevServer(
   try {
     console.log("[e2b rebuild] Resyncing files to sandbox", sandbox.sandboxId);
 
-    // 1. Kill existing serve process
+    // 1. Kill existing serve process and wait for it to fully exit.
+    // Without the wait, the old serve process may still hold memory when
+    // next build starts, causing OOM on the first rebuild attempt.
     await sandbox.commands.run("pkill -f 'serve out' || true");
+    await sandbox.commands.run("sleep 1 && ! pgrep -f 'serve out' || sleep 2");
 
     // 2. Clean stale build artifacts — .next cache can cause next build to
     //    serve old compiled output even after source files are updated.
@@ -574,9 +658,17 @@ export async function rebuildDevServer(
 
     // 6. Rebuild
     console.log("[e2b rebuild] Building...");
-    const buildResult = await sandbox.commands.run("cd /home/user/app && npx next build 2>&1", { timeoutMs: 120_000 });
+    const buildResult = await sandbox.commands.run(
+      "cd /home/user/app && NODE_OPTIONS='--max-old-space-size=512' npx next build 2>&1",
+      { timeoutMs: 120_000 }
+    );
     if (buildResult.exitCode !== 0) {
-      throw new Error(`next build failed (exit ${buildResult.exitCode}): ${buildResult.stdout.slice(-500)}`);
+      const tail = buildResult.stdout.slice(-500);
+      const signal = (buildResult as { signal?: string }).signal;
+      if (signal) {
+        throw new Error(`next build killed by ${signal} (likely OOM). Output: ${tail}`);
+      }
+      throw new Error(`next build failed (exit ${buildResult.exitCode}): ${tail}`);
     }
 
     // 7. Restart serve
@@ -585,6 +677,8 @@ export async function rebuildDevServer(
 
     const previewUrl = `https://${sandbox.getHost(SERVE_PORT)}`;
     await saveSandboxId(projectId, sandbox.sandboxId);
+    // Save fingerprint so startDevServer knows files are in sync
+    try { await saveFingerprint(projectId, await computeProjectFingerprint(projectId)); } catch { /* non-fatal */ }
     await sandbox.setTimeout(SANDBOX_TIMEOUT_MS);
     return { url: previewUrl, port: SERVE_PORT };
   } catch (err) {

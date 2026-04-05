@@ -9,7 +9,7 @@
 
 import { runGenerateProject } from "@/ai/flows";
 import { detectCheckpoint } from "@/ai/flows/generate_project/shared/checkpoint";
-import { createProject, getProject, initProjectDir, updateProjectStatus, renameProject, appendBuildStep } from "@/lib/projectManager";
+import { createProject, getProject, initProjectDir, updateProjectStatus, renameProject } from "@/lib/projectManager";
 import { uploadGeneratedFiles } from "@/lib/storage";
 import { setRuntimeModelId, type ModelId } from "@/lib/config/models";
 import type { BuildStep } from "@/ai/flows";
@@ -96,9 +96,10 @@ export async function POST(req: Request) {
           // Step 3: Run generation, writing files into sites/{projectId}/
           const result = await runGenerateProject(
             effectivePrompt,
-            async (step: BuildStep) => {
+            (step: BuildStep) => {
+            // SSE is the sole real-time channel — no DB writes during generation.
+            // Final buildSteps are persisted once via updateProjectStatus below.
               send({ type: "step", ...step });
-              try { await appendBuildStep(projectId, step); } catch { /* non-fatal */ }
             },
             { projectId, styleGuide, checkpoint }
           );
@@ -125,9 +126,10 @@ export async function POST(req: Request) {
               await renameProject(projectId, projectTitle.trim());
             }
           } else {
-            // Generation completed but reported failure
+            // Generation completed but reported failure — still persist steps for debugging
             await updateProjectStatus(projectId, "failed", {
               error: result.error ?? "Generation failed",
+              buildSteps: result.steps,
             });
           }
 

@@ -94,7 +94,14 @@ class FileSnapshotTracker {
 
 // ── System Prompt ────────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are an expert Next.js/React developer modifying existing projects.
+const SYSTEM_PROMPT = `You are an expert Next.js/React developer making SURGICAL, TARGETED modifications to existing projects.
+
+## CRITICAL RULE: Only change what the user explicitly asked for
+- If the user says "change the footer", ONLY modify footer-related files
+- If the user provides an image, use it ONLY to understand the specific element they want changed — do NOT "fix" other things you notice in the image
+- Do NOT refactor, improve, or touch files that are not directly related to the user's request
+- Do NOT change styles, colors, or content in sections the user did not mention
+- When in doubt, do LESS, not more
 
 ## Tools
 - read_file: Read a file's content
@@ -111,17 +118,18 @@ Users describe what they SEE on the page, not code internals. They will say thin
 - "导航栏的颜色不对" → they mean the layout header/navbar component
 - "底部的版权信息" → they mean the footer section
 
-Your job is to translate their visual description into code locations:
+Your job is to translate their visual description into the MINIMUM set of files to change:
 1. Extract keywords from their instruction (both Chinese and English — the code may use either)
 2. Use search_code to find those keywords in the codebase (try the Chinese text first, then English equivalents)
 3. Use list_dir on components/sections/ to see all available sections
-4. Read the matching files to confirm which one the user is referring to
-5. Make the changes and verify with run_build
+4. Read ONLY the matching files
+5. Make the MINIMUM changes needed to fulfill the request
+6. Verify with run_build
 
 ## Workflow (MANDATORY — you must follow this order)
 Step 1: SEARCH — Use search_code with keywords from the user's instruction. Also list_dir components/sections/ to see all section files.
 Step 2: READ — Use read_file on the files you found to understand the code.
-Step 3: EDIT — Use edit_file to make changes. old_string must match exactly one location.
+Step 3: EDIT — Use edit_file to make ONLY the changes the user asked for. old_string must match exactly one location.
 Step 4: BUILD — Use run_build to verify.
 
 You MUST complete at least Step 1 before you can stop. If you stop without using any tools, you will be asked to try again.
@@ -129,6 +137,12 @@ You MUST complete at least Step 1 before you can stop. If you stop without using
 ## edit_file rules
 - old_string must match EXACTLY one location in the file (include surrounding lines for uniqueness)
 - Use write_file only for brand new files
+- Only edit files that are DIRECTLY related to the user's request
+
+## If the user provides an image
+- The image shows the CURRENT state of the page
+- Use it to identify the SPECIFIC element the user wants changed
+- Do NOT use it as a list of things to fix — only address what the user explicitly asked for
 
 ## Conversation memory
 You may receive a "Previous Modifications" section listing past user instructions and their results.
@@ -425,6 +439,8 @@ export async function runModifyProject(
     const userMessage = `## User Instruction
 ${userInstruction}
 ${historyContext}
+⚠️ SCOPE: Only modify files directly related to the instruction above. Do not change other sections or files.
+${imageBase64 ? "⚠️ IMAGE: Use the image only to identify the specific element mentioned in the instruction. Do not fix other things you see in the image.\n" : ""}
 ## Project File Tree
 \`\`\`
 ${fileTree}
@@ -438,7 +454,7 @@ ${designSystem.slice(0, 2000)}
 ${globalsCss.slice(0, 1000)}
 \`\`\`
 
-Please read the relevant files, make the requested changes, and verify with run_build.`;
+Please read the relevant files, make ONLY the requested changes, and verify with run_build.`;
 
     const messages: ChatMessage[] = [
       { role: "system", content: SYSTEM_PROMPT },

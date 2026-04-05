@@ -276,8 +276,23 @@ export function BuildConversation({
         setValue: setModifyInstruction,
     });
 
+    // Auto-scroll only when the user is already near the bottom.
+    // If they scrolled up to read earlier content, don't yank them back.
+    const isNearBottomRef = useRef(true);
     useEffect(() => {
-        if (chatRef.current) {
+        const el = chatRef.current;
+        if (!el) return;
+        const handleScroll = () => {
+            const threshold = 80; // px from bottom
+            isNearBottomRef.current =
+                el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+        };
+        el.addEventListener("scroll", handleScroll, { passive: true });
+        return () => el.removeEventListener("scroll", handleScroll);
+    }, []);
+
+    useEffect(() => {
+        if (isNearBottomRef.current && chatRef.current) {
             chatRef.current.scrollTop = chatRef.current.scrollHeight;
         }
     }, [response, loading, modifying, modifyToolCalls, modifyThinking, modifySteps, modifyDiffs, modifyError, modifyHistory]);

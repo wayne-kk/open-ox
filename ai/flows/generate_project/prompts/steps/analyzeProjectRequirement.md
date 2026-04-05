@@ -110,8 +110,8 @@ Output a single valid JSON object. No markdown, no code fences, no explanations.
 
 ## Rules
 
-- 1–8 pages depending on complexity. Use `"home"` for homepage.
-- Page slugs: lowercase with hyphens only.
+- **Default to a single homepage only** (`"home"` slug). Only add more pages if the user explicitly mentions multiple pages, sections like "about page", "pricing page", etc. When in doubt, use one page.
+- Maximum 8 pages. Page slugs: lowercase with hyphens only.- Page slugs: lowercase with hyphens only.
 - `layoutSections`: navigation first, footer last for public sites.
 - `pages` must NOT contain a `sections` array — sections are planned separately.
 - Each page needs only: title, slug, description, journeyStage, primaryRoleIds, supportingCapabilityIds.

@@ -32,7 +32,7 @@ export interface ModifyPlan {
 
 export interface ModifyRecord {
   instruction: string;
-  image?: string | null; // base64 data URL if image was attached
+  image?: string | null;
   plan: ModifyPlan | null;
   steps: ModifyStep[];
   diffs: ModifyDiff[];
@@ -99,6 +99,23 @@ export interface BuildStudioState {
   iframeRef: React.RefObject<HTMLIFrameElement | null>;
 }
 
+// ---------------------------------------------------------------------------
+// Architecture: Single Source of Truth for buildSteps
+//
+// During generation (SSE stream active):
+//   SSE is the SOLE source of step data. No DB polling, no DB reads.
+//   The backend does NOT write intermediate steps to DB — only the final
+//   result is persisted via updateProjectStatus when generation completes.
+//
+// After generation / page reload:
+//   DB is the SOLE source. If the project status is "ready" or "failed",
+//   we load once from DB. If "generating" (another tab is running it),
+//   we poll DB every 3s until it finishes.
+//
+// This eliminates the dual-source race condition that caused steps to
+// flip back to "active" after reaching "ok".
+// ---------------------------------------------------------------------------
+
 export function useBuildStudio(initialProjectId?: string | null, initialPrompt?: string | null): BuildStudioState {
   const [input, setInput] = useState(initialPrompt ?? "");
   const [loading, setLoading] = useState(false);
@@ -146,13 +163,13 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const projectIdFromGenerationRef = useRef<string | null>(null);
   const autoStartedRef = useRef(false);
-  // Refs to capture in-progress modify state for history
   const modifyStepsRef = useRef<ModifyStep[]>([]);
   const modifyPlanRef = useRef<ModifyPlan | null>(null);
   const modifyDiffsRef = useRef<ModifyDiff[]>([]);
   const modifyThinkingRef = useRef<string[]>([]);
   const modifyToolCallsRef = useRef<ModifyToolCall[]>([]);
 
+  // ── Elapsed timer ──────────────────────────────────────────────────────
   useEffect(() => {
     if (loading && startedAt) {
       timerRef.current = setInterval(() => setElapsed(Date.now() - startedAt), 100);
@@ -164,6 +181,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
 
   useEffect(() => { return () => abortRef.current?.abort(); }, []);
 
+  // ── DB polling (only for "another tab is generating" scenario) ─────────
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const stopPolling = useCallback(() => {
     if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
@@ -217,7 +235,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // When projectId changes: load project data, start polling if still generating
+  // ── Load project data on projectId change ──────────────────────────────
   useEffect(() => {
     setPreviewUrl(null);
     setPreviewState("idle");
@@ -234,7 +252,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       return;
     }
 
-    // If this projectId was just set by a live generation run, don't overwrite
+    // If this projectId was just set by a live SSE generation, skip DB load
     if (projectIdFromGenerationRef.current === projectId) {
       projectIdFromGenerationRef.current = null;
       setProjectLoading(false);
@@ -249,7 +267,8 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         setProjectLoading(false);
 
         if (project.status === "generating") {
-          // Poll every 3s to pick up incremental buildSteps and final status
+          // Another tab/session is generating this project.
+          // Poll DB until it finishes — we don't have an SSE connection.
           setLoading(true);
           pollingRef.current = setInterval(async () => {
             const r2 = await fetch(`/api/projects/${projectId}`);
@@ -269,8 +288,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
-  // Auto-run: first visit to a freshly created project (no buildSteps yet),
-  // OR re-entry into a failed project (offer retry via handleRetry, not auto-trigger)
+  // ── Auto-run on first visit to a freshly created project ───────────────
   useEffect(() => {
     if (initialProjectId && !autoStartedRef.current) {
       autoStartedRef.current = true;
@@ -278,20 +296,44 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         .then((r) => r.ok ? r.json() : null)
         .then((project: ProjectData | null) => {
           if (project?.status === "generating" && !(project.buildSteps?.length)) {
-            // Brand new project — kick off build immediately
             void handleRun();
           }
-          // failed projects: just load the data (already done by the projectId effect above),
-          // user can manually retry via the UI
         })
         .catch(() => { });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // intentionally run once on mount
+  }, []);
 
+  // ── SSE step handler ────────────────────────────────────────────────────
+  // Simple upsert by step name. No anti-downgrade guards needed because
+  // the SSE stream is the sole data source during generation — there's
+  // nothing else writing to response.buildSteps concurrently.
+  const handleStepEvent = useCallback((step: BuildStep) => {
+    setResponse((prev) => {
+      const existing = prev?.buildSteps ?? [];
+      const idx = existing.findIndex((s) => s.step === step.step);
+      const updated = idx >= 0
+        ? [...existing.slice(0, idx), step, ...existing.slice(idx + 1)]
+        : [...existing, step];
+      return {
+        content: prev?.content ?? "",
+        generatedFiles: prev?.generatedFiles,
+        verificationStatus: prev?.verificationStatus,
+        unvalidatedFiles: prev?.unvalidatedFiles,
+        installedDependencies: prev?.installedDependencies,
+        dependencyInstallFailures: prev?.dependencyInstallFailures,
+        buildTotalDuration: prev?.buildTotalDuration,
+        logDirectory: prev?.logDirectory,
+        buildSteps: updated,
+      };
+    });
+  }, []);
+
+  // ── handleRun ──────────────────────────────────────────────────────────
   async function handleRun() {
     abortRef.current?.abort();
     abortRef.current = new AbortController();
+    stopPolling(); // kill any leftover polling from a previous page-load
 
     const t0 = Date.now();
     setStartedAt(t0);
@@ -302,7 +344,6 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     setPreviewUrl(null);
     setPreviewState("idle");
 
-    // Resolve the prompt to display: use input state, or fall back to what's stored in the project
     let displayPrompt = input;
     if (!displayPrompt && projectId) {
       try {
@@ -316,26 +357,10 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       await runBuildSite(
         input,
         {
-          onStep: (step: BuildStep) =>
-            setResponse((prev) => {
-              const existing = prev?.buildSteps ?? [];
-              const idx = existing.findIndex((s) => s.step === step.step);
-              const updated = idx >= 0
-                ? [...existing.slice(0, idx), step, ...existing.slice(idx + 1)]
-                : [...existing, step];
-              return {
-                content: prev?.content ?? "",
-                generatedFiles: prev?.generatedFiles,
-                verificationStatus: prev?.verificationStatus,
-                unvalidatedFiles: prev?.unvalidatedFiles,
-                installedDependencies: prev?.installedDependencies,
-                dependencyInstallFailures: prev?.dependencyInstallFailures,
-                buildTotalDuration: prev?.buildTotalDuration,
-                logDirectory: prev?.logDirectory,
-                buildSteps: updated,
-              };
-            }),
+          onStep: handleStepEvent,
           onDone: (result) => {
+            // done payload carries the authoritative final buildSteps from the server.
+            // This replaces whatever the SSE stream built up, ensuring consistency.
             setResponse((prev) => ({ ...result, buildSteps: result.buildSteps ?? prev?.buildSteps }));
             if (result.projectId) {
               projectIdFromGenerationRef.current = result.projectId;
@@ -347,9 +372,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         abortRef.current.signal,
         {
           model: selectedModel,
-          // Pass the pre-created projectId so the server skips createProject
           ...(projectId ? { projectId } : {}),
-          // Pass styleGuide stored by HeroPrompt (only present on first build)
           ...(projectId && typeof sessionStorage !== "undefined"
             ? (() => {
               const sg = sessionStorage.getItem(`styleGuide:${projectId}`);
@@ -379,10 +402,12 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     }
   }
 
+  // ── handleRetry ────────────────────────────────────────────────────────
   async function handleRetry() {
     if (!projectId || loading) return;
     abortRef.current?.abort();
     abortRef.current = new AbortController();
+    stopPolling();
 
     const t0 = Date.now();
     setStartedAt(t0);
@@ -397,33 +422,14 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
 
     try {
       await runBuildSite(
-        "", // prompt comes from the existing project
+        "",
         {
-          onStep: (step: BuildStep) =>
-            setResponse((prev) => {
-              const existing = prev?.buildSteps ?? [];
-              const idx = existing.findIndex((s) => s.step === step.step);
-              const updated = idx >= 0
-                ? [...existing.slice(0, idx), step, ...existing.slice(idx + 1)]
-                : [...existing, step];
-              return {
-                content: prev?.content ?? "",
-                generatedFiles: prev?.generatedFiles,
-                verificationStatus: prev?.verificationStatus,
-                unvalidatedFiles: prev?.unvalidatedFiles,
-                installedDependencies: prev?.installedDependencies,
-                dependencyInstallFailures: prev?.dependencyInstallFailures,
-                buildTotalDuration: prev?.buildTotalDuration,
-                logDirectory: prev?.logDirectory,
-                buildSteps: updated,
-              };
-            }),
+          onStep: handleStepEvent,
           onDone: (result) => {
             setResponse((prev) => ({ ...result, buildSteps: result.buildSteps ?? prev?.buildSteps }));
             if (result.projectId) {
               projectIdFromGenerationRef.current = result.projectId;
               setProjectId(result.projectId);
-              // Stay on the same /studio/[id] URL — no redirect needed
             }
           },
           onError: (msg) => setResponse({ content: "", error: msg }),
@@ -440,6 +446,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     }
   }
 
+  // ── Preview ──────────────────────────────────────────────────────────
   const startPreview = useCallback(async () => {
     if (!projectId) return;
     setPreviewUrl(null);
@@ -486,16 +493,15 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     }
   }, [projectId]);
 
-  // Auto-start preview when switching to preview panel
   useEffect(() => {
     if (rightPanel === "preview" && projectId && previewState === "idle") {
       startPreview();
     }
   }, [rightPanel, projectId, previewState, startPreview]);
 
+  // ── Modify ───────────────────────────────────────────────────────────
   const handleModify = useCallback(async () => {
     if (!modifyInstruction.trim() || modifying || !projectId) return;
-    // Capture image immediately and clear from input
     const capturedImage = modifyImage;
     setModifyImage(null);
     setPendingModifyInstruction(modifyInstruction);
@@ -512,6 +518,59 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     modifyDiffsRef.current = [];
     modifyThinkingRef.current = [];
     modifyToolCallsRef.current = [];
+
+    // Track whether the done event was received (for history saving)
+    let receivedDone = false;
+
+    function processModifySSE(raw: string) {
+      if (!raw.startsWith("data: ")) return;
+      try {
+        const event = JSON.parse(raw.slice(6));
+        if (event.type === "step") {
+          setModifySteps((prev) => {
+            const idx = prev.findIndex((s: ModifyStep) => s.name === event.name);
+            let next: ModifyStep[];
+            if (idx >= 0) { next = [...prev]; next[idx] = { name: event.name, status: event.status, message: event.message }; }
+            else { next = [...prev, { name: event.name, status: event.status, message: event.message }]; }
+            modifyStepsRef.current = next;
+            return next;
+          });
+        } else if (event.type === "plan") {
+          setModifyPlan(event.plan);
+          modifyPlanRef.current = event.plan;
+        } else if (event.type === "diff") {
+          setModifyDiffs((prev) => {
+            const next = [...prev, { file: event.file, reasoning: event.reasoning, patch: event.patch, stats: event.stats }];
+            modifyDiffsRef.current = next;
+            return next;
+          });
+        } else if (event.type === "tool_call") {
+          const tc = { tool: event.tool, args: event.args, result: event.result };
+          setModifyToolCalls((prev) => [...prev, tc]);
+          modifyToolCallsRef.current = [...modifyToolCallsRef.current, tc];
+        } else if (event.type === "thinking") {
+          setModifyThinking((prev) => [...prev, event.content]);
+          modifyThinkingRef.current = [...modifyThinkingRef.current, event.content];
+        } else if (event.type === "error") {
+          setModifyError(event.message);
+        } else if (event.type === "done") {
+          receivedDone = true;
+          setModifyInstruction("");
+          setModifyImage(null);
+          setModifyHistory((prev) => [...prev, {
+            instruction: modifyInstruction,
+            image: capturedImage ?? null,
+            plan: modifyPlanRef.current,
+            steps: modifyStepsRef.current,
+            diffs: modifyDiffsRef.current,
+            toolCalls: modifyToolCallsRef.current,
+            thinking: modifyThinkingRef.current,
+            error: null,
+            completedAt: new Date().toISOString(),
+          }]);
+        }
+      } catch (e) { console.warn("[modify] SSE parse error:", e); }
+    }
 
     try {
       const res = await fetch(`/api/projects/${projectId}/modify`, {
@@ -534,8 +593,9 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       });
 
       if (!res.ok || !res.body) { setModifyError("Failed to start modification"); return; }
-      setContextCleared(false); // reset after successful request
+      setContextCleared(false);
 
+      // ── Read SSE stream ──────────────────────────────────────────────
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -547,82 +607,59 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         const lines = buffer.split("\n\n");
         buffer = lines.pop() ?? "";
         for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          try {
-            const event = JSON.parse(line.slice(6));
-            if (event.type === "step") {
-              setModifySteps((prev) => {
-                const idx = prev.findIndex((s) => s.name === event.name);
-                let next: ModifyStep[];
-                if (idx >= 0) { next = [...prev]; next[idx] = { name: event.name, status: event.status, message: event.message }; }
-                else { next = [...prev, { name: event.name, status: event.status, message: event.message }]; }
-                modifyStepsRef.current = next;
-                return next;
-              });
-            } else if (event.type === "plan") {
-              setModifyPlan(event.plan);
-              modifyPlanRef.current = event.plan;
-            } else if (event.type === "diff") {
-              setModifyDiffs((prev) => {
-                const next = [...prev, { file: event.file, reasoning: event.reasoning, patch: event.patch, stats: event.stats }];
-                modifyDiffsRef.current = next;
-                return next;
-              });
-            } else if (event.type === "tool_call") {
-              const tc = { tool: event.tool, args: event.args, result: event.result };
-              setModifyToolCalls((prev) => [...prev, tc]);
-              modifyToolCallsRef.current = [...modifyToolCallsRef.current, tc];
-            } else if (event.type === "thinking") {
-              setModifyThinking((prev) => [...prev, event.content]);
-              modifyThinkingRef.current = [...modifyThinkingRef.current, event.content];
-            } else if (event.type === "error") {
-              setModifyError(event.message);
-            } else if (event.type === "done") {
-              setModifyInstruction("");
-              setModifyImage(null);
-              setModifyHistory((prev) => [...prev, {
-                instruction: modifyInstruction,
-                image: capturedImage ?? null,
-                plan: modifyPlanRef.current,
-                steps: modifyStepsRef.current,
-                diffs: modifyDiffsRef.current,
-                toolCalls: modifyToolCallsRef.current,
-                thinking: modifyThinkingRef.current,
-                error: null,
-                completedAt: new Date().toISOString(),
-              }]);
-
-              // Always try to rebuild preview if there were changes
-              if (modifyDiffsRef.current.length === 0) break;
-
-              setRightPanel("preview");
-              setPreviewState("starting");
-              setPreviewUrl(null);
-
-              // Always use PUT (rebuildDevServer) — it guarantees fresh file
-              // upload + build. Never POST (startDevServer) which has a reconnect
-              // shortcut that reuses a running sandbox WITHOUT re-uploading files.
-              fetch(`/api/projects/${projectId}/preview`, { method: "PUT" })
-                .then((r) => r.ok ? r.json() : r.json().catch(() => ({})).then((err) => Promise.reject(err)))
-                .then((data) => {
-                  setPreviewUrl(data.url);
-                  setPreviewVersion((v) => v + 1);
-                  setPreviewState("ready");
-                })
-                .catch((err) => {
-                  console.error("[preview] Rebuild failed:", err);
-                  setPreviewState("error");
-                  setPreviewError(
-                    event.buildPassed === false
-                      ? "构建失败，预览无法更新。请修复代码错误后重试。"
-                      : (err?.error ?? "Preview rebuild failed")
-                  );
-                });
-            }
-          } catch (e) { console.warn("[modify] SSE parse error:", e); }
+          processModifySSE(line);
         }
       }
-      console.log("[modify] stream ended. steps:", modifyStepsRef.current.length, "diffs:", modifyDiffsRef.current.length);
+      // Flush remaining buffer (same fix as generate flow)
+      if (buffer.trim()) {
+        processModifySSE(buffer);
+      }
+
+      // ── Stream ended — trigger preview rebuild if there were changes ──
+      // This runs AFTER the SSE stream is fully consumed, so it doesn't
+      // depend on the "done" event being parsed (buffer flush handles that).
+      // Even if "done" was somehow lost, diffs were already collected via
+      // individual "diff" events during the stream.
+      if (modifyDiffsRef.current.length > 0) {
+        // Save history if done event was missed
+        if (!receivedDone) {
+          setModifyInstruction("");
+          setModifyImage(null);
+          setModifyHistory((prev) => [...prev, {
+            instruction: modifyInstruction,
+            image: capturedImage ?? null,
+            plan: modifyPlanRef.current,
+            steps: modifyStepsRef.current,
+            diffs: modifyDiffsRef.current,
+            toolCalls: modifyToolCallsRef.current,
+            thinking: modifyThinkingRef.current,
+            error: null,
+            completedAt: new Date().toISOString(),
+          }]);
+        }
+
+        setRightPanel("preview");
+        setPreviewState("starting");
+        setPreviewUrl(null);
+
+        try {
+          const previewRes = await fetch(`/api/projects/${projectId}/preview`, { method: "PUT" });
+          if (previewRes.ok) {
+            const data = await previewRes.json();
+            setPreviewUrl(data.url);
+            setPreviewVersion((v) => v + 1);
+            setPreviewState("ready");
+          } else {
+            const errData = await previewRes.json().catch(() => ({}));
+            setPreviewState("error");
+            setPreviewError(errData?.error ?? "Preview rebuild failed");
+          }
+        } catch (previewErr) {
+          console.error("[preview] Rebuild failed:", previewErr);
+          setPreviewState("error");
+          setPreviewError(previewErr instanceof Error ? previewErr.message : "Preview rebuild failed");
+        }
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       setModifyError(msg);
@@ -644,6 +681,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     }
   }, [modifyInstruction, modifyImage, modifying, projectId, selectedModel, modifyHistory]);
 
+  // ── Computed ─────────────────────────────────────────────────────────
   const flowStart =
     response?.buildSteps?.[0]?.timestamp != null
       ? response.buildSteps[0].timestamp - response.buildSteps[0].duration

@@ -128,7 +128,7 @@ function ProjectCard({
         <h3 className="font-heading text-[15px] font-semibold text-white truncate group-hover:text-primary transition-colors">
           {project.name || "未命名项目"}
         </h3>
-        <p className="mt-1.5 text-[12px] leading-relaxed text-white/50 line-clamp-2">
+        <p className="mt-1.5 text-[12px] leading-relaxed text-white/50 line-clamp-2 min-h-[40px]">
           {project.userPrompt}
         </p>
 
