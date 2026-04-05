@@ -145,8 +145,8 @@ const skillPrompt = loadSkillPrompt(skillId);`}</Pre>
         </section>
 
         <div className="mt-14 border-t border-white/8 pt-8 flex justify-between">
-          <Link href="/docs/blueprint" className="flex items-center gap-2 text-[13px] text-muted-foreground hover:text-primary transition-colors">
-            <ArrowLeft className="h-3.5 w-3.5" /> 项目蓝图
+          <Link href="/docs/section-generation" className="flex items-center gap-2 text-[13px] text-muted-foreground hover:text-primary transition-colors">
+            <ArrowLeft className="h-3.5 w-3.5" /> Section 生成
           </Link>
           <Link href="/docs/modify-agent" className="flex items-center gap-2 text-[13px] text-muted-foreground hover:text-primary transition-colors">
             修改 Agent <ArrowRight className="h-3.5 w-3.5" />

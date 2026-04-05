@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Cpu, GitBranch, Layers, Zap, Shield, Eye, MessageSquare } from "lucide-react";
+import { ArrowRight, Cpu, GitBranch, Layers, Zap, Eye, MessageSquare, Database, Palette, FileCode, LayoutTemplate } from "lucide-react";
 
 const CARDS = [
   {
@@ -27,6 +27,30 @@ const CARDS = [
     accent: "muted",
   },
   {
+    icon: FileCode,
+    href: "/docs/normalize",
+    title: "Blueprint 容错解析",
+    desc: "三种输出格式兼容、字段级 normalize、Web Search 工具、Fallback 策略。",
+    tag: "容错",
+    accent: "tertiary",
+  },
+  {
+    icon: Palette,
+    href: "/docs/design-system",
+    title: "设计系统生成",
+    desc: "AI 生成颜色、字体、间距、动效规范，转化为 Tailwind v4 CSS 变量并传播给所有 section。",
+    tag: "设计",
+    accent: "primary",
+  },
+  {
+    icon: LayoutTemplate,
+    href: "/docs/section-generation",
+    title: "Section 生成",
+    desc: "从 PlannedSectionSpec 到单文件 TSX：Prompt 分层、Skill 预选、并行批次与静态验证重试。",
+    tag: "生成",
+    accent: "tertiary",
+  },
+  {
     icon: Zap,
     href: "/docs/skills",
     title: "风格技能",
@@ -47,6 +71,14 @@ const CARDS = [
     href: "/docs/preview",
     title: "预览沙箱",
     desc: "E2B 云端沙箱、静态导出策略、沙箱重连与增量重建优化。",
+    tag: "基础设施",
+    accent: "muted",
+  },
+  {
+    icon: Database,
+    href: "/docs/storage",
+    title: "存储与持久化",
+    desc: "双层存储架构：Supabase DB 保存元数据，Storage 保存源文件，本地 sites/ 作为工作区。",
     tag: "基础设施",
     accent: "muted",
   },

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, CircleCheckBig, Play, Send, Wand2, RefreshCw, ChevronDown } from "lucide-react";
+import { AlertTriangle, CircleCheckBig, Play, Send, Wand2, RefreshCw } from "lucide-react";
 import { ChatBubble } from "./ui/ChatBubble";
 import { LogSection } from "./ui/LogSection";
 import { TermLine } from "./ui/TermLine";
@@ -219,9 +219,6 @@ export function BuildConversation({
     handleRun,
     handleClear,
     handleRetry,
-    selectedModel,
-    setSelectedModel,
-    availableModels,
     projectId,
     setProjectId,
     modifyInstruction,
@@ -608,19 +605,6 @@ export function BuildConversation({
                             <div className="flex items-center gap-2">
                                 <Wand2 className="h-3 w-3 text-primary/60" />
                                 <span className="font-mono text-[9px] uppercase tracking-widest text-primary/60">Modify project</span>
-                            </div>
-                            <div className="relative">
-                                <select
-                                    value={selectedModel}
-                                    onChange={(e) => setSelectedModel(e.target.value)}
-                                    disabled={modifying}
-                                    className="appearance-none rounded-full border border-white/8 bg-white/5 pl-2.5 pr-6 py-1 font-mono text-[10px] text-muted-foreground/80 outline-none cursor-pointer hover:border-primary/30 transition-colors disabled:opacity-50"
-                                >
-                                    {availableModels.map((m) => (
-                                        <option key={m.id} value={m.id}>{m.displayName}</option>
-                                    ))}
-                                </select>
-                                <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-2.5 w-2.5 text-muted-foreground/60 pointer-events-none" />
                             </div>
                         </div>
                         <label className="sr-only" htmlFor="modify-input">修改指令</label>

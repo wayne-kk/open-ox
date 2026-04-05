@@ -14,6 +14,9 @@ const NAV_ITEMS = [
     section: "核心概念",
     items: [
       { href: "/docs/blueprint", label: "项目蓝图" },
+      { href: "/docs/normalize", label: "Blueprint 容错解析" },
+      { href: "/docs/design-system", label: "设计系统生成" },
+      { href: "/docs/section-generation", label: "Section 生成" },
       { href: "/docs/skills", label: "风格技能" },
       { href: "/docs/modify-agent", label: "修改 Agent" },
     ],
@@ -22,6 +25,7 @@ const NAV_ITEMS = [
     section: "基础设施",
     items: [
       { href: "/docs/preview", label: "预览沙箱" },
+      { href: "/docs/storage", label: "存储与持久化" },
       { href: "/docs/models", label: "模型配置" },
     ],
   },
