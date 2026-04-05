@@ -27,7 +27,7 @@ import type { ModificationRecord } from "@/lib/projectManager";
 import { getSystemToolDefinitions } from "@/ai/tools/systemToolCatalog";
 import { executeSystemTool } from "@/ai/tools";
 import { chatCompletion, type ChatMessage } from "@/ai/flows/generate_project/shared/llm";
-import { getModelId } from "@/lib/config/models";
+import { getModifyModelId } from "@/lib/config/models";
 import { createArtifactLogger } from "@/ai/flows/generate_project/shared/logging";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -217,7 +217,7 @@ async function runAgentLoop(
   onEvent: (event: ModifySSEEvent) => void,
   userInstruction: string,
 ): Promise<{ messages: ChatMessage[]; loopState: LoopState; iterations: number }> {
-  const model = getModelId();
+  const model = getModifyModelId();
   const tools = getSystemToolDefinitions(ALL_TOOLS);
   const loopState: LoopState = { hasEdited: false, hasSearched: false, hasBuild: false, buildPassed: false, lastBuildOutput: "" };
   let iterations = 0;

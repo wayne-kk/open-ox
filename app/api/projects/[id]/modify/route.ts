@@ -63,8 +63,14 @@ export async function POST(
 
   const stream = new ReadableStream({
     async start(controller) {
+      let closed = false;
       const send = (event: ModifySSEEvent) => {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        } catch {
+          closed = true;
+        }
       };
 
       // Collect plan and diffs for persistence
@@ -113,7 +119,10 @@ export async function POST(
         send({ type: "error", message });
       } finally {
         setRuntimeModelId(null);
-        controller.close();
+        if (!closed) {
+          closed = true;
+          controller.close();
+        }
       }
     },
   });

@@ -136,8 +136,8 @@ jobs:
             tar -xzf deploy.tar.gz
             rm deploy.tar.gz
 
-            echo "==> Installing production deps..."
-            pnpm install --frozen-lockfile --prod
+            echo "==> Installing deps..."
+            pnpm install --frozen-lockfile
 
             echo "==> Restarting..."
             pm2 restart open-ox || pm2 start pnpm --name open-ox -- start

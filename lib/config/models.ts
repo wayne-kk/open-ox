@@ -39,6 +39,14 @@ export function getModelId(): ModelId {
     return process.env.OPENAI_MODEL || DEFAULT_MODEL;
 }
 
+/** Model used by the modify agent when no runtime override is set */
+export const MODIFY_DEFAULT_MODEL: ModelId = "claude-opus-4-6";
+
+export function getModifyModelId(): ModelId {
+    if (_runtimeModelId) return _runtimeModelId;
+    return process.env.MODIFY_MODEL || MODIFY_DEFAULT_MODEL;
+}
+
 /** Step-level model overrides */
 const _stepModelMap = new Map<string, ModelId>();
 
