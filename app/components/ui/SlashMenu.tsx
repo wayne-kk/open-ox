@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { SlashCommand } from "@/app/hooks/useSlashMenu";
 
 interface SlashMenuProps {
@@ -8,24 +9,35 @@ interface SlashMenuProps {
 }
 
 export function SlashMenu({ matches, activeIndex, onSelect, onHover }: SlashMenuProps) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const activeRef = useRef<HTMLButtonElement>(null);
+
+  // Auto-scroll active item into view
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex]);
+
   if (matches.length === 0) return null;
 
   return (
-    <div className="rounded-xl border border-white/10 bg-[#0d0f14]/95 backdrop-blur-xl shadow-2xl overflow-hidden">
+    <div
+      ref={listRef}
+      className="max-h-[280px] overflow-y-auto rounded-lg border border-white/8 bg-[#0a0c10]/98 backdrop-blur-xl shadow-2xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    >
       {matches.map((cmd, i) => (
         <button
           key={cmd.id}
+          ref={i === activeIndex ? activeRef : undefined}
           type="button"
           onMouseDown={(e) => { e.preventDefault(); onSelect(cmd); }}
           onMouseEnter={() => onHover(i)}
-          className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-left transition-colors ${
-            i === activeIndex ? "bg-white/8" : "hover:bg-white/4"
+          className={`w-full flex items-baseline gap-2.5 px-3 py-1.5 text-left transition-colors ${i === activeIndex ? "bg-white/[0.07]" : "hover:bg-white/[0.03]"
           }`}
         >
-          <span className="font-mono text-[12px] text-primary/80 shrink-0">/{cmd.id}</span>
-          <span className="text-[12px] text-muted-foreground truncate">{cmd.description}</span>
+          <span className="font-mono text-[12px] text-primary shrink-0">/{cmd.id}</span>
+          <span className="text-[12px] text-muted-foreground/60 truncate">{cmd.description}</span>
           {i === activeIndex && (
-            <span className="ml-auto font-mono text-[10px] text-muted-foreground/50 shrink-0">↵</span>
+            <span className="ml-auto font-mono text-[10px] text-muted-foreground/30 shrink-0">↵</span>
           )}
         </button>
       ))}

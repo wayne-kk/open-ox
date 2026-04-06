@@ -633,6 +633,7 @@ export function BuildConversation({
                             value={modifyInstruction}
                             onChange={(e) => {
                                 setModifyInstruction(e.target.value);
+                                slashMenu.updateCursorPos(e.target.selectionStart ?? 0);
                                 setSlashHint(null);
                                 e.target.style.height = "auto";
                                 e.target.style.height = Math.min(e.target.scrollHeight, 200) + "px";
@@ -649,6 +650,9 @@ export function BuildConversation({
                                     reader.readAsDataURL(file);
                                 }
                             }}
+                            onSelect={(e) => {
+                                slashMenu.updateCursorPos((e.target as HTMLTextAreaElement).selectionStart ?? 0);
+                            }}
                             onKeyDown={(e) => {
                                 if (slashMenu.handleKeyDown(e)) return;
                                 if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !modifying) {
@@ -661,15 +665,19 @@ export function BuildConversation({
                             }}
                             placeholder={modifying ? "修改进行中..." : "描述要修改的内容... (粘贴图片 / 输入 / 查看命令)"}
                         />
-                        {/* Slash command autocomplete */}
-                        {slashMenu.isOpen && slashMenu.matches.length > 0 && !modifying && (
-                            <SlashMenu
+                        {/* Slash command autocomplete — floating overlay */}
+                        <div className="relative">
+                            {slashMenu.isOpen && slashMenu.matches.length > 0 && !modifying && (
+                                <div className="absolute bottom-0 left-0 right-0 z-50">
+                                    <SlashMenu
                                 matches={slashMenu.matches}
                                 activeIndex={slashMenu.activeIndex}
                                 onSelect={slashMenu.selectCommand}
                                 onHover={slashMenu.setActiveIndex}
-                            />
-                        )}
+                                    />
+                                </div>
+                            )}
+                        </div>
                         {/* Slash hint (from /help) */}
                         {slashHint && (
                             <pre className="px-2 py-1.5 text-[10px] leading-5 text-muted-foreground/70 font-mono whitespace-pre-wrap">{slashHint}</pre>

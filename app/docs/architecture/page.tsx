@@ -57,6 +57,8 @@ const TOC = [
   { id: "stack", label: "技术栈" },
   { id: "flow", label: "请求流程" },
   { id: "api", label: "API 路由" },
+  { id: "triggers", label: "输入触发器系统" },
+  { id: "modify-agent", label: "Modify Agent" },
   { id: "persistence", label: "数据持久化" },
   { id: "decisions", label: "关键决策" },
 ];
@@ -191,6 +193,78 @@ export default function ArchitecturePage() {
               </div>
             ))}
           </div>
+        </Section>
+
+        {/* ── Trigger System ── */}
+        <Section id="triggers">
+          <H2>输入触发器系统</H2>
+          <P>
+            HeroPrompt 输入框支持多种触发器，在文本任意位置通过特殊字符激活。
+            选中后以彩色 chip 形式注入，提交时各 chip 的 payload 合并到请求体。
+          </P>
+          <div className="mt-4 overflow-hidden rounded-xl border border-white/8">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="border-b border-white/8 bg-white/[0.02]">
+                  <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">触发符</th>
+                  <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">功能</th>
+                  <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">提交字段</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {[
+                  ["/", "风格模板选择（如 /glassmorphism）", "styleGuide"],
+                  ["@", "引用已有项目作为设计参考", "referenceProjectId"],
+                  ["#", "约束标签（#暗色主题 #极简 #中文）", "prompt 追加"],
+                  ["URL", "粘贴 URL 自动提取为参考", "referenceUrl"],
+                  ["图片", "粘贴截图作为视觉参考", "imageBase64"],
+                ].map(([trigger, desc, field]) => (
+                  <tr key={trigger} className="hover:bg-white/[0.015]">
+                    <td className="px-4 py-2.5 font-mono text-[11px] text-primary/80">{trigger}</td>
+                    <td className="px-4 py-2.5 text-muted-foreground/80">{desc}</td>
+                    <td className="px-4 py-2.5 font-mono text-[11px] text-muted-foreground/60">{field}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <H3>架构</H3>
+          <Pre>{`app/hooks/usePromptTriggers.ts   — 统一触发器 hook（检测 / @ # + 光标位置）
+app/components/ui/TriggerMenu.tsx — 浮层下拉菜单（按类型显示不同颜色前缀）
+app/components/ui/PromptChips.tsx — 注入的标签展示（含图片缩略图）
+app/components/ui/QuickTemplates.tsx — 快捷模板 pills`}</Pre>
+          <P>
+            触发检测基于光标位置：从光标往前搜索最近的触发字符，
+            触发字符必须在行首或空格后，且到光标之间不含空格。
+            这允许用户在文本中间任意位置触发菜单。
+          </P>
+        </Section>
+
+        {/* ── Modify Agent ── */}
+        <Section id="modify-agent">
+          <H2>Modify Agent</H2>
+          <P>
+            生成后的迭代修改由 Modify Agent 处理 — 一个受 Claude Code 启发的开放式 Agent 循环。
+            Agent 在单次循环中完成搜索、阅读、编辑和验证。
+          </P>
+          <H3>工具列表</H3>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {["read_file", "search_code", "list_dir", "edit_file", "write_file", "run_build", "exec_shell", "think", "revert_file"].map((t) => (
+              <code key={t} className="rounded bg-white/6 border border-white/8 px-2 py-0.5 font-mono text-[11px] text-foreground/80">{t}</code>
+            ))}
+          </div>
+          <H3>4-Phase 工作流</H3>
+          <Pre>{`Phase 1: ORIENT  — search_code + list_dir，建立全局理解
+Phase 2: READ    — 只读 1-2 个最相关文件，形成修改计划
+Phase 3: EDIT    — edit_file 精确替换，最小改动
+Phase 4: VERIFY  — run_build 验证编译`}</Pre>
+          <H3>安全机制</H3>
+          <P>
+            <Code>Must read before edit</Code> — edit_file 前必须先 read_file，防止盲改。
+            <Code>Loop Detection</Code> — 连续 4 次操作同一文件时注入策略转换提示。
+            <Code>Tool Result Budget</Code> — 单条结果上限 30K 字符。
+            <Code>Context 压缩</Code> — 基于相关性，热文件保留完整，冷文件压缩。
+          </P>
         </Section>
 
         {/* ── Persistence ── */}
