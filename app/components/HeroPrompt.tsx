@@ -7,11 +7,11 @@ import { useSlashMenu, type SlashCommand } from "@/app/hooks/useSlashMenu";
 import { SlashMenu } from "@/app/components/ui/SlashMenu";
 
 const PLACEHOLDERS = [
-  "A SaaS landing page for a project management tool...",
-  "Personal portfolio for a UX designer with case studies...",
-  "E-commerce storefront for handmade jewelry...",
-  "Crypto dashboard with live charts and wallet overview...",
-  "Restaurant website with menu and reservations...",
+  "一个项目管理工具的 SaaS 落地页...",
+  "UX 设计师的个人作品集，带案例展示...",
+  "手工珠宝的电商网站...",
+  "加密货币仪表盘，带实时图表和钱包概览...",
+  "餐厅官网，带菜单和在线预订...",
 ];
 
 export function HeroPrompt() {
@@ -149,12 +149,12 @@ export function HeroPrompt() {
                 type="button"
                 onClick={() => setInjectedSkill(null)}
                 className="ml-1 opacity-50 hover:opacity-100 transition-opacity"
-                aria-label="Remove skill"
+                aria-label="移除模板"
               >
                 ×
               </button>
             </span>
-            <span className="text-[12px] text-muted-foreground/60">{injectedSkill.label} style applied</span>
+            <span className="text-[12px] text-muted-foreground/60">已应用 {injectedSkill.label} 风格</span>
           </div>
         )}
 
@@ -168,7 +168,7 @@ export function HeroPrompt() {
           onKeyDown={handleKeyDown}
           placeholder={
             injectedSkill
-              ? "Describe your website (skill style will be applied)..."
+              ? "描述你想要的网站（将应用所选风格模板）..."
               : displayed + (phase !== "erasing" && !focused && !value ? "▌" : "")
           }
           className="w-full resize-none bg-transparent text-[15px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/55"
@@ -186,7 +186,7 @@ export function HeroPrompt() {
 
         <div className="flex items-center justify-between">
           <span className="font-mono text-[11px] text-muted-foreground/40">
-            Type <kbd className="rounded border border-white/10 px-1 py-0.5 text-[10px]">/</kbd> for style skills · ⌘↵ to build
+            输入 <kbd className="rounded border border-white/10 px-1 py-0.5 text-[10px]">/</kbd> 选择风格模板 · ⌘↵ 开始构建
           </span>
           <button
             type="submit"
@@ -194,9 +194,9 @@ export function HeroPrompt() {
             className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 font-mono text-[12px] font-bold tracking-[0.1em] text-white uppercase transition-all hover:bg-primary/90 disabled:opacity-30 disabled:cursor-not-allowed"
           >
             {submitting ? (
-              <><span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" /> Creating…</>
+              <><span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" /> 创建中…</>
             ) : (
-              <>Build <ArrowRight className="h-3.5 w-3.5" /></>
+                <>构建 <ArrowRight className="h-3.5 w-3.5" /></>
             )}
           </button>
         </div>
