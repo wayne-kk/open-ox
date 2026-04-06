@@ -3,6 +3,7 @@ import { dirname } from "path";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import type { ToolResult, ToolExecutor } from "../types";
 import { resolvePath } from "./common";
+import { hasFileBeenRead } from "./fileReadTracker";
 
 export const editFileTool: ChatCompletionTool = {
     type: "function",
@@ -51,17 +52,35 @@ export const executeEditFile: ToolExecutor = async (
         return { success: false, error: `File not found: ${filePath}` };
     }
 
+    // Claude Code pattern: warn if file hasn't been read first
+    if (!hasFileBeenRead(filePath)) {
+        return {
+            success: false,
+            error: `You must read_file "${filePath}" before editing it. This prevents blind edits and ensures your old_string matches the current content.`,
+        };
+    }
+
     const content = readFileSync(fullPath, "utf-8");
 
     // Count occurrences
     const occurrences = content.split(oldStr).length - 1;
 
     if (occurrences === 0) {
-        // Provide helpful context: show first 200 chars of file
-        const preview = content.slice(0, 200).replace(/\n/g, "\\n");
+        // Provide helpful context: show lines containing parts of old_string
+        const firstLine = oldStr.split("\n")[0].trim();
+        const lines = content.split("\n");
+        const nearMatches = lines
+            .map((l, i) => ({ line: i + 1, text: l }))
+            .filter((l) => firstLine && l.text.includes(firstLine.slice(0, 20)))
+            .slice(0, 3)
+            .map((l) => `  L${l.line}: ${l.text.slice(0, 100)}`)
+            .join("\n");
+        const hint = nearMatches
+            ? `\nNearest matches for "${firstLine.slice(0, 40)}":\n${nearMatches}`
+            : `\nFile has ${lines.length} lines. First 200 chars: "${content.slice(0, 200).replace(/\n/g, "\\n")}"`;
         return {
             success: false,
-            error: `old_string not found in ${filePath}. File starts with: "${preview}..."`,
+            error: `old_string not found in ${filePath}.${hint}\n\nTip: Use read_file with start_line/end_line to see the exact current content before retrying.`,
         };
     }
 

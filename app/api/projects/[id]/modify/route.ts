@@ -16,7 +16,6 @@ import { runModifyProject } from "@/ai/flows/modify_project/runModifyProject";
 import type { ModifySSEEvent } from "@/ai/flows/modify_project/runModifyProject";
 import { uploadGeneratedFiles } from "@/lib/storage";
 import { classifyModificationScope } from "@/lib/devServerManager";
-import { setRuntimeModelId, type ModelId } from "@/lib/config/models";
 
 export async function POST(
   req: Request,
@@ -58,8 +57,11 @@ export async function POST(
 
   const encoder = new TextEncoder();
 
-  // Set model override for this request
-  if (modelOverride) setRuntimeModelId(modelOverride as ModelId);
+  // Model override is passed directly to runModifyProject instead of using
+  // the global _runtimeModelId. This avoids:
+  //   1. Generate flow's selectedModel leaking into modify (the old bug)
+  //   2. Concurrent request pollution via shared module-level global
+  // If no modelOverride is provided, runModifyProject uses MODIFY_DEFAULT_MODEL.
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -94,7 +96,7 @@ export async function POST(
             // Capture build status from agent_loop completion
             if (event.message?.includes("build=passed")) buildPassed = true;
           }
-        }, conversationHistory, clearContext, imageBase64);
+        }, conversationHistory, clearContext, imageBase64, modelOverride);
 
         // Upload modified files to Storage (non-blocking)
         const touchedFiles = collectedDiffs.map((d) => d.file);
@@ -118,7 +120,6 @@ export async function POST(
         const message = err instanceof Error ? err.message : "Internal error";
         send({ type: "error", message });
       } finally {
-        setRuntimeModelId(null);
         if (!closed) {
           closed = true;
           controller.close();

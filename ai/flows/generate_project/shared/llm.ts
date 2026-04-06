@@ -48,6 +48,7 @@ export async function chatCompletion(params: {
   max_tokens?: number;
   tools?: ChatCompletionTool[];
   tool_choice?: string;
+  parallel_tool_calls?: boolean;
 }): Promise<ChatCompletionResponse> {
   const { apiKey, baseURL } = getApiConfig();
 
@@ -62,7 +63,11 @@ export async function chatCompletion(params: {
       messages: params.messages,
       temperature: params.temperature,
       ...(params.max_tokens ? { max_tokens: params.max_tokens } : {}),
-      ...(params.tools ? { tools: params.tools, tool_choice: params.tool_choice ?? "auto" } : {}),
+      ...(params.tools ? {
+        tools: params.tools,
+        tool_choice: params.tool_choice ?? "auto",
+        ...(params.parallel_tool_calls !== undefined ? { parallel_tool_calls: params.parallel_tool_calls } : {}),
+      } : {}),
     }),
     signal: AbortSignal.timeout(300_000),
   });

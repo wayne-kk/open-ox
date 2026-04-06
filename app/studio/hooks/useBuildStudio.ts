@@ -578,7 +578,6 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userInstruction: modifyInstruction,
-          model: selectedModel,
           clearContext: contextCleared,
           ...(capturedImage ? { imageBase64: capturedImage } : {}),
           conversationHistory: contextCleared ? [] : modifyHistory.filter((r) => !r.isSystemMessage).map((r) => ({

@@ -25,10 +25,11 @@ import { setSiteRoot, clearSiteRoot } from "@/ai/tools/system/common";
 import { getProject, getSiteRoot as pmGetSiteRoot, updateProjectStatus } from "@/lib/projectManager";
 import type { ModificationRecord } from "@/lib/projectManager";
 import { getSystemToolDefinitions } from "@/ai/tools/systemToolCatalog";
-import { executeSystemTool } from "@/ai/tools";
+import { executeSystemTool, clearFileReadTracking } from "@/ai/tools";
 import { chatCompletion, type ChatMessage } from "@/ai/flows/generate_project/shared/llm";
 import { getModifyModelId } from "@/lib/config/models";
 import { createArtifactLogger } from "@/ai/flows/generate_project/shared/logging";
+import { setRevertSnapshots, clearRevertSnapshots } from "@/ai/tools/system/revertFileTool";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -89,12 +90,29 @@ class FileSnapshotTracker {
     }
     return diffs;
   }
+  /** Expose snapshots for revert_file tool */
+  get snapshotMap() { return this.snapshots; }
   get touchedFiles() { return Array.from(this.snapshots.keys()); }
 }
 
 // ── System Prompt ────────────────────────────────────────────────────────────
 
 const SYSTEM_PROMPT = `You are an expert Next.js/React developer making SURGICAL, TARGETED modifications to existing projects.
+
+## Core Principles
+- Go straight to the point. Try the simplest approach first without going in circles. Do not overdo it.
+- Do not propose changes to code you haven't read. Always read_file before edit_file.
+- If an approach fails, diagnose WHY before switching tactics — read the error, check your assumptions, try a focused fix. Don't retry the identical action blindly, but don't abandon a viable approach after a single failure either.
+- Don't add features, refactor code, or make "improvements" beyond what was asked.
+- Keep your text output brief and direct. Lead with the action, not the reasoning.
+
+## THINKING PROTOCOL (MANDATORY)
+Before EVERY tool call, you MUST output a brief text explaining:
+- What you know so far
+- What you're about to do and why
+- What you expect to find/achieve
+
+This is non-negotiable. Tool calls without preceding analysis indicate poor engineering judgment.
 
 ## CRITICAL RULE: Only change what the user explicitly asked for
 - If the user says "change the footer", ONLY modify footer-related files
@@ -104,12 +122,21 @@ const SYSTEM_PROMPT = `You are an expert Next.js/React developer making SURGICAL
 - When in doubt, do LESS, not more
 
 ## Tools
-- read_file: Read a file's content
+- read_file: Read a file's content. Supports start_line/end_line for reading specific sections — use this instead of reading entire large files.
 - search_code: Search for patterns across the codebase (ripgrep)
 - list_dir: List directory contents
 - edit_file: Make precise edits (old_string → new_string replacement)
 - write_file: Create new files
 - run_build: Run the project build to verify changes
+- exec_shell: Run shell commands (grep, head, tail, cat, etc.) — useful for quick inspection without reading entire files
+- think: Internal scratchpad — use to plan complex edits or analyze errors step by step BEFORE acting. No side effects.
+- revert_file: Undo all changes to a file, restoring it to its state before this session. Use when your edits made things worse.
+
+## Parallel Tool Calls
+You can call multiple tools in a single response when they are independent. For example:
+- Phase 1: Call search_code AND list_dir simultaneously
+- Phase 2: Call read_file on 2 different files simultaneously
+Do NOT parallelize dependent operations (e.g. don't edit_file and run_build in the same call).
 
 ## Understanding user intent
 Users describe what they SEE on the page, not code internals. They will say things like:
@@ -118,21 +145,41 @@ Users describe what they SEE on the page, not code internals. They will say thin
 - "导航栏的颜色不对" → they mean the layout header/navbar component
 - "底部的版权信息" → they mean the footer section
 
-Your job is to translate their visual description into the MINIMUM set of files to change:
-1. Extract keywords from their instruction (both Chinese and English — the code may use either)
-2. Use search_code to find those keywords in the codebase (try the Chinese text first, then English equivalents)
-3. Use list_dir on components/sections/ to see all available sections
-4. Read ONLY the matching files
-5. Make the MINIMUM changes needed to fulfill the request
-6. Verify with run_build
+Your job is to translate their visual description into the MINIMUM set of files to change.
 
-## Workflow (MANDATORY — you must follow this order)
-Step 1: SEARCH — Use search_code with keywords from the user's instruction. Also list_dir components/sections/ to see all section files.
-Step 2: READ — Use read_file on the files you found to understand the code.
-Step 3: EDIT — Use edit_file to make ONLY the changes the user asked for. old_string must match exactly one location.
-Step 4: BUILD — Use run_build to verify.
+## Workflow: 4-Phase Progressive Approach (MANDATORY)
 
-You MUST complete at least Step 1 before you can stop. If you stop without using any tools, you will be asked to try again.
+### Phase 1: ORIENT (search + list)
+Goal: Build a mental map. Do NOT read or edit files yet.
+1. Extract keywords from the user's instruction (Chinese AND English — code may use either)
+2. Use search_code to find those keywords in the codebase
+3. Use list_dir on components/sections/ to see all section files
+4. Output your findings: which files are candidates, which is most likely the target
+
+### Phase 2: DEEP READ (read only the relevant files)
+Goal: Understand the code structure before touching anything.
+1. Read ONLY the 1-2 most relevant files identified in Phase 1
+2. Output your analysis: what needs to change, what's the minimal edit
+3. Do NOT re-read a file you've already read unless it was modified since
+
+### Phase 3: EDIT (make the minimum changes)
+Goal: Surgical modification.
+1. Use edit_file with precise old_string → new_string
+2. old_string must match EXACTLY one location (include surrounding lines for uniqueness)
+3. If edit_file fails, analyze WHY before retrying — don't just tweak the old_string blindly
+
+### Phase 4: VERIFY (build + self-check)
+Goal: Prove it works.
+1. Run run_build to verify compilation
+2. If build fails, read the error carefully, identify root cause, then fix
+3. Do NOT re-read the entire file just to make a small fix — use the error message to guide you
+
+## Anti-Patterns (things you must NOT do)
+- Reading the same file more than twice without editing it → you're stalling
+- Editing the same file more than 3 times → you're probably fixing symptoms, not the root cause. Use think to analyze, or revert_file to start fresh.
+- Making an edit, then immediately re-reading the same file → trust your edit, move to build
+- Calling search_code after you've already found and read the target file → you're going backwards
+- Making tool calls without any preceding text analysis → use think or output text explaining your reasoning
 
 ## edit_file rules
 - old_string must match EXACTLY one location in the file (include surrounding lines for uniqueness)
@@ -165,7 +212,7 @@ Never give a generic "I couldn't do it" response.`;
 
 // ── All tools, always available ──────────────────────────────────────────────
 
-const ALL_TOOLS = ["read_file", "search_code", "list_dir", "edit_file", "write_file", "run_build"];
+const ALL_TOOLS = ["read_file", "search_code", "list_dir", "edit_file", "write_file", "run_build", "exec_shell", "think", "revert_file"];
 
 // ── Stop Hook: quality gate when LLM wants to stop ──────────────────────────
 
@@ -175,6 +222,13 @@ interface LoopState {
   hasBuild: boolean;
   buildPassed: boolean;
   lastBuildOutput: string;
+  // Loop detection: track repeated file operations
+  fileReadCounts: Map<string, number>;
+  fileEditCounts: Map<string, number>;
+  consecutiveSameFileOps: number;
+  lastOperatedFile: string | null;
+  // Phase tracking for progressive disclosure
+  phase: "orient" | "read" | "edit" | "verify";
 }
 
 /**
@@ -215,6 +269,21 @@ Do not give up without explaining your search results.`;
     return "You've made changes but haven't verified them. Please call run_build to check that the project still compiles.";
   }
   if (!loopState.buildPassed) {
+    // Check if we're stuck in a build-fix loop
+    const totalEdits = Array.from(loopState.fileEditCounts.values()).reduce((a, b) => a + b, 0);
+    if (totalEdits > 6) {
+      return `The build is still failing after ${totalEdits} edits. You may be fixing symptoms, not the root cause.
+
+STOP and use the "think" tool to analyze:
+1. Re-read the build error carefully — what is the ACTUAL root cause?
+2. Are you editing the right file? Maybe the issue is in a parent component, layout, or CSS.
+3. Consider using revert_file to undo your changes and take a completely different approach.
+
+Build output:
+\`\`\`
+${loopState.lastBuildOutput.slice(0, 2000)}
+\`\`\``;
+    }
     return `The build failed after your changes:\n\`\`\`\n${loopState.lastBuildOutput.slice(0, 2000)}\n\`\`\`\nPlease fix the errors using edit_file and run_build again.`;
   }
   return null;
@@ -225,15 +294,65 @@ Do not give up without explaining your search results.`;
 const MAX_ITERATIONS = 40;
 const MAX_STOP_HOOK_RETRIES = 5; // max times stop hook can push back
 
+// ── Context Compression ──────────────────────────────────────────────────────
+// Relevance-based compression: keeps recent messages + messages related to
+// currently-edited files intact, compresses everything else.
+const CONTEXT_COMPRESS_THRESHOLD = 50_000; // chars before compressing
+const KEEP_RECENT_MESSAGES = 10;
+
+function compressContext(messages: ChatMessage[], loopState?: LoopState): void {
+  const totalChars = messages.reduce((sum, m) => {
+    const content = typeof m.content === "string" ? m.content : JSON.stringify(m.content);
+    return sum + content.length;
+  }, 0);
+
+  if (totalChars < CONTEXT_COMPRESS_THRESHOLD) return;
+
+  // Build set of "hot" file paths — files we're actively editing
+  const hotFiles = new Set<string>();
+  if (loopState) {
+    for (const [file, count] of loopState.fileEditCounts) {
+      if (count > 0) hotFiles.add(file);
+    }
+    if (loopState.lastOperatedFile) hotFiles.add(loopState.lastOperatedFile);
+  }
+
+  const compressibleEnd = Math.max(2, messages.length - KEEP_RECENT_MESSAGES);
+  for (let i = 1; i < compressibleEnd; i++) {
+    const msg = messages[i];
+    if (msg.role !== "tool" || typeof msg.content !== "string" || msg.content.length <= 300) continue;
+
+    const content = msg.content as string;
+    // Check if this tool result mentions a hot file — if so, keep it
+    const mentionsHotFile = Array.from(hotFiles).some((f) => content.includes(f));
+    if (mentionsHotFile) continue;
+
+    // Compress: keep first 150 chars + last 50 chars for context
+    const head = content.slice(0, 150);
+    const tail = content.slice(-50);
+    messages[i] = {
+      ...msg,
+      content: `${head}\n...[compressed: ${content.length} chars, not relevant to current edits]...\n${tail}`,
+    };
+  }
+}
+
 async function runAgentLoop(
   messages: ChatMessage[],
   tracker: FileSnapshotTracker,
   onEvent: (event: ModifySSEEvent) => void,
   userInstruction: string,
+  modelOverride?: string,
 ): Promise<{ messages: ChatMessage[]; loopState: LoopState; iterations: number }> {
-  const model = getModifyModelId();
+  const model = modelOverride || getModifyModelId();
+  console.log(`[agent] using model: ${model}`);
   const tools = getSystemToolDefinitions(ALL_TOOLS);
-  const loopState: LoopState = { hasEdited: false, hasSearched: false, hasBuild: false, buildPassed: false, lastBuildOutput: "" };
+  const loopState: LoopState = {
+    hasEdited: false, hasSearched: false, hasBuild: false, buildPassed: false, lastBuildOutput: "",
+    fileReadCounts: new Map(), fileEditCounts: new Map(),
+    consecutiveSameFileOps: 0, lastOperatedFile: null,
+    phase: "orient",
+  };
   let iterations = 0;
   let stopHookRetries = 0;
   // Track why we continued — prevents infinite stop hook loops (Claude Code's transition pattern)
@@ -241,6 +360,9 @@ async function runAgentLoop(
 
   while (iterations < MAX_ITERATIONS) {
     iterations++;
+
+    // Compress old tool results to prevent context blowout
+    compressContext(messages, loopState);
 
     // ── Determine tool_choice — force tools on first iteration ───────────
     // Claude Code's philosophy: always act first, think later.
@@ -262,6 +384,7 @@ async function runAgentLoop(
           temperature: 0.1,
           tools,
           tool_choice: toolChoice,
+          parallel_tool_calls: true,
         });
         break; // success
       } catch (err) {
@@ -343,14 +466,44 @@ async function runAgentLoop(
       // Update loop state
       if (name === "edit_file" || name === "write_file") {
         if (typeof result === "object" ? result.success : true) loopState.hasEdited = true;
+        const filePath = args.path as string;
+        if (filePath) {
+          loopState.fileEditCounts.set(filePath, (loopState.fileEditCounts.get(filePath) ?? 0) + 1);
+        }
       }
-      if (name === "search_code" || name === "list_dir" || name === "read_file") {
+      if (name === "search_code" || name === "list_dir" || name === "read_file" || name === "exec_shell") {
         loopState.hasSearched = true;
+        if (name === "read_file" && args.path) {
+          const filePath = args.path as string;
+          loopState.fileReadCounts.set(filePath, (loopState.fileReadCounts.get(filePath) ?? 0) + 1);
+        }
       }
       if (name === "run_build") {
         loopState.hasBuild = true;
         loopState.buildPassed = typeof result === "object" ? result.success : !String(result).includes("failed");
         loopState.lastBuildOutput = typeof result === "object" ? (result.output ?? result.error ?? "") : String(result);
+      }
+
+      // Track consecutive operations on same file (loop detection)
+      const opFile = args.path as string | undefined;
+      if (opFile) {
+        if (opFile === loopState.lastOperatedFile) {
+          loopState.consecutiveSameFileOps++;
+        } else {
+          loopState.consecutiveSameFileOps = 1;
+          loopState.lastOperatedFile = opFile;
+        }
+      }
+
+      // Update phase based on what's happened
+      if (!loopState.hasSearched) {
+        loopState.phase = "orient";
+      } else if (!loopState.hasEdited) {
+        loopState.phase = "read";
+      } else if (!loopState.hasBuild) {
+        loopState.phase = "edit";
+      } else {
+        loopState.phase = "verify";
       }
 
       // Stream to client
@@ -359,6 +512,27 @@ async function runAgentLoop(
 
       // Feed result back to LLM
       messages.push({ role: "tool", tool_call_id: tc.id, content: typeof result === "string" ? result : JSON.stringify(result) });
+    }
+
+    // ── Loop detection: inject nudge if agent is spinning on same file ───
+    if (loopState.consecutiveSameFileOps >= 4) {
+      const spinFile = loopState.lastOperatedFile;
+      const readCount = loopState.fileReadCounts.get(spinFile!) ?? 0;
+      const editCount = loopState.fileEditCounts.get(spinFile!) ?? 0;
+      onEvent({ type: "thinking", content: `[loop detect] ${spinFile} read=${readCount} edit=${editCount} — injecting strategy nudge` });
+      messages.push({
+        role: "user",
+        content: `⚠️ You've operated on "${spinFile}" ${readCount + editCount} times. You may be going in circles.
+
+STOP. Call the "think" tool to analyze step by step:
+1. What EXACTLY is the problem you're trying to solve right now?
+2. What have you tried so far and why didn't it work?
+3. Is the issue in this file, or could it be in a parent/sibling component, layout, or CSS?
+4. Should you revert_file "${spinFile}" and take a completely different approach?
+
+Use the think tool NOW before making any more edits.`,
+      });
+      loopState.consecutiveSameFileOps = 0; // Reset after nudge
     }
 
     lastTransition = "tool_execution";
@@ -377,6 +551,7 @@ export async function runModifyProject(
   conversationHistory?: Array<{ instruction: string; summary: string }>,
   clearContext = false,
   imageBase64?: string, // optional: base64-encoded image (data URL or raw base64)
+  modelOverride?: string, // optional: explicit model override (bypasses global state)
 ): Promise<void> {
   const artifactLogger = createArtifactLogger("modify_project");
   await artifactLogger.writeJson("run", "input", { projectId, userInstruction });
@@ -400,6 +575,8 @@ export async function runModifyProject(
     // Step 3: Run agent loop
     onEvent({ type: "step", name: "agent_loop", status: "running" });
     const tracker = new FileSnapshotTracker(projectDir);
+    // Wire up revert_file tool to use tracker's snapshots
+    setRevertSnapshots(tracker.snapshotMap);
 
     // Collect toolCalls and thinking for persistence
     const collectedToolCalls: Array<{ tool: string; args: Record<string, unknown>; result: string }> = [];
@@ -475,7 +652,7 @@ Please read the relevant files, make ONLY the requested changes, and verify with
       },
     ];
 
-    const { loopState, iterations } = await runAgentLoop(messages, tracker, collectingOnEvent, userInstruction);
+    const { loopState, iterations } = await runAgentLoop(messages, tracker, collectingOnEvent, userInstruction, modelOverride);
     collectingOnEvent({
       type: "step", name: "agent_loop",
       status: loopState.buildPassed ? "done" : (loopState.hasEdited ? "error" : "done"),
@@ -550,6 +727,8 @@ Please read the relevant files, make ONLY the requested changes, and verify with
     onEvent({ type: "step", name: "agent_loop", status: "error", message: errMsg });
     onEvent({ type: "error", message: errMsg });
   } finally {
+    clearRevertSnapshots();
+    clearFileReadTracking();
     clearSiteRoot();
   }
 }

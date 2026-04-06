@@ -8,6 +8,8 @@ import { readFileTool } from "./system/readFileTool";
 import { runBuildTool } from "./system/runBuildTool";
 import { searchCodeTool } from "./system/searchCodeTool";
 import { writeFileTool } from "./system/writeFileTool";
+import { thinkTool } from "./system/thinkTool";
+import { revertFileTool } from "./system/revertFileTool";
 
 const toolDefinitions: Record<string, ChatCompletionTool> = {
   write_file: writeFileTool,
@@ -19,6 +21,8 @@ const toolDefinitions: Record<string, ChatCompletionTool> = {
   install_package: installPackageTool,
   format_code: formatCodeTool,
   run_build: runBuildTool,
+  think: thinkTool,
+  revert_file: revertFileTool,
 };
 
 export function getSystemToolDefinitions(names: string[]): ChatCompletionTool[] {
