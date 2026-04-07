@@ -6,10 +6,10 @@ priority: 80
 fallback: false
 when:
   designKeywords:
-    any: ["dashboard", "analytics", "metrics", "saas", "platform", "terminal", "monitoring", "control"]
-    none: []
-  capabilityAssists:
-    any: ["pattern.hero.dashboard"]
+    any: ["dashboard", "analytics", "metrics", "saas", "monitoring", "control"]
+    none: ["particle", "粒子", "generative", "canvas", "kinetic", "editorial"]
+  traits:
+    any: ["product-led", "data-driven"]
     none: []
   journeyStages:
     any: ["activation", "retention", "product-evaluation"]

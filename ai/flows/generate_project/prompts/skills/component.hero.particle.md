@@ -2,14 +2,14 @@
 id: component.hero.particle
 kind: component-skill
 sectionTypes: ["hero"]
-priority: 72
+priority: 80
 fallback: false
 when:
   designKeywords:
-    any: ["particle", "generative", "interactive", "canvas", "text-effect", "kinetic", "dissolve", "scatter"]
+    any: ["particle", "generative", "interactive", "canvas", "text-effect", "kinetic", "dissolve", "scatter", "粒子", "粒子效果"]
     none: ["editorial", "magazine", "luxury", "minimal", "dashboard", "shader", "webgl", "lightning"]
-  capabilityAssists:
-    any: ["effect.motion.ambient", "effect.motion.energetic"]
+  traits:
+    any: ["ambient", "energetic"]
     none: []
   journeyStages:
     any: ["acquisition", "launch", "activation", "campaign"]
@@ -34,7 +34,7 @@ Keep the implementation self-contained in the hero component — no separate UI 
 
 ## Particle System — Minimal Implementation
 
-Use this exact class structure, stripped to essentials:
+Use this exact class structure, stripped to essentials. Note: the Particle class must NOT reference `canvas` or `ctx` directly — pass canvas dimensions as parameters to methods that need them.
 
 ```ts
 class Particle {
@@ -126,7 +126,10 @@ export default function HeroSection() {
   const words = ["WORD_1", "WORD_2", "WORD_3"]  // replace with real content
 
   useEffect(() => {
-    const canvas = canvasRef.current!
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
     canvas.width = canvas.offsetWidth
     canvas.height = canvas.offsetHeight
     // ... init particles, start rAF loop, attach mouse events
@@ -181,6 +184,7 @@ export default function HeroSection() {
 
 ```ts
 function animate() {
+  if (!ctx || !canvas) return
   ctx.fillStyle = "rgba(0,0,0,0.15)"  // motion blur trail
   ctx.fillRect(0, 0, canvas.width, canvas.height)
   for (const p of particles) { p.move(); p.draw(ctx) }
@@ -203,3 +207,4 @@ Right-click + drag: destroy particles within radius 60 of cursor. Optional, keep
 - No external canvas/particle libraries.
 - Font size for text rasterization: `Math.floor(canvas.height * 0.28)` — scales with canvas.
 - Pixel sampling step: 5–6 for performance.
+- **TypeScript strict mode**: Never use non-null assertions (`!`). Always null-check `canvasRef.current` and `canvas.getContext("2d")` with early returns. Every function that accesses `canvas` or `ctx` must guard against null. The code must compile with `strict: true` in tsconfig.

@@ -18,7 +18,7 @@ const NOTES_MAX_LENGTH = 80;
 
 export interface SkillWhenCondition {
   designKeywords?: { any: string[]; none: string[] };
-  capabilityAssists?: { any: string[]; none: string[] };
+  traits?: { any: string[]; none: string[] };
   journeyStages?: { any: string[]; none: string[] };
   productTypes?: { any: string[]; none: string[] };
 }

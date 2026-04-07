@@ -8,9 +8,9 @@ when:
   designKeywords:
     any: ["minimal", "minimalist", "clean", "editorial", "fashion", "luxury", "portrait", "product-shot", "lifestyle", "elegant", "refined", "white-space", "typographic", "less-is-more", "modern-minimal", "boutique", "high-end", "premium"]
     none: ["neon", "cyber", "glow", "festival", "rave", "acid", "dramatic", "immersive", "dashboard", "analytics", "shader", "webgl"]
-  capabilityAssists:
-    any: ["pattern.hero.split", "pattern.hero.centered", "pattern.hero.editorial", "effect.motion.subtle"]
-    none: ["effect.motion.energetic"]
+  traits:
+    any: ["split", "centered", "editorial", "subtle"]
+    none: ["energetic"]
   journeyStages:
     any: ["entry", "acquisition", "campaign"]
     none: []

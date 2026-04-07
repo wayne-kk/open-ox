@@ -24,6 +24,7 @@ interface ModelInfo {
     id: string;
     displayName: string;
     contextWindow: number;
+    supportsThinking: boolean;
 }
 
 interface StepInfo {
@@ -52,6 +53,7 @@ function ModelManagement() {
     const [newId, setNewId] = useState("");
     const [newName, setNewName] = useState("");
     const [newCtx, setNewCtx] = useState(128000);
+    const [newThinking, setNewThinking] = useState(false);
     const [adding, setAdding] = useState(false);
     const [savingStep, setSavingStep] = useState<string | null>(null);
 
@@ -72,9 +74,9 @@ function ModelManagement() {
         await fetch("/api/models", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id: newId.trim(), displayName: newName.trim(), contextWindow: newCtx }),
+            body: JSON.stringify({ id: newId.trim(), displayName: newName.trim(), contextWindow: newCtx, supportsThinking: newThinking }),
         });
-        setNewId(""); setNewName(""); setNewCtx(128000);
+        setNewId(""); setNewName(""); setNewCtx(128000); setNewThinking(false);
         setAdding(false);
         fetchModels();
     };
@@ -110,10 +112,13 @@ function ModelManagement() {
                 <div className="space-y-2">
                     {models.map((m) => (
                         <div key={m.id} className="flex items-center justify-between rounded-xl border border-white/8 bg-white/[0.02] px-4 py-3">
-                            <div>
+                            <div className="flex items-center gap-2 flex-wrap">
                                 <span className="font-mono text-[12px] font-semibold text-white">{m.displayName}</span>
-                                <span className="ml-3 font-mono text-[10px] text-muted-foreground/70">{m.id}</span>
-                                <span className="ml-3 font-mono text-[10px] text-muted-foreground/60">{(m.contextWindow / 1000).toFixed(0)}K ctx</span>
+                                <span className="font-mono text-[10px] text-muted-foreground/70">{m.id}</span>
+                                <span className="font-mono text-[10px] text-muted-foreground/60">{(m.contextWindow / 1000).toFixed(0)}K ctx</span>
+                                {m.supportsThinking && (
+                                    <span className="font-mono text-[9px] text-purple-400/80 border border-purple-400/20 bg-purple-400/5 px-1.5 py-0.5 rounded">Thinking</span>
+                                )}
                             </div>
                             <button
                                 onClick={() => handleDelete(m.id)}
@@ -150,6 +155,13 @@ function ModelManagement() {
                                 placeholder="Context"
                                 className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 font-mono text-[11px] text-foreground focus:border-primary/50 outline-none"
                             />
+                            <button
+                                onClick={() => setNewThinking((v) => !v)}
+                                className={`shrink-0 rounded-lg border px-3 py-2 font-mono text-[10px] transition-colors ${newThinking ? "border-purple-400/40 bg-purple-400/10 text-purple-400" : "border-white/10 text-muted-foreground/50 hover:text-foreground"}`}
+                                title="支持 Thinking 模式"
+                            >
+                                {newThinking ? "🧠 Thinking" : "🧠"}
+                            </button>
                             <button
                                 onClick={handleAdd}
                                 disabled={adding || !newId.trim() || !newName.trim()}

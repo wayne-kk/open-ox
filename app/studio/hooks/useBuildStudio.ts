@@ -235,6 +235,10 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Track whether this hook instance owns a live SSE stream.
+  // When true, DB loads/polls must NOT overwrite response.buildSteps.
+  const sseActiveRef = useRef(false);
+
   // ── Load project data on projectId change ──────────────────────────────
   useEffect(() => {
     setPreviewUrl(null);
@@ -263,23 +267,38 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       .then((r) => r.ok ? r.json() : null)
       .then((project: ProjectData | null) => {
         if (!project) { setProjectLoading(false); return; }
+
+        // If SSE is actively streaming steps, don't overwrite with stale DB data
+        if (sseActiveRef.current) {
+          // Still apply non-step metadata (prompt, model, history)
+          setLastRunInput(project.userPrompt ?? null);
+          if (project.modelId) setSelectedModel(project.modelId);
+          setProjectLoading(false);
+          return;
+        }
+
         applyProjectData(project);
         setProjectLoading(false);
 
         if (project.status === "generating") {
           // Another tab/session is generating this project.
-          // Poll DB until it finishes — we don't have an SSE connection.
-          setLoading(true);
-          pollingRef.current = setInterval(async () => {
-            const r2 = await fetch(`/api/projects/${projectId}`);
-            if (!r2.ok) return;
-            const updated: ProjectData = await r2.json();
-            applyProjectData(updated);
-            if (updated.status !== "generating") {
-              stopPolling();
-              setLoading(false);
-            }
-          }, 3000);
+          // Only poll if we don't own the SSE stream.
+          if (!sseActiveRef.current) {
+            setLoading(true);
+            pollingRef.current = setInterval(async () => {
+              // If SSE became active while polling, stop immediately
+              if (sseActiveRef.current) { stopPolling(); return; }
+              const r2 = await fetch(`/api/projects/${projectId}`);
+              if (!r2.ok) return;
+              const updated: ProjectData = await r2.json();
+              if (sseActiveRef.current) { stopPolling(); return; }
+              applyProjectData(updated);
+              if (updated.status !== "generating") {
+                stopPolling();
+                setLoading(false);
+              }
+            }, 3000);
+          }
         }
       })
       .catch(() => { setProjectLoading(false); });
@@ -334,12 +353,18 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     abortRef.current?.abort();
     abortRef.current = new AbortController();
     stopPolling(); // kill any leftover polling from a previous page-load
+    sseActiveRef.current = true;
 
     const t0 = Date.now();
     setStartedAt(t0);
     setElapsed(0);
     setLoading(true);
-    setResponse(null);
+    // Preserve existing buildSteps to avoid topology flash.
+    // New SSE steps will upsert into the existing array.
+    setResponse((prev) => prev
+      ? { ...prev, content: "", error: undefined, verificationStatus: undefined }
+      : null
+    );
     setRightPanel("topology");
     setPreviewUrl(null);
     setPreviewState("idle");
@@ -387,6 +412,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         setResponse({ content: "", error: err instanceof Error ? err.message : String(err) });
       }
     } finally {
+      sseActiveRef.current = false;
       setLoading(false);
     }
   }
@@ -408,12 +434,20 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     abortRef.current?.abort();
     abortRef.current = new AbortController();
     stopPolling();
+    sseActiveRef.current = true;
 
     const t0 = Date.now();
     setStartedAt(t0);
     setElapsed(0);
     setLoading(true);
-    setResponse(null);
+    // Clear steps for retry — user explicitly wants a fresh run
+    setResponse((prev) => ({
+      content: "",
+      buildSteps: [],
+      generatedFiles: prev?.generatedFiles,
+      verificationStatus: undefined,
+      logDirectory: undefined,
+    }));
     setRightPanel("topology");
     setPreviewUrl(null);
     setPreviewState("idle");
@@ -442,6 +476,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         setResponse({ content: "", error: err instanceof Error ? err.message : String(err) });
       }
     } finally {
+      sseActiveRef.current = false;
       setLoading(false);
     }
   }

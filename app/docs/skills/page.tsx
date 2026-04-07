@@ -35,7 +35,7 @@ const TOC = [
   { id: "overview", label: "概览" },
   { id: "available", label: "可用技能" },
   { id: "injection", label: "注入流程" },
-  { id: "preselect", label: "批量预选" },
+  { id: "preselect", label: "运行时发现" },
   { id: "custom", label: "自定义技能" },
 ];
 
@@ -104,25 +104,23 @@ export default function SkillsPage() {
         </section>
 
         <section id="preselect" className="scroll-mt-24">
-          <H2>批量预选</H2>
+          <H2>运行时 Skill 发现</H2>
           <P>
-            除了用户手动注入的 styleGuide，系统还有一套内部的 skill 预选机制。
-            <Code>preselect_skills</Code> 步骤为每个 section 从候选列表中选择最合适的组件级 skill。
+            除了用户手动注入的 styleGuide，系统还有一套内部的运行时 skill 发现机制。
+            每个 section 在生成时自行从候选列表中选择最合适的组件级 skill。
           </P>
-          <H3>菜单与菜谱分离</H3>
-          <Pre>{`// 选择阶段 — 只传 metadata（菜单）
-sections: [{
-  fileName: "HeroSection",
-  type: "hero",
-  intent: "...",
-  candidates: [{ id: "component.hero.impactful", notes: "..." }]
-}]
+          <H3>发现与降级</H3>
+          <Pre>{`// 运行时发现 — 每个 section 独立执行
+const candidates = discoverSkillsBySectionType(root, section.type);
+// 1. LLM 选择（从 metadata 候选列表中挑选）
+// 2. 失败时降级到 score-based 关键词匹配
+// 3. 最终 fallback: 优先级最高的 fallback 候选
 
-// 生成阶段 — 加载完整 prompt（菜谱）
+// 生成阶段 — 加载完整 prompt
 const skillPrompt = loadSkillPrompt(skillId);`}</Pre>
           <P>
-            这个设计大幅减少了选择阶段的 token 消耗。对于 8 个 section 的项目，
-            原来需要 8 次串行 LLM 调用（每次 ~2s），现在合并为 1 次（~3s）。
+            这个设计让 skill 选择与 section 上下文紧密耦合，
+            每个 section 可以基于自身的 intent、contentHints 和 traits 做出更精准的选择。
           </P>
         </section>
 

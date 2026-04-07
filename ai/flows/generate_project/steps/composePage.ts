@@ -6,6 +6,7 @@ import {
   writeSiteFile,
 } from "../shared/files";
 import { callLLM, extractContent } from "../shared/llm";
+import { getModelForStep } from "@/lib/config/models";
 import {
   buildSectionImportPath,
   slugToPagePath,
@@ -72,18 +73,10 @@ ${pageSections
   .map(
     (section) => `### ${section.fileName}
 - Type: ${section.type}
+- Intent: ${section.intent}
+- Content Hints: ${section.contentHints}
 - Primary Roles: ${section.primaryRoleIds.join(", ") || "none"}
-- Supporting Capabilities: ${section.supportingCapabilityIds.join(", ") || "none"}
-- Source Task Loops: ${section.sourceTaskLoopIds.join(", ") || "none"}
-- Role: ${section.designPlan.role}
-- Goal: ${section.designPlan.goal}
-- Role Fit: ${section.designPlan.roleFit}
-- Task Loop Focus: ${section.designPlan.taskLoopFocus}
-- Capability Focus: ${section.designPlan.capabilityFocus}
-- Layout Intent: ${section.designPlan.layoutIntent}
-- Visual Intent: ${section.designPlan.visualIntent}
-- Interaction Intent: ${section.designPlan.interactionIntent}
-- Capability Assists: ${section.designPlan.capabilityAssistIds.join(", ") || "none"}`
+- Supporting Capabilities: ${section.supportingCapabilityIds.join(", ") || "none"}`
   )
   .join("\n\n")}
 
@@ -93,7 +86,7 @@ ${designSystem}
 Generate the page component source for this page route.
 Treat the page design plan as the composition strategy, not just a list of imports.`;
 
-  const raw = await callLLM(systemPrompt, userMessage, 0.3);
+  const raw = await callLLM(systemPrompt, userMessage, 0.3, undefined, getModelForStep("compose_page"));
   let tsx = extractContent(raw, "tsx");
 
   // Post-process: ensure import paths match the actual generated files.
@@ -106,16 +99,33 @@ Treat the page design plan as the composition strategy, not just a list of impor
     );
   }
 
-  // Safety check: if LLM inlined components instead of importing them,
-  // rebuild the page from scratch using the correct imports.
+  // Deduplicate import lines — LLM sometimes emits the same import twice.
+  const lines = tsx.split("\n");
+  const seenImports = new Set<string>();
+  const deduped: string[] = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/^import\s+\w+\s+from\s+["']/.test(trimmed)) {
+      if (seenImports.has(trimmed)) continue; // skip duplicate
+      seenImports.add(trimmed);
+    }
+    deduped.push(line);
+  }
+  tsx = deduped.join("\n");
+
+  // Safety check: if LLM inlined components, duplicated components, or missed imports — rebuild.
   const hasExpectedImports = pageSections.every((s) =>
     tsx.includes(`from "${buildSectionImportPath(blueprint.slug, s.fileName)}"`)
   );
   const hasInlinedComponents = pageSections.some((s) =>
     new RegExp(`(const|function)\\s+${s.fileName}\\s*[=(]`).test(tsx)
   );
+  const hasDuplicateRenders = pageSections.some((s) => {
+    const matches = tsx.match(new RegExp(`<${s.fileName}\\s*/?>`, "g"));
+    return matches && matches.length > 1;
+  });
 
-  if (!hasExpectedImports || hasInlinedComponents) {
+  if (!hasExpectedImports || hasInlinedComponents || hasDuplicateRenders) {
     // Rebuild a minimal but correct page
     const imports = pageSections
       .map((s) => `import ${s.fileName} from "${buildSectionImportPath(blueprint.slug, s.fileName)}";`)

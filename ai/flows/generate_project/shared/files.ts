@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync } from "fs";
+import matter from "gray-matter";
 import { dirname, join } from "path";
 import { executeSystemTool } from "../../../tools";
 import { getSiteRoot } from "../../../tools/system/common";
@@ -8,10 +9,6 @@ const STEP_PROMPTS_ROOT = join(FLOW_ROOT, "prompts", "steps");
 const SKILL_PROMPTS_ROOT = join(FLOW_ROOT, "prompts", "skills");
 const SECTION_PROMPTS_ROOT = join(FLOW_ROOT, "prompts", "sections");
 const RULE_PROMPTS_ROOT = join(FLOW_ROOT, "prompts", "rules");
-const GUARDRAIL_PROMPTS_ROOT = join(FLOW_ROOT, "prompts", "guardrails");
-const MOTION_PROMPTS_ROOT = join(FLOW_ROOT, "prompts", "motions");
-const LAYOUT_PROMPTS_ROOT = join(FLOW_ROOT, "prompts", "layouts");
-const CAPABILITY_PROMPTS_ROOT = join(FLOW_ROOT, "prompts", "capabilities");
 
 function readPromptFile(path: string): string {
   if (!existsSync(path)) {
@@ -37,38 +34,12 @@ export function getSkillPromptPath(promptId: string): string {
   return join(SKILL_PROMPTS_ROOT, `${promptId}.md`);
 }
 
+export function getRulePromptsRoot(): string {
+  return RULE_PROMPTS_ROOT;
+}
+
 export function getRulePath(ruleId: string): string {
   return join(RULE_PROMPTS_ROOT, `${ruleId}.md`);
-}
-
-export function getGuardrailPath(guardrailId: string): string {
-  const modernPath = join(GUARDRAIL_PROMPTS_ROOT, `${guardrailId}.md`);
-  return existsSync(modernPath) ? modernPath : getRulePath(guardrailId);
-}
-
-export function getMotionPath(motionId: string): string {
-  return join(MOTION_PROMPTS_ROOT, `${motionId}.md`);
-}
-
-export function getLayoutVariantPath(layoutId: string): string {
-  return join(LAYOUT_PROMPTS_ROOT, `${layoutId}.md`);
-}
-
-export function getCapabilityAssistPath(capabilityId: string): string {
-  const modernPath = join(CAPABILITY_PROMPTS_ROOT, `${capabilityId}.md`);
-  if (existsSync(modernPath)) {
-    return modernPath;
-  }
-
-  if (capabilityId.startsWith("effect.motion.")) {
-    return getMotionPath(capabilityId.replace("effect.", ""));
-  }
-
-  if (capabilityId.startsWith("pattern.")) {
-    return getLayoutVariantPath(capabilityId.replace("pattern.", ""));
-  }
-
-  return modernPath;
 }
 
 export function hasSectionPrompt(promptId: string): boolean {
@@ -77,10 +48,6 @@ export function hasSectionPrompt(promptId: string): boolean {
 
 export function hasSkillPrompt(promptId: string): boolean {
   return existsSync(getSkillPromptPath(promptId));
-}
-
-export function hasCapabilityAssist(capabilityId: string): boolean {
-  return existsSync(getCapabilityAssistPath(capabilityId));
 }
 
 export function loadStepPrompt(promptId: string): string {
@@ -95,24 +62,9 @@ export function loadSkillPrompt(promptId: string): string {
   return readPromptFile(getSkillPromptPath(promptId));
 }
 
-export function loadRule(ruleId: string): string {
-  return readPromptFile(getRulePath(ruleId));
-}
-
 export function loadGuardrail(guardrailId: string): string {
-  return readPromptFile(getGuardrailPath(guardrailId));
-}
-
-export function loadMotion(motionId: string): string {
-  return readPromptFile(getMotionPath(motionId));
-}
-
-export function loadLayoutVariant(layoutId: string): string {
-  return readPromptFile(getLayoutVariantPath(layoutId));
-}
-
-export function loadCapabilityAssist(capabilityId: string): string {
-  return readPromptFile(getCapabilityAssistPath(capabilityId));
+  const raw = readPromptFile(getRulePath(guardrailId));
+  return matter(raw).content.trimStart();
 }
 
 export function loadSystem(name: string): string {

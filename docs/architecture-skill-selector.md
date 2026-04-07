@@ -29,7 +29,7 @@ priority: 50
 fallback: true
 when:
   designKeywords: { any: [...], none: [] }
-  capabilityAssists: { any: [...], none: [] }
+  traits: { any: [...], none: [] }
   journeyStages: { any: [...], none: [] }
   productTypes: { any: [...], none: [] }
 notes: |
@@ -93,7 +93,7 @@ metadata 已足够支撑选择逻辑，无需传 prompt 正文。
   "fallback": true,
   "when": {
     "designKeywords": { "any": ["acid", "neon", "festival"], "none": [] },
-    "capabilityAssists": { "any": ["pattern.hero.centered"], "none": [] },
+    "traits": { "any": ["centered"], "none": [] },
     "journeyStages": { "any": ["acquisition", "campaign"], "none": [] },
     "productTypes": { "any": ["marketing-site"], "none": [] }
   },
@@ -112,7 +112,7 @@ metadata 已足够支撑选择逻辑，无需传 prompt 正文。
   "type": "hero",
   "intent": "High-impact entry for Cyber-Night Halloween 2024",
   "contentHints": "festival, neon, cyberpunk",
-  "capabilityAssistIds": ["pattern.hero.centered", "effect.motion.energetic"],
+  "traits": { "layout": { "type": "centered" }, "motion": { "intensity": "energetic" } },
   "designKeywords": ["neon", "cyberpunk", "festival"],
   "productType": "campaign-site",
   "journeyStage": "campaign"

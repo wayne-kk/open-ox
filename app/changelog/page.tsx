@@ -12,6 +12,38 @@ interface ChangeEntry {
 
 const CHANGELOG: ChangeEntry[] = [
   {
+    version: "v1.0",
+    date: "2026-04-07",
+    tag: "major",
+    title: "Pipeline 重构 — Traits 系统 + 运行时 Skill 发现 + 并行提速",
+    body: "生成流水线的架构级重构。用结构化 Traits 替代 capability assist 白名单，移除全局 preselect_skills 步骤改为每个 section 运行时自发现 skill，design tokens 与 section 生成并行执行，repair_build 升级为 Agent 工具循环。",
+    items: [
+      "Traits 系统：SectionDesignPlan 中的 capabilityAssistIds 替换为结构化的 layout/motion/visual/interaction traits",
+      "运行时 Skill 发现：移除全局 preselect_skills 步骤，每个 section 在生成时自行发现并选择 skill（score-based fallback）",
+      "Guardrail 自动发现：guardrailPolicy.ts 从 prompts/rules/ 目录扫描文件名，不再维护手写常量表",
+      "Guardrail 合并策略：plan_project 输出与 inferSectionGuardrailDefaults 取并集，模型写少了也不会丢默认 guardrail",
+      "design_tokens ∥ section_generation：两者不再串行，Promise.all 并行执行",
+      "repair_build 升级为 Agent 工具循环：使用 read_file / edit_file / write_file / run_build 工具，替代旧的 JSON 批量写入",
+      "LLM 重试：chatCompletion 加入指数退避重试（500/502/503 + Thinking signature error），最多 2 次",
+      "模型配置：ModelConfig 新增 supportsThinking 字段，运行时可查询模型是否支持 thinking 模式",
+      "composePage 安全增强：import 去重 + 重复渲染检测 + 自动 rebuild",
+      "Section 去重：normalizeBlueprint、页面生成、composePage 三层去重，防止 LLM 输出重复 section",
+      "Prompt 精简：删除 7 个 section prompt、3 个 motion prompt、2 个 capability prompt、5 个 layout prompt，统一收敛到 section.default + skill",
+      "planProject 精简：SectionDesignPlan 验证从 15 字段缩减到 traits-based 结构",
+    ],
+  },
+  {
+    version: "v1.0",
+    date: "2026-04-07",
+    tag: "minor",
+    title: "Studio UI 优化",
+    body: "GenerationAtlas 拓扑图 memoize 优化，DetailDrawer 从 fixed 改为 absolute 定位，避免遮挡全局导航。",
+    items: [
+      "GenerationAtlas：useMemo + stepsFingerprint 避免每次渲染重新解析拓扑",
+      "DetailDrawer：backdrop 和抽屉从 fixed 改为 absolute，作用域限定在父容器内",
+    ],
+  },
+  {
     version: "v0.9",
     date: "2026-04-06",
     tag: "major",

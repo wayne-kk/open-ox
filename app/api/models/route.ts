@@ -10,10 +10,11 @@ export async function GET() {
     .select("*")
     .order("created_at", { ascending: true });
 
-  const customModels: ModelConfig[] = (customRows ?? []).map((r: { id: string; display_name: string; context_window: number }) => ({
+  const customModels: ModelConfig[] = (customRows ?? []).map((r: { id: string; display_name: string; context_window: number; supports_thinking?: boolean }) => ({
     id: r.id,
     displayName: r.display_name,
     contextWindow: r.context_window,
+    supportsThinking: r.supports_thinking ?? false,
   }));
 
   // Load step model assignments
@@ -33,7 +34,7 @@ export async function GET() {
   const models = allModels.filter((m) => { if (seen.has(m.id)) return false; seen.add(m.id); return true; });
 
   return NextResponse.json({
-    models: models.map((m) => ({ id: m.id, displayName: m.displayName, contextWindow: m.contextWindow })),
+    models: models.map((m) => ({ id: m.id, displayName: m.displayName, contextWindow: m.contextWindow, supportsThinking: m.supportsThinking ?? false })),
     default: DEFAULT_MODEL,
     steps: GENERATION_STEPS,
     stepModels,
@@ -43,7 +44,7 @@ export async function GET() {
 /** POST /api/models — add a custom model */
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { id, displayName, contextWindow } = body;
+  const { id, displayName, contextWindow, supportsThinking } = body;
 
   if (!id || !displayName) {
     return NextResponse.json({ error: "id and displayName are required" }, { status: 400 });
@@ -53,6 +54,7 @@ export async function POST(req: NextRequest) {
     id,
     display_name: displayName,
     context_window: contextWindow ?? 128_000,
+    supports_thinking: supportsThinking ?? false,
     created_at: new Date().toISOString(),
   });
 

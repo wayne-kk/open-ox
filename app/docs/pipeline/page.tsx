@@ -43,16 +43,15 @@ function Callout({ type = "info", children }: { type?: "info" | "warn"; children
 const STEPS = [
   { n: "01", name: "clear_template", type: "fs", desc: "清理上次生成的文件。当提供了 projectId 时跳过（项目目录已初始化）。" },
   { n: "02", name: "analyze_project_requirement", type: "llm+tool", desc: "将用户 prompt 解析为结构化的 ProjectBlueprint。配备 web_search 工具 — 遇到未知品牌名或专业术语时自动搜索。最多 4 次工具调用迭代。" },
-  { n: "03", name: "plan_project", type: "llm", desc: "为每个 section 生成 SectionDesignPlan：布局意图、视觉意图、约束规则、能力增强。与步骤 04 并行执行。" },
+  { n: "03", name: "plan_project", type: "llm", desc: "为每个 section 生成 SectionDesignPlan：布局意图、视觉意图、约束规则、结构化特征（traits）。与步骤 04 并行执行。" },
   { n: "04", name: "generate_project_design_system", type: "llm", desc: "生成 design-system.md：颜色系统、字体规范、间距规则、组件风格指导。与步骤 03 并行执行。支持 /skill 命令注入 styleGuide。" },
-  { n: "05", name: "apply_project_design_tokens", type: "llm", desc: "读取 globals.css，提取已有 @theme tokens，写入新的 CSS 变量。向 UI 流式推送进度事件。" },
-  { n: "06", name: "preselect_skills", type: "llm", desc: "单次批量 LLM 调用为所有 section 选择风格技能。将 N 次串行调用合并为 1 次。失败时降级到每个类型的默认 skill。" },
-  { n: "07", name: "generate_section ×N", type: "llm×N", desc: "并行生成。每个 section 获得分层 system prompt：基础规则 + 类型规则 + skill + 约束 + 能力增强。每个文件生成后做静态验证，失败自动重试一次。" },
-  { n: "08", name: "compose_layout", type: "llm", desc: "从生成的 layout sections（nav、footer）组装 layout.tsx。在 layout sections 生成完成后执行。" },
-  { n: "09", name: "compose_page ×M", type: "llm×M", desc: "并行页面组装。每个 page.tsx 导入其 sections 并组合在一起。" },
-  { n: "10", name: "install_dependencies", type: "npm", desc: "扫描所有生成文件的 import 语句，与 package.json 对比，只安装缺失的包。" },
-  { n: "11", name: "run_build", type: "build", desc: "本地执行 next build。失败则进入修复流程。" },
-  { n: "12", name: "repair_build ×0-2", type: "llm", desc: "从构建错误输出中提取文件名，LLM 每轮最多修复 6 个文件。修复后重新安装依赖。最多 2 轮。" },
+  { n: "05", name: "apply_project_design_tokens", type: "llm", desc: "读取 globals.css，提取已有 @theme tokens，写入新的 CSS 变量。与步骤 06 并行执行。" },
+  { n: "06", name: "generate_section ×N", type: "llm×N", desc: "并行生成，与步骤 05 并行。每个 section 运行时自发现 skill（score-based fallback），获得分层 system prompt：基础规则 + 类型规则 + skill + 约束 + traits。" },
+  { n: "07", name: "compose_layout", type: "llm", desc: "从生成的 layout sections（nav、footer）组装 layout.tsx。在 layout sections 生成完成后执行。" },
+  { n: "08", name: "compose_page ×M", type: "llm×M", desc: "并行页面组装。每个 page.tsx 导入其 sections 并组合在一起。import 去重 + 重复渲染检测 + 自动 rebuild。" },
+  { n: "09", name: "install_dependencies", type: "npm", desc: "扫描所有生成文件的 import 语句，与 package.json 对比，只安装缺失的包。" },
+  { n: "10", name: "run_build", type: "build", desc: "本地执行 next build。失败则进入修复流程。" },
+  { n: "11", name: "repair_build ×0-2", type: "llm+tool", desc: "Agent 工具循环：使用 read_file / edit_file / write_file / run_build 工具修复构建错误。每轮最多修复 3 个文件。最多 2 轮。" },
 ];
 
 const TOC = [
@@ -72,8 +71,8 @@ export default function PipelinePage() {
         </p>
         <h1 className="text-3xl font-bold tracking-tight">AI 生成流水线</h1>
         <p className="mt-3 text-[15px] leading-7 text-muted-foreground">
-          确定性的 12 步编排。每个步骤都有明确的输入、输出和失败处理。
-          生成阶段没有开放式 Agent 循环 — 只有修改阶段才使用。
+          确定性的 11 步编排。每个步骤都有明确的输入、输出和失败处理。
+          生成阶段没有开放式 Agent 循环 — 只有修改阶段和构建修复才使用。
         </p>
 
         <section id="steps" className="scroll-mt-24">
@@ -133,17 +132,16 @@ const pageOutcomes = await Promise.all(
 ├── bold.md          # 大胆：高对比度，超大字体，强烈色彩
 ├── glassmorphism.md # 玻璃拟态：毛玻璃效果，半透明层次，纵深感
 └── brutalist.md     # 野兽派：原始网格，强烈对比，反精致`}</Pre>
-          <H3>菜单与菜谱分离</H3>
+          <H3>运行时 Skill 发现</H3>
           <P>
-            在 <Code>preselect_skills</Code> 阶段，LLM 只看到文件名和一行描述（菜单）。
-            完整的 Markdown 内容（菜谱）只在 section 实际生成时才加载。
-            这让选择调用保持快速且低成本。
+            每个 section 在生成时自行发现并选择 skill（不再有全局 preselect 步骤）。
+            先用 LLM 从候选列表中选择，失败时降级到 score-based 关键词匹配。
+            完整的 Markdown 内容只在 section 实际生成时才加载。
           </P>
-          <Pre>{`// Selection call — metadata only
-sections: [{ fileName, type, intent, candidates: [{ id, notes }] }]
-
-// Generation call — full skill prompt loaded
-const skillPrompt = fs.readFileSync(\`public/skills/\${skillId}.md\`);`}</Pre>
+          <Pre>{`// Runtime discovery — per section
+const candidates = discoverSkillsBySectionType(root, section.type);
+// LLM selection → fallback: scoreSkillFallback(candidates, haystack)
+const skillPrompt = loadSelectedSkillPrompt(selectedSkillId);`}</Pre>
         </section>
 
         <section id="prompts" className="scroll-mt-24">
@@ -155,7 +153,7 @@ const skillPrompt = fs.readFileSync(\`public/skills/\${skillId}.md\`);`}</Pre>
   + section.{type}.md   // 类型特定规则（hero、pricing、faq...）
   + skill content       // 选定的风格指导
   + guardrail blocks    // 约束规则（无障碍、首屏...）
-  + capability assists  // 可选增强
+  + traits block          // 结构化特征提示（layout/motion/visual/interaction）
   + outputTsx.md        // 输出格式要求
 
 user message =

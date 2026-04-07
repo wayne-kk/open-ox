@@ -15,7 +15,6 @@ import { stepInstallDependencies } from "./steps/installDependencies";
 import { stepPlanProject } from "./steps/planProject";
 import { stepRepairBuild } from "./steps/repairBuild";
 import { stepRunBuild } from "./steps/runBuild";
-import { stepSelectComponentSkills } from "./steps/selectComponentSkills";
 import type {
   BuildStep,
   GenerateProjectResult,
@@ -41,19 +40,36 @@ function dedupeSectionsByFileName(sections: SectionSpec[]): SectionSpec[] {
 }
 
 function normalizeBlueprint(blueprint: ProjectBlueprint): ProjectBlueprint {
-  const layoutSections =
+  // Separate true layout sections (navigation, footer) from misplaced page sections
+  const allLayoutCandidates =
     blueprint.site.layoutSections.length > 0
-      ? dedupeSectionsByFileName(blueprint.site.layoutSections)
-      : dedupeSectionsByFileName(
-        blueprint.site.pages
+      ? blueprint.site.layoutSections
+      : blueprint.site.pages
           .flatMap((page) => page.sections)
-          .filter((section) => isLayoutSection(section.type))
-      );
+        .filter((section) => isLayoutSection(section.type));
 
-  const pages = blueprint.site.pages.map((page) => ({
-    ...page,
-    sections: page.sections.filter((section) => !isLayoutSection(section.type)),
-  }));
+  const layoutSections = dedupeSectionsByFileName(
+    allLayoutCandidates.filter((section) => isLayoutSection(section.type))
+  );
+
+  // Collect non-layout sections that were mistakenly placed in layoutSections
+  const misplacedSections = blueprint.site.layoutSections.filter(
+    (section) => !isLayoutSection(section.type)
+  );
+
+  // Build pages: remove layout-type sections from pages, then merge in any misplaced sections
+  const pages = blueprint.site.pages.map((page, index) => {
+    const pageSections = page.sections.filter((section) => !isLayoutSection(section.type));
+
+    // Attach misplaced sections to the first page (home) if they don't already exist there
+    if (index === 0 && misplacedSections.length > 0) {
+      const existingFileNames = new Set(pageSections.map((s) => s.fileName));
+      const toAdd = misplacedSections.filter((s) => !existingFileNames.has(s.fileName));
+      return { ...page, sections: [...toAdd, ...pageSections] };
+    }
+
+    return { ...page, sections: pageSections };
+  });
 
   return {
     ...blueprint,
@@ -126,7 +142,6 @@ interface SectionBatchItem {
   section: PlannedSectionSpec;
   outputFileRelative: string;
   pageContext?: GenerateSectionParams["pageContext"];
-  preselectedSkillId?: string | null;
 }
 
 function createInitialResult(logger: StepLogger): GenerateProjectResult {
@@ -334,7 +349,6 @@ async function runSectionBatch(params: {
         section: item.section,
         outputFileRelative: item.outputFileRelative,
         pageContext: item.pageContext,
-        preselectedSkillId: item.preselectedSkillId,
       })
     )
   );
@@ -387,107 +401,15 @@ async function runSectionBatch(params: {
   return generatedFiles;
 }
 
-/**
- * Pre-select component skills for all sections in parallel.
- * Returns a map of fileName → skillId (null = no skill matched).
- * This eliminates N serial LLM calls inside each stepGenerateSection.
- */
-async function preselectSkillsForSections(
-  sections: PlannedSectionSpec[],
-  runtimeContext: ProjectRuntimeContext
-): Promise<Map<string, string | null>> {
-  // Batch all sections into a single LLM call instead of N parallel calls.
-  const { callLLM, extractJSON } = await import("./shared/llm");
-  const { getSkillPromptsRoot } = await import("./shared/files");
-  const { discoverSkillsBySectionType, toCompactMetadata } = await import("../../shared/skillDiscovery");
-
-  const root = getSkillPromptsRoot();
-  const map = new Map<string, string | null>();
-
-  // Build per-section candidate lists and collect all valid skill ids
-  const sectionEntries: Array<{
-    fileName: string;
-    type: string;
-    intent: string;
-    candidates: Array<{ id: string; sectionTypes: string[]; priority: number; fallback: boolean; when?: unknown; notes: string }>;
-  }> = [];
-  const allValidIds = new Set<string>();
-
-  for (const section of sections) {
-    const candidates = discoverSkillsBySectionType(root, section.type);
-    if (candidates.length === 0) {
-      map.set(section.fileName, null);
-      continue;
-    }
-    const compact = candidates.map((c) => toCompactMetadata(c));
-    for (const c of candidates) allValidIds.add(c.id);
-    sectionEntries.push({
-      fileName: section.fileName,
-      type: section.type,
-      intent: section.intent,
-      candidates: compact as Array<{ id: string; sectionTypes: string[]; priority: number; fallback: boolean; when?: unknown; notes: string }>,
-    });
-  }
-
-  if (sectionEntries.length === 0) return map;
-
-  const systemPrompt = `You are a component skill selector. Given multiple sections and their candidate skills, pick the best skill id for each section (or null if none fit).
-Rules:
-- Match only when section context clearly aligns with skill metadata.
-- Prefer higher priority when multiple skills match.
-- Return null if no skill is a good fit.
-- Respond with JSON only: {"selections": {"SectionFileName.tsx": "skill.id.here", ...}}
-- Only use skill ids from the candidate lists provided.`;
-
-  const userMessage = JSON.stringify({
-    productType: runtimeContext.productScope.productType,
-    designKeywords: runtimeContext.designKeywords ?? [],
-    sections: sectionEntries.map((e) => ({
-      fileName: e.fileName,
-      type: e.type,
-      intent: e.intent,
-      candidates: e.candidates,
-    })),
-  }, null, 2);
-
-  try {
-    const raw = await callLLM(systemPrompt, userMessage, 0.2);
-    const json = extractJSON(raw);
-    const parsed = JSON.parse(json) as { selections?: Record<string, string | null> };
-
-    if (parsed.selections) {
-      for (const entry of sectionEntries) {
-        const selected = parsed.selections[entry.fileName];
-        if (typeof selected === "string" && allValidIds.has(selected)) {
-          map.set(entry.fileName, selected);
-        } else {
-          // Fallback: pick highest priority fallback candidate
-          const fallback = entry.candidates.find((c) => c.fallback);
-          map.set(entry.fileName, fallback?.id ?? null);
-        }
-      }
-    }
-  } catch {
-    // LLM failed — use fallback for all
-    for (const entry of sectionEntries) {
-      const fallback = entry.candidates.find((c) => c.fallback);
-      map.set(entry.fileName, fallback?.id ?? null);
-    }
-  }
-
-  return map;
-}
-
 async function generateSharedLayoutSections(params: {
   blueprint: PlannedProjectBlueprint;
   designSystem: string;
   runtimeContext: ProjectRuntimeContext;
   artifactLogger: ArtifactLogger;
   logger: StepLogger;
-  skillMap: Map<string, string | null>;
   skipSections?: Set<string>;
 }): Promise<string[]> {
-  const { blueprint, designSystem, runtimeContext, artifactLogger, logger, skillMap, skipSections } = params;
+  const { blueprint, designSystem, runtimeContext, artifactLogger, logger, skipSections } = params;
   const collectedFiles: string[] = [];
 
   if (blueprint.site.layoutSections.length === 0) {
@@ -518,7 +440,6 @@ async function generateSharedLayoutSections(params: {
         scopeKey: "layout",
         section,
         outputFileRelative: buildSectionFilePath("layout", section.fileName),
-        preselectedSkillId: skillMap.get(section.fileName),
       })),
       designSystem,
       runtimeContext,
@@ -551,23 +472,30 @@ async function generatePages(params: {
   runtimeContext: ProjectRuntimeContext;
   artifactLogger: ArtifactLogger;
   logger: StepLogger;
-  skillMap: Map<string, string | null>;
   skipSections?: Set<string>;
   skipPages?: Set<string>;
 }): Promise<string[]> {
-  const { blueprint, designSystem, runtimeContext, artifactLogger, logger, skillMap, skipSections, skipPages } = params;
+  const { blueprint, designSystem, runtimeContext, artifactLogger, logger, skipSections, skipPages } = params;
   const collectedFiles: string[] = [];
 
   // Pages are independent (distinct output paths per slug); run in parallel for wall-clock time.
   const pageOutcomes = await Promise.all(
     blueprint.site.pages.map(async (page) => {
+      // Deduplicate page sections by fileName to prevent duplicate generation
+      const seenFileNames = new Set<string>();
+      const dedupedSections = page.sections.filter((s) => {
+        if (seenFileNames.has(s.fileName)) return false;
+        seenFileNames.add(s.fileName);
+        return true;
+      });
+
       // Filter out already-generated sections for this page
       const sectionsToGenerate = skipSections
-        ? page.sections.filter((s) => !skipSections.has(`${page.slug}:${s.fileName}`))
-        : page.sections;
+        ? dedupedSections.filter((s) => !skipSections.has(`${page.slug}:${s.fileName}`))
+        : dedupedSections;
 
       // Log skipped sections
-      const skippedCount = page.sections.length - sectionsToGenerate.length;
+      const skippedCount = dedupedSections.length - sectionsToGenerate.length;
       if (skippedCount > 0) {
         logger.logStep(
           `checkpoint_skip_${page.slug}`,
@@ -578,7 +506,7 @@ async function generatePages(params: {
 
       // Collect files that were already generated (from checkpoint)
       const resumedFiles: string[] = [];
-      for (const section of page.sections) {
+      for (const section of dedupedSections) {
         if (skipSections?.has(`${page.slug}:${section.fileName}`)) {
           resumedFiles.push(buildSectionFilePath(page.slug, section.fileName));
         }
@@ -592,7 +520,6 @@ async function generatePages(params: {
             scopeKey: page.slug,
             section,
             outputFileRelative: buildSectionFilePath(page.slug, section.fileName),
-            preselectedSkillId: skillMap.get(section.fileName),
             pageContext: {
               title: page.title,
               slug: page.slug,
@@ -617,9 +544,10 @@ async function generatePages(params: {
         return { files: [...resumedFiles, ...generatedFiles, pagePath] };
       }
 
+      // Deduplicate sections by fileName before composing the page
       const pagePath = await logger.timed(
         getComposePageStepName(page.slug),
-        () => stepComposePage(page, designSystem, page.sections),
+        () => stepComposePage(page, designSystem, dedupedSections),
         (path) => path
       );
 
@@ -627,7 +555,7 @@ async function generatePages(params: {
         pagePath,
         slug: page.slug,
         title: page.title,
-        sections: page.sections.map((section) => section.fileName),
+        sections: dedupedSections.map((section) => section.fileName),
       });
       await persistSiteFileArtifact(
         artifactLogger,
@@ -839,7 +767,15 @@ export async function runGenerateProject(
       blueprint.site.layoutSections = trueLayoutSections;
       const homePage = blueprint.site.pages.find((p) => p.slug === "home") ?? blueprint.site.pages[0];
       if (homePage) {
-        homePage.sections = [...misplacedSections, ...homePage.sections];
+        // Deduplicate: only add misplaced sections whose fileName doesn't already exist in the page
+        const existingFileNames = new Set(homePage.sections.map((s) => s.fileName));
+        const newSections = misplacedSections.filter((s) => !existingFileNames.has(s.fileName));
+        if (newSections.length < misplacedSections.length) {
+          console.warn(
+            `[plan_project] ${misplacedSections.length - newSections.length} misplaced section(s) already existed in page, skipped duplicates`
+          );
+        }
+        homePage.sections = [...newSections, ...homePage.sections];
       }
     }
 
@@ -847,10 +783,14 @@ export async function runGenerateProject(
     const runtimeContext = buildProjectRuntimeContext(blueprint);
     appendGeneratedFiles(result, ["design-system.md"]);
 
-    // ── Step: apply_project_design_tokens ─────────────────────────────────
-    if (cp?.skipDesignTokens) {
-      logger.logStep("apply_project_design_tokens", "ok", "resumed from checkpoint");
-    } else {
+    // ── Step: apply_project_design_tokens + Section generation (parallel) ──
+    // Sections now rely only on design-system.md (not globals.css), so we can
+    // run design-token application and section generation concurrently.
+    const designTokensPromise = (async () => {
+      if (cp?.skipDesignTokens) {
+        logger.logStep("apply_project_design_tokens", "ok", "resumed from checkpoint");
+        return;
+      }
       const tokenFiles = await logger.timed(
         "apply_project_design_tokens",
         () => stepApplyProjectDesignTokens(designSystem, (msg) => {
@@ -876,43 +816,16 @@ export async function runGenerateProject(
         );
       }
       appendGeneratedFiles(result, tokenFiles);
-    }
+    })();
 
-    // ── Step: preselect_skills ────────────────────────────────────────────
-    const allSections = [
-      ...blueprint.site.layoutSections,
-      ...blueprint.site.pages.flatMap((p) => p.sections),
-    ];
-    let skillMap: Map<string, string | null>;
-    if (cp?.skipPreselectSkills) {
-    // Re-run skill selection even on resume — it's fast (~3s) and we don't persist the map
-      logger.startStep("preselect_skills");
-      skillMap = await preselectSkillsForSections(allSections, runtimeContext);
-      logger.logStep("preselect_skills", "ok", `${skillMap.size} sections → skills resolved (re-selected)`);
-    } else {
-      logger.startStep("preselect_skills");
-      skillMap = await preselectSkillsForSections(allSections, runtimeContext);
-      logger.logStep("preselect_skills", "ok", `${skillMap.size} sections → skills resolved`);
-    }
-
-    // ── Section generation (with per-section checkpoint skip) ─────────────
-    // Layout sections and page sections are independent at the generation level.
-    // Only `next build` needs all files present. Run them in parallel to save
-    // wall-clock time on multi-page projects.
-    //
-    // Flow:
-    //   ┌─ layout sections (parallel) ─→ compose_layout ──┐
-    //   │                                                  ├→ install_deps → build
-    //   └─ page sections (parallel per page) ─→ compose_page ─┘
-    //
-    await Promise.all([
+    // Each section discovers and selects its own skill at runtime.
+    const sectionGenerationPromise = Promise.all([
       generateSharedLayoutSections({
         blueprint,
         designSystem,
         runtimeContext,
         artifactLogger,
         logger,
-        skillMap,
         skipSections: cp?.generatedSections,
       }),
       generatePages({
@@ -921,7 +834,6 @@ export async function runGenerateProject(
         runtimeContext,
         artifactLogger,
         logger,
-        skillMap,
         skipSections: cp?.generatedSections,
         skipPages: cp?.composedPages,
       }),
@@ -929,6 +841,8 @@ export async function runGenerateProject(
       appendGeneratedFiles(result, layoutFiles);
       appendGeneratedFiles(result, pageFiles);
     });
+
+    await Promise.all([designTokensPromise, sectionGenerationPromise]);
     await autoInstallDependenciesForFiles({
       scope: "generated",
       files: result.generatedFiles,

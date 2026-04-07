@@ -8,8 +8,8 @@ when:
   designKeywords:
     any: ["editorial", "magazine", "story", "narrative", "manifesto", "premium", "luxury", "publication"]
     none: []
-  capabilityAssists:
-    any: ["pattern.hero.editorial"]
+  traits:
+    any: ["editorial"]
     none: []
   journeyStages:
     any: ["consideration", "education", "storytelling"]

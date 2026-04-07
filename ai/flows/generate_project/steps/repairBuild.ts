@@ -1,16 +1,13 @@
 import {
-  formatSiteFile,
-  loadGuardrail,
   loadStepPrompt,
   loadSystem,
-  readSiteFile,
-  writeSiteFile,
 } from "../shared/files";
-import { callLLM, extractJSON } from "../shared/llm";
+import { callLLMWithTools } from "../shared/llm";
+import { getSystemToolDefinitions } from "../../../tools/systemToolCatalog";
+import { getModelForStep } from "@/lib/config/models";
 import type {
   BuildRepairResult,
   PlannedProjectBlueprint,
-  RepairWrite,
 } from "../types";
 
 interface RepairBuildParams {
@@ -31,32 +28,21 @@ function selectRepairTargets(buildOutput: string, generatedFiles: string[]): str
   });
 
   if (matched.length > 0) {
-    return unique(matched).slice(0, 6);
+    return unique(matched).slice(0, 3);
   }
 
   const preferred = generatedFiles.filter(
     (path) =>
       path === "app/layout.tsx" ||
       path === "app/page.tsx" ||
-      path === "app/globals.css" ||
       path.includes("components/sections/")
   );
 
-  return unique(preferred.length > 0 ? preferred : generatedFiles).slice(-6);
+  return unique(preferred.length > 0 ? preferred : generatedFiles).slice(-3);
 }
 
-function isRepairWriteArray(value: unknown): value is RepairWrite[] {
-  return (
-    Array.isArray(value) &&
-    value.every(
-      (item) =>
-        item &&
-        typeof item === "object" &&
-        typeof (item as RepairWrite).path === "string" &&
-        typeof (item as RepairWrite).content === "string"
-    )
-  );
-}
+/** Repair tools: read → edit → run_build. Minimal set for fast patching. */
+const REPAIR_TOOLS = ["read_file", "edit_file", "write_file", "run_build"];
 
 export async function stepRepairBuild({
   blueprint,
@@ -72,21 +58,10 @@ export async function stepRepairBuild({
     };
   }
 
-  const relatedFiles = allowedFiles
-    .map(
-      (path) => `### ${path}
-\`\`\`
-${readSiteFile(path)}
-\`\`\``
-    )
-    .join("\n\n");
-
   const systemPrompt = [
     loadSystem("frontend"),
     "\n\n",
     loadStepPrompt("repairBuild"),
-    "\n\n",
-    loadGuardrail("outputJson"),
   ].join("");
 
   const userMessage = `## Project
@@ -97,51 +72,54 @@ ${blueprint.brief.projectTitle}
 ${buildOutput}
 \`\`\`
 
-## Allowed Files
+## Likely Files (read these first, then edit only what's needed)
 ${allowedFiles.map((path) => `- ${path}`).join("\n")}
 
-## Related File Contents
-${relatedFiles}`;
+## All Generated Files
+${generatedFiles.map((path) => `- ${path}`).join("\n")}
+
+Fix the build error using the smallest possible edits. Start by reading the failing file(s), then use edit_file to patch only the broken lines.`;
+
+  const tools = getSystemToolDefinitions(REPAIR_TOOLS);
+  const touchedFiles = new Set<string>();
 
   try {
-    const raw = await callLLM(systemPrompt, userMessage, 0.1);
-    const parsed = JSON.parse(extractJSON(raw)) as {
-      files?: RepairWrite[];
-      summary?: string;
-    };
+    const { toolCalls } = await callLLMWithTools({
+      systemPrompt,
+      userMessage,
+      tools,
+      temperature: 0.1,
+      maxIterations: 10,
+      model: getModelForStep("repair_build"),
+    });
 
-    if (!isRepairWriteArray(parsed.files) || parsed.files.length === 0) {
-      return {
-        success: false,
-        output: parsed.summary ?? "repair_build: model returned no file changes",
-        touchedFiles: [],
-      };
+    for (const tc of toolCalls) {
+      if ((tc.name === "edit_file" || tc.name === "write_file") && tc.args.path) {
+        const result = typeof tc.result === "object" ? tc.result : { success: true };
+        if (result.success) {
+          touchedFiles.add(tc.args.path as string);
+        }
+      }
     }
 
-    const safeWrites = parsed.files.filter((file) => allowedFiles.includes(file.path));
-    if (safeWrites.length === 0) {
+    if (touchedFiles.size === 0) {
       return {
         success: false,
-        output: "repair_build: model attempted to modify files outside the allowed set",
+        output: "repair_build: agent made no successful edits",
         touchedFiles: [],
       };
-    }
-
-    for (const file of safeWrites) {
-      await writeSiteFile(file.path, file.content);
-      await formatSiteFile(file.path);
     }
 
     return {
       success: true,
-      output: parsed.summary ?? "repair_build: applied targeted file repairs",
-      touchedFiles: safeWrites.map((file) => file.path),
+      output: `repair_build: patched ${touchedFiles.size} file(s) via tool calls`,
+      touchedFiles: Array.from(touchedFiles),
     };
   } catch (error) {
     return {
       success: false,
       output: error instanceof Error ? error.message : String(error),
-      touchedFiles: [],
+      touchedFiles: Array.from(touchedFiles),
     };
   }
 }

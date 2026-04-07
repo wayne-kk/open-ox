@@ -20,22 +20,22 @@ Do not output JSON, do not output diffs, and do not provide any explanation outs
 /* 2. Tailwind v4 entry — replaces @tailwind base/components/utilities */
 @import "tailwindcss";
 
-/* 3. @theme block — design tokens that become Tailwind utility classes */
+/* 3. @theme block — design tokens that AUTOMATICALLY become Tailwind utility classes */
 @theme {
-  /* Colors → bg-accent, text-accent, border-accent, etc. */
+  /* Colors → automatically generates: bg-accent, text-accent, border-accent */
   --color-accent: #FF00FF;
   --color-primary: #1A1A2E;
   --color-background: #050505;
 
-  /* Fonts → font-display, font-header, font-body */
+  /* Fonts → automatically generates: font-display, font-header, font-body */
   --font-display: "Orbitron", sans-serif;
   --font-header: "Orbitron", sans-serif;
   --font-body: "Inter", sans-serif;
 
-  /* Shadows → shadow-neon, shadow-glow, etc. */
+  /* Shadows → automatically generates: shadow-neon, shadow-glow */
   --shadow-neon: 0 0 15px rgba(255, 0, 255, 0.5), 0 0 30px rgba(255, 0, 255, 0.2);
 
-  /* Animations → animate-glitch, animate-pulse-neon, etc. */
+  /* Animations → automatically generates: animate-glitch, animate-neon-pulse */
   --animate-glitch: glitch 0.3s cubic-bezier(.25,.46,.45,.94) both infinite;
   --animate-neon-pulse: neon-pulse 2s ease-in-out infinite alternate;
 }
@@ -43,8 +43,9 @@ Do not output JSON, do not output diffs, and do not provide any explanation outs
 /* 4. @layer base — global resets, :root vars for non-Tailwind values, body styles */
 @layer base {
   :root {
-    /* CSS vars not tied to Tailwind utilities (clip-paths, complex gradients, etc.) */
+    /* CSS vars NOT tied to Tailwind utilities (clip-paths, complex gradients, transitions, etc.) */
     --tech-cut: polygon(10% 0, 100% 0, 100% 70%, 90% 100%, 0 100%, 0 30%);
+    --transition-pop: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
   html, body {
     background-color: theme(--color-background);
@@ -57,18 +58,39 @@ Do not output JSON, do not output diffs, and do not provide any explanation outs
 @keyframes glitch { /* ... */ }
 @keyframes neon-pulse { /* ... */ }
 
-/* 6. @layer utilities — custom classes mirroring tokens (required, see rules below) */
+/* 6. @layer utilities — ONLY for effects that Tailwind cannot auto-generate */
 @layer utilities {
-  /* Design-system aliases: same tokens as @theme / :root, explicit classNames for stable usage */
-  .ds-font-display { font-family: theme(--font-display); }
-  .ds-font-header { font-family: theme(--font-header); }
-  .ds-font-body { font-family: theme(--font-body); }
-  .ds-font-label { font-family: theme(--font-label); }
-  .ds-shadow-neon { box-shadow: theme(--shadow-neon); }
-  .ds-animate-glitch { animation: theme(--animate-glitch); }
+  /* Custom composite effects that have no @theme equivalent */
   .ds-chamfer { clip-path: var(--tech-cut); }
+  .ds-glass { backdrop-filter: blur(12px); background: rgba(255,255,255,0.1); }
+  .ds-scanlines {
+    background-image: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+  }
 }
 ```
+
+## CRITICAL: Do NOT duplicate Tailwind auto-utilities
+
+Tailwind v4 `@theme` tokens **automatically** generate utility classes. You MUST NOT create manual `.ds-*` mirrors for tokens that Tailwind already handles:
+
+| @theme token | Auto-generated Tailwind utility | DO NOT create |
+|---|---|---|
+| `--color-primary: #xxx` | `bg-primary`, `text-primary`, `border-primary` | ~~`.ds-bg-primary`~~, ~~`.ds-text-primary`~~ |
+| `--color-accent: #xxx` | `bg-accent`, `text-accent`, `border-accent` | ~~`.ds-bg-accent`~~, ~~`.ds-text-accent`~~ |
+| `--font-display: "..."` | `font-display` | ~~`.ds-font-display`~~ |
+| `--font-header: "..."` | `font-header` | ~~`.ds-font-header`~~ |
+| `--font-body: "..."` | `font-body` | ~~`.ds-font-body`~~ |
+| `--shadow-glow: ...` | `shadow-glow` | ~~`.ds-shadow-glow`~~ |
+| `--shadow-soft: ...` | `shadow-soft` | ~~`.ds-shadow-soft`~~ |
+| `--animate-float: ...` | `animate-float` | ~~`.ds-animate-float`~~ |
+| `--animate-pulse: ...` | `animate-pulse` | ~~`.ds-animate-pulse`~~ |
+
+**Only create `ds-*` custom classes for effects that Tailwind CANNOT auto-generate:**
+- Composite effects combining multiple properties (glass, scanlines, grain overlays)
+- Clip-path shapes from `:root` CSS variables
+- Pseudo-element effects (::before/::after based textures)
+- Complex hover/focus states that compose multiple tokens
+- Transition shorthands stored in `:root` (not in `@theme`)
 
 ## Key Rules
 
@@ -77,14 +99,13 @@ Do not output JSON, do not output diffs, and do not provide any explanation outs
 - Define fonts as `--font-{name}: "Font Family", fallback`
 - Define named shadows as `--shadow-{name}: <value>`
 - Define animations as `--animate-{name}: <keyframe-name> <timing>`
-- **Do not** put custom `--transition-*` values in `@theme` if they are full shorthands like `all 0.6s cubic-bezier(...)` — Tailwind v4’s theme compiler can throw **CssSyntaxError**. Put those on `:root` inside `@layer base` instead
-- `@theme` also creates Tailwind utilities (`bg-accent`, `shadow-neon`, etc.) — still add the **`.ds-*` mirrors** in `@layer utilities` (required)
+- **Do not** put custom `--transition-*` values in `@theme` if they are full shorthands like `all 0.6s cubic-bezier(...)` — Tailwind v4's theme compiler can throw **CssSyntaxError**. Put those on `:root` inside `@layer base` instead
 - Use direct color values (hex, oklch) — NOT `hsl(var(...))` pattern from v3
 
 **@layer base:**
 - Keep shadcn/ui CSS variables (`--background`, `--foreground`, `--card`, etc.) using the same variable names but with direct values, NOT `hsl(number number% number%)` format — use hex or oklch
 - Apply body/html background and text colors using `theme(--color-xxx)` or direct values
-- Keep `:root` for non-Tailwind CSS variables (clip-paths, complex values)
+- Keep `:root` for non-Tailwind CSS variables (clip-paths, complex values, transitions)
 - **Do not** add `h1`–`h6` selectors with `color` (or any heading-level color rules). Heading color comes from components via utilities (`text-foreground`, etc.), not global base styles.
 
 **@keyframes:**
@@ -92,27 +113,19 @@ Do not output JSON, do not output diffs, and do not provide any explanation outs
 - The **first identifier** in each `--animate-*` value must match the `@keyframes` name exactly (e.g. `--animate-float: float 3s ...` requires `@keyframes float { ... }`)
 - Place them at root level (not inside any @layer)
 
-**@layer utilities — custom classNames (required):**
-
-You may define **any** tokens in `@theme` or `:root`, but you **must** also emit matching **custom utility classes** so generated sections can use stable, design-system-prefixed `className` values (Tailwind’s auto-utilities from `@theme` alone are not enough for a single obvious API in prompts).
-
-- **Prefix:** use **`ds-`** (design system): `.ds-shadow-soft`, `.ds-animate-float`, `.ds-text-accent`, etc.
-- **Mirror every meaningful token** from the design spec (skip only ultra-internal one-offs):
-  - For each **`--font-*`** in `@theme`: `.ds-font-{name} { font-family: theme(--font-{name}); }`
-  - For each **`--shadow-*`** in `@theme`: `.ds-shadow-{name} { box-shadow: theme(--shadow-{name}); }`
-  - For each **`--animate-*`** in `@theme`: `.ds-animate-{name} { animation: theme(--animate-{name}); }`
-  - For key **`--color-*`** used for text/background/border in the design system: add `.ds-text-{name}`, `.ds-bg-{name}`, `.ds-border-{name}` using `color` / `background-color` / `border-color` with `theme(--color-{name})` as appropriate
-  - For **`:root`-only** vars (`--transition-*`, clip-paths, gradients, etc.): `.ds-{name}` or a semantic name from the brief, using `var(--...)`
-- **Design-specific effects** (scanlines, glitch hover, grain): still add semantic `.ds-*` or brief-driven names (e.g. `.ds-scanlines`, `.ds-glitch-hover`) that compose tokens
-- **Do not** rely only on Tailwind’s implicit utilities; always provide the **`.ds-*` parallel** for every token category you introduce (fonts, shadows, animations, key semantic colors)
+**@layer utilities — ONLY for non-Tailwind effects:**
+- Use `ds-` prefix for custom composite effects only
+- Do NOT mirror `@theme` tokens — Tailwind already generates those utilities
+- Keep this section minimal — most design tokens need zero custom classes
 
 **Do NOT:**
-- Output a JSON structure.
-- Output anything outside the ` ```css ` code block.
+- Create `.ds-font-*`, `.ds-bg-*`, `.ds-text-*`, `.ds-shadow-*`, `.ds-animate-*` classes that duplicate Tailwind auto-utilities from `@theme`
+- Output a JSON structure
+- Output anything outside the ` ```css ` code block
 - Use `@tailwind base`, `@tailwind components`, `@tailwind utilities` (v3 syntax)
 - Use `hsl(var(--xxx))` pattern for colors (v3 pattern)
 - Reference or modify `tailwind.config.ts` — it is not used in v4
-- Generate `h1`, `h2`, `h3`, `h4`, `h5`, `h6` rules that set `color` (or any global heading color / typography color for headings). Omit them entirely.
+- Generate `h1`, `h2`, `h3`, `h4`, `h5`, `h6` rules that set `color`
 
 ## Preserve from existing globals.css
 

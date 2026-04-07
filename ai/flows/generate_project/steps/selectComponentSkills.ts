@@ -42,7 +42,7 @@ function buildUserMessage(params: {
     type: section.type,
     intent: section.intent,
     contentHints: section.contentHints,
-    capabilityAssistIds: section.designPlan?.capabilityAssistIds ?? [],
+    traits: section.designPlan?.traits ?? {},
     designKeywords,
     productType: productScope.productType,
     journeyStage: productScope.journeyStageHints?.[0] ?? "",

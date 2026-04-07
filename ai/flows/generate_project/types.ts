@@ -9,8 +9,54 @@ export interface SectionSpec {
 }
 
 export type GuardrailId = string;
-export type CapabilityAssistId = string;
 export type ShellPlacement = "beforePageContent" | "afterPageContent";
+
+// ── Trait System (replaces capability assist whitelist) ──────────────────
+
+export interface LayoutTrait {
+  /** e.g. "split", "centered", "editorial", "asymmetric", "stacked", "grid" */
+  type: string;
+  /** e.g. "60/40", "50/50", "70/30" — optional ratio hint */
+  ratio?: string;
+  /** e.g. "ltr", "rtl" — content direction bias */
+  direction?: string;
+  /** Free-form note for downstream code gen */
+  note?: string;
+}
+
+export interface MotionTrait {
+  /** "subtle" | "ambient" | "energetic" | "none" */
+  intensity: string;
+  /** e.g. "viewport-enter", "hover", "load", "scroll" */
+  trigger?: string;
+  /** Free-form note */
+  note?: string;
+}
+
+export interface VisualTrait {
+  /** e.g. "sparse", "dense", "balanced" */
+  density?: string;
+  /** e.g. "high", "low", "medium" */
+  contrast?: string;
+  /** e.g. "geometric", "organic", "typographic", "photographic" */
+  style?: string;
+  /** Free-form note */
+  note?: string;
+}
+
+export interface InteractionTrait {
+  /** e.g. "cta-focused", "explorative", "passive", "data-driven" */
+  mode?: string;
+  /** Free-form note */
+  note?: string;
+}
+
+export interface SectionTraits {
+  layout?: LayoutTrait;
+  motion?: MotionTrait;
+  visual?: VisualTrait;
+  interaction?: InteractionTrait;
+}
 export type RolePriority = "primary" | "secondary" | "supporting";
 export type CapabilityPriority = "must-have" | "should-have" | "nice-to-have";
 
@@ -84,7 +130,7 @@ export interface SectionDesignPlan {
   contentStrategy: string;
   hierarchy: string[];
   guardrailIds: GuardrailId[];
-  capabilityAssistIds: CapabilityAssistId[];
+  traits: SectionTraits;
   constraints: string[];
   shellPlacement?: ShellPlacement;
   rationale?: string;

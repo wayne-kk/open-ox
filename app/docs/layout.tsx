@@ -8,6 +8,7 @@ const NAV_ITEMS = [
       { href: "/docs", label: "概览" },
       { href: "/docs/architecture", label: "系统架构" },
       { href: "/docs/pipeline", label: "AI 生成流水线" },
+      { href: "/docs/generate-project-trace", label: "Prompt 拼装 Trace" },
     ],
   },
   {

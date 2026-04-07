@@ -115,5 +115,5 @@ Output a single valid JSON object. No markdown, no code fences, no explanations.
 - `layoutSections`: navigation first, footer last for public sites.
 - `pages` must NOT contain a `sections` array — sections are planned separately.
 - Each page needs only: title, slug, description, journeyStage, primaryRoleIds, supportingCapabilityIds.
-- `designIntent.keywords`: 5–8 visual/emotional adjectives.
+- `designIntent.keywords`: 5–8 visual/emotional adjectives, always in English regardless of user input language.
 - Output only the JSON object.

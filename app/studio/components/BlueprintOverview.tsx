@@ -166,8 +166,8 @@ export function BlueprintOverview({ blueprint }: { blueprint: PlannedProjectBlue
                             )}
                             {page.sections.length > 0 && (
                                 <div className="mt-2 space-y-1.5">
-                                    {page.sections.map((section) => (
-                                        <div key={section.fileName} className="rounded-lg bg-black/20 px-2.5 py-2">
+                                    {page.sections.map((section, idx) => (
+                                        <div key={`${section.fileName}-${idx}`} className="rounded-lg bg-black/20 px-2.5 py-2">
                                             <div className="flex items-center gap-2">
                                                 <span className="font-mono text-[11px] text-accent-tertiary">{section.fileName}</span>
                                                 <span className="rounded bg-white/6 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">{section.type}</span>

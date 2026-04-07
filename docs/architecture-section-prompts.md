@@ -1,137 +1,83 @@
-# Section 生成 Prompt 架构
+# Section 生成 Prompt 与 Guardrail 架构
 
-本文档描述 `generateSection` 的 prompt 组合模型、Guardrail 体系及扩展指南。
+本文是 **Open-OX 生成流水线里 section 相关提示词的入口说明**：分层顺序、guardrail 白名单、规划合并行为。  
+**完整流水线步骤、skill 预选细节与日志说明**：应用内 **`/docs/generate-project-trace`**；仓库入口与说明见 [generate-project-trace.md](./generate-project-trace.md)。
 
-## 1. Prompt 组合顺序
+---
+
+## 1. `generate_section` 的 System 堆叠顺序（与实现一致）
+
+由下至上依次拼接（`steps/generateSection.ts` → `buildSystemPrompt`）：
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  Layer 1: System (frontend)                                     │
-│  - 全局 AI 行为、角色设定                                         │
-└─────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  Layer 2: Section Base                                          │
-│  - section.default：通用 section 要求、Tech Stack、Output Rules   │
-│  - section.{type}：类型专属结构、布局、规则（hero/features/...）  │
-└─────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  Layer 3: Component Skill（可选）                                │
-│  - 由 LLM 根据 section context 选择                               │
-│  - 提供更细粒度的设计指导（如 hero.lighting、hero.dashboard）      │
-└─────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  Layer 4: Guardrails                                             │
-│  - project.*：项目级约束                                          │
-│  - section.*：Section 级原子约束                                  │
-│  - outputTsx：输出格式                                           │
-└─────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  Layer 5: Capability Assists（可选）                             │
-│  - pattern.*：布局变体（如 pattern.hero.centered）                 │
-│  - effect.motion.*：动效风格（如 effect.motion.ambient）           │
-└─────────────────────────────────────────────────────────────────┘
+1. frontend（全局栈与输出习惯）     ← ai/prompts/systems/frontend.md
+2. section.default + section.{type} ← prompts/sections/
+3. 组件 skill（可选）               ← prompts/skills/{id}.md
+4. Guardrails                       ← projectGuardrailIds ∪ designPlan.guardrailIds → loadGuardrail
+5. Traits（可选）                  ← designPlan.traits → buildTraitsBlock（内联生成）
+6. outputTsx                        ← 输出形态契约（仍在 system 末段）
 ```
 
-## 2. Guardrail 分层
+说明：**`outputTsx` 在 traits 之后**，不要与「第 4 层 guardrail 正文」画在同一层里。
 
-### 2.1 项目级 (projectGuardrailIds)
+---
+
+## 2. Guardrail 白名单（单一真相）
+
+**发现逻辑**在 `ai/flows/generate_project/planners/guardrailPolicy.ts`：**允许 ID**来自 `prompts/rules/` 下的 `section.*.md` / `project.*.md` 文件名（运行时 `readdir` + 可选 YAML frontmatter），不再维护手写常量表。
+
+### 2.1 项目级 `projectGuardrailIds`
 
 | ID | 说明 |
 |----|------|
-| `project.consistency` | 视觉语言、typography、间距、组件样式跨 section 一致 |
-| `project.accessibility` | 对比度、语义结构、交互可及性、motion 兼容 reduced-motion |
+| `project.consistency` | 跨 section 视觉与组件用语一致 |
+| `project.accessibility` | 对比度、语义结构、可及性 |
 
-### 2.2 Section 级 (designPlan.guardrailIds)
-
-由 `inferGuardrailIds` 为每个 section 推断，按类型补充：
-
-| ID | 适用 | 说明 |
-|----|------|------|
-| `section.core` | 全部 | 自包含、无 props、真实内容、生产级、响应式、语义 HTML |
-| `section.accessibility` | 全部 | 语义地标、标题、可及性属性 |
-| `section.layout` | 全部 | 双层结构（Outer/Inner）、区块分隔禁止项 |
-| `section.typography` | 全部 | font-display/header/body/label 层级与用法 |
-| `section.styles` | 全部 | 禁止组件内定义全局样式，复用 globals.css |
-| `section.above-fold` | hero, navigation | 首屏优化 |
-| `section.interactive` | pricing, faq, navigation | 交互元素规范 |
-
-### 2.3 输出级
+### 2.2 Section 级 `designPlan.guardrailIds`（规划器允许的全部 ID）
 
 | ID | 说明 |
 |----|------|
-| `outputTsx` | 仅输出 raw TSX，无 markdown 围栏、无注释，包含完整 imports |
+| `section.core` | 自包含、无 props、生产级、响应式等 |
+| `section.accessibility` | 语义地标、标题层级、ARIA |
+| `section.layout` | 外层/内层结构、区块分隔 |
+| `section.typography` | 字体角色与层级 |
+| `section.styles` | 不在组件内造全局样式，复用 globals |
+| `section.above-fold` | 首屏相关（hero、navigation） |
+| `section.interactive` | 交互控件（pricing、faq、navigation） |
 
-## 3. 未来方向：Section Prompt 的 Skill 化
+**默认推断**（与 `plan_project` 合并前一致）：`inferSectionGuardrailDefaults(section)` — 全体带 core / accessibility / layout / typography / styles；hero 与 navigation 额外 `section.above-fold`；pricing、faq、navigation 额外 `section.interactive`。
 
-当前 section prompt 采用约定式发现（存在即用，无则 default）。后续可演进为与 Component Skill 类似的形式：
+### 2.3 规划合并（避免「模型写少了就丢 guardrail」）
 
-- 多个 `section.{type}.{variant}.md` 变体
-- 基于 metadata 的 LLM 模糊匹配
-- 无需硬编码 type → prompt 映射
+- **`plan_project` 的 user 消息**里列出的 Allowed Section / Project Guardrail IDs 与磁盘上规则文件一致（`getAllowedSectionGuardrailIds()` / `getAllowedProjectGuardrailIds()`）。
+- 合并时：
+  - **Section**：`guardrailIds = mergeSectionGuardrailIds(模型输出, inferSectionGuardrailDefaults(section))` — 在**允许集合内**取模型补充项，并与默认**并集去重**，不会删掉默认里的 `layout` / `typography` / `styles`。
+  - **Project**：`projectGuardrailIds = mergeProjectGuardrailIds(模型输出, defaultPlan.projectGuardrailIds)`。
 
-届时 section prompt 选择逻辑可与 `selectComponentSkills` 对齐。
+Guardrail 正文统一从 `prompts/rules/{id}.md` 加载（`loadGuardrail` → `getRulePath`）。
 
-## 4. 设计原则
+---
 
-### 3.1 原子性 (Atomicity)
+## 3. Traits（与 guardrail 区分）
 
-- 每个 guardrail 只负责单一关切
-- 避免大而全的 rule，便于复用与组合
+- **Guardrail**：红线与一致性，id 必须在上一节白名单内。  
+- **Traits**：结构化的 layout/motion/visual/interaction 描述，由 `plan_project` 自由生成（无白名单约束）；解析见应用内 **`/docs/generate-project-trace`** §5。
 
-### 3.2 去重 (DRY)
+---
 
-- 通用约束放在 guardrail，不在 section prompt 中重复
-- section.{type} 仅保留**类型专属**内容
+## 4. 扩展指南
 
-### 3.3 扩展性
+- **允许 ID 与默认挂载**由 `prompts/rules/` 扫描得到，无需在 `guardrailPolicy.ts` 里手写列表。  
+- 新增 **section 级 guardrail**：增加 `section.xxx.md` 即自动进入 planner 白名单；可选 YAML frontmatter：  
+  - `guardrailDefaultFor: all`（默认，可省略）— 所有 section 类型都会带上该 guardrail。  
+  - `guardrailDefaultFor: [hero, navigation]` — 仅列出的 `section.type` 默认带上。  
+  - `guardrailPlannerOnly: true` — 不参与默认合并，仅当 planner 在 JSON 里显式写出时才生效。  
+- 新增 **项目级**：增加 `project.xxx.md` 即自动进入项目级白名单；非 `guardrailPlannerOnly` 的规则会进入 `inferProjectGuardrailDefaults()`（`buildDefaultProjectPlan` 使用）。  
+- `outputJson` / `outputTsx` 等非 `section.*` / `project.*` 规则不参与上述白名单，仍可通过 `loadGuardrail` 在步骤里引用。
 
-- **新增 section 类型**：新增 `section.{type}.md` 即可，存在即生效，无需注册
-- **新增约束**：新增 `rules/section.{concern}.md` → 在 `inferGuardrailIds` 中加入
-- **新增 component skill**：新增 `skills/component.{type}.{variant}.md` → frontmatter 正确即可
+---
 
-## 5. 各层职责
+## 5. 相关文档
 
-| 层 | 职责 | 不应包含 |
-|----|------|----------|
-| section.default | Tech Stack、输出格式、Server/Client 默认、导入导出 | 类型专属结构、字体/样式细则（→ guardrail） |
-| section.{type} | Required Structure、Layout Guidance、类型专属 Rules | "Output only raw TSX"、"no props"（→ 已由 guardrail 覆盖） |
-| Component Skill | Design Principles、Structure、Layout、Typography 变体、Technical 要求 | 与 guardrail 重复的通用约束 |
-| Guardrail | 硬性约束、原子规则 | 设计建议、可变指导 |
-
-## 6. 文件索引
-
-```
-prompts/
-├── sections/
-│   ├── section.default.md      # 通用 base
-│   ├── section.hero.md
-│   ├── section.features.md
-│   └── ...
-├── skills/
-│   ├── component.hero.lighting.md
-│   └── ...
-└── rules/
-    ├── section.core.md
-    ├── section.accessibility.md
-    ├── section.layout.md
-    ├── section.typography.md   # 字体层级
-    ├── section.styles.md       # 全局样式复用
-    ├── section.above-fold.md
-    ├── section.interactive.md
-    ├── outputTsx.md
-    ├── project.consistency.md
-    └── project.accessibility.md
-```
-
-## 7. 与 section-skill-rules 的关系
-
-- **section-skill-rules.md**：侧重 Component Skill 与 Section Prompt 的编写规范
-- **本文档**：侧重 generateSection 的 prompt 组合架构、Guardrail 体系与扩展流程
+- [section-skill-rules.md](./section-skill-rules.md) — flow 内 `prompts/skills` 约定  
+- **`/docs/generate-project-trace`**（应用内）/ [generate-project-trace.md](./generate-project-trace.md) — 全链路步骤、skill 预选、日志路径  

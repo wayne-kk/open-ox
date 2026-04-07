@@ -101,7 +101,7 @@ export default function BlueprintPage() {
   }
 }`}</Pre>
           <P>
-            <Code>keywords</Code> 数组特别重要 — 它会被传递给 <Code>preselect_skills</Code> 步骤，
+            <Code>keywords</Code> 数组特别重要 — 它会被传递给 section 生成阶段的运行时 skill 发现，
             影响每个 section 的风格技能选择。
           </P>
         </section>

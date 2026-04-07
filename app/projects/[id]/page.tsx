@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, use } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Send, RefreshCw, Trash2 } from "lucide-react";
+import { ArrowLeft, Send, RefreshCw, Trash2, Loader2, AlertTriangle } from "lucide-react";
 
 interface ModifyStep {
   name: string;
@@ -45,13 +45,17 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [modifyPlan, setModifyPlan] = useState<ModifyPlan | null>(null);
   const [modifyDiffs, setModifyDiffs] = useState<DiffInfo[]>([]);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const handleDelete = async () => {
-    if (!confirm("确定要删除这个项目吗？此操作不可撤销。")) return;
+    setShowDeleteConfirm(false);
+    setDeleting(true);
     try {
       const res = await fetch(`/api/projects/${id}`, { method: "DELETE" });
       if (res.ok) router.push("/projects");
     } catch { /* ignore */ }
+    finally { setDeleting(false); }
   };
 
   const startPreview = async () => {
@@ -146,6 +150,47 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
   return (
     <main className="relative h-screen overflow-hidden bg-background flex flex-col">
+      {/* Confirm delete modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0d0f14] p-6 shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/10 border border-red-500/20">
+                <AlertTriangle className="h-5 w-5 text-red-400" />
+              </div>
+              <h3 className="text-[15px] font-semibold text-white">确认删除</h3>
+            </div>
+            <p className="text-[13px] text-white/60 leading-relaxed mb-1">确定要删除这个项目吗？</p>
+            <p className="text-[12px] text-red-400/60 mb-6">此操作不可撤销，项目所有数据将被永久删除。</p>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="rounded-xl px-4 py-2 text-[12px] font-medium text-white/60 border border-white/10 hover:bg-white/5 transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleDelete}
+                className="rounded-xl px-4 py-2 text-[12px] font-medium text-white bg-red-500/80 hover:bg-red-500 border border-red-500/40 transition-colors"
+              >
+                确认删除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full-page loading overlay while deleting */}
+      {deleting && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="h-8 w-8 animate-spin text-red-400" />
+            <p className="font-mono text-sm text-white/60 tracking-wider">正在删除项目...</p>
+            <p className="font-mono text-[10px] text-white/30">请勿关闭页面</p>
+          </div>
+        </div>
+      )}
+
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(247,147,26,0.14),transparent_28%)]" />
 
       <header className="relative z-10 border-b border-white/8 bg-background/75 backdrop-blur-xl shrink-0">
@@ -177,8 +222,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               </button>
             )}
             <button
-              onClick={handleDelete}
-              className="defi-button-outline px-3 py-1.5 text-[10px] font-medium flex items-center gap-1.5 text-red-400/70 hover:text-red-400 hover:border-red-400/30"
+              onClick={() => setShowDeleteConfirm(true)}
+              disabled={deleting}
+              className="defi-button-outline px-3 py-1.5 text-[10px] font-medium flex items-center gap-1.5 text-red-400/70 hover:text-red-400 hover:border-red-400/30 disabled:opacity-50 disabled:cursor-not-allowed"
               title="Delete project"
             >
               <Trash2 className="h-3 w-3" />

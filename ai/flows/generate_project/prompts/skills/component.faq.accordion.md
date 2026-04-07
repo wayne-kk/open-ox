@@ -8,7 +8,7 @@ when:
   designKeywords:
     any: []
     none: []
-  capabilityAssists:
+  traits:
     any: []
     none: []
   journeyStages:

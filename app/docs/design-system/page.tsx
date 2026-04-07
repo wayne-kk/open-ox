@@ -66,9 +66,8 @@ export default function DesignSystemPage() {
           <Pre>{`// 流水线中的位置
 step 03: plan_project          ─┐ 并行
 step 04: generate_design_system ─┘
-step 05: apply_design_tokens   ← 读取 design-system.md → 写入 globals.css
-step 06: preselect_skills
-step 07: generate_section ×N   ← 每次都注入 design-system.md + globals.css`}</Pre>
+step 05: apply_design_tokens   ← 读取 design-system.md → 写入 globals.css（与 step 06 并行）
+step 06: generate_section ×N   ← 每次都注入 design-system.md + globals.css（与 step 05 并行）`}</Pre>
           <Callout>
             步骤 03 和 04 并行执行。设计系统不依赖规划结果，两者都只需要
             <Code>ProjectBlueprint</Code> 作为输入。

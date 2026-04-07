@@ -1,20 +1,19 @@
 import {
   formatSiteFile,
-  hasCapabilityAssist,
-  loadCapabilityAssist,
+  getSkillPromptsRoot,
   loadGuardrail,
   loadSectionPrompt,
   loadSystem,
-  readSiteFile,
   writeSiteFile,
 } from "../shared/files";
-import {
-  stepSelectComponentSkills,
-  loadSelectedSkillPrompt,
-} from "./selectComponentSkills";
+import { loadSelectedSkillPrompt } from "./selectComponentSkills";
 import { selectSectionPromptId } from "../selectors/sectionPromptSelector";
-import { callLLMWithMeta } from "../shared/llm";
-import { extractContent } from "../shared/llm";
+import { callLLM, callLLMWithMeta, extractContent, extractJSON } from "../shared/llm";
+import { getModelForStep } from "@/lib/config/models";
+import {
+  discoverSkillsBySectionType,
+  toCompactMetadata,
+} from "../../../shared/skillDiscovery";
 import type {
   CapabilitySpec,
   GuardrailId,
@@ -25,7 +24,7 @@ import type {
   PlannedSectionSpec,
   StepTrace,
 } from "../types";
-import { buildDefaultSectionDesignPlan } from "../planners/defaultProjectPlanner";
+import { inferSectionGuardrailDefaults } from "../planners/guardrailPolicy";
 
 export interface GenerateSectionParams {
   designSystem: string;
@@ -34,8 +33,6 @@ export interface GenerateSectionParams {
   section: PlannedSectionSpec;
   outputFileRelative: string;
   pageContext?: GenerateSectionPageContext;
-  /** Pre-selected skill id — skips the LLM skill selection call if provided. */
-  preselectedSkillId?: string | null;
 }
 
 type GenerateSectionProjectContext = {
@@ -65,33 +62,162 @@ type GenerateSectionPageContext = {
   pageDesignPlan: PageDesignPlan;
 };
 
-function buildSectionDesignPlan(
-  section: PlannedSectionSpec,
-  projectContext: GenerateSectionProjectContext
-) {
-  return (
-    section.designPlan ??
-    buildDefaultSectionDesignPlan(section, {
-      roles: projectContext.roles,
-      taskLoops: projectContext.taskLoops,
-      capabilities: projectContext.capabilities,
-      designKeywords: [],
-    })
-  );
+// ── Skill Discovery (runtime, per-section) ──────────────────────────────
+
+/**
+ * Score-based fallback when LLM skill selection fails.
+ * Uses word-boundary matching against section context.
+ */
+function scoreSkillFallback(
+  candidates: ReturnType<typeof discoverSkillsBySectionType>,
+  haystack: string
+): typeof candidates[0] | null {
+  function haystackContains(keyword: string): boolean {
+    const kw = keyword.toLowerCase();
+    const re = new RegExp(`(?:^|[\\s,;|/()\\[\\]{}])${kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:$|[\\s,;|/()\\[\\]{}])`, "i");
+    return re.test(` ${haystack} `);
+  }
+
+  let bestMatch: typeof candidates[0] | null = null;
+  let bestScore = -1;
+
+  for (const candidate of candidates) {
+    let score = 0;
+    const w = candidate.when;
+    if (!w) { score = candidate.fallback ? 1 : 0; }
+    else {
+      if (w.designKeywords?.any) {
+        for (const kw of w.designKeywords.any) {
+          if (haystackContains(kw)) score += 2;
+        }
+      }
+      if (w.designKeywords?.none) {
+        for (const kw of w.designKeywords.none) {
+          if (haystackContains(kw)) { score = -100; break; }
+        }
+      }
+      if (w.traits?.any) {
+        for (const t of w.traits.any) {
+          if (haystackContains(t)) score += 1;
+        }
+      }
+      if (w.productTypes?.any) {
+        for (const pt of w.productTypes.any) {
+          if (haystackContains(pt)) score += 1;
+        }
+      }
+      if (w.productTypes?.none) {
+        for (const pt of w.productTypes.none) {
+          if (haystackContains(pt)) { score = -100; break; }
+        }
+      }
+    }
+    score += candidate.priority / 1000;
+    if (score > bestScore) { bestScore = score; bestMatch = candidate; }
+  }
+
+  if (!bestMatch || bestScore <= 0) {
+    bestMatch = candidates.find((c) => c.fallback) ?? candidates[0];
+  }
+  return bestMatch;
 }
 
-function buildGuardrailBlocks(projectGuardrailIds: GuardrailId[], designPlan: PlannedSectionSpec["designPlan"]) {
-  return Array.from(new Set([...projectGuardrailIds, ...designPlan.guardrailIds]))
-    .map((guardrailId) => loadGuardrail(guardrailId))
-    .join("\n\n");
+/**
+ * Use LLM to select the best skill for a section.
+ * Returns the skill id or null if LLM fails.
+ */
+async function llmSelectSkill(
+  candidates: ReturnType<typeof discoverSkillsBySectionType>,
+  context: { intent: string; contentHints: string; designKeywords: string[]; productType: string }
+): Promise<string | null> {
+  const skillList = candidates.map((c) => {
+    const meta = toCompactMetadata(c);
+    return `- id: "${c.id}" | notes: ${c.notes || "no description"} | triggers: ${JSON.stringify(meta.when ?? {})}`;
+  }).join("\n");
+
+  const systemPrompt = `You are a skill selector. Given a section's context and a list of available component skills, pick the single best skill id.
+Reply with ONLY a JSON object: {"skillId": "<chosen-id>"}. No explanation.`;
+
+  const userMessage = `## Section Context
+- Type: ${candidates[0]?.sectionTypes[0] ?? "unknown"}
+- Intent: ${context.intent}
+- Content Hints: ${context.contentHints}
+- Design Keywords: ${context.designKeywords.join(", ")}
+- Product Type: ${context.productType}
+
+## Available Skills
+${skillList}
+
+Pick the skill that best matches the section's intent and design keywords.`;
+
+  try {
+    const raw = await callLLM(systemPrompt, userMessage, 0, 200);
+    const parsed = JSON.parse(extractJSON(raw)) as { skillId?: string };
+    if (parsed.skillId && candidates.some((c) => c.id === parsed.skillId)) {
+      return parsed.skillId;
+    }
+  } catch {
+    // LLM failed — fall through to scoring fallback
+  }
+  return null;
 }
 
-function buildCapabilityBlocks(designPlan: PlannedSectionSpec["designPlan"]) {
-  return designPlan.capabilityAssistIds
-    .filter((assistId) => hasCapabilityAssist(assistId))
-    .map((assistId) => loadCapabilityAssist(assistId))
-    .join("\n\n");
+async function discoverAndSelectSkill(
+  sectionType: string,
+  context: { intent: string; contentHints: string; designKeywords: string[]; productType: string }
+): Promise<{ skillId: string | null; skillPrompt: string; skillMetadataBlock: string }> {
+  const root = getSkillPromptsRoot();
+  const candidates = discoverSkillsBySectionType(root, sectionType);
+
+  if (candidates.length === 0) {
+    return { skillId: null, skillPrompt: "", skillMetadataBlock: "" };
+  }
+
+  const metadataBlock = candidates
+    .map((c) => `- **${c.id}** (priority: ${c.priority}${c.fallback ? ", fallback" : ""}): ${c.notes || "no description"}`)
+    .join("\n");
+
+  // If only one candidate, skip selection
+  if (candidates.length === 1) {
+    return {
+      skillId: candidates[0].id,
+      skillPrompt: loadSelectedSkillPrompt(candidates[0].id),
+      skillMetadataBlock: metadataBlock,
+    };
+  }
+
+  // Primary: LLM-based selection
+  const llmChoice = await llmSelectSkill(candidates, context);
+  if (llmChoice) {
+    console.log(`[skill-select] LLM chose "${llmChoice}" for ${sectionType}`);
+    return {
+      skillId: llmChoice,
+      skillPrompt: loadSelectedSkillPrompt(llmChoice),
+      skillMetadataBlock: metadataBlock,
+    };
+  }
+
+  // Fallback: score-based selection
+  const haystack = `${context.intent} ${context.contentHints} ${context.designKeywords.join(" ")} ${context.productType}`.toLowerCase();
+  const bestMatch = scoreSkillFallback(candidates, haystack);
+  console.log(`[skill-select] Fallback chose "${bestMatch?.id}" for ${sectionType}`);
+
+  return {
+    skillId: bestMatch?.id ?? null,
+    skillPrompt: bestMatch ? loadSelectedSkillPrompt(bestMatch.id) : "",
+    skillMetadataBlock: metadataBlock,
+  };
 }
+
+// ── Guardrail Assembly ──────────────────────────────────────────────────
+
+function buildGuardrailBlocks(projectGuardrailIds: GuardrailId[], section: PlannedSectionSpec) {
+  const sectionDefaults = inferSectionGuardrailDefaults(section);
+  const allIds = Array.from(new Set([...projectGuardrailIds, ...sectionDefaults]));
+  return allIds.map((id) => loadGuardrail(id)).join("\n\n");
+}
+
+// ── Section Prompt ──────────────────────────────────────────────────────
 
 function buildSectionPromptBlocks(sectionType: string) {
   const sectionPromptId = selectSectionPromptId(sectionType);
@@ -103,226 +229,161 @@ function buildSectionPromptBlocks(sectionType: string) {
     .join("\n\n");
 }
 
-async function buildSystemPrompt(params: {
+// ── System Prompt ───────────────────────────────────────────────────────
+
+function buildSystemPrompt(params: {
   section: PlannedSectionSpec;
   projectGuardrailIds: GuardrailId[];
-  designPlan: PlannedSectionSpec["designPlan"];
-  productScope: ProductScope;
-  designKeywords: string[];
-  preselectedSkillId?: string | null;
-}): Promise<{ prompt: string; skillId: string | null }> {
-  const { section, projectGuardrailIds, designPlan, productScope, designKeywords, preselectedSkillId } = params;
+  skillPrompt: string;
+}): string {
+  const { section, projectGuardrailIds, skillPrompt } = params;
 
-  // Use pre-selected skill if available, otherwise run LLM selection
-  const skillId = preselectedSkillId !== undefined
-    ? preselectedSkillId
-    : (await stepSelectComponentSkills({ section, productScope, designKeywords })).id;
-
-  const componentSkillBlock = loadSelectedSkillPrompt(skillId);
-
-  const prompt = [
+  return [
     loadSystem("frontend"),
     buildSectionPromptBlocks(section.type),
-    componentSkillBlock,
-    buildGuardrailBlocks(projectGuardrailIds, designPlan),
-    buildCapabilityBlocks(designPlan),
+    skillPrompt,
+    buildGuardrailBlocks(projectGuardrailIds, section),
     loadGuardrail("outputTsx"),
   ]
     .filter(Boolean)
     .join("\n\n");
-
-  return { prompt, skillId };
 }
+
+// ── Formatting Helpers ──────────────────────────────────────────────────
 
 function formatRolesBlock(roles: UserRole[]) {
   return roles
-    .map(
-      (role) =>
-        `- ${role.roleName} (${role.roleId}): ${role.summary}\n  - Goals: ${role.goals.join(" | ")}\n  - Core Actions: ${role.coreActions.join(" | ")}`
-    )
+    .map((r) => `- ${r.roleName} (${r.roleId}): ${r.summary}\n  - Goals: ${r.goals.join(" | ")}\n  - Core Actions: ${r.coreActions.join(" | ")}`)
     .join("\n");
 }
 
 function formatTaskLoopsBlock(taskLoops: TaskLoop[]) {
   return taskLoops
-    .map(
-      (loop) =>
-        `- ${loop.name} (${loop.loopId})\n  - Role: ${loop.roleId}\n  - Trigger: ${loop.entryTrigger}\n  - Steps: ${loop.steps.join(" -> ")}\n  - Success: ${loop.successState}`
-    )
+    .map((l) => `- ${l.name} (${l.loopId})\n  - Role: ${l.roleId}\n  - Trigger: ${l.entryTrigger}\n  - Steps: ${l.steps.join(" -> ")}\n  - Success: ${l.successState}`)
     .join("\n");
 }
 
 function formatCapabilitiesBlock(capabilities: CapabilitySpec[]) {
   return capabilities
-    .map(
-      (capability) =>
-        `- ${capability.name} (${capability.capabilityId})\n  - Summary: ${capability.summary}\n  - Roles: ${capability.primaryRoleIds.join(", ") || "none"}`
-    )
+    .map((c) => `- ${c.name} (${c.capabilityId})\n  - Summary: ${c.summary}\n  - Roles: ${c.primaryRoleIds.join(", ") || "none"}`)
     .join("\n");
 }
 
-function formatBulletList(items: string[]) {
-  return items.map((item) => `  - ${item}`).join("\n");
-}
-
-function filterRelevantRoles(
-  section: PlannedSectionSpec,
-  projectContext: GenerateSectionProjectContext,
-  pageContext?: GenerateSectionPageContext
-) {
-  const roleIds = new Set([
-    ...section.primaryRoleIds,
-    ...(pageContext?.primaryRoleIds ?? []),
-  ]);
-
-  return projectContext.roles.filter((role) => roleIds.has(role.roleId));
-}
-
-function filterRelevantTaskLoops(
-  section: PlannedSectionSpec,
-  projectContext: GenerateSectionProjectContext
-) {
-  const loopIds = new Set(section.sourceTaskLoopIds);
-  return projectContext.taskLoops.filter((loop) => loopIds.has(loop.loopId));
-}
-
-function filterRelevantCapabilities(
-  section: PlannedSectionSpec,
-  projectContext: GenerateSectionProjectContext,
-  pageContext?: GenerateSectionPageContext
-) {
-  const capabilityIds = new Set([
-    ...section.supportingCapabilityIds,
-    ...(pageContext?.supportingCapabilityIds ?? []),
-  ]);
-
-  return projectContext.capabilities.filter((capability) =>
-    capabilityIds.has(capability.capabilityId)
-  );
-}
-
-
-
-function formatKnownRoutesBlock(
-  pages: GenerateSectionProjectContext["pages"]
-) {
+function formatKnownRoutesBlock(pages: GenerateSectionProjectContext["pages"]) {
   return pages
-    .map((page) => {
-      const path = page.slug === "home" ? "/" : `/${page.slug}`;
-      return `- ${page.title} (${page.slug}): ${path} — ${page.description} [${page.journeyStage}]`;
-    })
+    .map((p) => `- ${p.title} (${p.slug}): ${p.slug === "home" ? "/" : `/${p.slug}`} — ${p.description} [${p.journeyStage}]`)
     .join("\n");
+}
+
+function filterRelevantRoles(section: PlannedSectionSpec, ctx: GenerateSectionProjectContext, page?: GenerateSectionPageContext) {
+  const ids = new Set([...section.primaryRoleIds, ...(page?.primaryRoleIds ?? [])]);
+  return ctx.roles.filter((r) => ids.has(r.roleId));
+}
+
+function filterRelevantTaskLoops(section: PlannedSectionSpec, ctx: GenerateSectionProjectContext) {
+  const ids = new Set(section.sourceTaskLoopIds);
+  return ctx.taskLoops.filter((l) => ids.has(l.loopId));
+}
+
+function filterRelevantCapabilities(section: PlannedSectionSpec, ctx: GenerateSectionProjectContext, page?: GenerateSectionPageContext) {
+  const ids = new Set([...section.supportingCapabilityIds, ...(page?.supportingCapabilityIds ?? [])]);
+  return ctx.capabilities.filter((c) => ids.has(c.capabilityId));
 }
 
 function buildPageContextBlock(pageContext?: GenerateSectionPageContext) {
   if (!pageContext) {
-    return `## Page Context
-This is a shared layout section. Design it to work coherently across the whole project.`;
+    return `## Page Context\nThis is a shared layout section. Design it to work coherently across the whole project.`;
   }
-
+  const p = pageContext.pageDesignPlan;
   return `## Page Context
 - **Title**: ${pageContext.title}
-- **Slug**: ${pageContext.slug}
 - **Route**: ${pageContext.slug === "home" ? "/" : `/${pageContext.slug}`}
 - **Description**: ${pageContext.description}
 - **Journey Stage**: ${pageContext.journeyStage}
-- **Primary Roles**: ${pageContext.primaryRoleIds.join(", ") || "none"}
-- **Supporting Capabilities**: ${pageContext.supportingCapabilityIds.join(", ") || "none"}
 
 ## Page Design Plan
-- **Page Goal**: ${pageContext.pageDesignPlan.pageGoal}
-- **Audience Focus**: ${pageContext.pageDesignPlan.audienceFocus}
-- **Role Fit**: ${pageContext.pageDesignPlan.roleFit}
-- **Capability Focus**: ${pageContext.pageDesignPlan.capabilityFocus}
-- **Task Loop Coverage**: ${pageContext.pageDesignPlan.taskLoopCoverage}
-- **Narrative Arc**: ${pageContext.pageDesignPlan.narrativeArc}
-- **Layout Strategy**: ${pageContext.pageDesignPlan.layoutStrategy}
-- **Hierarchy**: ${pageContext.pageDesignPlan.hierarchy.join(" | ")}
-- **Transition Strategy**: ${pageContext.pageDesignPlan.transitionStrategy}
-- **Shared Shell Notes**: ${pageContext.pageDesignPlan.sharedShellNotes.join(" | ")}
-- **Page Constraints**:
-${formatBulletList(pageContext.pageDesignPlan.constraints)}`;
+- **Page Goal**: ${p.pageGoal}
+- **Narrative Arc**: ${p.narrativeArc}
+- **Layout Strategy**: ${p.layoutStrategy}
+- **Hierarchy**: ${p.hierarchy.join(" | ")}`;
 }
+
+// ── User Message ────────────────────────────────────────────────────────
 
 function buildUserMessage(params: {
   designSystem: string;
-  globalsCss: string;
   projectContext: GenerateSectionProjectContext;
   pageContext?: GenerateSectionPageContext;
   section: PlannedSectionSpec;
-  designPlan: PlannedSectionSpec["designPlan"];
+  skillMetadataBlock: string;
 }) {
-  const { designSystem, globalsCss, projectContext, pageContext, section, designPlan } = params;
-  const relevantRoles = filterRelevantRoles(section, projectContext, pageContext);
-  const relevantTaskLoops = filterRelevantTaskLoops(section, projectContext);
-  const relevantCapabilities = filterRelevantCapabilities(section, projectContext, pageContext);
-  const rolesBlock = formatRolesBlock(relevantRoles);
-  const taskLoopsBlock = formatTaskLoopsBlock(relevantTaskLoops);
-  const capabilitiesBlock = formatCapabilitiesBlock(relevantCapabilities);
-  const knownRoutesBlock = formatKnownRoutesBlock(projectContext.pages);
-  const pageContextBlock = buildPageContextBlock(pageContext);
+  const { designSystem, projectContext, pageContext, section, skillMetadataBlock } = params;
+  const roles = filterRelevantRoles(section, projectContext, pageContext);
+  const loops = filterRelevantTaskLoops(section, projectContext);
+  const caps = filterRelevantCapabilities(section, projectContext, pageContext);
 
   return `## Design System
 ${designSystem}
 
-## globals.css (already applied — DO NOT redefine any of these classes or keyframes)
-\`\`\`css
-${globalsCss}
-\`\`\`
+## Design System → Tailwind CSS v4 Mapping Guide
+The design system above is the single source of truth. A separate build step converts it into \`globals.css\` with Tailwind v4 tokens. When writing component classes, follow these mapping rules:
+
+**Colors** — Design system color names map directly to Tailwind utilities:
+- A color named "accent" / "primary" / "background" etc. → use \`bg-accent\`, \`text-primary\`, \`border-background\` etc.
+- Pattern: \`--color-{name}\` in @theme → \`bg-{name}\`, \`text-{name}\`, \`border-{name}\`
+
+**Fonts** — Font names map to \`font-{name}\`:
+- "display" font → \`font-display\`, "body" font → \`font-body\`, "header" font → \`font-header\`
+
+**Shadows** — Named shadows map to \`shadow-{name}\`:
+- "glow" shadow → \`shadow-glow\`, "soft" shadow → \`shadow-soft\`
+
+**Animations** — Named animations map to \`animate-{name}\`:
+- "float" animation → \`animate-float\`, "pulse" animation → \`animate-pulse\`
+
+**Custom effects** — Composite effects use \`ds-\` prefix:
+- Glass/blur effects → \`ds-glass\`, clip-path shapes → \`ds-chamfer\`, texture overlays → \`ds-scanlines\`
+
+**Do NOT** define inline CSS variables, @keyframes, or custom classes that duplicate design system tokens. Trust that the Tailwind utilities exist.
+
 ## Project Context
 - **Project**: ${projectContext.projectTitle}
 - **Description**: ${projectContext.projectDescription}
-- **Language**: ${projectContext.language} — ALL user-facing text in this component MUST be in this language. Do not use English placeholders if the language is not English.
+- **Language**: ${projectContext.language} — ALL user-facing text MUST be in this language.
 - **Product Type**: ${projectContext.productScope.productType}
-- **MVP Definition**: ${projectContext.productScope.mvpDefinition}
 - **Core Outcome**: ${projectContext.productScope.coreOutcome}
 - **Business Goal**: ${projectContext.productScope.businessGoal}
-- **In Scope**: ${projectContext.productScope.inScope.join(" | ")}
-- **Out Of Scope**: ${projectContext.productScope.outOfScope.join(" | ") || "none"}
 
 ## Roles
-${rolesBlock || "- none"}
+${formatRolesBlock(roles) || "- none"}
 
 ## Task Loops
-${taskLoopsBlock || "- none"}
+${formatTaskLoopsBlock(loops) || "- none"}
 
 ## Capabilities
-${capabilitiesBlock || "- none"}
+${formatCapabilitiesBlock(caps) || "- none"}
 
 ## Known Routes
-**These are the ONLY valid routes in this project. Navigation components must use exactly these routes and no others.**
-${knownRoutesBlock || "- / (home)"}
+**These are the ONLY valid routes. Navigation must use exactly these routes.**
+${formatKnownRoutesBlock(projectContext.pages) || "- / (home)"}
 
-${pageContextBlock}
+${buildPageContextBlock(pageContext)}
 
 ## Section to Generate
 - **Type**: ${section.type}
 - **Component Name**: ${section.fileName}
 - **Intent**: ${section.intent}
 - **Content Hints**: ${section.contentHints}
-- **Primary Role IDs**: ${section.primaryRoleIds.join(", ") || "none"}
-- **Supporting Capability IDs**: ${section.supportingCapabilityIds.join(", ") || "none"}
-- **Source Task Loop IDs**: ${section.sourceTaskLoopIds.join(", ") || "none"}
-- **Role**: ${designPlan.role}
-- **Goal**: ${designPlan.goal}
-- **Role Fit**: ${designPlan.roleFit}
-- **Task Loop Focus**: ${designPlan.taskLoopFocus}
-- **Capability Focus**: ${designPlan.capabilityFocus}
-- **Information Architecture**: ${designPlan.informationArchitecture}
-- **Layout Intent**: ${designPlan.layoutIntent}
-- **Visual Intent**: ${designPlan.visualIntent}
-- **Interaction Intent**: ${designPlan.interactionIntent}
-- **Content Strategy**: ${designPlan.contentStrategy}
-- **Hierarchy**: ${designPlan.hierarchy.join(" | ")}
-- **Section Guardrail IDs**: ${designPlan.guardrailIds.join(", ")}
-- **Capability Assist IDs**: ${designPlan.capabilityAssistIds.join(", ") || "none"}
-- **Constraints**:
-${formatBulletList(designPlan.constraints)}
-- **Planner Rationale**: ${designPlan.rationale ?? "No rationale provided."}
+- **Primary Roles**: ${section.primaryRoleIds.join(", ") || "none"}
+- **Supporting Capabilities**: ${section.supportingCapabilityIds.join(", ") || "none"}
+
+${skillMetadataBlock ? `## Available Component Skills\nThe following skills are available for this section type. The selected skill's full guidance is already in the system prompt.\n${skillMetadataBlock}` : ""}
 
 Generate the complete ${section.fileName}.tsx component.
-Treat the design plan as the primary source of truth. Capability assists are optional helpers, not mandatory templates.`;
+Use the design system and project context to make all design decisions (layout, visual style, motion, interaction). Apply the Tailwind CSS mapping rules above to translate design tokens into utility classes. The section intent and content hints define WHAT to build; YOU decide HOW it looks.`;
 }
+
+// ── Validation ──────────────────────────────────────────────────────────
 
 export interface GenerateSectionResult {
   filePath: string;
@@ -330,44 +391,18 @@ export interface GenerateSectionResult {
   trace: StepTrace;
 }
 
-function validateSectionExports(
-  tsx: string,
-  componentName: string
-): NonNullable<StepTrace["validationResult"]> {
+function validateSectionExports(tsx: string, componentName: string): NonNullable<StepTrace["validationResult"]> {
   const checks: Array<{ name: string; passed: boolean; detail?: string }> = [];
-
-  // Check: file is non-empty
-  checks.push({
-    name: "non_empty",
-    passed: tsx.trim().length > 0,
-    detail: tsx.trim().length === 0 ? "Generated content is empty" : undefined,
-  });
-
-  // Check: has named export matching component name
-  const hasNamedExport = new RegExp(
-    `export\\s+(function|const|class)\\s+${componentName}\\b`
-  ).test(tsx);
+  checks.push({ name: "non_empty", passed: tsx.trim().length > 0, detail: tsx.trim().length === 0 ? "Generated content is empty" : undefined });
+  const hasNamedExport = new RegExp(`export\\s+(function|const|class)\\s+${componentName}\\b`).test(tsx);
   const hasDefaultExport = /export\s+default\s+/.test(tsx);
-  checks.push({
-    name: "has_export",
-    passed: hasNamedExport || hasDefaultExport,
-    detail:
-      !hasNamedExport && !hasDefaultExport
-        ? `No export found for "${componentName}". File may be truncated.`
-        : undefined,
-  });
-
-  // Check: has JSX return
+  checks.push({ name: "has_export", passed: hasNamedExport || hasDefaultExport, detail: !hasNamedExport && !hasDefaultExport ? `No export found for "${componentName}".` : undefined });
   const hasJsx = /return\s*\(?\s*</.test(tsx);
-  checks.push({
-    name: "has_jsx",
-    passed: hasJsx,
-    detail: !hasJsx ? "No JSX return statement found" : undefined,
-  });
-
-  const passed = checks.every((c) => c.passed);
-  return { passed, checks };
+  checks.push({ name: "has_jsx", passed: hasJsx, detail: !hasJsx ? "No JSX return statement found" : undefined });
+  return { passed: checks.every((c) => c.passed), checks };
 }
+
+// ── Main Entry ──────────────────────────────────────────────────────────
 
 export async function stepGenerateSection({
   designSystem,
@@ -376,43 +411,40 @@ export async function stepGenerateSection({
   section,
   outputFileRelative,
   pageContext,
-  preselectedSkillId,
 }: GenerateSectionParams): Promise<GenerateSectionResult> {
-  const designPlan = buildSectionDesignPlan(section, projectContext);
-  const { prompt: systemPrompt, skillId } = await buildSystemPrompt({
+  // Discover and select skill at runtime based on section context
+  const { skillId, skillPrompt, skillMetadataBlock } = await discoverAndSelectSkill(section.type, {
+    intent: section.intent,
+    contentHints: section.contentHints,
+    designKeywords: projectContext.designKeywords,
+    productType: projectContext.productScope.productType,
+  });
+
+  const systemPrompt = buildSystemPrompt({
     section,
     projectGuardrailIds,
-    designPlan,
-    productScope: projectContext.productScope,
-    designKeywords: projectContext.designKeywords ?? [],
-    preselectedSkillId,
+    skillPrompt,
   });
+
   const userMessage = buildUserMessage({
     designSystem,
-    globalsCss: readSiteFile("app/globals.css"),
     projectContext,
     pageContext,
     section,
-    designPlan,
+    skillMetadataBlock,
   });
 
   const componentName = section.fileName.replace(/\.tsx$/, "");
   const filePath = outputFileRelative;
   const MAX_RETRIES = 1;
-
-  let lastTrace: StepTrace | undefined;
   let lastError = "";
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     const retryHint = attempt > 0
-      ? `\n\nIMPORTANT: Your previous response was truncated/incomplete — the component "${componentName}" was missing its export or JSX return. Make sure to output the COMPLETE component with a proper \`export function ${componentName}\` and a JSX return statement. Keep the component concise to avoid truncation.`
+      ? `\n\nIMPORTANT: Your previous response was truncated/incomplete — the component "${componentName}" was missing its export or JSX return. Output the COMPLETE component with \`export function ${componentName}\` and a JSX return. Keep it concise.`
       : "";
 
-    const llmResult = await callLLMWithMeta(
-      systemPrompt + retryHint,
-      userMessage,
-      0.7
-    );
+    const llmResult = await callLLMWithMeta(systemPrompt + retryHint, userMessage, 0.7, undefined, getModelForStep("generate_section"));
     const tsx = extractContent(llmResult.content, "tsx");
 
     await writeSiteFile(filePath, tsx);
@@ -426,22 +458,9 @@ export async function stepGenerateSection({
         componentName,
         outputFile: outputFileRelative,
         skillId,
-        designPlan: {
-          role: designPlan.role,
-          goal: designPlan.goal,
-          layoutIntent: designPlan.layoutIntent,
-          visualIntent: designPlan.visualIntent,
-          constraints: designPlan.constraints,
-        },
-        pageContext: pageContext
-          ? { slug: pageContext.slug, title: pageContext.title, journeyStage: pageContext.journeyStage }
-          : null,
+        pageContext: pageContext ? { slug: pageContext.slug, title: pageContext.title } : null,
       },
-      output: {
-        filePath,
-        linesGenerated: tsx.split("\n").length,
-        validationPassed: validationResult.passed,
-      },
+      output: { filePath, linesGenerated: tsx.split("\n").length, validationPassed: validationResult.passed },
       llmCall: {
         model: llmResult.model,
         systemPrompt: systemPrompt + retryHint,
@@ -452,22 +471,16 @@ export async function stepGenerateSection({
       },
       validationResult,
     };
-    lastTrace = trace;
 
     if (validationResult.passed) {
       return { filePath, skillId, trace };
     }
 
-    lastError = validationResult.checks
-      .filter((c) => !c.passed)
-      .map((c) => c.detail ?? c.name)
-      .join("; ");
-
+    lastError = validationResult.checks.filter((c) => !c.passed).map((c) => c.detail ?? c.name).join("; ");
     if (attempt < MAX_RETRIES) {
       console.warn(`[generateSection] ${componentName} validation failed (attempt ${attempt + 1}), retrying: ${lastError}`);
     }
   }
 
-  // All attempts failed
   throw new Error(`Section validation failed for ${componentName}: ${lastError}`);
 }

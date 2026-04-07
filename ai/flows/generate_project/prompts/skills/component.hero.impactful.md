@@ -8,8 +8,8 @@ when:
   designKeywords:
     any: ["bold", "vibrant", "energetic", "neon", "cyber", "futuristic", "tech", "glow", "festival", "rave", "acid", "dark", "dramatic", "immersive", "animated", "dynamic"]
     none: ["editorial", "magazine", "luxury", "minimal", "dashboard", "analytics", "shader", "webgl"]
-  capabilityAssists:
-    any: ["effect.motion.energetic", "pattern.hero.centered", "pattern.hero.split"]
+  traits:
+    any: ["energetic", "centered", "split"]
     none: []
   journeyStages:
     any: ["acquisition", "campaign", "launch", "activation"]
@@ -59,7 +59,7 @@ Use this skill when generating a hero section that must create immediate visual 
 - Use design tokens for color, shadow, and animation.
 - Contrast: Ensure headline and CTA stand out against background. Use `--color-accent`, `--shadow-*`, and semantic tokens.
 - Depth: Layered backgrounds, subtle gradients, or texture classes from `globals.css` create depth without clutter.
-- Motion: If `effect.motion.ambient` or `effect.motion.energetic` is in capability assists, use restrained motion (e.g. subtle glow, gentle parallax). Never block the fold or slow load.
+- Motion: If the section traits specify ambient or energetic motion, use restrained motion (e.g. subtle glow, gentle parallax). Never block the fold or slow load.
 
 ## Constraints
 

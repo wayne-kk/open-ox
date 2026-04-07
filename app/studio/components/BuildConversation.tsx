@@ -88,7 +88,7 @@ function ModifyBubble({ record }: { record: ModifyRecord }) {
                 <img
                     src={record.image}
                     alt="attached"
-                    className="mt-2 max-h-48 max-w-full rounded-lg border border-white/10 object-contain"
+                    className="mt-2 max-h-64 rounded-lg border border-white/10 object-cover"
                 />
             )}
             <pre className="mt-2 whitespace-pre-wrap font-body text-[14px] leading-7 text-foreground">
@@ -484,7 +484,7 @@ export function BuildConversation({
                                 <img
                                     src={pendingModifyImage}
                                     alt="attached"
-                                    className="mt-2 max-h-48 max-w-full rounded-lg border border-white/10 object-contain"
+                                    className="mt-2 max-h-64 rounded-lg border border-white/10 object-cover"
                                 />
                             )}
                             <pre className="mt-2 whitespace-pre-wrap font-body text-[14px] leading-7 text-foreground">

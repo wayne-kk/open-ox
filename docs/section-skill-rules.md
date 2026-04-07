@@ -41,8 +41,8 @@ when:
   designKeywords:
     any: ["lightning", "shader", "webgl"]
     none: []
-  capabilityAssists:
-    any: ["effect.motion.ambient", "pattern.hero.centered"]
+  traits:
+    any: ["ambient", "centered"]
     none: []
   journeyStages:
     any: ["acquisition", "campaign"]

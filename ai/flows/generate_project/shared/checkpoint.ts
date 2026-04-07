@@ -101,7 +101,6 @@ export interface CheckpointResult {
     skipAnalyze: boolean;
     skipPlanAndDesign: boolean;
     skipDesignTokens: boolean;
-    skipPreselectSkills: boolean;
     /** Per-section skip map: "scope:fileName" → true if already generated */
     generatedSections: Set<string>;
     /** Per-page skip map: slug → true if already composed */
@@ -129,7 +128,6 @@ export function detectCheckpoint(project: ProjectMetadata): CheckpointResult {
         skipAnalyze: false,
         skipPlanAndDesign: false,
         skipDesignTokens: false,
-        skipPreselectSkills: false,
         generatedSections: new Set(),
         composedPages: new Set(),
         cachedBlueprint: null,
@@ -171,7 +169,7 @@ export function detectCheckpoint(project: ProjectMetadata): CheckpointResult {
         result.summary = "Resuming from preselect_skills";
         return result;
     }
-    result.skipPreselectSkills = true;
+    result.skipDesignTokens = true;
 
     // Check individual sections
     const bp = result.cachedBlueprint;

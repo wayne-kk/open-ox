@@ -8,8 +8,8 @@ when:
   designKeywords:
     any: ["lightning", "shader", "webgl", "plasma", "particle-field", "generative-art"]
     none: ["editorial", "magazine", "luxury", "minimal", "clean", "nature", "organic", "warm", "festive", "celebration"]
-  capabilityAssists:
-    any: ["effect.motion.ambient", "effect.motion.energetic"]
+  traits:
+    any: ["ambient", "energetic"]
     none: []
   journeyStages:
     any: ["activation", "launch"]

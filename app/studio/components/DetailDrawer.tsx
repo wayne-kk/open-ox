@@ -218,10 +218,11 @@ export function DetailDrawer({
 
   return (
     <>
-      <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px]" onClick={onClose} aria-hidden="true" />
+      {/* Backdrop — scoped to the parent container, not the full viewport */}
+      <div className="absolute inset-0 z-40 bg-black/30" onClick={onClose} aria-hidden="true" />
 
       <div
-        className="fixed right-0 top-0 z-50 flex h-full w-full max-w-[420px] flex-col border-l border-white/10 bg-[#0a0c10]/98 shadow-[-12px_0_40px_rgba(0,0,0,0.6)]"
+        className="absolute right-0 top-0 z-50 flex h-full w-full max-w-[420px] flex-col border-l border-white/10 bg-[#0a0c10]/98 shadow-[-12px_0_40px_rgba(0,0,0,0.6)]"
         role="dialog"
         aria-label="Step detail"
       >

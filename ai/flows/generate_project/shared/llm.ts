@@ -1,4 +1,4 @@
-import { getModelId } from "../../../../lib/config/models";
+import { getModelId, modelSupportsThinking } from "../../../../lib/config/models";
 import { executeSystemTool } from "../../../tools";
 import type { ToolResult } from "../../../tools";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
@@ -51,33 +51,57 @@ export async function chatCompletion(params: {
   parallel_tool_calls?: boolean;
 }): Promise<ChatCompletionResponse> {
   const { apiKey, baseURL } = getApiConfig();
+  const maxRetries = 2;
 
-  const res = await fetch(`${baseURL}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: params.model,
-      messages: params.messages,
-      temperature: params.temperature,
-      ...(params.max_tokens ? { max_tokens: params.max_tokens } : {}),
-      ...(params.tools ? {
-        tools: params.tools,
-        tool_choice: params.tool_choice ?? "auto",
-        ...(params.parallel_tool_calls !== undefined ? { parallel_tool_calls: params.parallel_tool_calls } : {}),
-      } : {}),
-    }),
-    signal: AbortSignal.timeout(300_000),
-  });
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    const res = await fetch(`${baseURL}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: params.model,
+        messages: params.messages,
+        temperature: params.temperature,
+        ...(params.max_tokens ? { max_tokens: params.max_tokens } : {}),
+        ...(params.tools ? {
+          tools: params.tools,
+          tool_choice: params.tool_choice ?? "auto",
+          ...(params.parallel_tool_calls !== undefined ? { parallel_tool_calls: params.parallel_tool_calls } : {}),
+        } : {}),
+      }),
+      signal: AbortSignal.timeout(300_000),
+    });
 
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`LLM HTTP ${res.status}: ${body.slice(0, 300)}`);
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+
+      // Retry on transient provider errors (e.g. Gemini "Thought signature is not valid",
+      // 500/502/503 server errors) — these typically succeed on a second attempt.
+      const isThinkingError = body.includes("Thought signature is not valid");
+      const isRetryable =
+        res.status === 500 || res.status === 502 || res.status === 503 ||
+        (res.status === 400 && isThinkingError);
+
+      if (isRetryable && attempt < maxRetries) {
+        const delay = 1000 * (attempt + 1);
+        const reason = isThinkingError
+          ? `Thinking signature error (model ${params.model} supportsThinking=${modelSupportsThinking(params.model)})`
+          : `HTTP ${res.status}`;
+        console.warn(`[chatCompletion] ${reason}, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
+      }
+
+      throw new Error(`LLM HTTP ${res.status}: ${body.slice(0, 300)}`);
+    }
+
+    return res.json() as Promise<ChatCompletionResponse>;
   }
 
-  return res.json() as Promise<ChatCompletionResponse>;
+  // Unreachable, but TypeScript needs it
+  throw new Error("chatCompletion: exhausted retries");
 }
 
 export interface LLMCallResult {
@@ -91,21 +115,23 @@ export async function callLLM(
   systemPrompt: string,
   userMessage: string,
   temperature = 0.7,
-  maxTokens?: number
+  maxTokens?: number,
+  model?: string
 ): Promise<string> {
-  return (await callLLMWithMeta(systemPrompt, userMessage, temperature, maxTokens)).content;
+  return (await callLLMWithMeta(systemPrompt, userMessage, temperature, maxTokens, model)).content;
 }
 
 export async function callLLMWithMeta(
   systemPrompt: string,
   userMessage: string,
   temperature = 0.7,
-  maxTokens?: number
+  maxTokens?: number,
+  model?: string
 ): Promise<LLMCallResult> {
-  const model = getModelId();
+  const resolvedModel = model || getModelId();
   try {
     const res = await chatCompletion({
-      model,
+      model: resolvedModel,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userMessage },
@@ -116,12 +142,12 @@ export async function callLLMWithMeta(
 
     const content = res.choices[0]?.message?.content?.trim() ?? "";
     if (!content && res.choices[0]?.finish_reason === "length") {
-      throw new Error(`LLM response truncated (max_tokens reached). Model: ${model}`);
+      throw new Error(`LLM response truncated (max_tokens reached). Model: ${resolvedModel}`);
     }
 
     return {
       content,
-      model,
+      model: resolvedModel,
       inputTokens: res.usage?.prompt_tokens,
       outputTokens: res.usage?.completion_tokens,
     };
@@ -143,10 +169,10 @@ export async function callLLMWithMeta(
     const causeChain = causes.length > 0 ? ` | causes: ${causes.join(" → ")}` : "";
 
     // Log full error to server console for debugging
-    console.error(`[LLM ERROR] model=${model} status=${status} code=${code} msg=${msg}${causeChain}`);
+    console.error(`[LLM ERROR] model=${resolvedModel} status=${status} code=${code} msg=${msg}${causeChain}`);
 
     const detail = [
-      `Model: ${model}`,
+      `Model: ${resolvedModel}`,
       status ? `HTTP ${status}` : null,
       code ? `code: ${code}` : null,
       type ? `type: ${type}` : null,
@@ -187,10 +213,11 @@ export async function callLLMWithTools(params: {
   tools: ChatCompletionTool[];
   temperature?: number;
   maxIterations?: number;
+  model?: string;
   executeToolOverrides?: Record<string, (args: Record<string, unknown>) => Promise<ToolResult | string>>;
 }): Promise<{ content: string; toolCalls: AgentToolCallRecord[] }> {
   const { systemPrompt, userMessage, tools, temperature = 0.1, maxIterations = 8, executeToolOverrides = {} } = params;
-  const model = getModelId();
+  const model = params.model || getModelId();
   const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
     { role: "user", content: userMessage },

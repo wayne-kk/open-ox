@@ -109,7 +109,6 @@ function getModelForStep(stepName: string): ModelId {
                   ["plan_project", "项目规划"],
                   ["generate_project_design_system", "设计系统"],
                   ["apply_project_design_tokens", "设计 Token"],
-                  ["preselect_skills", "技能匹配"],
                   ["generate_section", "组件生成"],
                   ["compose_page", "页面组合"],
                   ["repair_build", "构建修复"],
@@ -133,8 +132,7 @@ function getModelForStep(stepName: string): ModelId {
             {[
               { steps: "analyze + plan + design_system", model: "强模型", reason: "需要深度理解用户意图和产品逻辑" },
               { steps: "generate_section", model: "快模型", reason: "数量最多（N 个并行），速度优先" },
-              { steps: "repair_build", model: "强模型", reason: "需要理解构建错误并精确修复" },
-              { steps: "preselect_skills", model: "快模型", reason: "简单分类任务，不需要强推理" },
+              { steps: "repair_build", model: "强模型", reason: "Agent 工具循环，需要理解构建错误并精确修复" },
             ].map(({ steps, model, reason }) => (
               <div key={steps} className="rounded-lg border border-white/6 bg-white/[0.02] px-4 py-3">
                 <div className="flex items-center gap-3">

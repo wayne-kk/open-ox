@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import type { GraphNode } from "@/lib/atlas/types";
 import type { BuildStep } from "../types/build-studio";
 import { parseStepsToTopology } from "@/lib/atlas/parseSteps";
@@ -96,11 +96,18 @@ export function GenerationAtlas({
         prevStepCountRef.current = steps.length;
     }, [steps.length]);
 
-    if (steps.length === 0) {
+    // Memoize topology — reparse when steps change (new step or status update)
+    const stepsFingerprint = steps.map((s) => `${s.step}:${s.status}`).join("|");
+    const topology = useMemo(
+        () => (steps.length > 0 ? parseStepsToTopology(steps, flowStart) : null),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [stepsFingerprint, flowStart]
+    );
+
+    if (!topology) {
         return <EmptyState loading={loading} />;
     }
 
-    const topology = parseStepsToTopology(steps, flowStart);
     const activeIndex = loading ? topology.nodes.findLastIndex((n) => n.status === "active") : -1;
 
     const handleSelectNode = (id: string) => {
@@ -110,7 +117,7 @@ export function GenerationAtlas({
     const selectedNode = topology.nodes.find((n) => n.id === selectedNodeId) ?? null;
 
     return (
-        <div className="flex h-full flex-col">
+        <div className="relative flex h-full flex-col">
             <SummaryBar
                 nodes={topology.nodes}
                 totalDuration={totalDuration}

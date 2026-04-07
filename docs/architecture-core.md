@@ -52,7 +52,7 @@
 - 为每个页面生成 `PageDesignPlan`
 - 为每个 section 生成 `SectionDesignPlan`
 - 把设计决策绑定回角色 / 闭环 / capability
-- 仅在必要时附加 `capabilityAssistIds`
+- 仅在必要时附加 `traits`（结构化的 layout/motion/visual/interaction 描述）
 
 这一层的核心不是模板选型，而是：
 
@@ -99,14 +99,14 @@
   - `UserRole`
   - `TaskLoop`
   - `CapabilitySpec`
-- 按需附加 capability assist
+- 按需附加 traits（结构化特征描述）
 
 运行时更接近：
 
 ```text
 frontend system
 + project guardrails
-+ optional capability assists
++ optional traits block
 + product scope
 + role / task loop / capability context
 + page context
@@ -186,13 +186,14 @@ interface PlannedSectionSpec
 
 - `prompts/steps/*`
 - guardrails
-- capability assists
+- traits（结构化特征描述，替代旧的 capability assists 白名单）
 
 ### 已经降级的
 
 - `prompts/sections/*`
 - `prompts/layouts/*`
 - `prompts/motions/*`
+- `prompts/capabilities/*`
 - `selectors/sectionPromptSelector.ts`
 
 这些 legacy 资产不再主导运行时设计决策。
@@ -207,7 +208,7 @@ interface PlannedSectionSpec
 - section 为什么存在
 - capability 为什么需要被表达
 
-如果一个问题属于下面这些范畴，它才适合做 capability assist：
+如果一个问题属于下面这些范畴，它才适合用 traits 表达：
 
 - 复杂 Hero 表达
 - 复杂 Dashboard pattern

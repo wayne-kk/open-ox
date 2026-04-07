@@ -4,13 +4,14 @@ export interface ModelConfig {
     id: string;
     displayName: string;
     contextWindow: number;
+    supportsThinking?: boolean;
 }
 
 // Built-in models — always available
 const BUILTIN_MODELS: ModelConfig[] = [
-    { id: "gemini-3-flash-preview", displayName: "Gemini 3 Flash", contextWindow: 128_000 },
-    { id: "gemini-3.1-pro-preview", displayName: "Gemini 3.1 Pro", contextWindow: 128_000 },
-    { id: "gpt-5.2", displayName: "GPT-5.2", contextWindow: 128_000 },
+    { id: "gemini-3-flash-preview", displayName: "Gemini 3 Flash", contextWindow: 128_000, supportsThinking: true },
+    { id: "gemini-3.1-pro-preview", displayName: "Gemini 3.1 Pro", contextWindow: 128_000, supportsThinking: true },
+    { id: "gpt-5.2", displayName: "GPT-5.2", contextWindow: 128_000, supportsThinking: false },
 ];
 
 // User-added models (loaded from DB at runtime)
@@ -77,3 +78,10 @@ export const GENERATION_STEPS = [
     { id: "compose_page", label: "页面组合" },
     { id: "repair_build", label: "构建修复" },
 ] as const;
+
+/** Check if a model supports thinking/reasoning mode */
+export function modelSupportsThinking(modelId: string): boolean {
+    const all = getAllModels();
+    const model = all.find((m) => m.id === modelId);
+    return model?.supportsThinking ?? false;
+}

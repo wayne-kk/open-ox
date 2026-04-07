@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft, Trash2, Plus, Clock, Layers, Pencil,
   CheckCircle2, AlertCircle, Loader2, Sparkles, Globe,
+  AlertTriangle,
 } from "lucide-react";
 
 interface ProjectMetadata {
@@ -66,15 +67,47 @@ function ProjectCard({
     .map((w) => w[0]?.toUpperCase() ?? "")
     .join("");
 
+  const pressedRef = useRef(false);
+  const [pressed, setPressed] = useState(false);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    // Ignore right-click and let delete button handle its own clicks
+    if (e.button !== 0 || !isClickable) return;
+    pressedRef.current = true;
+    setPressed(true);
+  };
+
+  const handleMouseUp = (e: React.MouseEvent) => {
+    if (!pressedRef.current || !isClickable) return;
+    pressedRef.current = false;
+    setPressed(false);
+    // Only navigate if mouse is still over this card (not the delete button)
+    const target = e.target as HTMLElement;
+    if (!target.closest("[data-delete-btn]")) {
+      if (e.metaKey || e.ctrlKey) {
+        window.open(`/studio/${project.id}`, "_blank");
+      } else {
+        onClick();
+      }
+    }
+  };
+
+  const handleMouseLeave = () => {
+    pressedRef.current = false;
+    setPressed(false);
+  };
+
   return (
     <div
-      onClick={isClickable ? onClick : undefined}
+      onMouseDown={handleMouseDown}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseLeave}
       className={`
-        group relative rounded-2xl border overflow-hidden transition-all duration-300
+        group relative rounded-2xl border overflow-hidden transition-all duration-300${pressed ? " select-none" : ""}
         ${isReady
-          ? "border-white/10 hover:border-primary/40 cursor-pointer hover:shadow-[0_0_50px_-12px_rgba(247,147,26,0.25)] hover:-translate-y-1"
+        ? `border-white/10 hover:border-primary/40 cursor-pointer hover:shadow-[0_0_50px_-12px_rgba(247,147,26,0.25)] ${pressed ? "scale-[0.98]" : "hover:-translate-y-1"}`
         : isFailed
-          ? "border-red-400/20 hover:border-red-400/40 cursor-pointer hover:shadow-[0_0_30px_-12px_rgba(248,113,113,0.2)] hover:-translate-y-1"
+          ? `border-red-400/20 hover:border-red-400/40 cursor-pointer hover:shadow-[0_0_30px_-12px_rgba(248,113,113,0.2)] ${pressed ? "scale-[0.98]" : "hover:-translate-y-1"}`
           : isGenerating
             ? "border-primary/20 cursor-default"
             : "border-white/8 cursor-default"
@@ -154,6 +187,7 @@ function ProjectCard({
           </div>
 
           <button
+            data-delete-btn
             onClick={onDelete}
             disabled={deleting}
             className="rounded-lg p-1.5 text-white/20 hover:text-red-400 hover:bg-red-400/10
@@ -172,11 +206,67 @@ function ProjectCard({
   );
 }
 
+/* ── Confirm Delete Modal ── */
+function ConfirmDeleteModal({
+  projectName,
+  onConfirm,
+  onCancel,
+}: {
+  projectName: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0d0f14] p-6 shadow-2xl">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/10 border border-red-500/20">
+            <AlertTriangle className="h-5 w-5 text-red-400" />
+          </div>
+          <h3 className="text-[15px] font-semibold text-white">确认删除</h3>
+        </div>
+        <p className="text-[13px] text-white/60 leading-relaxed mb-1">
+          确定要删除项目 <span className="text-white/90 font-medium">&ldquo;{projectName}&rdquo;</span> 吗？
+        </p>
+        <p className="text-[12px] text-red-400/60 mb-6">此操作不可撤销，项目所有数据将被永久删除。</p>
+        <div className="flex items-center justify-end gap-3">
+          <button
+            onClick={onCancel}
+            className="rounded-xl px-4 py-2 text-[12px] font-medium text-white/60 border border-white/10 hover:bg-white/5 transition-colors"
+          >
+            取消
+          </button>
+          <button
+            onClick={onConfirm}
+            className="rounded-xl px-4 py-2 text-[12px] font-medium text-white bg-red-500/80 hover:bg-red-500 border border-red-500/40 transition-colors"
+          >
+            确认删除
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Deleting Overlay ── */
+function DeletingOverlay() {
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+      <div className="flex flex-col items-center gap-4">
+        <Loader2 className="h-8 w-8 animate-spin text-red-400" />
+        <p className="font-mono text-sm text-white/60 tracking-wider">正在删除项目...</p>
+        <p className="font-mono text-[10px] text-white/30">请勿关闭页面</p>
+      </div>
+    </div>
+  );
+}
+
 export default function ProjectsPage() {
   const router = useRouter();
   const [projects, setProjects] = useState<ProjectMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   const fetchProjects = useCallback(async () => {
     try {
@@ -194,9 +284,17 @@ export default function ProjectsPage() {
     return () => clearInterval(interval);
   }, [projects, fetchProjects]);
 
-  const handleDelete = async (e: React.MouseEvent, id: string) => {
+  // Step 1: click delete → show confirm modal
+  const handleDeleteClick = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    if (!confirm("确定要删除这个项目吗？")) return;
+    setPendingDeleteId(id);
+  };
+
+  // Step 2: confirm → show loading overlay, do the delete
+  const handleConfirmDelete = async () => {
+    const id = pendingDeleteId;
+    if (!id) return;
+    setPendingDeleteId(null);
     setDeletingId(id);
     try {
       const res = await fetch(`/api/projects/${id}`, { method: "DELETE" });
@@ -210,6 +308,18 @@ export default function ProjectsPage() {
 
   return (
     <main className="relative min-h-screen pt-[57px]">
+
+      {/* Confirm delete modal */}
+      {pendingDeleteId && (
+        <ConfirmDeleteModal
+          projectName={projects.find((p) => p.id === pendingDeleteId)?.name || "未命名项目"}
+          onConfirm={handleConfirmDelete}
+          onCancel={() => setPendingDeleteId(null)}
+        />
+      )}
+
+      {/* Full-page loading overlay while deleting */}
+      {deletingId && <DeletingOverlay />}
 
       <div className="relative z-1 mx-auto max-w-6xl px-6 py-8 lg:px-8">
         {loading ? (
@@ -252,7 +362,7 @@ export default function ProjectsPage() {
                 key={project.id}
                 project={project}
                 onClick={() => router.push(`/studio/${project.id}`)}
-                onDelete={(e) => handleDelete(e, project.id)}
+                onDelete={(e) => handleDeleteClick(e, project.id)}
                 deleting={deletingId === project.id}
               />
             ))}
