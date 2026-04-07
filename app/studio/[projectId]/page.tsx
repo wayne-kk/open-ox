@@ -4,6 +4,7 @@ import { use } from "react";
 import { Suspense } from "react";
 import Link from "next/link";
 import { ArrowLeft, GitBranch, Monitor, RefreshCw, ExternalLink } from "lucide-react";
+import { HamsterLoader } from "@/components/ui/hamster-loader";
 import { useBuildStudio } from "@/app/studio/hooks/useBuildStudio";
 import { BuildConversation } from "@/app/studio/components/BuildConversation";
 import { GenerationAtlas } from "@/app/studio/components/GenerationAtlas";
@@ -25,7 +26,7 @@ function StudioInner({ projectId }: { projectId: string }) {
       <main className="relative h-screen overflow-hidden bg-background flex items-center justify-center">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(247,147,26,0.14),transparent_28%)]" />
         <div className="relative z-10 flex flex-col items-center gap-4">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <HamsterLoader size="sm" className="translate-x-1" />
           <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Loading project...</p>
         </div>
       </main>
@@ -185,7 +186,7 @@ function StudioInner({ projectId }: { projectId: string }) {
                 <div className="flex h-full flex-col">
                   {previewState === "starting" && (
                     <div className="flex flex-1 flex-col items-center justify-center gap-3">
-                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                      <HamsterLoader size="sm" />
                       <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Starting dev server…</p>
                       <p className="font-mono text-[10px] text-muted-foreground/70">First start may take 15–30s</p>
                     </div>

@@ -7,6 +7,7 @@ import { usePromptTriggers, detectUrl, type TriggerItem, type InjectedChip } fro
 import { TriggerMenu } from "@/app/components/ui/TriggerMenu";
 import { PromptChips } from "@/app/components/ui/PromptChips";
 import { QuickTemplates } from "@/app/components/ui/QuickTemplates";
+import { SparkleHoverButton } from "@/components/ui/sparkle-hover-button";
 
 // ── Typewriter placeholders ──────────────────────────────────────────────────
 const PLACEHOLDERS = [
@@ -215,7 +216,7 @@ export function HeroPrompt() {
   };
 
   const canSubmit = (value.trim().length > 0 || chips.length > 0) && !submitting;
-  const showTemplates = chips.length === 0 && value.trim().length < 5;
+  const showTemplates = chips.length === 0 && value.trim().length < 1;
 
   return (
     <form onSubmit={e => { e.preventDefault(); submit(); }} className="mx-auto w-full max-w-4xl">
@@ -302,17 +303,17 @@ export function HeroPrompt() {
             <kbd className="rounded border border-white/10 px-1 py-0.5 text-[10px]">#</kbd> 约束
             {" · ⌘↵ 构建"}
           </span>
-          <button
+          <SparkleHoverButton
             type="submit"
             disabled={!canSubmit}
-            className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 font-mono text-[12px] font-bold tracking-[0.1em] text-white uppercase transition-all hover:bg-primary/90 disabled:opacity-30 disabled:cursor-not-allowed"
+            className="px-5 py-2.5 tracking-[0.1em] disabled:opacity-30 disabled:cursor-not-allowed"
           >
             {submitting ? (
               <><span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" /> 创建中…</>
             ) : (
-                <>构建 <ArrowRight className="h-3.5 w-3.5" /></>
+              <>构建 <ArrowRight className="h-3.5 w-3.5" /></>
             )}
-          </button>
+          </SparkleHoverButton>
         </div>
       </div>
     </form>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import { NodeBurstFx } from "./ui/NodeBurstFx";
 
 interface Step {
     id: string;
@@ -30,15 +31,16 @@ const EDGES: [number, number][] = [
    Node component — with breathing glow, ripple, glass
    ════════════════════════════════════════════════════ */
 function Node({
-    step, index, state, progress, isParallel, hovered, onHover, onLeave,
+    step, index, state, progress, isParallel, hovered, onHover, onLeave, fx,
 }: {
         step: Step; index: number;
-        state: "pending" | "active" | "done";
+        state: "pending" | "active" | "done" | "failed";
         progress: number;
         isParallel: boolean;
         hovered: boolean;
         onHover: () => void;
         onLeave: () => void;
+        fx: { variant: "success" | "failure"; key: number } | undefined;
 }) {
     // Non-linear progress: fast start, pause at 80%, then snap to 100%
     const displayProgress = progress < 80
@@ -53,6 +55,7 @@ function Node({
         relative flex flex-col items-center gap-3 transition-all duration-500 cursor-default
         ${state === "pending" ? "opacity-25 scale-95" : "opacity-100"}
         ${state === "active" ? "scale-[1.08] z-20" : ""}
+        ${state === "failed" ? "scale-[1.02] z-20" : ""}
         ${hovered && state !== "pending" ? "scale-[1.12] z-30" : ""}
       `}
             onMouseEnter={onHover}
@@ -68,6 +71,9 @@ function Node({
             {state === "done" && (
                 <div className="absolute -inset-5 rounded-3xl bg-green-500/8 blur-xl pointer-events-none" />
             )}
+            {state === "failed" && (
+                <div className="absolute -inset-5 rounded-3xl bg-red-500/12 blur-xl pointer-events-none" />
+            )}
 
             {/* Main card — glass effect */}
             <div className={`
@@ -76,6 +82,8 @@ function Node({
         backdrop-blur-sm
         ${state === "done"
                 ? "bg-green-500/15 border-2 border-green-400/50 text-green-300 shadow-[0_0_24px_rgba(34,197,94,0.3)]"
+                : state === "failed"
+                    ? "bg-red-500/14 border-2 border-red-400/60 text-red-300 shadow-[0_0_24px_rgba(239,68,68,0.35)]"
                 : state === "active"
                     ? "bg-primary/12 border-2 border-primary/60 text-primary shadow-[0_0_32px_rgba(247,147,26,0.35)]"
                     : "bg-white/[0.03] border border-white/8 text-white/20"
@@ -84,6 +92,10 @@ function Node({
                 {state === "done" ? (
                     <svg className="h-7 w-7" fill="none" viewBox="0 0 16 16">
                         <path d="M3 8l4 4 6-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                ) : state === "failed" ? (
+                    <svg className="h-7 w-7" fill="none" viewBox="0 0 16 16">
+                        <path d="M5 5l6 6M11 5l-6 6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
                     </svg>
                 ) : state === "active" ? (
                     <span className="animate-[breathe_2s_ease-in-out_infinite]">
@@ -105,6 +117,10 @@ function Node({
                 {state === "done" && (
                     <span className="absolute inset-0 rounded-2xl border-2 border-green-400/40 animate-[rippleBurst_0.8s_ease-out_forwards]" />
                 )}
+                {state === "failed" && (
+                    <span className="absolute inset-0 rounded-2xl border-2 border-red-400/45 animate-[rippleBurst_0.45s_ease-out_forwards]" />
+                )}
+                {fx && <NodeBurstFx variant={fx.variant} triggerKey={fx.key} />}
 
                 {/* Number badge */}
                 <span className={`
@@ -112,6 +128,8 @@ function Node({
           text-[9px] font-bold font-mono border transition-all duration-500
           ${state === "done"
                     ? "bg-green-500 border-green-400 text-black"
+                    : state === "failed"
+                        ? "bg-red-500 border-red-400 text-black"
                     : state === "active"
                         ? "bg-primary border-primary text-black"
                         : "bg-white/8 border-white/12 text-white/25"
@@ -158,7 +176,7 @@ function Node({
             <span className={`
         font-mono text-[10px] sm:text-[11px] font-bold tracking-wider leading-tight text-center
         transition-colors duration-500
-        ${state === "done" ? "text-green-300" : state === "active" ? "text-white" : "text-white/25"}
+        ${state === "done" ? "text-green-300" : state === "failed" ? "text-red-300" : state === "active" ? "text-white" : "text-white/25"}
       `}>
                 {step.label}
             </span>
@@ -167,7 +185,7 @@ function Node({
             <span className={`
         font-mono text-[8px] sm:text-[9px] tracking-wide leading-tight text-center
         max-w-[110px] sm:max-w-[130px] transition-all duration-500
-        ${state === "active" ? "text-white/55 translate-y-0" : state === "done" ? "text-white/30" : "text-white/10"}
+        ${state === "active" ? "text-white/55 translate-y-0" : state === "done" ? "text-white/30" : state === "failed" ? "text-red-200/60" : "text-white/10"}
       `}>
                 {step.detail}
             </span>
@@ -344,24 +362,42 @@ function TopoEdges({ nodeRefs, edges, getState, repairActive }: {
 export function AgentFlowDemo({ steps }: Props) {
     const [activeIndex, setActiveIndex] = useState(-1);
     const [doneSet, setDoneSet] = useState<Set<number>>(new Set());
+    const [failedSet, setFailedSet] = useState<Set<number>>(new Set());
     const [progress, setProgress] = useState(0);
     const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
     const [repairActive, setRepairActive] = useState(false);
+    const [fxMap, setFxMap] = useState<Record<number, { variant: "success" | "failure"; key: number }>>({});
     const nodeRefs = useRef<(HTMLDivElement | null)[]>([]);
 
+    const triggerFx = useCallback((index: number, variant: "success" | "failure") => {
+        setFxMap((prev) => {
+            const prevKey = prev[index]?.key ?? 0;
+            return { ...prev, [index]: { variant, key: prevKey + 1 } };
+        });
+    }, []);
+
     const getState = useCallback(
-        (i: number): "pending" | "active" | "done" => {
+        (i: number): "pending" | "active" | "done" | "failed" => {
             if (doneSet.has(i)) return "done";
+            if (failedSet.has(i)) return "failed";
             if (activeIndex === i) return "active";
             return "pending";
         },
-        [activeIndex, doneSet]
+        [activeIndex, doneSet, failedSet]
+    );
+
+    const getEdgeState = useCallback(
+        (i: number): "pending" | "active" | "done" => {
+            const s = getState(i);
+            return s === "failed" ? "active" : s;
+        },
+        [getState]
     );
 
     useEffect(() => {
         let cancelled = false;
         async function run() {
-        setActiveIndex(-1); setDoneSet(new Set()); setProgress(0); setRepairActive(false);
+        setActiveIndex(-1); setDoneSet(new Set()); setFailedSet(new Set()); setProgress(0); setRepairActive(false); setFxMap({});
         await sleep(600);
         for (let i = 0; i < steps.length; i++) {
             if (cancelled) return;
@@ -385,7 +421,22 @@ export function AgentFlowDemo({ steps }: Props) {
             })();
         });
           if (cancelled) return;
-          setDoneSet((s) => new Set([...s, i]));
+          if (i === 4) {
+              setFailedSet(new Set([4]));
+              triggerFx(4, "failure");
+              await sleep(520);
+              if (cancelled) return;
+              continue;
+          }
+          if (i === 5) {
+              setFailedSet(new Set());
+              setDoneSet((s) => new Set([...s, 4, 5]));
+              triggerFx(4, "success");
+              triggerFx(5, "success");
+          } else {
+              setDoneSet((s) => new Set([...s, i]));
+              triggerFx(i, "success");
+          }
           if (i === 5) setRepairActive(false);
           }
           setActiveIndex(steps.length);
@@ -417,7 +468,7 @@ export function AgentFlowDemo({ steps }: Props) {
           )}
 
           <div className="relative px-6 py-10 sm:px-10 sm:py-14">
-              <TopoEdges nodeRefs={nodeRefs} edges={EDGES} getState={getState} repairActive={repairActive} />
+              <TopoEdges nodeRefs={nodeRefs} edges={EDGES} getState={getEdgeState} repairActive={repairActive} />
 
               {/* Row 0 */}
               <div className="relative z-10 grid grid-cols-3 gap-4 sm:gap-8 mb-8 sm:mb-12">
@@ -430,6 +481,7 @@ export function AgentFlowDemo({ steps }: Props) {
                       hovered={hoveredIndex === i}
                       onHover={() => setHoveredIndex(i)}
                       onLeave={() => setHoveredIndex(null)}
+                      fx={fxMap[i]}
                   />
               </div>
           ))}
@@ -448,6 +500,7 @@ export function AgentFlowDemo({ steps }: Props) {
                           hovered={hoveredIndex === realIndex}
                           onHover={() => setHoveredIndex(realIndex)}
                           onLeave={() => setHoveredIndex(null)}
+                          fx={fxMap[realIndex]}
                       />
                   </div>
               );

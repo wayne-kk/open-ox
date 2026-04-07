@@ -38,7 +38,7 @@ export function Footer() {
                           </span>
                       </Link>
                       <p className="mt-4 max-w-xs text-sm leading-relaxed text-muted-foreground">
-                          AI 驱动的网站构建引擎。描述你的想法，几秒内获得一个可运行的站点。
+                          AI 驱动的网站构建引擎。描述你的想法，2分钟内获得一个可部署的站点。
                       </p>
                       {/* Social icons */}
                       <div className="mt-5 flex items-center gap-3">

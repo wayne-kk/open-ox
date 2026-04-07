@@ -1,8 +1,11 @@
+ "use client";
+
 import Link from "next/link";
 import { ArrowRight, Cpu, GitBranch, Shield, Zap, Layers, Paintbrush } from "lucide-react";
 import { AgentFlowDemo } from "./components/AgentFlowDemo";
 import { HeroVisual } from "./components/HeroVisual";
 import { HeroPrompt } from "./components/HeroPrompt";
+import { SparkleHoverButton } from "@/components/ui/sparkle-hover-button";
 
 const AGENT_STEPS = [
   { id: "analyze", label: "analyze_requirement", detail: "解析意图 · 规划页面 · 定义角色", color: "text-primary" },
@@ -14,9 +17,9 @@ const AGENT_STEPS = [
 ];
 
 const STATS = [
-  { value: "~30s", label: "平均生成时间", sub: "从描述到可运行站点" },
+  { value: "2.5m", label: "平均生成时间", sub: "从描述到可运行站点" },
   { value: "6", label: "步流水线", sub: "每步有明确输入输出" },
-  { value: "2x", label: "自动修复", sub: "构建失败自动诊断修复" },
+  { value: "100+", label: "skill 发现", sub: "每个 section 运行时自发现 skill" },
   { value: "∞", label: "迭代修改", sub: "对话式持续优化" },
 ];
 
@@ -78,6 +81,10 @@ const FEATURES = [
 ];
 
 export default function Home() {
+  const handleBuildClick = () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   return (
     <main className="relative isolate overflow-hidden min-h-screen">
 
@@ -218,18 +225,20 @@ export default function Home() {
           >
             描述你的想法
             <br />
-            <span className="bitcoin-gradient-text">30 秒后看到结果</span>
+            <span className="bitcoin-gradient-text">2 分钟后看到结果</span>
           </h2>
           <p className="mt-4 text-sm text-muted-foreground max-w-md mx-auto">
             不需要设计稿，不需要写代码。输入一段描述，AI 工程流水线帮你完成剩下的。
           </p>
-          <div className="mt-8 flex items-center justify-center gap-4">
-            <Link
-              href="/studio"
-              className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 font-mono text-[12px] font-bold tracking-[0.1em] text-white uppercase transition-all hover:bg-primary/90 shadow-[0_0_30px_-5px_rgba(247,147,26,0.4)]"
-            >
-              开始构建 <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
+          <div className="relative mt-8 flex items-center justify-center gap-4">
+            <div className="relative">
+              <SparkleHoverButton
+                onClick={handleBuildClick}
+                className="tracking-[0.1em]"
+              >
+                开始构建 <ArrowRight className="h-3.5 w-3.5" />
+              </SparkleHoverButton>
+            </div>
             <Link
               href="/docs"
               className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/3 px-6 py-3 font-mono text-[12px] font-medium tracking-[0.1em] text-muted-foreground transition-all hover:border-white/20 hover:text-foreground"
@@ -239,7 +248,6 @@ export default function Home() {
           </div>
         </div>
       </section>
-
     </main>
   );
 }

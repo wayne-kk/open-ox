@@ -8,6 +8,7 @@ import {
   CheckCircle2, AlertCircle, Loader2, Sparkles, Globe,
   AlertTriangle,
 } from "lucide-react";
+import { HamsterLoader } from "@/components/ui/hamster-loader";
 
 interface ProjectMetadata {
   id: string;
@@ -105,12 +106,12 @@ function ProjectCard({
       className={`
         group relative rounded-2xl border overflow-hidden transition-all duration-300${pressed ? " select-none" : ""}
         ${isReady
-        ? `border-white/10 hover:border-primary/40 cursor-pointer hover:shadow-[0_0_50px_-12px_rgba(247,147,26,0.25)] ${pressed ? "scale-[0.98]" : "hover:-translate-y-1"}`
-        : isFailed
-          ? `border-red-400/20 hover:border-red-400/40 cursor-pointer hover:shadow-[0_0_30px_-12px_rgba(248,113,113,0.2)] ${pressed ? "scale-[0.98]" : "hover:-translate-y-1"}`
-          : isGenerating
-            ? "border-primary/20 cursor-default"
-            : "border-white/8 cursor-default"
+          ? `border-white/10 hover:border-primary/40 cursor-pointer hover:shadow-[0_0_50px_-12px_rgba(247,147,26,0.25)] ${pressed ? "scale-[0.98]" : "hover:-translate-y-1"}`
+          : isFailed
+            ? `border-red-400/20 hover:border-red-400/40 cursor-pointer hover:shadow-[0_0_30px_-12px_rgba(248,113,113,0.2)] ${pressed ? "scale-[0.98]" : "hover:-translate-y-1"}`
+            : isGenerating
+              ? "border-primary/20 cursor-default"
+              : "border-white/8 cursor-default"
         }
       `}
     >
@@ -253,7 +254,7 @@ function DeletingOverlay() {
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm">
       <div className="flex flex-col items-center gap-4">
-        <Loader2 className="h-8 w-8 animate-spin text-red-400" />
+        <HamsterLoader size="sm" />
         <p className="font-mono text-sm text-white/60 tracking-wider">正在删除项目...</p>
         <p className="font-mono text-[10px] text-white/30">请勿关闭页面</p>
       </div>
@@ -321,40 +322,40 @@ export default function ProjectsPage() {
       {/* Full-page loading overlay while deleting */}
       {deletingId && <DeletingOverlay />}
 
-      <div className="relative z-1 mx-auto max-w-6xl px-6 py-8 lg:px-8">
+      <div className="relative z-1 mx-auto max-w-6xl px-6 py-8 lg:px-8 min-h-screen">
         {loading ? (
-          <div className="flex flex-col items-center justify-center gap-4 py-32">
-            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          <div className="flex flex-col items-center justify-center gap-4 py-32 min-h-screen">
+            <HamsterLoader size="sm" className="-mt-[200px]" />
             <p className="font-mono text-xs text-white/40 tracking-wider">加载中...</p>
           </div>
         ) : projects.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-6 py-32">
-              <div className="flex h-20 w-20 items-center justify-center rounded-2xl border border-white/8 bg-white/[0.02]">
-                <Sparkles className="h-8 w-8 text-primary/40" />
-              </div>
-              <div className="text-center space-y-2">
-                <h2 className="text-lg font-semibold text-white">还没有项目</h2>
-                <p className="text-sm text-white/40">描述你的想法，AI 帮你生成完整网站</p>
-              </div>
-              <Link href="/" className="defi-button px-6 py-3 text-sm font-semibold uppercase tracking-[0.14em]">
-                <Plus className="h-4 w-4" />
-                创建第一个项目
-              </Link>
+          <div className="flex flex-col items-center justify-center gap-6 py-32">
+            <div className="flex h-20 w-20 items-center justify-center rounded-2xl border border-white/8 bg-white/[0.02]">
+              <Sparkles className="h-8 w-8 text-primary/40" />
             </div>
-          ) : (
-              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                {/* New project card */}
-                <Link
-                  href="/"
-                  className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-white/10
+            <div className="text-center space-y-2">
+              <h2 className="text-lg font-semibold text-white">还没有项目</h2>
+              <p className="text-sm text-white/40">描述你的想法，AI 帮你生成完整网站</p>
+            </div>
+            <Link href="/" className="defi-button px-6 py-3 text-sm font-semibold uppercase tracking-[0.14em]">
+              <Plus className="h-4 w-4" />
+              创建第一个项目
+            </Link>
+          </div>
+        ) : (
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {/* New project card */}
+            <Link
+              href="/"
+              className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-white/10
                 bg-white/[0.01] p-8 transition-all hover:border-primary/30 hover:bg-primary/[0.03] group min-h-[260px]"
-                >
-                  <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] group-hover:border-primary/30 group-hover:bg-primary/10 transition-all">
-                    <Plus className="h-6 w-6 text-white/30 group-hover:text-primary transition-colors" />
-                  </div>
-                  <span className="font-mono text-[11px] text-white/30 group-hover:text-primary/70 tracking-wider transition-colors">
-                    新建项目
-                  </span>
+            >
+              <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] group-hover:border-primary/30 group-hover:bg-primary/10 transition-all">
+                <Plus className="h-6 w-6 text-white/30 group-hover:text-primary transition-colors" />
+              </div>
+              <span className="font-mono text-[11px] text-white/30 group-hover:text-primary/70 tracking-wider transition-colors">
+                新建项目
+              </span>
             </Link>
 
             {projects.map((project) => (

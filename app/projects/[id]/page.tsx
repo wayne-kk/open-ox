@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, use } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Send, RefreshCw, Trash2, Loader2, AlertTriangle } from "lucide-react";
+import { HamsterLoader } from "@/components/ui/hamster-loader";
 
 interface ModifyStep {
   name: string;
@@ -184,7 +185,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       {deleting && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-4">
-            <Loader2 className="h-8 w-8 animate-spin text-red-400" />
+            <HamsterLoader size="sm" />
             <p className="font-mono text-sm text-white/60 tracking-wider">正在删除项目...</p>
             <p className="font-mono text-[10px] text-white/30">请勿关闭页面</p>
           </div>

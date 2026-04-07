@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, Plus, Play, Loader2, Trash2, Save, Download, CheckSquare, Square } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { HamsterLoader } from "@/components/ui/hamster-loader";
 
 interface QueryItem { id: string; text: string }
 interface WorkflowOutputs {
@@ -278,7 +279,7 @@ export default function StyleEvalPage() {
                 )}
 
                 {loading && (
-                    <div className="text-center py-16"><Loader2 className="h-5 w-5 animate-spin text-primary mx-auto" /></div>
+                    <div className="text-center py-16"><HamsterLoader size="sm" className="mx-auto" /></div>
                 )}
 
                 {!loading && queries.length === 0 && (

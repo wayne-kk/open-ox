@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { ArrowLeft, Play, Loader2, Plus, Trash2, Settings, Zap, Save } from "lucide-react";
+import { HamsterLoader } from "@/components/ui/hamster-loader";
 
 interface TestResult {
     success: boolean;
@@ -102,7 +103,7 @@ function ModelManagement() {
         setSavingStep(null);
     };
 
-    if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>;
+    if (loading) return <div className="flex justify-center py-12"><HamsterLoader size="sm" /></div>;
 
     return (
         <div className="space-y-8">
