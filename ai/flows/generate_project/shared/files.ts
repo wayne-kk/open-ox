@@ -9,6 +9,9 @@ const STEP_PROMPTS_ROOT = join(FLOW_ROOT, "prompts", "steps");
 const SKILL_PROMPTS_ROOT = join(FLOW_ROOT, "prompts", "skills");
 const SECTION_PROMPTS_ROOT = join(FLOW_ROOT, "prompts", "sections");
 const RULE_PROMPTS_ROOT = join(FLOW_ROOT, "prompts", "rules");
+const MOTION_PROMPTS_ROOT = join(FLOW_ROOT, "prompts", "motions");
+const LAYOUT_PROMPTS_ROOT = join(FLOW_ROOT, "prompts", "layouts");
+const CAPABILITY_PROMPTS_ROOT = join(FLOW_ROOT, "prompts", "capabilities");
 
 function readPromptFile(path: string): string {
   if (!existsSync(path)) {
@@ -42,12 +45,41 @@ export function getRulePath(ruleId: string): string {
   return join(RULE_PROMPTS_ROOT, `${ruleId}.md`);
 }
 
+export function getMotionPath(motionId: string): string {
+  return join(MOTION_PROMPTS_ROOT, `${motionId}.md`);
+}
+
+export function getLayoutVariantPath(layoutId: string): string {
+  return join(LAYOUT_PROMPTS_ROOT, `${layoutId}.md`);
+}
+
+export function getCapabilityAssistPath(capabilityId: string): string {
+  const modernPath = join(CAPABILITY_PROMPTS_ROOT, `${capabilityId}.md`);
+  if (existsSync(modernPath)) {
+    return modernPath;
+  }
+
+  if (capabilityId.startsWith("effect.motion.")) {
+    return getMotionPath(capabilityId.replace("effect.", ""));
+  }
+
+  if (capabilityId.startsWith("pattern.")) {
+    return getLayoutVariantPath(capabilityId.replace("pattern.", ""));
+  }
+
+  return modernPath;
+}
+
 export function hasSectionPrompt(promptId: string): boolean {
   return existsSync(getSectionPromptPath(promptId));
 }
 
 export function hasSkillPrompt(promptId: string): boolean {
   return existsSync(getSkillPromptPath(promptId));
+}
+
+export function hasCapabilityAssist(capabilityId: string): boolean {
+  return existsSync(getCapabilityAssistPath(capabilityId));
 }
 
 export function loadStepPrompt(promptId: string): string {
@@ -65,6 +97,18 @@ export function loadSkillPrompt(promptId: string): string {
 export function loadGuardrail(guardrailId: string): string {
   const raw = readPromptFile(getRulePath(guardrailId));
   return matter(raw).content.trimStart();
+}
+
+export function loadMotion(motionId: string): string {
+  return readPromptFile(getMotionPath(motionId));
+}
+
+export function loadLayoutVariant(layoutId: string): string {
+  return readPromptFile(getLayoutVariantPath(layoutId));
+}
+
+export function loadCapabilityAssist(capabilityId: string): string {
+  return readPromptFile(getCapabilityAssistPath(capabilityId));
 }
 
 export function loadSystem(name: string): string {

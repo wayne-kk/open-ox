@@ -23,8 +23,6 @@ export function Navigation() {
     return () => window.removeEventListener("scroll", handler);
   }, []);
 
-  useEffect(() => { setOpen(false); }, [pathname]);
-
   return (
     <>
       <header
@@ -64,6 +62,12 @@ export function Navigation() {
 
           {/* Right side */}
           <div className="flex items-center gap-3">
+            <Link
+              href="/auth"
+              className="hidden rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20 md:inline-flex"
+            >
+              登录
+            </Link>
             <button
               onClick={() => setOpen((v) => !v)}
               className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground md:hidden"
@@ -86,6 +90,7 @@ export function Navigation() {
                 <Link
                   key={href}
                   href={href}
+                  onClick={() => setOpen(false)}
                   className={`block rounded-lg px-4 py-3 text-[15px] font-medium transition-colors ${active ? "bg-primary/10 text-primary" : "text-muted-foreground"
                     }`}
                 >
@@ -93,6 +98,13 @@ export function Navigation() {
                 </Link>
               );
             })}
+            <Link
+              href="/auth"
+              onClick={() => setOpen(false)}
+              className="mt-2 block rounded-lg border border-primary/40 bg-primary/10 px-4 py-3 text-[15px] font-medium text-primary transition-colors hover:bg-primary/20"
+            >
+              登录
+            </Link>
           </nav>
         </div>
       )}

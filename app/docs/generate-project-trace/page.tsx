@@ -30,7 +30,7 @@ const PHASE_ROWS: [string, string, string][] = [
   ["plan_project", "steps/planProject.md + outputJson", "规范化蓝图 JSON"],
   ["generate_project_design_system", "frontend + steps/generateProjectDesignSystem.md", "蓝图 + 可选 styleGuide"],
   ["apply_project_design_tokens", "frontend + steps/applyProjectDesignTokens.md", "globals + 设计系统"],
-  ["preselect_skills（已移除）", "—", "v1.0 起由每个 section 运行时自发现"],
+  ["preselect_skills（内联 selector）", "短 system", "各 section 的 skill metadata（无正文）"],
   ["generate_section", "见 §3", "见 §4"],
   ["compose_layout / compose_page", "frontend + steps/compose*.md + outputTsx", "已生成文件 + 蓝图"],
   ["repair_build", "frontend + steps/repairBuild.md + outputJson", "构建日志 + 相关文件"],
@@ -40,8 +40,8 @@ const PROMPT_PLACEMENT_ROWS: [string, string][] = [
   ["全局写代码约定", "ai/prompts/systems/frontend.md"],
   ["某 section.type 通用结构", "prompts/sections/section.{type}.md"],
   ["组件气质 skill", "prompts/skills/*.md + frontmatter"],
-  ["版式 pattern", "prompts/layouts/*.md（已废弃，收敛到 skill）"],
-  ["动效", "prompts/motions/*.md（已废弃，收敛到 traits）"],
+  ["版式 pattern", "prompts/layouts/*.md 或 prompts/capabilities/pattern.*.md"],
+  ["动效", "prompts/motions/motion.*.md + effect.motion.* id"],
   ["红线 guardrail", "prompts/rules/*.md（允许 ID 由规则文件扫描，见仓库 docs/architecture-section-prompts.md）"],
   ["某一步任务", "prompts/steps/{name}.md"],
   ["JSON/TSX 输出格式", "prompts/rules/outputJson.md、outputTsx.md"],
@@ -52,7 +52,7 @@ const TOC = [
   { id: "skills", label: "Skill 预选与正文" },
   { id: "system", label: "generate_section System" },
   { id: "user", label: "generate_section User" },
-  { id: "capability", label: "traits → 内联提示" },
+  { id: "capability", label: "capabilityAssistIds → 文件" },
   { id: "logs", label: "日志" },
   { id: "cheat", label: "新提示放哪" },
 ];
@@ -68,7 +68,7 @@ export default function GenerateProjectTracePage() {
         <p className="mt-3 text-[15px] leading-7 text-muted-foreground">
           <Code>runGenerateProject</Code> 流水线里组件 skill 如何选出、每个 section 的 system/user 如何拼接，以及日志里能看到什么。
           对照代码：<Code>runGenerateProject.ts</Code>、<Code>steps/generateSection.ts</Code>、
-          <Code>steps/selectComponentSkills.ts</Code>、<Code>shared/files.ts</Code>。
+          <Code>steps/selectComponentSkills.ts</Code>、<Code>shared/files.ts</Code>（<Code>getCapabilityAssistPath</Code>）。
         </p>
 
         <Callout>
@@ -143,7 +143,7 @@ export default function GenerateProjectTracePage() {
               <Code>prompts/rules/&#123;id&#125;.md</Code>）
             </li>
             <li>
-              <Code>designPlan.traits</Code> → <Code>buildTraitsBlock</Code>（内联生成 layout/motion/visual/interaction 提示文本，无需文件查找）
+              <Code>designPlan.capabilityAssistIds</Code> → <Code>loadCapabilityAssist</Code>（capabilities / motions / layouts，解析见 §5）
             </li>
             <li>
               <Code>loadGuardrail(&quot;outputTsx&quot;)</Code>
@@ -158,32 +158,27 @@ export default function GenerateProjectTracePage() {
             <Code>buildUserMessage</Code>：<Code>Design System</Code> → <Code>globals.css</Code> → <Code>Project Context</Code> →
             Roles / Task Loops / Capabilities → <Code>Known Routes</Code> → <Code>Page Context</Code> →{" "}
             <Code>Section to Generate</Code>（含完整 <Code>designPlan</Code>，列出 <Code>guardrailIds</Code> 与{" "}
-            <Code>traits</Code>）。
+            <Code>capabilityAssistIds</Code>）。
           </P>
         </section>
 
         <section id="capability" className="scroll-mt-24">
-          <H2>5. traits → 内联提示</H2>
+          <H2>5. capabilityAssistIds → 文件</H2>
           <P>
-            <Code>buildTraitsBlock</Code> 从 <Code>designPlan.traits</Code> 结构化对象生成内联 Markdown 提示：
+            <Code>getCapabilityAssistPath</Code>：
           </P>
           <ol className="mt-3 list-decimal pl-5 text-[14px] leading-7 text-muted-foreground space-y-2">
             <li>
-              <Code>traits.layout</Code> → 布局类型、比例、方向等结构化描述
+              <Code>prompts/capabilities/&#123;id&#125;.md</Code> 存在则用之
             </li>
             <li>
-              <Code>traits.motion</Code> → 动效强度（subtle/ambient/energetic/none）和触发时机
+              <Code>effect.motion.*</Code> → <Code>prompts/motions/motion.*.md</Code>（去掉 <Code>effect.</Code> 前缀）
             </li>
             <li>
-              <Code>traits.visual</Code> → 视觉密度、对比度、风格
+              <Code>pattern.*</Code> → <Code>prompts/layouts/&#123;去 pattern. 前缀&#125;.md</Code>
             </li>
-            <li>
-              <Code>traits.interaction</Code> → 交互模式描述
-            </li>
+            <li>否则回退 <Code>capabilities/&#123;id&#125;.md</Code>（通常需 <Code>hasCapabilityAssist</Code> 过滤）</li>
           </ol>
-          <P>
-            不再依赖文件系统白名单。LLM 在 schema 约束内自由组合 traits，系统将其转为内联提示文本注入 system prompt。
-          </P>
         </section>
 
         <section id="logs" className="scroll-mt-24">

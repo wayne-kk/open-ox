@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { Navigation } from "./Navigation";
 
 // These routes have their own custom headers
-const HIDE_NAV_ROUTES = ["/projects/", "/studio/"];
+const HIDE_NAV_ROUTES = ["/projects/", "/studio/", "/auth"];
 
 export function ConditionalNav() {
     const pathname = usePathname();

@@ -7,7 +7,6 @@ import type {
   ProjectBlueprint,
   SectionDesignPlan,
   SectionSpec,
-  SectionTraits,
   ShellPlacement,
   TaskLoop,
   UserRole,
@@ -46,22 +45,46 @@ function formatTaskLoopNames(loopIds: string[], taskLoops: TaskLoop[]): string {
   return names.length > 0 ? names.join(", ") : "the core user journey";
 }
 
-function inferTraits(section: SectionSpec): SectionTraits {
-  // Minimal safe defaults per section type.
-  // The real traits come from planProject's LLM output.
-  // This only runs when the LLM call fails entirely.
-  switch (section.type) {
-    case "hero":
-      return { layout: { type: "split" }, motion: { intensity: "ambient", trigger: "load" } };
-    case "features":
-      return { layout: { type: "grid" } };
-    case "pricing":
-      return { layout: { type: "comparison" } };
-    case "faq":
-      return { layout: { type: "two-column" } };
-    default:
-      return {};
+function inferCapabilityAssistIds(section: SectionSpec, context: PlanningContext): string[] {
+  const haystack = `${section.intent} ${section.contentHints} ${context.designKeywords.join(" ")}`
+    .toLowerCase();
+  const assists: string[] = [];
+
+  if (/(neon|cyber|festival|halloween|punk|bold|energetic|glow|glitch)/.test(haystack)) {
+    assists.push("effect.motion.ambient", "effect.motion.energetic");
+  } else if (/(editorial|minimal|luxury|calm|clean|portfolio)/.test(haystack)) {
+    assists.push("effect.motion.subtle");
+  } else if (section.type === "hero") {
+    assists.push("effect.motion.ambient");
+  } else if (/(faq|pricing|navigation|tabs|filter|accordion|menu|comparison)/.test(haystack)) {
+    assists.push("effect.motion.subtle");
   }
+
+  if (section.type === "hero") {
+    if (/(center|event|campaign|poster|festival|immersive|full-bleed)/.test(haystack)) {
+      assists.push("pattern.hero.centered");
+    } else if (/(dashboard|product|platform|saas|terminal|metrics|analytics)/.test(haystack)) {
+      assists.push("pattern.hero.dashboard");
+    } else if (/(story|editorial|magazine|brand|manifesto|narrative)/.test(haystack)) {
+      assists.push("pattern.hero.editorial");
+    } else {
+      assists.push("pattern.hero.split");
+    }
+  }
+
+  if (section.type === "features") {
+    assists.push("pattern.features.grid");
+  }
+
+  if (section.type === "pricing") {
+    assists.push("pattern.pricing.three-tier");
+  }
+
+  if (section.type === "faq") {
+    assists.push("pattern.faq.two-column");
+  }
+
+  return unique(assists);
 }
 
 function inferSectionRole(section: SectionSpec): string {
@@ -186,7 +209,7 @@ export function buildDefaultSectionDesignPlan(
       "Make scan order obvious on mobile and desktop.",
     ],
     guardrailIds: inferSectionGuardrailDefaults(section),
-    traits: inferTraits(section),
+    capabilityAssistIds: inferCapabilityAssistIds(section, context),
     constraints: unique([
       "Preserve the project design system vocabulary.",
       "Generate production-ready code with realistic content.",

@@ -1,7 +1,10 @@
-import { buildDefaultProjectPlan, buildDefaultSectionDesignPlan } from "../planners/defaultProjectPlanner";
+import { buildDefaultProjectPlan } from "../planners/defaultProjectPlanner";
 import {
   getAllowedProjectGuardrailIds,
+  getAllowedSectionGuardrailIds,
+  inferSectionGuardrailDefaults,
   mergeProjectGuardrailIds,
+  mergeSectionGuardrailIds,
 } from "../planners/guardrailPolicy";
 import { loadGuardrail, loadStepPrompt } from "../shared/files";
 import { callLLM, extractJSON } from "../shared/llm";
@@ -10,34 +13,56 @@ import type {
   PageDesignPlan,
   PlannedProjectBlueprint,
   ProjectBlueprint,
-  SectionSpec,
+  SectionDesignPlan,
 } from "../types";
 
-function isPageDesignPlan(value: unknown): value is PageDesignPlan {
-  if (!value || typeof value !== "object") return false;
-  const c = value as Partial<PageDesignPlan>;
+function isSectionDesignPlan(value: unknown): value is SectionDesignPlan {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Partial<SectionDesignPlan>;
   return (
-    typeof c.pageGoal === "string" &&
-    typeof c.audienceFocus === "string" &&
-    typeof c.roleFit === "string" &&
-    typeof c.capabilityFocus === "string" &&
-    typeof c.taskLoopCoverage === "string" &&
-    typeof c.narrativeArc === "string" &&
-    typeof c.layoutStrategy === "string" &&
-    isStringArray(c.hierarchy) &&
-    typeof c.transitionStrategy === "string" &&
-    isStringArray(c.sharedShellNotes) &&
-    isStringArray(c.constraints)
+    typeof candidate.role === "string" &&
+    typeof candidate.goal === "string" &&
+    typeof candidate.roleFit === "string" &&
+    typeof candidate.taskLoopFocus === "string" &&
+    typeof candidate.capabilityFocus === "string" &&
+    typeof candidate.informationArchitecture === "string" &&
+    typeof candidate.layoutIntent === "string" &&
+    typeof candidate.visualIntent === "string" &&
+    typeof candidate.interactionIntent === "string" &&
+    typeof candidate.contentStrategy === "string" &&
+    isStringArray(candidate.hierarchy) &&
+    isStringArray(candidate.guardrailIds) &&
+    isStringArray(candidate.capabilityAssistIds) &&
+    isStringArray(candidate.constraints) &&
+    (candidate.shellPlacement == null ||
+      candidate.shellPlacement === "beforePageContent" ||
+      candidate.shellPlacement === "afterPageContent") &&
+    (candidate.rationale == null || typeof candidate.rationale === "string")
   );
 }
 
-function isSectionSpec(value: unknown): value is SectionSpec {
-  if (!value || typeof value !== "object") return false;
-  const c = value as Partial<SectionSpec>;
+function isPageDesignPlan(value: unknown): value is PageDesignPlan {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Partial<PageDesignPlan>;
   return (
-    typeof c.type === "string" &&
-    typeof c.intent === "string" &&
-    typeof c.fileName === "string"
+    typeof candidate.pageGoal === "string" &&
+    typeof candidate.audienceFocus === "string" &&
+    typeof candidate.roleFit === "string" &&
+    typeof candidate.capabilityFocus === "string" &&
+    typeof candidate.taskLoopCoverage === "string" &&
+    typeof candidate.narrativeArc === "string" &&
+    typeof candidate.layoutStrategy === "string" &&
+    isStringArray(candidate.hierarchy) &&
+    typeof candidate.transitionStrategy === "string" &&
+    isStringArray(candidate.sharedShellNotes) &&
+    isStringArray(candidate.constraints) &&
+    (candidate.rationale == null || typeof candidate.rationale === "string")
   );
 }
 
@@ -46,7 +71,6 @@ export async function stepPlanProject(
 ): Promise<PlannedProjectBlueprint> {
   const defaultPlan = buildDefaultProjectPlan(blueprint);
   const systemPrompt = [loadStepPrompt("planProject"), "\n\n", loadGuardrail("outputJson")].join("");
-
   const rolesSummary = blueprint.brief.roles
     .map(
       (role) =>
@@ -98,88 +122,110 @@ ${blueprint.site.pages.map((page) =>
 ${blueprint.site.layoutSections.map((s) => `- ${s.type}: ${s.intent}`).join("\n")}
 
 ## Allowed Project Guardrail IDs
-${getAllowedProjectGuardrailIds().map((id) => `- ${id}`).join("\n")}`;
+${getAllowedProjectGuardrailIds().map((id) => `- ${id}`).join("\n")}
+
+## Allowed Section Guardrail IDs
+${getAllowedSectionGuardrailIds().map((id) => `- ${id}`).join("\n")}
+
+## Allowed Capability Assist IDs
+- effect.motion.subtle
+- effect.motion.ambient
+- effect.motion.energetic
+- pattern.hero.split
+- pattern.hero.centered
+- pattern.hero.editorial
+- pattern.hero.dashboard
+- pattern.features.grid
+- pattern.pricing.three-tier
+- pattern.faq.two-column`;
 
   try {
     const raw = await callLLM(systemPrompt, userMessage, 0.2);
-    const parsed = JSON.parse(extractJSON(raw)) as Record<string, unknown>;
+    const parsed = JSON.parse(extractJSON(raw)) as Partial<PlannedProjectBlueprint>;
 
-    if (!isStringArray(parsed.projectGuardrailIds as unknown)) {
+    if (!isStringArray(parsed.projectGuardrailIds)) {
       return defaultPlan;
     }
 
-    // Merge sections from LLM output into default plan
-    const site = parsed.site as Record<string, unknown> | undefined;
-
-    // Merge layout sections (just SectionSpec, no designPlan)
-    const mergedLayoutSections = defaultPlan.site.layoutSections.map((defaultSection) => {
-      const incoming = Array.isArray(site?.layoutSections)
-        ? (site.layoutSections as unknown[]).find(
-          (s) => s && typeof s === "object" && (s as { type?: string }).type === defaultSection.type
-        ) as SectionSpec | undefined
-        : undefined;
-      if (incoming && isSectionSpec(incoming)) {
-        return { ...defaultSection, intent: incoming.intent || defaultSection.intent, contentHints: incoming.contentHints || defaultSection.contentHints };
+    const mergeSectionPlans = <
+      T extends { fileName: string; designPlan: SectionDesignPlan; type: string }
+    >(
+      targetSections: T[],
+      incomingSections: unknown
+    ): T[] => {
+      if (!Array.isArray(incomingSections)) {
+        return targetSections;
       }
-      return defaultSection;
-    });
 
-    // Merge pages — accept new sections and pageDesignPlan from LLM
-    const mergedPages = defaultPlan.site.pages.map((defaultPage) => {
-      const incomingPage = Array.isArray(site?.pages)
-        ? (site.pages as unknown[]).find(
-          (p) => p && typeof p === "object" && (p as { slug?: string }).slug === defaultPage.slug
-        ) as Record<string, unknown> | undefined
-        : undefined;
+      const incomingMap = new Map<string, SectionDesignPlan>();
+      for (const value of incomingSections) {
+        if (!value || typeof value !== "object") {
+          continue;
+        }
 
-      if (!incomingPage) return defaultPage;
-
-      // Accept pageDesignPlan from LLM
-      const pageDesignPlan = isPageDesignPlan(incomingPage.pageDesignPlan)
-        ? incomingPage.pageDesignPlan
-        : defaultPage.pageDesignPlan;
-
-      // Accept sections from LLM (just SectionSpec — we generate designPlan from context)
-      let sections = defaultPage.sections;
-      if (Array.isArray(incomingPage.sections)) {
-        const validSections = (incomingPage.sections as unknown[])
-          .filter(isSectionSpec)
-          .map((s) => ({
-            type: s.type,
-            intent: s.intent || "",
-            contentHints: s.contentHints || "",
-            fileName: s.fileName,
-            primaryRoleIds: Array.isArray(s.primaryRoleIds) ? s.primaryRoleIds : [],
-            supportingCapabilityIds: Array.isArray(s.supportingCapabilityIds) ? s.supportingCapabilityIds : [],
-            sourceTaskLoopIds: Array.isArray(s.sourceTaskLoopIds) ? s.sourceTaskLoopIds : [],
-          }));
-        if (validSections.length > 0) {
-          const planningContext = {
-            roles: blueprint.brief.roles,
-            taskLoops: blueprint.brief.taskLoops,
-            capabilities: blueprint.brief.capabilities,
-            designKeywords: blueprint.experience.designIntent.keywords,
-          };
-          sections = validSections.map((s) => ({
-            ...s,
-            designPlan: buildDefaultSectionDesignPlan(s, planningContext),
-          }));
+        const fileName = (value as { fileName?: unknown }).fileName;
+        const designPlan = (value as { designPlan?: unknown }).designPlan;
+        if (typeof fileName === "string" && isSectionDesignPlan(designPlan)) {
+          incomingMap.set(fileName, designPlan);
         }
       }
 
-      return { ...defaultPage, pageDesignPlan, sections };
-    });
+      return targetSections.map((section) => {
+        const incoming = incomingMap.get(section.fileName);
+        if (!incoming) {
+          return section;
+        }
+        const defaults = inferSectionGuardrailDefaults(section);
+        return {
+          ...section,
+          designPlan: {
+            ...incoming,
+            guardrailIds: mergeSectionGuardrailIds(incoming.guardrailIds, defaults),
+          },
+        };
+      });
+    };
+
+    const mergePageDesignPlan = (
+      target: PageDesignPlan,
+      incomingPage: unknown
+    ): PageDesignPlan => {
+      if (!incomingPage || typeof incomingPage !== "object") {
+        return target;
+      }
+
+      const maybePlan = (incomingPage as { pageDesignPlan?: unknown }).pageDesignPlan;
+      return isPageDesignPlan(maybePlan) ? maybePlan : target;
+    };
 
     return {
       ...defaultPlan,
       projectGuardrailIds: mergeProjectGuardrailIds(
-        parsed.projectGuardrailIds as string[],
+        parsed.projectGuardrailIds,
         defaultPlan.projectGuardrailIds
       ),
       site: {
         ...defaultPlan.site,
-        layoutSections: mergedLayoutSections,
-        pages: mergedPages,
+        layoutSections: mergeSectionPlans(
+          defaultPlan.site.layoutSections,
+          parsed.site?.layoutSections
+        ),
+        pages: defaultPlan.site.pages.map((page) => {
+          const incomingPage = Array.isArray(parsed.site?.pages)
+            ? parsed.site.pages.find(
+              (candidate) =>
+                candidate &&
+                typeof candidate === "object" &&
+                (candidate as { slug?: unknown }).slug === page.slug
+            )
+            : undefined;
+
+          return {
+            ...page,
+            pageDesignPlan: mergePageDesignPlan(page.pageDesignPlan, incomingPage),
+            sections: mergeSectionPlans(page.sections, incomingPage?.sections),
+          };
+        }),
       },
     };
   } catch {

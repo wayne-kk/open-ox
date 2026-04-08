@@ -102,8 +102,10 @@ export default function SectionGenerationPage() {
         <section id="orchestration" className="scroll-mt-24">
           <H2>编排与并行</H2>
           <P>
-            写入设计 Token（<Code>apply_project_design_tokens</Code>）与 section 生成现在并行执行。
-            每个 section 在生成时自行发现并选择 skill（运行时 score-based fallback），不再有全局预选步骤。
+            在写入设计 Token（<Code>apply_project_design_tokens</Code>）之后，流水线会先执行{" "}
+            <Code>preselect_skills</Code>：用<strong>单次批量</strong> LLM 调用为所有 section 选好风格技能 ID，
+            避免在每个 <Code>stepGenerateSection</Code> 里再各打一次选型电话。实现见{" "}
+            <Code>runGenerateProject.ts</Code> 中的 <Code>preselectSkillsForSections</Code>。
           </P>
           <P>
             所有待生成的 section（含 layout 与各页）被收集为一批 <Code>SectionBatchItem</Code>，通过{" "}
@@ -135,7 +137,7 @@ const results = await Promise.allSettled(
             section 通用规则（<Code>section.default.md</Code>）、按类型可选的 <Code>{"section.{type}.md"}</Code>（
             由 <Code>selectSectionPromptId</Code> 按约定文件名是否存在决定，无则回退 default）、
             选中技能的完整 Markdown、guardrail（项目级 + <Code>designPlan.guardrailIds</Code>）、
-            能力增强片段（<Code>traits</Code>）、以及输出形态约束（<Code>outputTsx</Code>）。
+            能力增强片段（<Code>capabilityAssistIds</Code>）、以及输出形态约束（<Code>outputTsx</Code>）。
             逐步骤对照表与 skill 预选细节见{" "}
             <Link href="/docs/generate-project-trace" className="text-foreground underline underline-offset-4 hover:text-primary transition-colors">
               Prompt 拼装 Trace
