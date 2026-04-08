@@ -13,42 +13,8 @@ import type {
   PageDesignPlan,
   PlannedProjectBlueprint,
   ProjectBlueprint,
-<<<<<<< HEAD
   SectionDesignPlan,
-} from "../types";
-
-function isSectionDesignPlan(value: unknown): value is SectionDesignPlan {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const candidate = value as Partial<SectionDesignPlan>;
-  return (
-    typeof candidate.role === "string" &&
-    typeof candidate.goal === "string" &&
-    typeof candidate.roleFit === "string" &&
-    typeof candidate.taskLoopFocus === "string" &&
-    typeof candidate.capabilityFocus === "string" &&
-    typeof candidate.informationArchitecture === "string" &&
-    typeof candidate.layoutIntent === "string" &&
-    typeof candidate.visualIntent === "string" &&
-    typeof candidate.interactionIntent === "string" &&
-    typeof candidate.contentStrategy === "string" &&
-    isStringArray(candidate.hierarchy) &&
-    isStringArray(candidate.guardrailIds) &&
-    isStringArray(candidate.capabilityAssistIds) &&
-    isStringArray(candidate.constraints) &&
-    (candidate.shellPlacement == null ||
-      candidate.shellPlacement === "beforePageContent" ||
-      candidate.shellPlacement === "afterPageContent") &&
-    (candidate.rationale == null || typeof candidate.rationale === "string")
-  );
-}
-
-function isPageDesignPlan(value: unknown): value is PageDesignPlan {
-=======
   SectionTraits,
-  SectionDesignPlan,
 } from "../types";
 
 function isSectionTraits(value: unknown): value is SectionTraits {
@@ -66,15 +32,10 @@ function isSectionTraits(value: unknown): value is SectionTraits {
 }
 
 function isSectionDesignPlan(value: unknown): value is SectionDesignPlan {
->>>>>>> b1eeef2 (feat: 登录注册UI)
   if (!value || typeof value !== "object") {
     return false;
   }
 
-<<<<<<< HEAD
-  const candidate = value as Partial<PageDesignPlan>;
-  return (
-=======
   const candidate = value as Partial<SectionDesignPlan>;
   return (
     typeof candidate.role === "string" &&
@@ -105,7 +66,6 @@ function isPageDesignPlan(value: unknown): value is PageDesignPlan {
 
   const candidate = value as Partial<PageDesignPlan>;
   return (
->>>>>>> b1eeef2 (feat: 登录注册UI)
     typeof candidate.pageGoal === "string" &&
     typeof candidate.audienceFocus === "string" &&
     typeof candidate.roleFit === "string" &&
@@ -182,26 +142,12 @@ ${getAllowedProjectGuardrailIds().map((id) => `- ${id}`).join("\n")}
 ## Allowed Section Guardrail IDs
 ${getAllowedSectionGuardrailIds().map((id) => `- ${id}`).join("\n")}
 
-<<<<<<< HEAD
-## Allowed Capability Assist IDs
-- effect.motion.subtle
-- effect.motion.ambient
-- effect.motion.energetic
-- pattern.hero.split
-- pattern.hero.centered
-- pattern.hero.editorial
-- pattern.hero.dashboard
-- pattern.features.grid
-- pattern.pricing.three-tier
-- pattern.faq.two-column`;
-=======
 ## Section Traits Contract
 - Every section designPlan must include a traits object.
 - traits.layout: optional object (type/ratio/direction/note)
 - traits.motion: optional object (intensity/trigger/note)
 - traits.visual: optional object (density/contrast/style/note)
 - traits.interaction: optional object (mode/note)`;
->>>>>>> b1eeef2 (feat: 登录注册UI)
 
   try {
     const raw = await callLLM(systemPrompt, userMessage, 0.2);

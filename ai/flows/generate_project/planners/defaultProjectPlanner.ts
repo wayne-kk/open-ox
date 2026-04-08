@@ -7,6 +7,7 @@ import type {
   ProjectBlueprint,
   SectionDesignPlan,
   SectionSpec,
+  SectionTraits,
   ShellPlacement,
   TaskLoop,
   UserRole,
@@ -85,8 +86,6 @@ function inferCapabilityAssistIds(section: SectionSpec, context: PlanningContext
   }
 
   return unique(assists);
-<<<<<<< HEAD
-=======
 }
 
 function inferSectionTraits(section: SectionSpec, context: PlanningContext): SectionTraits {
@@ -136,7 +135,6 @@ function inferSectionTraits(section: SectionSpec, context: PlanningContext): Sec
   }
 
   return traits;
->>>>>>> b1eeef2 (feat: 登录注册UI)
 }
 
 function inferSectionRole(section: SectionSpec): string {
@@ -261,11 +259,7 @@ export function buildDefaultSectionDesignPlan(
       "Make scan order obvious on mobile and desktop.",
     ],
     guardrailIds: inferSectionGuardrailDefaults(section),
-<<<<<<< HEAD
-    capabilityAssistIds: inferCapabilityAssistIds(section, context),
-=======
     traits: inferSectionTraits(section, context),
->>>>>>> b1eeef2 (feat: 登录注册UI)
     constraints: unique([
       "Preserve the project design system vocabulary.",
       "Generate production-ready code with realistic content.",
