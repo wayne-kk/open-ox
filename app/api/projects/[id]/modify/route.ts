@@ -11,6 +11,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { SSE_RESPONSE_HEADERS } from "@/lib/sse-headers";
 import { getProject } from "@/lib/projectManager";
 import { runModifyProject } from "@/ai/flows/modify_project/runModifyProject";
 import type { ModifySSEEvent } from "@/ai/flows/modify_project/runModifyProject";
@@ -129,10 +130,6 @@ export async function POST(
   });
 
   return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    },
+    headers: SSE_RESPONSE_HEADERS,
   });
 }

@@ -8,6 +8,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { SSE_RESPONSE_HEADERS } from "@/lib/sse-headers";
 
 export async function POST(req: Request) {
     // 运行时读取，避免模块级缓存导致 env 为空
@@ -51,11 +52,7 @@ export async function POST(req: Request) {
 
         // 透传 SSE 流
         return new Response(difyRes.body, {
-            headers: {
-                "Content-Type": "text/event-stream",
-                "Cache-Control": "no-cache",
-                Connection: "keep-alive",
-            },
+            headers: SSE_RESPONSE_HEADERS,
         });
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "Unknown error";

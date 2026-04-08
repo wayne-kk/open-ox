@@ -13,6 +13,7 @@ import { createProject, getProject, initProjectDir, updateProjectStatus, renameP
 import { uploadGeneratedFiles } from "@/lib/storage";
 import { setRuntimeModelId, type ModelId } from "@/lib/config/models";
 import type { BuildStep } from "@/ai/flows";
+import { SSE_RESPONSE_HEADERS } from "@/lib/sse-headers";
 import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
@@ -187,11 +188,7 @@ export async function POST(req: Request) {
     });
 
     return new Response(stream, {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        Connection: "keep-alive",
-      },
+      headers: SSE_RESPONSE_HEADERS,
     });
   } catch (err) {
     console.error("[AI API]", err);
