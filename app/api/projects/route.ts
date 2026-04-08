@@ -1,13 +1,10 @@
 import { NextResponse } from "next/server";
-import { listProjects, createProject } from "@/lib/projectManager";
+import { listProjectsSummary, createProject } from "@/lib/projectManager";
 
 export async function GET() {
   try {
-    const projects = await listProjects();
-    const sorted = [...projects].sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
-    return NextResponse.json(sorted);
+    const projects = await listProjectsSummary();
+    return NextResponse.json(projects);
   } catch (err) {
     console.error("[GET /api/projects]", err);
     return NextResponse.json(

@@ -22,6 +22,24 @@ function unique(values: string[]): string[] {
 
 function selectRepairTargets(buildOutput: string, generatedFiles: string[]): string[] {
   const lowered = buildOutput.toLowerCase();
+  const lowerFiles = generatedFiles.map((path) => path.toLowerCase());
+
+  // Next.js prerender failures on "/_not-found" usually map to app/not-found.tsx.
+  // Prioritize these files so repair agent edits the right place first.
+  if (lowered.includes('"/_not-found"') || lowered.includes("/_not-found")) {
+    const notFoundCandidates = generatedFiles.filter((path, idx) => {
+      const lp = lowerFiles[idx];
+      return (
+        lp === "app/not-found.tsx" ||
+        lp === "app/global-error.tsx" ||
+        lp === "app/error.tsx"
+      );
+    });
+    if (notFoundCandidates.length > 0) {
+      return unique(notFoundCandidates).slice(0, 3);
+    }
+  }
+
   const matched = generatedFiles.filter((path) => {
     const fileName = path.split("/").pop()?.toLowerCase() ?? "";
     return lowered.includes(path.toLowerCase()) || (fileName && lowered.includes(fileName));
@@ -35,6 +53,9 @@ function selectRepairTargets(buildOutput: string, generatedFiles: string[]): str
     (path) =>
       path === "app/layout.tsx" ||
       path === "app/page.tsx" ||
+      path === "app/not-found.tsx" ||
+      path === "app/error.tsx" ||
+      path === "app/global-error.tsx" ||
       path.includes("components/sections/")
   );
 

@@ -106,6 +106,51 @@ export async function listProjects(): Promise<ProjectMetadata[]> {
   return (data as ProjectRow[]).map(rowToMetadata);
 }
 
+interface ProjectListRow {
+  id: string;
+  name: string;
+  user_prompt: string;
+  status: "generating" | "ready" | "failed";
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+  error: string | null;
+  verification_status: "passed" | "failed" | null;
+  model_id: string | null;
+}
+
+/**
+ * Fast list query for dashboard/autocomplete.
+ * Avoid selecting heavy JSON columns (blueprint/build_steps/generated_files/modification_history).
+ */
+export async function listProjectsSummary(): Promise<ProjectMetadata[]> {
+  const { data, error } = await supabase
+    .from("projects")
+    .select(
+      "id,name,user_prompt,status,created_at,updated_at,completed_at,error,verification_status,model_id"
+    )
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("[projectManager] listProjectsSummary error:", error.message);
+    return [];
+  }
+
+  return (data as ProjectListRow[]).map((row) => ({
+    id: row.id,
+    name: row.name,
+    userPrompt: row.user_prompt,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    completedAt: row.completed_at ?? undefined,
+    error: row.error ?? undefined,
+    verificationStatus: row.verification_status ?? undefined,
+    modelId: row.model_id ?? undefined,
+    modificationHistory: [],
+  }));
+}
+
 export async function getProject(id: string): Promise<ProjectMetadata | null> {
   const { data, error } = await supabase
     .from("projects")
