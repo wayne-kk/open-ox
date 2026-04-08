@@ -1,0 +1,32 @@
+---
+description: Enforce root-cause fixes; ban hacks and fake fallbacks
+alwaysApply: true
+---
+
+# Root Cause Only Policy
+
+## Non-Negotiable Standard
+
+- Never ship hacks, band-aids, or cosmetic "fallbacks" as the primary fix.
+- Never claim a problem is fixed unless the root cause is identified and addressed in code.
+- If a workaround is temporarily required, it must be explicitly labeled as temporary and followed by a concrete root-cause remediation in the same task.
+
+## Required Workflow
+
+1. Reproduce the issue and capture the failing path.
+2. Identify the exact root cause (specific code path and mutation point).
+3. Implement the minimal structural fix at the root cause.
+4. Verify with evidence (typecheck/build/tests/runtime scenario) that the original failure no longer occurs.
+5. Report what changed, why it was root-cause level, and what verification passed.
+
+## Hard Prohibitions
+
+- Do not silence errors with broad retries, blanket catches, or content rewriting unless the root cause requires them and is documented.
+- Do not mutate historical protocol payloads in ways that violate provider invariants.
+- Do not leave dead/disabled legacy logic that can reintroduce the same class of bug.
+
+## Quality Bar
+
+- Prefer protocol-correctness over convenience.
+- Prefer deterministic behavior over heuristic guessing.
+- Prefer removing incorrect logic over layering additional compensating logic.
