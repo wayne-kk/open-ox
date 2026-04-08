@@ -5,6 +5,8 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { ArrowLeft, GitBranch, Monitor, RefreshCw, ExternalLink } from "lucide-react";
 import { HamsterLoader } from "@/components/ui/hamster-loader";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { useBuildStudio } from "@/app/studio/hooks/useBuildStudio";
 import { BuildConversation } from "@/app/studio/components/BuildConversation";
 import { GenerationAtlas } from "@/app/studio/components/GenerationAtlas";
@@ -17,7 +19,8 @@ function formatMs(ms: number): string {
 function StudioInner({ projectId }: { projectId: string }) {
   const studio = useBuildStudio(projectId);
   const { loading, response, elapsed, rightPanel, setRightPanel,
-    previewUrl, previewState, previewError, previewVersion, startPreview, iframeRef, projectLoading } = studio;
+    previewUrl, previewState, previewError, previewVersion, startPreview, iframeRef, projectLoading,
+    autoPreviewAfterBuild, setAutoPreviewAfterBuild } = studio;
   const buildSteps = response?.buildSteps ?? [];
   const canPreview = !!projectId && !loading;
 
@@ -140,6 +143,20 @@ function StudioInner({ projectId }: { projectId: string }) {
                   <Monitor className="h-3 w-3" />
                   Preview
                 </button>
+              </div>
+
+              <div className="hidden sm:flex items-center gap-2 rounded-lg border border-white/8 bg-white/3 px-2.5 h-7">
+                <Checkbox
+                  id="auto-preview-after-build"
+                  checked={autoPreviewAfterBuild}
+                  onCheckedChange={(v) => setAutoPreviewAfterBuild(v === true)}
+                />
+                <Label
+                  htmlFor="auto-preview-after-build"
+                  className="cursor-pointer font-mono text-[9px] uppercase tracking-widest text-muted-foreground/80"
+                >
+                  生成后预览
+                </Label>
               </div>
 
               {/* Spacer */}

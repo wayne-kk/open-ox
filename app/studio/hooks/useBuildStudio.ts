@@ -78,6 +78,9 @@ export interface BuildStudioState {
   previewVersion: number;
   startPreview: () => Promise<void>;
   rebuildPreview: () => Promise<void>;
+  /** After generate/retry (and optionally modify), switch to Preview and start/rebuild dev server */
+  autoPreviewAfterBuild: boolean;
+  setAutoPreviewAfterBuild: (v: boolean) => void;
 
   // Modify
   modifyInstruction: string;
@@ -97,6 +100,17 @@ export interface BuildStudioState {
   pendingModifyInstruction: string | null;
   pendingModifyImage: string | null;
   iframeRef: React.RefObject<HTMLIFrameElement | null>;
+}
+
+const AUTO_PREVIEW_STORAGE_KEY = "open-ox:studio:autoPreviewAfterBuild";
+
+function readAutoPreviewAfterBuild(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    return localStorage.getItem(AUTO_PREVIEW_STORAGE_KEY) !== "false";
+  } catch {
+    return true;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -138,6 +152,25 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
   const [projectId, setProjectId] = useState<string | null>(initialProjectId ?? null);
   const [projectLoading, setProjectLoading] = useState<boolean>(!!initialProjectId);
   const [rightPanel, setRightPanel] = useState<RightPanel>("topology");
+
+  const [autoPreviewAfterBuild, setAutoPreviewAfterBuildState] = useState(true);
+  const autoPreviewAfterBuildRef = useRef(true);
+
+  useEffect(() => {
+    const v = readAutoPreviewAfterBuild();
+    autoPreviewAfterBuildRef.current = v;
+    setAutoPreviewAfterBuildState(v);
+  }, []);
+
+  const setAutoPreviewAfterBuild = useCallback((next: boolean) => {
+    autoPreviewAfterBuildRef.current = next;
+    setAutoPreviewAfterBuildState(next);
+    try {
+      localStorage.setItem(AUTO_PREVIEW_STORAGE_KEY, next ? "true" : "false");
+    } catch {
+      /* ignore quota / private mode */
+    }
+  }, []);
 
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewState, setPreviewState] = useState<"idle" | "starting" | "ready" | "error">("idle");
@@ -387,9 +420,13 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
             // done payload carries the authoritative final buildSteps from the server.
             // This replaces whatever the SSE stream built up, ensuring consistency.
             setResponse((prev) => ({ ...result, buildSteps: result.buildSteps ?? prev?.buildSteps }));
-            if (result.projectId) {
-              projectIdFromGenerationRef.current = result.projectId;
-              setProjectId(result.projectId);
+            const nextProjectId = result.projectId ?? projectId ?? null;
+            if (nextProjectId) {
+              projectIdFromGenerationRef.current = nextProjectId;
+              setProjectId(nextProjectId);
+              if (autoPreviewAfterBuildRef.current) {
+                void openPreviewAfterBuild(nextProjectId, false);
+              }
             }
           },
           onError: (msg) => setResponse({ content: "", error: msg }),
@@ -461,9 +498,13 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
           onStep: handleStepEvent,
           onDone: (result) => {
             setResponse((prev) => ({ ...result, buildSteps: result.buildSteps ?? prev?.buildSteps }));
-            if (result.projectId) {
-              projectIdFromGenerationRef.current = result.projectId;
-              setProjectId(result.projectId);
+            const nextProjectId = result.projectId ?? retryId;
+            if (nextProjectId) {
+              projectIdFromGenerationRef.current = nextProjectId;
+              setProjectId(nextProjectId);
+              if (autoPreviewAfterBuildRef.current) {
+                void openPreviewAfterBuild(nextProjectId, true);
+              }
             }
           },
           onError: (msg) => setResponse({ content: "", error: msg }),
@@ -527,6 +568,34 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       setPreviewState("error");
     }
   }, [projectId]);
+
+  const openPreviewAfterBuild = useCallback(
+    async (targetProjectId: string, forceRebuild = false) => {
+      setRightPanel("preview");
+      setPreviewState("starting");
+      setPreviewError(null);
+      setPreviewUrl(null);
+
+      try {
+        const method: "POST" | "PUT" = forceRebuild ? "PUT" : "POST";
+        const res = await fetch(`/api/projects/${targetProjectId}/preview`, { method });
+        if (res.ok) {
+          const data = await res.json();
+          setPreviewUrl(data.url);
+          setPreviewVersion((v) => v + 1);
+          setPreviewState("ready");
+        } else {
+          const err = await res.json().catch(() => ({}));
+          setPreviewError(err.error ?? `HTTP ${res.status}`);
+          setPreviewState("error");
+        }
+      } catch (e) {
+        setPreviewError(e instanceof Error ? e.message : "Network error");
+        setPreviewState("error");
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     if (rightPanel === "preview" && projectId && previewState === "idle") {
@@ -672,26 +741,8 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
           }]);
         }
 
-        setRightPanel("preview");
-        setPreviewState("starting");
-        setPreviewUrl(null);
-
-        try {
-          const previewRes = await fetch(`/api/projects/${projectId}/preview`, { method: "PUT" });
-          if (previewRes.ok) {
-            const data = await previewRes.json();
-            setPreviewUrl(data.url);
-            setPreviewVersion((v) => v + 1);
-            setPreviewState("ready");
-          } else {
-            const errData = await previewRes.json().catch(() => ({}));
-            setPreviewState("error");
-            setPreviewError(errData?.error ?? "Preview rebuild failed");
-          }
-        } catch (previewErr) {
-          console.error("[preview] Rebuild failed:", previewErr);
-          setPreviewState("error");
-          setPreviewError(previewErr instanceof Error ? previewErr.message : "Preview rebuild failed");
+        if (autoPreviewAfterBuildRef.current) {
+          void openPreviewAfterBuild(projectId, true);
         }
       }
     } catch (err) {
@@ -713,7 +764,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       setPendingModifyInstruction(null);
       setPendingModifyImage(null);
     }
-  }, [modifyInstruction, modifyImage, modifying, projectId, selectedModel, modifyHistory]);
+  }, [modifyInstruction, modifyImage, modifying, projectId, selectedModel, modifyHistory, openPreviewAfterBuild]);
 
   // ── Computed ─────────────────────────────────────────────────────────
   const flowStart =
@@ -728,6 +779,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     projectId, setProjectId, projectLoading,
     rightPanel, setRightPanel,
     previewUrl, previewState, previewError, previewVersion, startPreview, rebuildPreview,
+    autoPreviewAfterBuild, setAutoPreviewAfterBuild,
     modifyInstruction, setModifyInstruction, modifyImage, setModifyImage, modifying,
     modifySteps, modifyPlan, modifyDiffs, modifyToolCalls, modifyThinking, modifyError, handleModify,
     clearModifyHistory: () => {
