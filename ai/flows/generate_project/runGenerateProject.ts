@@ -16,73 +16,20 @@ import { stepInstallDependencies } from "./steps/installDependencies";
 import { stepPlanProject } from "./steps/planProject";
 import { stepRepairBuild } from "./steps/repairBuild";
 import { stepRunBuild } from "./steps/runBuild";
-import type {
-  BuildStep,
-  GenerateProjectResult,
-  PlannedProjectBlueprint,
-  PlannedSectionSpec,
-  ProjectBlueprint,
-  SectionSpec,
-} from "./types";
+import { normalizeBlueprint } from "./normalization/blueprintNormalizer";
+import {
+  appendDependencyInstallFailures,
+  appendGeneratedFiles,
+  appendInstalledDependencies,
+  createInitialResult,
+} from "./orchestration/resultAccumulator";
+import type { BuildStep, GenerateProjectResult, PlannedProjectBlueprint, PlannedSectionSpec, ProjectBlueprint } from "./types";
 import type { ArtifactLogger, StepLogger } from "./shared/logging";
 import type { GenerateSectionParams } from "./steps/generateSection";
 import type { PendingImage } from "../../tools/system/generateImageTool";
 import { awaitPendingImages } from "../../tools/system/generateImageTool";
 import type { CheckpointResult } from "./shared/checkpoint";
 
-function dedupeSectionsByFileName(sections: SectionSpec[]): SectionSpec[] {
-  const seen = new Set<string>();
-  return sections.filter((section) => {
-    if (seen.has(section.fileName)) {
-      return false;
-    }
-
-    seen.add(section.fileName);
-    return true;
-  });
-}
-
-function normalizeBlueprint(blueprint: ProjectBlueprint): ProjectBlueprint {
-  // Separate true layout sections (navigation, footer) from misplaced page sections
-  const allLayoutCandidates =
-    blueprint.site.layoutSections.length > 0
-      ? blueprint.site.layoutSections
-      : blueprint.site.pages
-          .flatMap((page) => page.sections)
-        .filter((section) => isLayoutSection(section.type));
-
-  const layoutSections = dedupeSectionsByFileName(
-    allLayoutCandidates.filter((section) => isLayoutSection(section.type))
-  );
-
-  // Collect non-layout sections that were mistakenly placed in layoutSections
-  const misplacedSections = blueprint.site.layoutSections.filter(
-    (section) => !isLayoutSection(section.type)
-  );
-
-  // Build pages: remove layout-type sections from pages, then merge in any misplaced sections
-  const pages = blueprint.site.pages.map((page, index) => {
-    const pageSections = page.sections.filter((section) => !isLayoutSection(section.type));
-
-    // Attach misplaced sections to the first page (home) if they don't already exist there
-    if (index === 0 && misplacedSections.length > 0) {
-      const existingFileNames = new Set(pageSections.map((s) => s.fileName));
-      const toAdd = misplacedSections.filter((s) => !existingFileNames.has(s.fileName));
-      return { ...page, sections: [...toAdd, ...pageSections] };
-    }
-
-    return { ...page, sections: pageSections };
-  });
-
-  return {
-    ...blueprint,
-    site: {
-      ...blueprint.site,
-      layoutSections,
-      pages,
-    },
-  };
-}
 
 function summarizeFailures(prefix: string, failures: Array<{ name: string; message: string }>): string {
   const detail = failures.map((failure) => `${failure.name}: ${failure.message}`).join("; ");
@@ -147,17 +94,6 @@ interface SectionBatchItem {
   pageContext?: GenerateSectionParams["pageContext"];
 }
 
-function createInitialResult(logger: StepLogger): GenerateProjectResult {
-  return {
-    success: false,
-    verificationStatus: "failed",
-    generatedFiles: [],
-    unvalidatedFiles: [],
-    installedDependencies: [],
-    dependencyInstallFailures: [],
-    steps: logger.resultSteps,
-  };
-}
 
 function buildProjectRuntimeContext(blueprint: PlannedProjectBlueprint): ProjectRuntimeContext {
   return {
@@ -179,56 +115,6 @@ function buildProjectRuntimeContext(blueprint: PlannedProjectBlueprint): Project
   };
 }
 
-function appendGeneratedFiles(result: GenerateProjectResult, files: string[]): void {
-  for (const path of files) {
-    if (!result.generatedFiles.includes(path)) {
-      result.generatedFiles.push(path);
-    }
-  }
-}
-
-function appendInstalledDependencies(
-  result: GenerateProjectResult,
-  dependencies: GenerateProjectResult["installedDependencies"]
-): void {
-  for (const dependency of dependencies) {
-    const existing = result.installedDependencies.find(
-      (item) => item.packageName === dependency.packageName && item.dev === dependency.dev
-    );
-
-    if (!existing) {
-      result.installedDependencies.push({
-        ...dependency,
-        files: [...dependency.files],
-      });
-      continue;
-    }
-
-    existing.files = Array.from(new Set([...existing.files, ...dependency.files]));
-  }
-}
-
-function appendDependencyInstallFailures(
-  result: GenerateProjectResult,
-  failures: GenerateProjectResult["dependencyInstallFailures"]
-): void {
-  for (const failure of failures) {
-    const existing = result.dependencyInstallFailures.find(
-      (item) => item.packageName === failure.packageName && item.dev === failure.dev
-    );
-
-    if (!existing) {
-      result.dependencyInstallFailures.push({
-        ...failure,
-        files: [...failure.files],
-      });
-      continue;
-    }
-
-    existing.files = Array.from(new Set([...existing.files, ...failure.files]));
-    existing.error = failure.error;
-  }
-}
 
 function getSectionStepName(scopeKey: string, fileName: string): string {
   return `generate_section:${scopeKey}:${fileName}`;

@@ -1,4 +1,5 @@
 import {
+  composePromptBlocks,
   formatSiteFile,
   loadGuardrail,
   loadStepPrompt,
@@ -18,13 +19,11 @@ export async function stepComposePage(
   designSystem: string,
   pageSections: PlannedSectionSpec[]
 ): Promise<string> {
-  const systemPrompt = [
+  const systemPrompt = composePromptBlocks([
     loadSystem("frontend"),
-    "\n\n",
     loadStepPrompt("composePage"),
-    "\n\n",
     loadGuardrail("outputTsx"),
-  ].join("");
+  ]);
 
   const importStatements = pageSections
     .map(

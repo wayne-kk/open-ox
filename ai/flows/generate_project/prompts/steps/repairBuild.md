@@ -15,7 +15,7 @@ Your job is to fix the build error with minimal, surgical edits.
 ## Common Build Errors & Fixes
 
 - **"Event handlers cannot be passed to Client Component props"** → Add `"use client";` as the first line of the component file.
-- **"Invalid import 'client-only' cannot be imported from a Server Component"** → Add `"use client";` to the importing file.
+- **"Invalid import 'client-only'/'server-only'"** → Remove the sentinel import first. Then, if the file truly needs browser APIs/hooks/events, add `"use client";` as the first line.
 - **Import not found** → Fix the import path or remove the unused import.
 - **Type errors** → Fix the type annotation or add a type assertion.
 - **Missing export** → Add `export default` to the component function.

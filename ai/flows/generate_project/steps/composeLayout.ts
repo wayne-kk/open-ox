@@ -1,4 +1,5 @@
 import {
+  composePromptBlocks,
   formatSiteFile,
   loadGuardrail,
   loadStepPrompt,
@@ -70,13 +71,11 @@ ${layoutSections
 7. Project: ${blueprint.brief.projectTitle}
 8. **Set the \`lang\` attribute on the \`<html>\` tag to: \`${blueprint.brief.language}\`** — this is the detected language of the website content.`;
 
-  const systemPrompt = [
+  const systemPrompt = composePromptBlocks([
     loadSystem("frontend"),
-    "\n\n",
     loadStepPrompt("composeLayout"),
-    "\n\n",
     loadGuardrail("outputTsx"),
-  ].join("");
+  ]);
   const raw = await callLLM(systemPrompt, userMessage, 0.2);
   const tsx = extractContent(raw, "tsx");
 

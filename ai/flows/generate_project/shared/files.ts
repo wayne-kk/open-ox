@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, readFileSync } from "fs";
-import matter from "gray-matter";
 import { dirname, join } from "path";
 import { executeSystemTool } from "../../../tools";
 import { getSiteRoot } from "../../../tools/system/common";
+import { hasPrompt, loadPrompt, resolvePromptPath, composePrompt } from "@/ai/prompts/core";
 
 const FLOW_ROOT = join(process.cwd(), "ai", "flows", "generate_project");
 const STEP_PROMPTS_ROOT = join(FLOW_ROOT, "prompts", "steps");
@@ -22,11 +22,11 @@ function readPromptFile(path: string): string {
 }
 
 export function getStepPromptPath(promptId: string): string {
-  return join(STEP_PROMPTS_ROOT, `${promptId}.md`);
+  return resolvePromptPath("step", promptId);
 }
 
 export function getSectionPromptPath(promptId: string): string {
-  return join(SECTION_PROMPTS_ROOT, `${promptId}.md`);
+  return resolvePromptPath("section", promptId);
 }
 
 export function getSkillPromptsRoot(): string {
@@ -34,7 +34,7 @@ export function getSkillPromptsRoot(): string {
 }
 
 export function getSkillPromptPath(promptId: string): string {
-  return join(SKILL_PROMPTS_ROOT, `${promptId}.md`);
+  return resolvePromptPath("skill", promptId);
 }
 
 export function getRulePromptsRoot(): string {
@@ -42,19 +42,19 @@ export function getRulePromptsRoot(): string {
 }
 
 export function getRulePath(ruleId: string): string {
-  return join(RULE_PROMPTS_ROOT, `${ruleId}.md`);
+  return resolvePromptPath("guardrail", ruleId);
 }
 
 export function getMotionPath(motionId: string): string {
-  return join(MOTION_PROMPTS_ROOT, `${motionId}.md`);
+  return resolvePromptPath("motion", motionId);
 }
 
 export function getLayoutVariantPath(layoutId: string): string {
-  return join(LAYOUT_PROMPTS_ROOT, `${layoutId}.md`);
+  return resolvePromptPath("layout", layoutId);
 }
 
 export function getCapabilityAssistPath(capabilityId: string): string {
-  const modernPath = join(CAPABILITY_PROMPTS_ROOT, `${capabilityId}.md`);
+  const modernPath = resolvePromptPath("capability", capabilityId);
   if (existsSync(modernPath)) {
     return modernPath;
   }
@@ -71,11 +71,11 @@ export function getCapabilityAssistPath(capabilityId: string): string {
 }
 
 export function hasSectionPrompt(promptId: string): boolean {
-  return existsSync(getSectionPromptPath(promptId));
+  return hasPrompt("section", promptId);
 }
 
 export function hasSkillPrompt(promptId: string): boolean {
-  return existsSync(getSkillPromptPath(promptId));
+  return hasPrompt("skill", promptId);
 }
 
 export function hasCapabilityAssist(capabilityId: string): boolean {
@@ -83,28 +83,27 @@ export function hasCapabilityAssist(capabilityId: string): boolean {
 }
 
 export function loadStepPrompt(promptId: string): string {
-  return readPromptFile(getStepPromptPath(promptId));
+  return loadPrompt("step", promptId);
 }
 
 export function loadSectionPrompt(promptId: string): string {
-  return readPromptFile(getSectionPromptPath(promptId));
+  return loadPrompt("section", promptId);
 }
 
 export function loadSkillPrompt(promptId: string): string {
-  return readPromptFile(getSkillPromptPath(promptId));
+  return loadPrompt("skill", promptId);
 }
 
 export function loadGuardrail(guardrailId: string): string {
-  const raw = readPromptFile(getRulePath(guardrailId));
-  return matter(raw).content.trimStart();
+  return loadPrompt("guardrail", guardrailId);
 }
 
 export function loadMotion(motionId: string): string {
-  return readPromptFile(getMotionPath(motionId));
+  return loadPrompt("motion", motionId);
 }
 
 export function loadLayoutVariant(layoutId: string): string {
-  return readPromptFile(getLayoutVariantPath(layoutId));
+  return loadPrompt("layout", layoutId);
 }
 
 export function loadCapabilityAssist(capabilityId: string): string {
@@ -112,12 +111,16 @@ export function loadCapabilityAssist(capabilityId: string): string {
 }
 
 export function loadSystem(name: string): string {
-  const path = join(process.cwd(), "ai", "prompts", "systems", `${name}.md`);
-  if (!existsSync(path)) {
+  const systemPath = resolvePromptPath("system", name);
+  if (!existsSync(systemPath)) {
     return "You are a professional AI assistant.";
   }
 
-  return readFileSync(path, "utf-8");
+  return loadPrompt("system", name);
+}
+
+export function composePromptBlocks(blocks: string[]): string {
+  return composePrompt({ blocks, dedupe: true });
 }
 
 export function readSiteFile(relativePath: string): string {

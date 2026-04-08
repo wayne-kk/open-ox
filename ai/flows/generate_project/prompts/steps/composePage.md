@@ -14,17 +14,17 @@ Do not import or render layout-level sections in `page.tsx`.
 Each section component already implements its own layout: an outer full-width layer
 for background and an inner `container mx-auto px-* py-*` for content (per project
 section layout rules). **Do not** wrap section imports in extra `<section>`,
-`container`, `mx-auto`, `px-*`, `py-*`, or `max-w-*` — that duplicates padding and
+`container`, `mx-auto`, `px-`*, `py-*`, or `max-w-*` — that duplicates padding and
 width constraints and breaks rhythm.
 
 - Render sections **directly** as siblings inside `<main>`: `<HeroSection />`,
-  `<FeaturesSection />`, etc.
+`<FeaturesSection />`, etc.
 - Page-level composition may add **only**: global fixed overlays outside `<main>`,
-  optional decorative non-layout elements, or a minimal wrapper when an effect truly
-  requires a positioned ancestor (e.g. one absolute child next to the hero). Never
-  use `border-t` / `border-b` / `divide-*` / `<hr />` between sections on the page
-  file; spacing and separation belong inside section components or via background
-  contrast.
+optional decorative non-layout elements, or a minimal wrapper when an effect truly
+requires a positioned ancestor (e.g. one absolute child next to the hero). Never
+use `border-t` / `border-b` / `divide-`* / `<hr />` between sections on the page
+file; spacing and separation belong inside section components or via background
+contrast.
 
 ## Design Responsibility
 
@@ -38,11 +38,12 @@ width constraints and breaks rhythm.
 - **CRITICAL: Copy the provided import statements VERBATIM. Do not change the import paths, component names, or file names. The import paths are pre-computed and correct.**
 - Render all sections inside a single `<main>` element in the provided order.
 - Use only global overlays or minimal decorative structure when needed; do not add
-  per-section spacing or container wrappers (see Section Layout Contract above).
+per-section spacing or container wrappers (see Section Layout Contract above).
 - If the design system specifies a global page-level overlay, add it as a fixed
-  `pointer-events-none` element outside `<main>`.
+`pointer-events-none` element outside `<main>`.
 - The page component is pure composition: no business logic, no state, no
-  `"use client"`.
+`"use client"`.
+- Do not import sentinel packages like `client-only` or `server-only` in `page.tsx`.
 - Export `metadata` and `export default function Page() {}`.
 - Do not hardcode route assumptions beyond the supplied path and metadata.
 
@@ -76,3 +77,4 @@ export default function Page() {
   );
 }
 ```
+

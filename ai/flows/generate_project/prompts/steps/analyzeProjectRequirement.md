@@ -15,7 +15,7 @@ Output a single valid JSON object. No markdown, no code fences, no explanations.
   "brief": {
     "projectTitle": "Human-readable title",
     "projectDescription": "One sentence: goal, audience, scope",
-    "language": "BCP 47 tag detected from user input (zh-CN, en, ja, ko, fr, etc.)",
+    "language": "BCP 47 tag for WEBSITE CONTENT language, decided from requirement semantics (zh-CN, en, ja, ko, fr, etc.)",
     "productScope": {
       "productType": "landing page / company website / dashboard / marketplace / etc.",
       "mvpDefinition": "Smallest coherent first version",
@@ -122,5 +122,8 @@ Output a single valid JSON object. No markdown, no code fences, no explanations.
 - `pages` must NOT contain a `sections` array — sections are planned separately.
 - Each page needs only: title, slug, description, journeyStage, primaryRoleIds, supportingCapabilityIds.
 - `designIntent.keywords`: 5–8 visual/emotional adjectives, always in English regardless of user input language.
+- Language decision rule:
+  1. If the user explicitly specifies site/content language, use exactly that language.
+  2. If language is not explicitly specified, infer site language from the language of the user's input text.
 - Output only the JSON object.
 

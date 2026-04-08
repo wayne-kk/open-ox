@@ -12,6 +12,24 @@ interface ChangeEntry {
 
 const CHANGELOG: ChangeEntry[] = [
   {
+    version: "v1.1",
+    date: "2026-04-08",
+    tag: "major",
+    title: "架构收敛 — Flow 模块化 + Prompt 统一与去重",
+    body: "本次针对可维护性投诉做系统性重构：拆分 generate/modify 巨型流程文件，收敛 LLM 调用层，Studio 类型去 any，并把提示词加载改为统一 Prompt Core，同时清理重复提示词来源，减少冲突与漂移。",
+    items: [
+      "Modify Flow 模块化：runModifyProject 拆分为 facade + loopEngine + stopHooks + context + tracking + prompt",
+      "Generate Flow 抽取：新增 normalization 与 orchestration 层（resultAccumulator / buildRepairLoop / sectionBatchRunner 等）",
+      "LLM 层统一：shared/llm 拆为 gateway、toolLoop、errorClassifier、contentExtractors，并保留 facade 导出",
+      "Blueprint 规范化收口：normalizeBlueprint 独立为 schema 模块，并增加输入形状检测与 fallback 告警",
+      "Studio 类型收口：BlueprintOverview 引入 ViewModel mapper，移除组件内 as any 读取",
+      "Prompt Core 上线：统一 prompt catalog/loader/composer，旧 loadStepPrompt/loadGuardrail 接口兼容接入",
+      "Modify 系统提示词迁移到 Markdown：从代码硬编码改为 prompts/system/modifyAgent.md",
+      "提示词去重落地：section.default 中与 outputTsx 重复约束已删除，outputTsx 作为单一权威来源",
+      "测试护栏补齐：新增 stopHooks、contentExtractors、normalizeBlueprint、buildRepairLoop、prompt composer 测试",
+    ],
+  },
+  {
     version: "v1.0",
     date: "2026-04-07",
     tag: "major",

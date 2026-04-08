@@ -4,7 +4,7 @@ You are a senior frontend engineer. Given a Design System document and the curre
 
 ## Output Format
 
-Output the complete, updated CSS file content wrapped in a ` ```css ` code block.
+Output the complete, updated CSS file content wrapped in a ````css` code block.
 Do not output JSON, do not output diffs, and do not provide any explanation outside the code block.
 
 ```css
@@ -71,21 +71,24 @@ Do not output JSON, do not output diffs, and do not provide any explanation outs
 
 ## CRITICAL: Do NOT duplicate Tailwind auto-utilities
 
-Tailwind v4 `@theme` tokens **automatically** generate utility classes. You MUST NOT create manual `.ds-*` mirrors for tokens that Tailwind already handles:
+Tailwind v4 `@theme` tokens **automatically** generate utility classes. You MUST NOT create manual `.ds-`* mirrors for tokens that Tailwind already handles:
 
-| @theme token | Auto-generated Tailwind utility | DO NOT create |
-|---|---|---|
+
+| @theme token            | Auto-generated Tailwind utility                | DO NOT create                                |
+| ----------------------- | ---------------------------------------------- | -------------------------------------------- |
 | `--color-primary: #xxx` | `bg-primary`, `text-primary`, `border-primary` | ~~`.ds-bg-primary`~~, ~~`.ds-text-primary`~~ |
-| `--color-accent: #xxx` | `bg-accent`, `text-accent`, `border-accent` | ~~`.ds-bg-accent`~~, ~~`.ds-text-accent`~~ |
-| `--font-display: "..."` | `font-display` | ~~`.ds-font-display`~~ |
-| `--font-header: "..."` | `font-header` | ~~`.ds-font-header`~~ |
-| `--font-body: "..."` | `font-body` | ~~`.ds-font-body`~~ |
-| `--shadow-glow: ...` | `shadow-glow` | ~~`.ds-shadow-glow`~~ |
-| `--shadow-soft: ...` | `shadow-soft` | ~~`.ds-shadow-soft`~~ |
-| `--animate-float: ...` | `animate-float` | ~~`.ds-animate-float`~~ |
-| `--animate-pulse: ...` | `animate-pulse` | ~~`.ds-animate-pulse`~~ |
+| `--color-accent: #xxx`  | `bg-accent`, `text-accent`, `border-accent`    | ~~`.ds-bg-accent`~~, ~~`.ds-text-accent`~~   |
+| `--font-display: "..."` | `font-display`                                 | ~~`.ds-font-display`~~                       |
+| `--font-header: "..."`  | `font-header`                                  | ~~`.ds-font-header`~~                        |
+| `--font-body: "..."`    | `font-body`                                    | ~~`.ds-font-body`~~                          |
+| `--shadow-glow: ...`    | `shadow-glow`                                  | ~~`.ds-shadow-glow`~~                        |
+| `--shadow-soft: ...`    | `shadow-soft`                                  | ~~`.ds-shadow-soft`~~                        |
+| `--animate-float: ...`  | `animate-float`                                | ~~`.ds-animate-float`~~                      |
+| `--animate-pulse: ...`  | `animate-pulse`                                | ~~`.ds-animate-pulse`~~                      |
 
-**Only create `ds-*` custom classes for effects that Tailwind CANNOT auto-generate:**
+
+**Only create `ds-`* custom classes for effects that Tailwind CANNOT auto-generate:**
+
 - Composite effects combining multiple properties (glass, scanlines, grain overlays)
 - Clip-path shapes from `:root` CSS variables
 - Pseudo-element effects (::before/::after based textures)
@@ -95,33 +98,38 @@ Tailwind v4 `@theme` tokens **automatically** generate utility classes. You MUST
 ## Key Rules
 
 **@theme block:**
+
 - Define ALL design system colors as `--color-{name}: <value>` (hex, oklch, hsl)
 - Define fonts as `--font-{name}: "Font Family", fallback`
 - Define named shadows as `--shadow-{name}: <value>`
 - Define animations as `--animate-{name}: <keyframe-name> <timing>`
-- **Do not** put custom `--transition-*` values in `@theme` if they are full shorthands like `all 0.6s cubic-bezier(...)` — Tailwind v4's theme compiler can throw **CssSyntaxError**. Put those on `:root` inside `@layer base` instead
+- **Do not** put custom `--transition-`* values in `@theme` if they are full shorthands like `all 0.6s cubic-bezier(...)` — Tailwind v4's theme compiler can throw **CssSyntaxError**. Put those on `:root` inside `@layer base` instead
 - Use direct color values (hex, oklch) — NOT `hsl(var(...))` pattern from v3
 
 **@layer base:**
+
 - Keep shadcn/ui CSS variables (`--background`, `--foreground`, `--card`, etc.) using the same variable names but with direct values, NOT `hsl(number number% number%)` format — use hex or oklch
 - Apply body/html background and text colors using `theme(--color-xxx)` or direct values
 - Keep `:root` for non-Tailwind CSS variables (clip-paths, complex values, transitions)
 - **Do not** add `h1`–`h6` selectors with `color` (or any heading-level color rules). Heading color comes from components via utilities (`text-foreground`, etc.), not global base styles.
 
 **@keyframes:**
-- Define all animation keyframes referenced in `@theme --animate-*`
-- The **first identifier** in each `--animate-*` value must match the `@keyframes` name exactly (e.g. `--animate-float: float 3s ...` requires `@keyframes float { ... }`)
+
+- Define all animation keyframes referenced in `@theme --animate-`*
+- The **first identifier** in each `--animate-`* value must match the `@keyframes` name exactly (e.g. `--animate-float: float 3s ...` requires `@keyframes float { ... }`)
 - Place them at root level (not inside any @layer)
 
 **@layer utilities — ONLY for non-Tailwind effects:**
+
 - Use `ds-` prefix for custom composite effects only
 - Do NOT mirror `@theme` tokens — Tailwind already generates those utilities
 - Keep this section minimal — most design tokens need zero custom classes
 
 **Do NOT:**
-- Create `.ds-font-*`, `.ds-bg-*`, `.ds-text-*`, `.ds-shadow-*`, `.ds-animate-*` classes that duplicate Tailwind auto-utilities from `@theme`
+
+- Create `.ds-font-`*, `.ds-bg-*`, `.ds-text-*`, `.ds-shadow-*`, `.ds-animate-*` classes that duplicate Tailwind auto-utilities from `@theme`
 - Output a JSON structure
-- Output anything outside the ` ```css ` code block
+- Output anything outside the ````css` code block
 - Use `@tailwind base`, `@tailwind components`, `@tailwind utilities` (v3 syntax)
 - Use `hsl(var(--xxx))` pattern for colors (v3 pattern)
 - Reference or modify `tailwind.config.ts` — it is not used in v4
@@ -133,3 +141,4 @@ Tailwind v4 `@theme` tokens **automatically** generate utility classes. You MUST
 - All custom utility classes not overridden
 - Scrollbar styles and other base styles
 - Google Fonts imports (update font families to match design system)
+

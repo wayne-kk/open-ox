@@ -2,6 +2,7 @@ import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { getSystemToolDefinitions } from "../../../tools/systemToolCatalog";
 import {
+  composePromptBlocks,
   loadStepPrompt,
   loadSystem,
   readSiteFile,
@@ -189,7 +190,7 @@ export async function stepInstallDependencies({
     };
   }
 
-  const systemPrompt = [loadSystem("frontend"), loadStepPrompt("dependencyResolver")].join("\n\n");
+  const systemPrompt = composePromptBlocks([loadSystem("frontend"), loadStepPrompt("dependencyResolver")]);
   const templatePackages = getTemplatePackageNames();
   const templatePackageSet = new Set(templatePackages);
 

@@ -6,7 +6,7 @@ import {
   mergeProjectGuardrailIds,
   mergeSectionGuardrailIds,
 } from "../planners/guardrailPolicy";
-import { loadGuardrail, loadStepPrompt } from "../shared/files";
+import { composePromptBlocks, loadGuardrail, loadStepPrompt } from "../shared/files";
 import { callLLM, extractJSON } from "../shared/llm";
 import { isStringArray } from "../shared/typeGuards";
 import type {
@@ -71,7 +71,7 @@ export async function stepPlanProject(
   blueprint: ProjectBlueprint
 ): Promise<PlannedProjectBlueprint> {
   const defaultPlan = buildDefaultProjectPlan(blueprint);
-  const systemPrompt = [loadStepPrompt("planProject"), "\n\n", loadGuardrail("outputJson")].join("");
+  const systemPrompt = composePromptBlocks([loadStepPrompt("planProject"), loadGuardrail("outputJson")]);
   const rolesSummary = blueprint.brief.roles
     .map(
       (role) =>
