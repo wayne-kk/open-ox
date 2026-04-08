@@ -54,8 +54,9 @@ export const generateImageTool: ChatCompletionTool = {
         prompt: {
           type: "string",
           description:
-            "Detailed image generation prompt in English. Describe the subject, style, mood, lighting, " +
-            "composition, and color palette. Be specific for best results.",
+            "Image generation prompt in English, MUST be under 160 characters. " +
+            "Formula: [Subject] + [Style] + [Lighting] + [Mood/Color] + [Quality]. " +
+            "Be dense and specific. End with 'sharp focus, 4K'. No text/logos in image.",
         },
         size: {
           type: "string",
@@ -86,17 +87,10 @@ export interface PendingImage {
   publicPath: string;
   /** Resolves when the image file has been written to disk. */
   promise: Promise<void>;
+  /** Generation duration in ms — populated after promise resolves. */
+  durationMs: number;
 }
 
-/**
- * Create a scoped image executor that returns paths instantly and collects
- * background generation promises.
- *
- * Usage:
- *   const { executor, pendingImages } = createImageExecutor("HeroSection");
- *   // pass executor as executeToolOverrides["generate_image"]
- *   // after LLM finishes, await Promise.allSettled(pendingImages.map(p => p.promise))
- */
 export function createImageExecutor(componentName: string): {
   executor: ToolExecutor;
   pendingImages: PendingImage[];
@@ -129,9 +123,14 @@ export function createImageExecutor(componentName: string): {
       };
     }
 
-    // Fire-and-forget: enqueue the actual generation in the background
-    const generationPromise = (async () => {
+    const pending: PendingImage = {
+      filename, prompt, size, publicPath, durationMs: 0,
+      promise: Promise.resolve(),
+    };
+
+    pending.promise = (async () => {
       await acquireSlot();
+      const t0 = Date.now();
       try {
         console.log(`[generate_image] Generating "${filename}" (size=${size})...`);
         const b64 = await generateArkImageBase64({ prompt, size });
@@ -144,8 +143,10 @@ export function createImageExecutor(componentName: string): {
         }
 
         writeFileSync(join(imagesDir, `${filename}.png`), buf);
-        console.log(`[generate_image] Saved ${publicPath} (${buf.length} bytes)`);
+        pending.durationMs = Date.now() - t0;
+        console.log(`[generate_image] Saved ${publicPath} (${buf.length} bytes, ${pending.durationMs}ms)`);
       } catch (err) {
+        pending.durationMs = Date.now() - t0;
         const msg = err instanceof Error ? err.message : String(err);
         console.error(`[generate_image] Failed to generate "${filename}":`, msg);
       } finally {
@@ -153,9 +154,8 @@ export function createImageExecutor(componentName: string): {
       }
     })();
 
-    pendingImages.push({ filename, prompt, size, publicPath, promise: generationPromise });
+    pendingImages.push(pending);
 
-    // Return immediately — LLM gets the path without waiting for Ark API
     return {
       success: true,
       output: `Image will be generated. Use this path in your component: ${publicPath}`,
@@ -166,10 +166,6 @@ export function createImageExecutor(componentName: string): {
   return { executor, pendingImages };
 }
 
-/**
- * Await all pending image generation promises. Call before build step.
- * Returns a summary of results.
- */
 export async function awaitPendingImages(
   pending: PendingImage[]
 ): Promise<{ total: number; settled: number; failed: number }> {

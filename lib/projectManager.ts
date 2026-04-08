@@ -43,6 +43,7 @@ export interface ProjectMetadata {
   buildSteps?: unknown[];
   generatedFiles?: string[];
   logDirectory?: string;
+  totalDuration?: number;
   modelId?: string;
   modificationHistory: ModificationRecord[];
 }
@@ -61,6 +62,7 @@ interface ProjectRow {
   build_steps: unknown[] | null;
   generated_files: string[] | null;
   log_directory: string | null;
+  total_duration: number | null;
   model_id: string | null;
   modification_history: ModificationRecord[];
 }
@@ -80,6 +82,7 @@ function rowToMetadata(row: ProjectRow): ProjectMetadata {
     buildSteps: row.build_steps ?? undefined,
     generatedFiles: row.generated_files ?? undefined,
     logDirectory: row.log_directory ?? undefined,
+    totalDuration: row.total_duration ?? undefined,
     modelId: row.model_id ?? undefined,
     modificationHistory: row.modification_history ?? [],
   };
@@ -208,6 +211,7 @@ export async function updateProjectStatus(
     if (extra.buildSteps !== undefined) update.build_steps = extra.buildSteps;
     if (extra.generatedFiles !== undefined) update.generated_files = extra.generatedFiles;
     if (extra.logDirectory !== undefined) update.log_directory = extra.logDirectory;
+    if (extra.totalDuration !== undefined) update.total_duration = extra.totalDuration;
     if (extra.modificationHistory !== undefined) update.modification_history = extra.modificationHistory;
   }
   const { error } = await supabase.from("projects").update(update).eq("id", id);

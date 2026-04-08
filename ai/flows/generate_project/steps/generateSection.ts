@@ -13,6 +13,8 @@ import { getModelForStep } from "@/lib/config/models";
 import { getSystemToolDefinitions } from "../../../tools/systemToolCatalog";
 import { createImageExecutor } from "../../../tools/system/generateImageTool";
 import type { PendingImage } from "../../../tools/system/generateImageTool";
+import { execSync } from "child_process";
+import { getSiteRoot } from "../../../tools/system/common";
 import {
   discoverSkillsBySectionType,
   toCompactMetadata,
@@ -407,6 +409,85 @@ function validateSectionExports(tsx: string, componentName: string): NonNullable
   return { passed: checks.every((c) => c.passed), checks };
 }
 
+// ── Single-file diagnostics + repair ────────────────────────────────────
+
+/**
+ * Run `tsc --noEmit` scoped to a single file in the site root.
+ * Returns null if clean, or the error output string if there are issues.
+ */
+function runSingleFileDiagnostics(filePath: string): string | null {
+  const siteRoot = getSiteRoot();
+  try {
+    execSync(
+      `npx tsc --noEmit --pretty false ${filePath} 2>&1`,
+      { cwd: siteRoot, encoding: "utf-8", timeout: 30_000, maxBuffer: 512 * 1024 }
+    );
+    return null; // clean
+  } catch (err) {
+    const output = (err as { stdout?: string; stderr?: string }).stdout ?? "";
+    // Filter to only errors in our file (tsc may report errors in other files too)
+    const lines = output.split("\n").filter((l) =>
+      l.includes(filePath) || l.startsWith(" ") || /^\s*~/.test(l) || /error TS\d+/.test(l)
+    );
+    const filtered = lines.join("\n").trim();
+    return filtered || output.trim() || null;
+  }
+}
+
+/**
+ * Attempt to repair a single file using the repair agent pattern.
+ * Returns true if repair was applied, false if no repair needed or repair failed.
+ */
+async function repairSectionDiagnostics(
+  filePath: string,
+  diagnosticOutput: string
+): Promise<{ repaired: boolean; detail: string }> {
+  const tools = getSystemToolDefinitions(["read_file", "edit_file"]);
+
+  const systemPrompt = `You are a TypeScript repair agent. A generated React component has type errors.
+Fix them with minimal, surgical edits using edit_file. Do NOT rewrite the entire file.
+Common fixes: add "use client", fix import paths, add missing types, remove invalid props.`;
+
+  const userMessage = `## File
+${filePath}
+
+## TypeScript Errors
+\`\`\`
+${diagnosticOutput}
+\`\`\`
+
+Read the file, then apply the smallest edits to fix these errors.`;
+
+  try {
+    const { toolCalls } = await callLLMWithTools({
+      systemPrompt,
+      userMessage,
+      tools,
+      temperature: 0.1,
+      maxIterations: 5,
+      model: getModelForStep("repair_build"),
+    });
+
+    const edits = toolCalls.filter(
+      (tc) => tc.name === "edit_file" && typeof tc.result === "object" && (tc.result as { success?: boolean }).success
+    );
+
+    if (edits.length === 0) {
+      return { repaired: false, detail: "repair agent made no edits" };
+    }
+
+    // Re-check after repair
+    const recheck = runSingleFileDiagnostics(filePath);
+    if (recheck) {
+      return { repaired: false, detail: `still has errors after repair: ${recheck.slice(0, 200)}` };
+    }
+
+    return { repaired: true, detail: `${edits.length} edit(s) applied` };
+  } catch (err) {
+    return { repaired: false, detail: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 // ── Main Entry ──────────────────────────────────────────────────────────
 
 export async function stepGenerateSection({
@@ -476,17 +557,15 @@ export async function stepGenerateSection({
 
     const validationResult = validateSectionExports(tsx, componentName);
 
-    // Collect generated image info from tool calls for tracing
-    const generatedImages = llmResult.toolCalls
-      .filter((tc) => tc.name === "generate_image")
-      .map((tc) => {
-        const result = typeof tc.result === "string" ? {} : tc.result;
-        return {
-          filename: tc.args.filename as string,
-          prompt: tc.args.prompt as string,
-          path: (result as { meta?: { path?: string } }).meta?.path ?? null,
-        };
-      });
+    // Collect generated image info from tool calls for tracing.
+    // durationMs is populated asynchronously after the image finishes generating;
+    // by the time the user views the trace (post-build), it will be filled in.
+    const generatedImages = pendingImages.map((img) => ({
+      filename: img.filename,
+      prompt: img.prompt,
+      path: img.publicPath,
+      durationMs: img.durationMs,
+    }));
 
     const trace: StepTrace = {
       input: {
@@ -512,6 +591,25 @@ export async function stepGenerateSection({
     };
 
     if (validationResult.passed) {
+      // Run single-file TypeScript diagnostics before returning.
+      // If errors found, attempt surgical repair (like repairBuild but per-file).
+      const diagnosticErrors = runSingleFileDiagnostics(filePath);
+      if (diagnosticErrors) {
+        console.log(`[generateSection] ${componentName} has TS errors, attempting repair...`);
+        const repair = await repairSectionDiagnostics(filePath, diagnosticErrors);
+        (trace.output as Record<string, unknown>).diagnosticRepair = {
+          hadErrors: true,
+          repaired: repair.repaired,
+          detail: repair.detail,
+          originalErrors: diagnosticErrors.slice(0, 500),
+        };
+        if (repair.repaired) {
+          console.log(`[generateSection] ${componentName} repaired: ${repair.detail}`);
+        } else {
+          console.warn(`[generateSection] ${componentName} repair failed: ${repair.detail}`);
+        }
+      }
+
       return { filePath, skillId, trace, pendingImages };
     }
 

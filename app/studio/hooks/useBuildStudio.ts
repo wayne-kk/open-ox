@@ -224,6 +224,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     id: string; status: string; userPrompt: string; modelId?: string;
     buildSteps?: unknown[]; generatedFiles?: string[]; blueprint?: unknown;
     verificationStatus?: string; logDirectory?: string; error?: string;
+    totalDuration?: number;
     modificationHistory?: Array<{
       instruction: string; modifiedAt: string;
       plan?: { analysis: string; changes: Array<{ path: string; action: string; reasoning: string }> };
@@ -263,6 +264,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       buildSteps: (project.buildSteps ?? []) as import("../types/build-studio").BuildStep[],
       generatedFiles: project.generatedFiles ?? [],
       logDirectory: project.logDirectory,
+      buildTotalDuration: project.totalDuration,
       error: project.status === "failed" ? (project.error ?? "Generation failed") : undefined,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps

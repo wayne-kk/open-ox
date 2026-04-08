@@ -130,7 +130,7 @@ function ValidationSection({ result }: { result: NonNullable<StepTrace["validati
 
 // ─── IO Section ───────────────────────────────────────────────────────────────
 
-function GeneratedImagesSection({ images }: { images: Array<{ filename: string; prompt: string; path: string | null }> }) {
+function GeneratedImagesSection({ images }: { images: Array<{ filename: string; prompt: string; path: string | null; durationMs?: number }> }) {
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   if (images.length === 0) return null;
 
@@ -148,7 +148,10 @@ function GeneratedImagesSection({ images }: { images: Array<{ filename: string; 
       {images.map((img, i) => (
         <div key={i} className="rounded-lg border border-violet-500/10 bg-violet-500/5 p-2.5 space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] text-violet-300/80">{img.path ?? img.filename}</span>
+            <span className="font-mono text-[10px] text-violet-300/80">
+              {img.path ?? img.filename}
+              {img.durationMs ? ` · ${(img.durationMs / 1000).toFixed(1)}s` : ""}
+            </span>
             <button
               type="button"
               onClick={() => handleCopy(img.prompt, i)}

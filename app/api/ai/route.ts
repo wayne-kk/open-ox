@@ -123,6 +123,7 @@ export async function POST(req: Request) {
               buildSteps: result.steps,
               generatedFiles: result.generatedFiles,
               logDirectory: result.logDirectory,
+              totalDuration: result.totalDuration,
             });
 
             // Step 6: Update project name from blueprint's projectTitle

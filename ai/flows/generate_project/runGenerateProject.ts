@@ -871,11 +871,33 @@ export async function runGenerateProject(
     ]);
 
     if (imageStats.total > 0) {
+      const imageDetails = allPendingImages.map((img) =>
+        `${img.filename}: ${(img.durationMs / 1000).toFixed(1)}s`
+      ).join(", ");
       logger.logStep(
         "await_images",
         imageStats.failed > 0 ? "error" : "ok",
-        `${imageStats.settled}/${imageStats.total} images generated${imageStats.failed > 0 ? `, ${imageStats.failed} failed` : ""}`
+        `${imageStats.settled}/${imageStats.total} images generated (${imageDetails})${imageStats.failed > 0 ? `, ${imageStats.failed} failed` : ""}`
       );
+
+      // Persist per-image details (prompt, duration, path) for trace inspection
+      await persistJsonArtifact(artifactLogger, "await_images", "output", {
+        images: allPendingImages.map((img) => ({
+          filename: img.filename,
+          path: img.publicPath,
+          prompt: img.prompt,
+          size: img.size,
+          durationMs: img.durationMs,
+        })),
+        summary: imageStats,
+      });
+
+      // Add generated image files to the result so they get uploaded to
+      // Supabase Storage and are available after server restarts.
+      const imagePaths = allPendingImages
+        .map((img) => `public/images/${img.filename}.png`)
+        .filter((p) => !result.generatedFiles.includes(p));
+      appendGeneratedFiles(result, imagePaths);
     }
     const buildLifecycle = await runBuildWithRepair({ blueprint, artifactLogger, result, logger });
     result.verificationStatus = buildLifecycle.verificationStatus;
