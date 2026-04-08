@@ -126,13 +126,32 @@ interface ProjectListRow {
  * Fast list query for dashboard/autocomplete.
  * Avoid selecting heavy JSON columns (blueprint/build_steps/generated_files/modification_history).
  */
-export async function listProjectsSummary(): Promise<ProjectMetadata[]> {
-  const { data, error } = await supabase
+export async function listProjectsSummary(options?: {
+  limit?: number;
+  offset?: number;
+}): Promise<ProjectMetadata[]> {
+  let query = supabase
     .from("projects")
     .select(
       "id,name,user_prompt,status,created_at,updated_at,completed_at,error,verification_status,model_id"
     )
     .order("created_at", { ascending: false });
+
+  if (
+    typeof options?.limit === "number" &&
+    Number.isFinite(options.limit) &&
+    options.limit > 0
+  ) {
+    const offset =
+      typeof options.offset === "number" &&
+      Number.isFinite(options.offset) &&
+      options.offset >= 0
+        ? options.offset
+        : 0;
+    query = query.range(offset, offset + options.limit - 1);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     console.error("[projectManager] listProjectsSummary error:", error.message);

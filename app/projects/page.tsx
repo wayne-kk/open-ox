@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  ArrowLeft, Trash2, Plus, Clock, Layers, Pencil,
+  Trash2, Plus, Clock, Layers, Pencil,
   CheckCircle2, AlertCircle, Loader2, Sparkles, Globe,
   AlertTriangle,
 } from "lucide-react";
@@ -21,6 +21,8 @@ interface ProjectMetadata {
   verificationStatus?: "passed" | "failed";
   modificationHistory: unknown[];
 }
+
+const PAGE_SIZE = 10;
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -264,26 +266,75 @@ function DeletingOverlay() {
 
 export default function ProjectsPage() {
   const router = useRouter();
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const [projects, setProjects] = useState<ProjectMetadata[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
-  const fetchProjects = useCallback(async () => {
+  const fetchProjectsPage = useCallback(async (offset: number, limit: number) => {
     try {
-      const res = await fetch("/api/projects");
-      if (res.ok) setProjects(await res.json());
-    } catch { /* ignore */ }
-    finally { setLoading(false); }
+      const res = await fetch(`/api/projects?offset=${offset}&limit=${limit}`);
+      if (!res.ok) return null;
+      return (await res.json()) as ProjectMetadata[];
+    } catch {
+      return null;
+    }
   }, []);
 
-  useEffect(() => { fetchProjects(); }, [fetchProjects]);
+  const loadInitialProjects = useCallback(async () => {
+    const data = await fetchProjectsPage(0, PAGE_SIZE);
+    if (data) {
+      setProjects(data);
+      setHasMore(data.length === PAGE_SIZE);
+    }
+    setLoading(false);
+  }, [fetchProjectsPage]);
+
+  const loadMoreProjects = useCallback(async () => {
+    if (loading || loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    const data = await fetchProjectsPage(projects.length, PAGE_SIZE);
+    if (data) {
+      setProjects((prev) => [...prev, ...data]);
+      setHasMore(data.length === PAGE_SIZE);
+    }
+    setLoadingMore(false);
+  }, [fetchProjectsPage, hasMore, loading, loadingMore, projects.length]);
+
+  const refreshLoadedProjects = useCallback(async () => {
+    const loadedCount = projects.length;
+    if (loadedCount === 0) return;
+    const data = await fetchProjectsPage(0, loadedCount);
+    if (data) {
+      setProjects(data);
+      setHasMore(data.length === loadedCount);
+    }
+  }, [fetchProjectsPage, projects.length]);
+
+  useEffect(() => { loadInitialProjects(); }, [loadInitialProjects]);
 
   useEffect(() => {
     if (!projects.some((p) => p.status === "generating")) return;
-    const interval = setInterval(fetchProjects, 3000);
+    const interval = setInterval(refreshLoadedProjects, 3000);
     return () => clearInterval(interval);
-  }, [projects, fetchProjects]);
+  }, [projects, refreshLoadedProjects]);
+
+  useEffect(() => {
+    if (loading || loadingMore || !hasMore || !loadMoreRef.current) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          void loadMoreProjects();
+        }
+      },
+      { rootMargin: "200px 0px" }
+    );
+    observer.observe(loadMoreRef.current);
+    return () => observer.disconnect();
+  }, [hasMore, loadMoreProjects, loading, loadingMore]);
 
   // Step 1: click delete → show confirm modal
   const handleDeleteClick = (e: React.MouseEvent, id: string) => {
@@ -303,9 +354,6 @@ export default function ProjectsPage() {
     } catch { /* ignore */ }
     finally { setDeletingId(null); }
   };
-
-  const readyCount = projects.filter((p) => p.status === "ready").length;
-  const generatingCount = projects.filter((p) => p.status === "generating").length;
 
   return (
     <main className="relative min-h-screen pt-[57px]">
@@ -343,31 +391,43 @@ export default function ProjectsPage() {
             </Link>
           </div>
         ) : (
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {/* New project card */}
-            <Link
-              href="/"
-              className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-white/10
-                bg-white/[0.01] p-8 transition-all hover:border-primary/30 hover:bg-primary/[0.03] group min-h-[260px]"
-            >
-              <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] group-hover:border-primary/30 group-hover:bg-primary/10 transition-all">
-                <Plus className="h-6 w-6 text-white/30 group-hover:text-primary transition-colors" />
-              </div>
-              <span className="font-mono text-[11px] text-white/30 group-hover:text-primary/70 tracking-wider transition-colors">
-                新建项目
-              </span>
-            </Link>
+          <>
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {/* New project card */}
+              <Link
+                href="/"
+                className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-white/10
+                  bg-white/[0.01] p-8 transition-all hover:border-primary/30 hover:bg-primary/[0.03] group min-h-[260px]"
+              >
+                <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] group-hover:border-primary/30 group-hover:bg-primary/10 transition-all">
+                  <Plus className="h-6 w-6 text-white/30 group-hover:text-primary transition-colors" />
+                </div>
+                <span className="font-mono text-[11px] text-white/30 group-hover:text-primary/70 tracking-wider transition-colors">
+                  新建项目
+                </span>
+              </Link>
 
-            {projects.map((project) => (
-              <ProjectCard
-                key={project.id}
-                project={project}
-                onClick={() => router.push(`/studio/${project.id}`)}
-                onDelete={(e) => handleDeleteClick(e, project.id)}
-                deleting={deletingId === project.id}
-              />
-            ))}
-          </div>
+              {projects.map((project) => (
+                <ProjectCard
+                  key={project.id}
+                  project={project}
+                  onClick={() => router.push(`/studio/${project.id}`)}
+                  onDelete={(e) => handleDeleteClick(e, project.id)}
+                  deleting={deletingId === project.id}
+                />
+              ))}
+            </div>
+            <div ref={loadMoreRef} className="flex min-h-14 items-center justify-center py-6">
+              {loadingMore ? (
+                <div className="flex items-center gap-2 text-xs text-white/40 font-mono tracking-wider">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  加载更多项目...
+                </div>
+              ) : !hasMore ? (
+                <span className="text-[11px] text-white/25 font-mono tracking-wider">已加载全部项目</span>
+              ) : null}
+            </div>
+          </>
         )}
       </div>
 

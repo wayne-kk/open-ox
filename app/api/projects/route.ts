@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
 import { listProjectsSummary, createProject } from "@/lib/projectManager";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const projects = await listProjectsSummary();
+    const { searchParams } = new URL(req.url);
+    const limitParam = Number(searchParams.get("limit"));
+    const offsetParam = Number(searchParams.get("offset"));
+    const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.floor(limitParam) : undefined;
+    const offset = Number.isFinite(offsetParam) && offsetParam >= 0 ? Math.floor(offsetParam) : 0;
+    const projects = await listProjectsSummary({ limit, offset });
     return NextResponse.json(projects);
   } catch (err) {
     console.error("[GET /api/projects]", err);
