@@ -85,6 +85,58 @@ function inferCapabilityAssistIds(section: SectionSpec, context: PlanningContext
   }
 
   return unique(assists);
+<<<<<<< HEAD
+=======
+}
+
+function inferSectionTraits(section: SectionSpec, context: PlanningContext): SectionTraits {
+  const assists = inferCapabilityAssistIds(section, context);
+  const traits: SectionTraits = {};
+
+  const motion =
+    assists.includes("effect.motion.energetic")
+      ? "energetic"
+      : assists.includes("effect.motion.ambient")
+        ? "ambient"
+        : assists.includes("effect.motion.subtle")
+          ? "subtle"
+          : "none";
+  traits.motion = { intensity: motion };
+
+  if (assists.includes("pattern.hero.centered")) {
+    traits.layout = { type: "centered" };
+  } else if (assists.includes("pattern.hero.dashboard")) {
+    traits.layout = { type: "split", ratio: "55/45", note: "product-led dashboard composition" };
+  } else if (assists.includes("pattern.hero.editorial")) {
+    traits.layout = { type: "editorial" };
+  } else if (assists.includes("pattern.hero.split")) {
+    traits.layout = { type: "split", ratio: "50/50" };
+  } else if (assists.includes("pattern.features.grid")) {
+    traits.layout = { type: "grid" };
+  } else if (assists.includes("pattern.pricing.three-tier")) {
+    traits.layout = { type: "grid", note: "three-tier comparison" };
+  } else if (assists.includes("pattern.faq.two-column")) {
+    traits.layout = { type: "two-column" };
+  }
+
+  if (section.type === "pricing" || section.type === "faq") {
+    traits.visual = { density: "dense", contrast: "medium" };
+  } else if (section.type === "hero" || section.type === "cta") {
+    traits.visual = { density: "balanced", contrast: "high" };
+  } else {
+    traits.visual = { density: "balanced", contrast: "medium" };
+  }
+
+  if (section.type === "hero" || section.type === "cta") {
+    traits.interaction = { mode: "cta-focused" };
+  } else if (section.type === "pricing" || section.type === "faq" || section.type === "navigation") {
+    traits.interaction = { mode: "explorative" };
+  } else {
+    traits.interaction = { mode: "passive" };
+  }
+
+  return traits;
+>>>>>>> b1eeef2 (feat: 登录注册UI)
 }
 
 function inferSectionRole(section: SectionSpec): string {
@@ -209,7 +261,11 @@ export function buildDefaultSectionDesignPlan(
       "Make scan order obvious on mobile and desktop.",
     ],
     guardrailIds: inferSectionGuardrailDefaults(section),
+<<<<<<< HEAD
     capabilityAssistIds: inferCapabilityAssistIds(section, context),
+=======
+    traits: inferSectionTraits(section, context),
+>>>>>>> b1eeef2 (feat: 登录注册UI)
     constraints: unique([
       "Preserve the project design system vocabulary.",
       "Generate production-ready code with realistic content.",

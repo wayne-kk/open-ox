@@ -13,6 +13,7 @@ import type {
   PageDesignPlan,
   PlannedProjectBlueprint,
   ProjectBlueprint,
+<<<<<<< HEAD
   SectionDesignPlan,
 } from "../types";
 
@@ -45,12 +46,66 @@ function isSectionDesignPlan(value: unknown): value is SectionDesignPlan {
 }
 
 function isPageDesignPlan(value: unknown): value is PageDesignPlan {
+=======
+  SectionTraits,
+  SectionDesignPlan,
+} from "../types";
+
+function isSectionTraits(value: unknown): value is SectionTraits {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const candidate = value as Partial<SectionTraits>;
+  const isObj = (v: unknown) => v != null && typeof v === "object";
+  return (
+    (candidate.layout == null || isObj(candidate.layout)) &&
+    (candidate.motion == null || isObj(candidate.motion)) &&
+    (candidate.visual == null || isObj(candidate.visual)) &&
+    (candidate.interaction == null || isObj(candidate.interaction))
+  );
+}
+
+function isSectionDesignPlan(value: unknown): value is SectionDesignPlan {
+>>>>>>> b1eeef2 (feat: 登录注册UI)
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+<<<<<<< HEAD
+  const candidate = value as Partial<PageDesignPlan>;
+  return (
+=======
+  const candidate = value as Partial<SectionDesignPlan>;
+  return (
+    typeof candidate.role === "string" &&
+    typeof candidate.goal === "string" &&
+    typeof candidate.roleFit === "string" &&
+    typeof candidate.taskLoopFocus === "string" &&
+    typeof candidate.capabilityFocus === "string" &&
+    typeof candidate.informationArchitecture === "string" &&
+    typeof candidate.layoutIntent === "string" &&
+    typeof candidate.visualIntent === "string" &&
+    typeof candidate.interactionIntent === "string" &&
+    typeof candidate.contentStrategy === "string" &&
+    isStringArray(candidate.hierarchy) &&
+    isStringArray(candidate.guardrailIds) &&
+    isSectionTraits(candidate.traits) &&
+    isStringArray(candidate.constraints) &&
+    (candidate.shellPlacement == null ||
+      candidate.shellPlacement === "beforePageContent" ||
+      candidate.shellPlacement === "afterPageContent") &&
+    (candidate.rationale == null || typeof candidate.rationale === "string")
+  );
+}
+
+function isPageDesignPlan(value: unknown): value is PageDesignPlan {
   if (!value || typeof value !== "object") {
     return false;
   }
 
   const candidate = value as Partial<PageDesignPlan>;
   return (
+>>>>>>> b1eeef2 (feat: 登录注册UI)
     typeof candidate.pageGoal === "string" &&
     typeof candidate.audienceFocus === "string" &&
     typeof candidate.roleFit === "string" &&
@@ -127,6 +182,7 @@ ${getAllowedProjectGuardrailIds().map((id) => `- ${id}`).join("\n")}
 ## Allowed Section Guardrail IDs
 ${getAllowedSectionGuardrailIds().map((id) => `- ${id}`).join("\n")}
 
+<<<<<<< HEAD
 ## Allowed Capability Assist IDs
 - effect.motion.subtle
 - effect.motion.ambient
@@ -138,6 +194,14 @@ ${getAllowedSectionGuardrailIds().map((id) => `- ${id}`).join("\n")}
 - pattern.features.grid
 - pattern.pricing.three-tier
 - pattern.faq.two-column`;
+=======
+## Section Traits Contract
+- Every section designPlan must include a traits object.
+- traits.layout: optional object (type/ratio/direction/note)
+- traits.motion: optional object (intensity/trigger/note)
+- traits.visual: optional object (density/contrast/style/note)
+- traits.interaction: optional object (mode/note)`;
+>>>>>>> b1eeef2 (feat: 登录注册UI)
 
   try {
     const raw = await callLLM(systemPrompt, userMessage, 0.2);
