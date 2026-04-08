@@ -71,20 +71,13 @@ Output a single valid JSON object matching this structure:
         "designPlan": {
           "role": "Global wayfinding shell",
           "goal": "Orient users quickly and expose the highest-value paths",
-          "roleFit": "Optimize for the most important role",
-          "taskLoopFocus": "Help users enter or continue the core loop",
-          "capabilityFocus": "Make the most important capability discoverable",
-          "informationArchitecture": "Primary nav, utility actions, mobile behavior",
           "layoutIntent": "Concise shell with strong scanability",
           "visualIntent": "Matches project style while remaining globally reusable",
-          "interactionIntent": "Responsive nav interactions stay clear and low-friction",
-          "contentStrategy": "Lead with core navigation, then utility actions",
           "hierarchy": ["Brand", "Primary links", "Utility CTA"],
           "guardrailIds": ["section.core", "section.accessibility", "section.layout", "section.typography", "section.styles", "section.above-fold"],
-          "capabilityAssistIds": [],
+          "traits": { "layout": {}, "motion": {}, "visual": {}, "interaction": {} },
           "constraints": ["Short, implementation-oriented constraints"],
-          "shellPlacement": "beforePageContent",
-          "rationale": "Short explanation of why this design direction fits"
+          "shellPlacement": "beforePageContent"
         }
       }
     ],
@@ -98,17 +91,10 @@ Output a single valid JSON object matching this structure:
         "supportingCapabilityIds": ["core-conversion"],
         "pageDesignPlan": {
           "pageGoal": "What this page must achieve",
-          "audienceFocus": "Who this page primarily speaks to",
-          "roleFit": "Which roles this page is serving",
-          "capabilityFocus": "Which capabilities this page should make clear",
-          "taskLoopCoverage": "Which role journeys this page supports",
           "narrativeArc": "How the page should progress emotionally and informationally",
           "layoutStrategy": "Overall page-level structure and pacing",
           "hierarchy": ["Primary emphasis", "Secondary emphasis", "Tertiary emphasis"],
-          "transitionStrategy": "How sections should transition visually and rhythmically",
-          "sharedShellNotes": ["Any notes about how page content should relate to global layout sections"],
-          "constraints": ["Short page-level constraints"],
-          "rationale": "Short explanation of the page strategy"
+          "constraints": ["Short page-level constraints"]
         },
         "sections": [
           {
@@ -122,19 +108,13 @@ Output a single valid JSON object matching this structure:
             "designPlan": {
               "role": "Page opener and value proposition anchor",
               "goal": "What this hero must accomplish",
-              "roleFit": "Which role should recognize itself in this section",
-              "taskLoopFocus": "Which task loop moment this section should support",
-              "capabilityFocus": "Which capability this section should clarify or prove",
-              "informationArchitecture": "How information should be structured within the section",
               "layoutIntent": "Preferred structural direction",
               "visualIntent": "Preferred visual tone and emphasis",
-              "interactionIntent": "How users should interact with this section",
-              "contentStrategy": "How content should be prioritized and framed",
               "hierarchy": ["Primary emphasis", "Secondary emphasis", "Supporting proof"],
               "guardrailIds": ["section.core", "section.accessibility", "section.layout", "section.typography", "section.styles", "section.above-fold"],
-              "capabilityAssistIds": ["pattern.hero.split", "effect.motion.ambient"],
+              "traits": { "layout": {}, "motion": {}, "visual": {}, "interaction": {} },
               "constraints": ["Short, implementation-oriented constraints"],
-              "rationale": "Short explanation of why this section should be designed this way"
+              "shellPlacement": "beforePageContent"
             }
           }
         ]

@@ -1,6 +1,7 @@
 import { clearTemplate } from "@/lib/clearTemplate";
 import { getSiteRoot as projectManagerGetSiteRoot } from "@/lib/projectManager";
-import { setSiteRoot } from "@/ai/tools/system/common";
+import { setSiteRoot, getSiteRoot } from "@/ai/tools/system/common";
+import { execSync } from "child_process";
 import { isLayoutSection } from "./registry/layoutSections";
 import { syncSiteValidationMarkers, readSiteFile } from "./shared/files";
 import { createArtifactLogger, createStepLogger } from "./shared/logging";
@@ -899,6 +900,46 @@ export async function runGenerateProject(
         .filter((p) => !result.generatedFiles.includes(p));
       appendGeneratedFiles(result, imagePaths);
     }
+
+    // ── Pre-build: run tsc once across all generated files, repair if needed ──
+    {
+      const tscStepName = "typecheck";
+      logger.startStep(tscStepName);
+      try {
+        const tscOutput = execSync("npx tsc --noEmit --pretty false 2>&1", {
+          cwd: getSiteRoot(),
+          encoding: "utf-8",
+          timeout: 60_000,
+          maxBuffer: 1024 * 1024,
+        });
+        logger.logStep(tscStepName, "ok", "no type errors");
+      } catch (err) {
+        const tscErrors = (err as { stdout?: string }).stdout?.trim() ?? "";
+        const errorCount = (tscErrors.match(/error TS\d+/g) ?? []).length;
+        console.warn(`[typecheck] ${errorCount} error(s) found, attempting repair...`);
+
+        // Use repair agent to fix type errors before build
+        const repairResult = await stepRepairBuild({
+          blueprint,
+          buildOutput: tscErrors,
+          generatedFiles: result.generatedFiles,
+        });
+
+        if (repairResult.success) {
+          appendGeneratedFiles(result, repairResult.touchedFiles);
+          logger.logStep(tscStepName, "ok", `${errorCount} error(s) repaired: ${repairResult.touchedFiles.join(", ")}`);
+        } else {
+          logger.logStep(tscStepName, "error", `${errorCount} error(s), repair failed`);
+        }
+
+        await persistJsonArtifact(artifactLogger, tscStepName, "output", {
+          errorCount,
+          errors: tscErrors.slice(0, 2000),
+          repairResult: { success: repairResult.success, touchedFiles: repairResult.touchedFiles },
+        });
+      }
+    }
+
     const buildLifecycle = await runBuildWithRepair({ blueprint, artifactLogger, result, logger });
     result.verificationStatus = buildLifecycle.verificationStatus;
     result.verificationOutput = buildLifecycle.verificationOutput;

@@ -50,15 +50,9 @@ ${blueprint.description}
 
 ## Page Design Plan
 - **Page Goal**: ${blueprint.pageDesignPlan.pageGoal}
-- **Audience Focus**: ${blueprint.pageDesignPlan.audienceFocus}
-- **Role Fit**: ${blueprint.pageDesignPlan.roleFit}
-- **Capability Focus**: ${blueprint.pageDesignPlan.capabilityFocus}
-- **Task Loop Coverage**: ${blueprint.pageDesignPlan.taskLoopCoverage}
 - **Narrative Arc**: ${blueprint.pageDesignPlan.narrativeArc}
 - **Layout Strategy**: ${blueprint.pageDesignPlan.layoutStrategy}
 - **Hierarchy**: ${blueprint.pageDesignPlan.hierarchy.join(" | ")}
-- **Transition Strategy**: ${blueprint.pageDesignPlan.transitionStrategy}
-- **Shared Shell Notes**: ${blueprint.pageDesignPlan.sharedShellNotes.join(" | ")}
 - **Page Constraints**:
 ${blueprint.pageDesignPlan.constraints.map((constraint) => `  - ${constraint}`).join("\n")}
 

@@ -40,22 +40,15 @@ function isSectionDesignPlan(value: unknown): value is SectionDesignPlan {
   return (
     typeof candidate.role === "string" &&
     typeof candidate.goal === "string" &&
-    typeof candidate.roleFit === "string" &&
-    typeof candidate.taskLoopFocus === "string" &&
-    typeof candidate.capabilityFocus === "string" &&
-    typeof candidate.informationArchitecture === "string" &&
     typeof candidate.layoutIntent === "string" &&
     typeof candidate.visualIntent === "string" &&
-    typeof candidate.interactionIntent === "string" &&
-    typeof candidate.contentStrategy === "string" &&
     isStringArray(candidate.hierarchy) &&
     isStringArray(candidate.guardrailIds) &&
     isSectionTraits(candidate.traits) &&
     isStringArray(candidate.constraints) &&
     (candidate.shellPlacement == null ||
       candidate.shellPlacement === "beforePageContent" ||
-      candidate.shellPlacement === "afterPageContent") &&
-    (candidate.rationale == null || typeof candidate.rationale === "string")
+      candidate.shellPlacement === "afterPageContent")
   );
 }
 
@@ -67,17 +60,10 @@ function isPageDesignPlan(value: unknown): value is PageDesignPlan {
   const candidate = value as Partial<PageDesignPlan>;
   return (
     typeof candidate.pageGoal === "string" &&
-    typeof candidate.audienceFocus === "string" &&
-    typeof candidate.roleFit === "string" &&
-    typeof candidate.capabilityFocus === "string" &&
-    typeof candidate.taskLoopCoverage === "string" &&
     typeof candidate.narrativeArc === "string" &&
     typeof candidate.layoutStrategy === "string" &&
     isStringArray(candidate.hierarchy) &&
-    typeof candidate.transitionStrategy === "string" &&
-    isStringArray(candidate.sharedShellNotes) &&
-    isStringArray(candidate.constraints) &&
-    (candidate.rationale == null || typeof candidate.rationale === "string")
+    isStringArray(candidate.constraints)
   );
 }
 

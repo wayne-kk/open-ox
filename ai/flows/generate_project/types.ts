@@ -120,20 +120,13 @@ export interface InformationArchitecture {
 export interface SectionDesignPlan {
   role: string;
   goal: string;
-  roleFit: string;
-  taskLoopFocus: string;
-  capabilityFocus: string;
-  informationArchitecture: string;
   layoutIntent: string;
   visualIntent: string;
-  interactionIntent: string;
-  contentStrategy: string;
   hierarchy: string[];
   guardrailIds: GuardrailId[];
   traits: SectionTraits;
   constraints: string[];
   shellPlacement?: ShellPlacement;
-  rationale?: string;
 }
 
 export interface PlannedSectionSpec extends SectionSpec {
@@ -159,17 +152,10 @@ export interface PageBlueprint {
 
 export interface PageDesignPlan {
   pageGoal: string;
-  audienceFocus: string;
-  roleFit: string;
-  capabilityFocus: string;
-  taskLoopCoverage: string;
   narrativeArc: string;
   layoutStrategy: string;
   hierarchy: string[];
-  transitionStrategy: string;
-  sharedShellNotes: string[];
   constraints: string[];
-  rationale?: string;
 }
 
 export interface PlannedPageBlueprint extends Omit<PageBlueprint, "sections"> {

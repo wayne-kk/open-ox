@@ -26,9 +26,8 @@ When the task requires React or Next.js component code, output TSX only.
 - For keyframe animations not in globals.css, use Tailwind's `animate-[name_duration_easing]` arbitrary value syntax instead of defining new keyframes.
 - Prefer Tailwind utility classes for all layout, spacing, color, and typography.
 - If the component uses any browser API, event handlers, or hooks (`useState`, `useEffect`, etc.), it **MUST** have `"use client";` as the very first line.
-- For **marketing / lifestyle / product / hero photos**, call the `generate_image` tool to create the image asset first, then use the returned path in a standard `<img>` tag. **Never** hardcode external placeholder URLs (Unsplash, Picsum, etc.) for these images.
-  - Call `generate_image` with a descriptive `prompt` (subject, style, mood, lighting, composition) and a `filename` (kebab-case, e.g. `hero-bg`, `feature-dashboard`).
+- For **marketing / lifestyle / product / hero photos**, you MUST call the `generate_image` tool first, then use the **exact path** it returns in `<img src="...">`. **Never** invent image paths — only tool-returned paths exist on disk. **Never** hardcode external URLs (Unsplash, Picsum, etc.).
+  - Call `generate_image` with a descriptive `prompt` and a `filename` (kebab-case, e.g. `hero-bg`, `feature-dashboard`).
   - Use `size: "2K"` for hero / full-bleed backgrounds, `"1K"` for normal images.
-  - After the tool returns the path (e.g. `/images/hero-bg.png`), use it in your TSX: `<img src="/images/hero-bg.png" alt="..." className="..." />`
   - You may call `generate_image` multiple times if the section needs several images.
-  - If the section only needs icons or abstract shapes, use `lucide-react` or CSS — no need to generate images for those.
+  - If the section only needs icons or abstract shapes, use `lucide-react` or CSS — no image generation needed.

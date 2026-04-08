@@ -77,24 +77,31 @@ export async function chatCompletion(params: {
     if (!res.ok) {
       const body = await res.text().catch(() => "");
 
-      // Retry on transient provider errors (e.g. Gemini "Thought signature is not valid",
-      // 500/502/503 server errors) — these typically succeed on a second attempt.
-      const isThinkingError = body.includes("Thought signature is not valid");
+      // Retry on transient server errors (500/502/503).
+      // Some gateways wrap transient upstream failures as HTTP 400 with
+      // upstream_error payloads (e.g. bad_response_status_code).
+      const bodyLower = body.toLowerCase();
+      const isUpstreamWrapped400 =
+        res.status === 400 &&
+        (bodyLower.includes("upstream_error") ||
+          bodyLower.includes("bad_response_status_code"));
       const isRetryable =
-        res.status === 500 || res.status === 502 || res.status === 503 ||
-        (res.status === 400 && isThinkingError);
+        res.status === 500 ||
+        res.status === 502 ||
+        res.status === 503 ||
+        isUpstreamWrapped400;
 
       if (isRetryable && attempt < maxRetries) {
         const delay = 1000 * (attempt + 1);
-        const reason = isThinkingError
-          ? `Thinking signature error (model ${params.model} supportsThinking=${modelSupportsThinking(params.model)})`
-          : `HTTP ${res.status}`;
-        console.warn(`[chatCompletion] ${reason}, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})...`);
+        console.warn(`[chatCompletion] HTTP ${res.status}, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})...`);
         await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
       }
 
-      throw new Error(`LLM HTTP ${res.status}: ${body.slice(0, 300)}`);
+      // Keep full provider payload for debugging tricky upstream errors
+      // (e.g. Gemini INVALID_ARGUMENT / thought signature issues).
+      console.error(`[chatCompletion] HTTP ${res.status} body=${body}`);
+      throw new Error(`LLM HTTP ${res.status}: ${body}`);
     }
 
     return res.json() as Promise<ChatCompletionResponse>;
@@ -218,6 +225,7 @@ export async function callLLMWithTools(params: {
 }): Promise<{ content: string; toolCalls: AgentToolCallRecord[] }> {
   const { systemPrompt, userMessage, tools, temperature = 0.1, maxIterations = 8, executeToolOverrides = {} } = params;
   const model = params.model || getModelId();
+  let activeTools = tools;
   const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
     { role: "user", content: userMessage },
@@ -225,13 +233,34 @@ export async function callLLMWithTools(params: {
   const toolCalls: AgentToolCallRecord[] = [];
 
   for (let iteration = 0; iteration < maxIterations; iteration += 1) {
-    const res = await chatCompletion({
-      model,
-      messages,
-      temperature,
-      tools,
-      tool_choice: tools.length > 0 ? "auto" : undefined,
-    });
+    let res: ChatCompletionResponse;
+    try {
+      res = await chatCompletion({
+        model,
+        messages,
+        temperature,
+        tools: activeTools.length > 0 ? activeTools : undefined,
+        tool_choice: activeTools.length > 0 ? "auto" : undefined,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const msgLower = msg.toLowerCase();
+      const shouldDisableTools =
+        activeTools.length > 0 &&
+        (msg.includes("LLM HTTP 400") ||
+          msgLower.includes("upstream_error") ||
+          msgLower.includes("bad_response_status_code"));
+
+      if (shouldDisableTools) {
+        console.warn(
+          `[callLLMWithTools] model=${model} rejected tool payload; fallback to plain completion.`
+        );
+        activeTools = [];
+        continue;
+      }
+
+      throw err;
+    }
     const message = res.choices[0]?.message;
     if (!message) break;
 

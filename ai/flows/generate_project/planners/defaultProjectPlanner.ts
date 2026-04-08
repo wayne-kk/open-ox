@@ -245,14 +245,8 @@ export function buildDefaultSectionDesignPlan(
   return {
     role: inferSectionRole(section),
     goal: section.intent,
-    roleFit: inferRoleFit(section, context),
-    taskLoopFocus: inferTaskLoopFocus(section, context),
-    capabilityFocus: inferCapabilityFocus(section, context),
-    informationArchitecture: `Translate these content hints into a clear section structure: ${section.contentHints}`,
     layoutIntent: inferLayoutIntent(section),
     visualIntent: inferVisualIntent(section, context.designKeywords),
-    interactionIntent: inferInteractionIntent(section),
-    contentStrategy: `Prioritize the most important content first, then support it with realistic UI elements described in: ${section.contentHints}`,
     hierarchy: [
       "Lead with the single most important message or action.",
       "Group supporting information into visually distinct clusters.",
@@ -263,10 +257,8 @@ export function buildDefaultSectionDesignPlan(
     constraints: unique([
       "Preserve the project design system vocabulary.",
       "Generate production-ready code with realistic content.",
-      "Prefer reusable composition over one-off ornamentation.",
     ]),
     shellPlacement: inferShellPlacement(section),
-    rationale: `Default planner translated ${section.type} into a design brief grounded in roles, task loops, and capability needs.`,
   };
 }
 
@@ -302,10 +294,6 @@ function buildDefaultPageDesignPlan(
 
   return {
     pageGoal: page.description,
-    audienceFocus: `Design for ${roleNames}.`,
-    roleFit: `This page primarily serves ${roleNames}.`,
-    capabilityFocus: `This page should make ${capabilityNames} understandable and actionable.`,
-    taskLoopCoverage: `Help users progress through ${formatTaskLoopNames(taskLoops, context.taskLoops)}.`,
     narrativeArc,
     layoutStrategy: `Use section rhythm, spacing, and contrast to support the ${page.journeyStage} stage of the user journey rather than making every block equally loud.`,
     hierarchy: [
@@ -313,16 +301,10 @@ function buildDefaultPageDesignPlan(
       "Mid-page sections should deepen trust or explain the offer.",
       "Lower-page sections should reduce friction and reinforce action.",
     ],
-    transitionStrategy: "Make transitions feel intentional through spacing, contrast shifts, and restrained motion rather than decorative separators.",
-    sharedShellNotes: [
-      "Assume global layout sections frame the page experience.",
-      "Keep page-specific sections visually coherent with the shared shell.",
-    ],
     constraints: [
       "Preserve the given section order unless a wrapper or grouping is required for coherence.",
       "Avoid repetitive section pacing; vary density and emphasis across the page.",
     ],
-    rationale: `Default page planner framed ${page.title} around role needs and the MVP journey rather than isolated sections.`,
   };
 }
 

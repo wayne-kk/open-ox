@@ -56,7 +56,8 @@ export const generateImageTool: ChatCompletionTool = {
           description:
             "Image generation prompt in English, MUST be under 160 characters. " +
             "Formula: [Subject] + [Style] + [Lighting] + [Mood/Color] + [Quality]. " +
-            "Be dense and specific. End with 'sharp focus, 4K'. No text/logos in image.",
+            "Be dense and specific. End with 'sharp focus, 4K'. " +
+            "NEVER include any text, words, letters, logos, or UI elements — image must be purely visual.",
         },
         size: {
           type: "string",

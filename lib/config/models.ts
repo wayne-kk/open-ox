@@ -9,8 +9,8 @@ export interface ModelConfig {
 
 // Built-in models — always available
 const BUILTIN_MODELS: ModelConfig[] = [
-    { id: "gemini-3-flash-preview", displayName: "Gemini 3 Flash", contextWindow: 128_000, supportsThinking: true },
-    { id: "gemini-3.1-pro-preview", displayName: "Gemini 3.1 Pro", contextWindow: 128_000, supportsThinking: true },
+    { id: "gemini-3-flash-preview", displayName: "Gemini 3 Flash", contextWindow: 128_000, supportsThinking: false },
+    { id: "gemini-3.1-pro-preview", displayName: "Gemini 3.1 Pro", contextWindow: 128_000, supportsThinking: false },
     { id: "gpt-5.2", displayName: "GPT-5.2", contextWindow: 128_000, supportsThinking: false },
 ];
 
