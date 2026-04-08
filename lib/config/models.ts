@@ -85,3 +85,26 @@ export function modelSupportsThinking(modelId: string): boolean {
     const model = all.find((m) => m.id === modelId);
     return model?.supportsThinking ?? false;
 }
+
+/**
+ * Load step-level model overrides from Supabase into memory.
+ * Call this before any generation flow to ensure DB settings are applied
+ * even after process restarts or serverless cold starts.
+ */
+export async function loadStepModelsFromDB(): Promise<void> {
+    try {
+        const { supabase } = await import("@/lib/supabase");
+        const { data: rows } = await supabase
+            .from("step_model_configs")
+            .select("step_name, model_id");
+
+        if (rows) {
+            for (const row of rows) {
+                const { step_name, model_id } = row as { step_name: string; model_id: string };
+                _stepModelMap.set(step_name, model_id);
+            }
+        }
+    } catch (err) {
+        console.warn("[loadStepModelsFromDB] Failed to load step models:", err);
+    }
+}

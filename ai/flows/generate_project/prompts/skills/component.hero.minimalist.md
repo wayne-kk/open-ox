@@ -4,6 +4,7 @@ kind: component-skill
 sectionTypes: ["hero"]
 priority: 75
 fallback: false
+disabled: true
 when:
   designKeywords:
     any: ["minimal", "minimalist", "clean", "editorial", "fashion", "luxury", "portrait", "product-shot", "lifestyle", "elegant", "refined", "white-space", "typographic", "less-is-more", "modern-minimal", "boutique", "high-end", "premium"]
@@ -64,27 +65,28 @@ This is the most important part. Implement it exactly like this:
     className="absolute z-0 h-[300px] w-[300px] rounded-full bg-yellow-400/90 md:h-[400px] md:w-[400px] lg:h-[500px] lg:w-[500px]"
   />
 
-  {/* Image — scale-150 makes it overflow the circle, z-10 puts it on top */}
-  <motion.img
-    src="[Unsplash portrait or product URL]"
-    alt="[descriptive alt text]"
-    className="relative z-10 h-auto w-56 scale-150 object-cover md:w-64 lg:w-72"
+  {/* Image — call generate_image tool first, then use the returned path. Wrap in motion.div for entrance; scale on wrapper */}
+  <motion.div
+    className="relative z-10 w-56 scale-150 md:w-64 lg:w-72"
     initial={{ opacity: 0, y: 50 }}
     animate={{ opacity: 1, y: 0 }}
     transition={{ duration: 1, ease: [0.22, 1, 0.36, 1], delay: 0.4 }}
-    onError={(e) => {
-      const t = e.target as HTMLImageElement;
-      t.onerror = null;
-      t.src = "https://placehold.co/400x600/eab308/ffffff?text=Image";
-    }}
-  />
+  >
+    <img
+      src="/images/HeroSection-center.png"
+      alt="Editorial fashion portrait"
+      className="h-auto w-full object-cover"
+      style={{ aspectRatio: "3 / 4" }}
+    />
+  </motion.div>
 </div>
 ```
 
 **Rules for this effect:**
+- Call `generate_image` tool with a portrait-oriented prompt before writing the component, then use the returned `/images/...` path in a standard `<img>` tag.
 - Parent `div`: NO `overflow-hidden` — the image must be allowed to overflow
 - Circle: `absolute z-0 rounded-full` — background layer only
-- Image: `relative z-10 scale-150` — sits on top, scaled 1.5× to overflow the circle
+- Image wrapper: `relative z-10 scale-150` — sits on top, scaled 1.5× to overflow the circle
 - Circle color: use design system accent (warm tones work best: yellow, orange, amber)
 
 ## Full Layout Structure
@@ -158,7 +160,7 @@ export default function HeroSection() {
 ## Content Guidelines
 
 - Fill ALL content from the project context — no placeholder text
-- Image: use a relevant Unsplash portrait or product photo URL
+- Image: call `generate_image` tool with descriptive prompt tuned to the brand, then use the returned path in `<img src="...">`
 - Headline: 2 short lines, evocative, brand-aligned
 - Circle color: match design system accent (yellow/orange/amber for warm brands, use `--color-accent` token)
 - Social icons: use lucide-react icons matching the brand's actual social presence
@@ -167,5 +169,5 @@ export default function HeroSection() {
 
 - `"use client"` required (framer-motion)
 - No `overflow-hidden` on the center column parent
-- `scale-150` on the image is mandatory for the overflow effect
+- `scale-150` on the image wrapper is mandatory for the overflow effect
 - Output only raw TSX, no markdown fences

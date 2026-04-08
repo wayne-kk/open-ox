@@ -88,6 +88,11 @@ export function discoverSkills(rootPath: string): SkillMetadata[] {
       continue;
     }
 
+    // Skip disabled skills
+    if (frontmatter.disabled === true) {
+      continue;
+    }
+
     result.push(parseSkillMetadata(frontmatter, id));
   }
 

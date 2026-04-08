@@ -9,6 +9,7 @@ const NAV_LINKS = [
   { href: "/projects", label: "项目" },
   { href: "/docs", label: "文档" },
   { href: "/llm-test", label: "LLM 测试" },
+  { href: "/test-image", label: "图片测试" },
   { href: "/changelog", label: "更新日志" },
 ];
 

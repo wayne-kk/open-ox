@@ -12,6 +12,7 @@ import { detectCheckpoint } from "@/ai/flows/generate_project/shared/checkpoint"
 import { createProject, getProject, initProjectDir, updateProjectStatus, renameProject } from "@/lib/projectManager";
 import { uploadGeneratedFiles } from "@/lib/storage";
 import { setRuntimeModelId, type ModelId } from "@/lib/config/models";
+import { loadStepModelsFromDB } from "@/lib/config/models";
 import type { BuildStep } from "@/ai/flows";
 import { SSE_RESPONSE_HEADERS } from "@/lib/sse-headers";
 import { NextResponse } from "next/server";
@@ -44,6 +45,9 @@ export async function POST(req: Request) {
     if (effectiveModel) {
       setRuntimeModelId(effectiveModel as ModelId);
     }
+
+    // Load step-level model overrides from DB (ensures they survive process restarts)
+    await loadStepModelsFromDB();
 
     if (!effectivePrompt || typeof effectivePrompt !== "string") {
       return NextResponse.json(

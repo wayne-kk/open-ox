@@ -74,7 +74,7 @@ Output a single valid JSON object. No markdown, no code fences, no explanations.
         {
           "slug": "home",
           "title": "Home",
-          "purpose": "Why this page exists",
+          "purpose": "Single landing page containing all MVP content blocks",
           "primaryRoleIds": ["visitor"],
           "supportingCapabilityIds": ["core-conversion"],
           "journeyStage": "entry"
@@ -96,9 +96,9 @@ Output a single valid JSON object. No markdown, no code fences, no explanations.
     ],
     "pages": [
       {
-        "title": "Page title",
+        "title": "Home",
         "slug": "home",
-        "description": "One sentence: page goal and audience",
+        "description": "One sentence: full single-page goal and audience (all sections live here)",
         "journeyStage": "entry",
         "primaryRoleIds": ["visitor"],
         "supportingCapabilityIds": ["core-conversion"]
@@ -110,10 +110,17 @@ Output a single valid JSON object. No markdown, no code fences, no explanations.
 
 ## Rules
 
-- **Default to a single homepage only** (`"home"` slug). Only add more pages if the user explicitly mentions multiple pages, sections like "about page", "pricing page", etc. When in doubt, use one page.
-- Maximum 8 pages. Page slugs: lowercase with hyphens only.- Page slugs: lowercase with hyphens only.
+### CRITICAL — Single homepage only (this pipeline)
+
+- **You MUST output exactly ONE page** in `site.pages` and **exactly ONE entry** in `site.informationArchitecture.pageMap`.
+- The only allowed slug is `**"home"`** (the Next.js app route is `/`). Do **not** create `about`, `products`, `contact`, `lookbook`, `news`, or any other top-level slug.
+- Phrases like **“品牌官网 / official website / brand site / 官方网站 / corporate site / 公司官网”** mean **one long scrolling landing page** on `home`, not a multi-page site. Put “关于、系列、门店、联系”等内容作为 **同一页内的区块（sections）**，用锚点滚动，而不是新页面。
+- **Only** add a second page if the user **explicitly** asks for separate URLs (e.g. “单独做一页 /pricing 路由”“要两个页面 home 和 about”). If they only describe site sections (“要有关于我们、产品、联系”), that is still **one** `home` page.
+- `informationArchitecture.navigationModel` must describe **single-page + in-page anchors** (e.g. “单页长滚动，导航链接指向 #section-id”), not a multi-page tree.
+- Maximum **1** page for this product. Page slugs: lowercase with hyphens only (and the only slug here is `home`).
 - `layoutSections`: navigation first, footer last for public sites.
 - `pages` must NOT contain a `sections` array — sections are planned separately.
 - Each page needs only: title, slug, description, journeyStage, primaryRoleIds, supportingCapabilityIds.
 - `designIntent.keywords`: 5–8 visual/emotional adjectives, always in English regardless of user input language.
 - Output only the JSON object.
+

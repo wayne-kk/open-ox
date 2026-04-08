@@ -10,6 +10,7 @@ import { searchCodeTool } from "./system/searchCodeTool";
 import { writeFileTool } from "./system/writeFileTool";
 import { thinkTool } from "./system/thinkTool";
 import { revertFileTool } from "./system/revertFileTool";
+import { generateImageTool } from "./system/generateImageTool";
 
 const toolDefinitions: Record<string, ChatCompletionTool> = {
   write_file: writeFileTool,
@@ -23,6 +24,7 @@ const toolDefinitions: Record<string, ChatCompletionTool> = {
   run_build: runBuildTool,
   think: thinkTool,
   revert_file: revertFileTool,
+  generate_image: generateImageTool,
 };
 
 export function getSystemToolDefinitions(names: string[]): ChatCompletionTool[] {

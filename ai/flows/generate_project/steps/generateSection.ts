@@ -8,8 +8,11 @@ import {
 } from "../shared/files";
 import { loadSelectedSkillPrompt } from "./selectComponentSkills";
 import { selectSectionPromptId } from "../selectors/sectionPromptSelector";
-import { callLLM, callLLMWithMeta, extractContent, extractJSON } from "../shared/llm";
+import { callLLM, callLLMWithMeta, callLLMWithTools, extractContent, extractJSON } from "../shared/llm";
 import { getModelForStep } from "@/lib/config/models";
+import { getSystemToolDefinitions } from "../../../tools/systemToolCatalog";
+import { createImageExecutor } from "../../../tools/system/generateImageTool";
+import type { PendingImage } from "../../../tools/system/generateImageTool";
 import {
   discoverSkillsBySectionType,
   toCompactMetadata,
@@ -389,6 +392,8 @@ export interface GenerateSectionResult {
   filePath: string;
   skillId: string | null;
   trace: StepTrace;
+  /** Background image generation promises — await before build. */
+  pendingImages: PendingImage[];
 }
 
 function validateSectionExports(tsx: string, componentName: string): NonNullable<StepTrace["validationResult"]> {
@@ -439,18 +444,49 @@ export async function stepGenerateSection({
   const MAX_RETRIES = 1;
   let lastError = "";
 
+  // Provide generate_image tool so LLM can create images during section generation
+  const imageTools = getSystemToolDefinitions(["generate_image"]);
+
+  // Create a scoped executor that auto-prefixes filenames and collects
+  // background generation promises. LLM gets paths instantly, Ark API
+  // runs in the background without blocking code generation.
+  const { executor: imageExecutor, pendingImages } = createImageExecutor(componentName);
+
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     const retryHint = attempt > 0
       ? `\n\nIMPORTANT: Your previous response was truncated/incomplete — the component "${componentName}" was missing its export or JSX return. Output the COMPLETE component with \`export function ${componentName}\` and a JSX return. Keep it concise.`
       : "";
 
-    const llmResult = await callLLMWithMeta(systemPrompt + retryHint, userMessage, 0.7, undefined, getModelForStep("generate_section"));
+    const llmResult = await callLLMWithTools({
+      systemPrompt: systemPrompt + retryHint,
+      userMessage,
+      tools: imageTools,
+      temperature: 0.7,
+      maxIterations: 6,
+      model: getModelForStep("generate_section"),
+      executeToolOverrides: {
+        generate_image: imageExecutor,
+      },
+    });
+
     const tsx = extractContent(llmResult.content, "tsx");
 
     await writeSiteFile(filePath, tsx);
     await formatSiteFile(filePath);
 
     const validationResult = validateSectionExports(tsx, componentName);
+
+    // Collect generated image info from tool calls for tracing
+    const generatedImages = llmResult.toolCalls
+      .filter((tc) => tc.name === "generate_image")
+      .map((tc) => {
+        const result = typeof tc.result === "string" ? {} : tc.result;
+        return {
+          filename: tc.args.filename as string,
+          prompt: tc.args.prompt as string,
+          path: (result as { meta?: { path?: string } }).meta?.path ?? null,
+        };
+      });
 
     const trace: StepTrace = {
       input: {
@@ -460,20 +496,23 @@ export async function stepGenerateSection({
         skillId,
         pageContext: pageContext ? { slug: pageContext.slug, title: pageContext.title } : null,
       },
-      output: { filePath, linesGenerated: tsx.split("\n").length, validationPassed: validationResult.passed },
+      output: {
+        filePath,
+        linesGenerated: tsx.split("\n").length,
+        validationPassed: validationResult.passed,
+        generatedImages,
+      },
       llmCall: {
-        model: llmResult.model,
+        model: getModelForStep("generate_section") ?? undefined,
         systemPrompt: systemPrompt + retryHint,
         userMessage,
         rawResponse: llmResult.content,
-        inputTokens: llmResult.inputTokens,
-        outputTokens: llmResult.outputTokens,
       },
       validationResult,
     };
 
     if (validationResult.passed) {
-      return { filePath, skillId, trace };
+      return { filePath, skillId, trace, pendingImages };
     }
 
     lastError = validationResult.checks.filter((c) => !c.passed).map((c) => c.detail ?? c.name).join("; ");

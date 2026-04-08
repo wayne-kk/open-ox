@@ -256,6 +256,64 @@ function normalizePageBlueprint(value: unknown, index: number): PageBlueprint {
   };
 }
 
+function uniqueStrings(values: string[]): string[] {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
+/**
+ * Pipeline contract: only one routable page (`/`, slug `home`). If the model returns
+ * multiple pages (common for "brand official site"), merge into one scrolling home.
+ */
+function enforceSingleHomePage(pages: PageBlueprint[]): PageBlueprint[] {
+  if (pages.length === 0) {
+    return [
+      {
+        title: "Home",
+        slug: "home",
+        description: "Single-page marketing site.",
+        journeyStage: "entry",
+        primaryRoleIds: ["visitor"],
+        supportingCapabilityIds: [],
+        sections: [],
+      },
+    ];
+  }
+
+  if (pages.length === 1) {
+    const only = pages[0];
+    return [
+      {
+        ...only,
+        slug: "home",
+        title: only.title?.trim() ? only.title : "Home",
+      },
+    ];
+  }
+
+  const homeIdx = pages.findIndex((p) => p.slug === "home");
+  const base = homeIdx >= 0 ? pages[homeIdx] : pages[0];
+  const mergedDescription = uniqueStrings(pages.map((p) => p.description).filter(Boolean)).join(" ");
+  const primaryRoleIds = uniqueStrings(pages.flatMap((p) => p.primaryRoleIds));
+  const supportingCapabilityIds = uniqueStrings(pages.flatMap((p) => p.supportingCapabilityIds));
+
+  return [
+    {
+      ...base,
+      slug: "home",
+      title: base.title?.trim() ? base.title : "Home",
+      description:
+        mergedDescription.length > 24
+          ? mergedDescription.slice(0, 800)
+          : base.description || mergedDescription || "Single-page brand site.",
+      journeyStage: base.journeyStage || "entry",
+      primaryRoleIds: primaryRoleIds.length > 0 ? primaryRoleIds : base.primaryRoleIds,
+      supportingCapabilityIds:
+        supportingCapabilityIds.length > 0 ? supportingCapabilityIds : base.supportingCapabilityIds,
+      sections: [],
+    },
+  ];
+}
+
 function normalizeBrief(value: unknown): ProjectBrief {
   if (!value || typeof value !== "object") {
     throw new Error("analyze_project_requirement: brief is missing");
@@ -310,9 +368,28 @@ function normalizeSite(value: unknown): ProjectSiteBlueprint {
     throw new Error("analyze_project_requirement: site must include layoutSections and pages");
   }
 
-  const pages = candidate.pages.map((page, index) => normalizePageBlueprint(page, index));
+  const pagesRaw = candidate.pages.map((page, index) => normalizePageBlueprint(page, index));
+  const mergedFromMultiple = pagesRaw.length > 1;
+  const pages = enforceSingleHomePage(pagesRaw);
+
+  const baseIa = normalizeInformationArchitecture(candidate.informationArchitecture, pages);
+  const pageMap: PageMapEntry[] = pages.map((page) => ({
+    slug: page.slug,
+    title: page.title,
+    purpose: page.description,
+    primaryRoleIds: page.primaryRoleIds,
+    supportingCapabilityIds: page.supportingCapabilityIds,
+    journeyStage: page.journeyStage,
+  }));
+
   return {
-    informationArchitecture: normalizeInformationArchitecture(candidate.informationArchitecture, pages),
+    informationArchitecture: {
+      ...baseIa,
+      pageMap,
+      navigationModel: mergedFromMultiple
+        ? "Single-page site: all content on `/` (home). Primary navigation MUST use in-page anchor links (#section-id), not separate routes."
+        : baseIa.navigationModel,
+    },
     layoutSections: candidate.layoutSections.map((section, index) =>
       normalizeSectionSpec(section, index)
     ),

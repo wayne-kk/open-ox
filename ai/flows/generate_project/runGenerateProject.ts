@@ -25,6 +25,8 @@ import type {
 } from "./types";
 import type { ArtifactLogger, StepLogger } from "./shared/logging";
 import type { GenerateSectionParams } from "./steps/generateSection";
+import type { PendingImage } from "../../tools/system/generateImageTool";
+import { awaitPendingImages } from "../../tools/system/generateImageTool";
 import type { CheckpointResult } from "./shared/checkpoint";
 
 function dedupeSectionsByFileName(sections: SectionSpec[]): SectionSpec[] {
@@ -332,10 +334,10 @@ async function runSectionBatch(params: {
   runtimeContext: ProjectRuntimeContext;
   artifactLogger: ArtifactLogger;
   logger: StepLogger;
-}): Promise<string[]> {
+}): Promise<{ generatedFiles: string[]; pendingImages: PendingImage[] }> {
   const { batchLabel, items, designSystem, runtimeContext, artifactLogger, logger } = params;
   if (items.length === 0) {
-    return [];
+    return { generatedFiles: [], pendingImages: [] };
   }
 
   items.forEach((item) => logger.startStep(getSectionStepName(item.scopeKey, item.section.fileName)));
@@ -354,6 +356,7 @@ async function runSectionBatch(params: {
   );
 
   const generatedFiles: string[] = [];
+  const allPendingImages: PendingImage[] = [];
   const failures: Array<{ name: string; message: string }> = [];
 
   for (let index = 0; index < items.length; index += 1) {
@@ -362,8 +365,9 @@ async function runSectionBatch(params: {
     const stepName = getSectionStepName(item.scopeKey, item.section.fileName);
 
     if (result.status === "fulfilled") {
-      const { filePath, skillId, trace } = result.value;
+      const { filePath, skillId, trace, pendingImages } = result.value;
       generatedFiles.push(filePath);
+      allPendingImages.push(...pendingImages);
       logger.logStep(stepName, "ok", filePath, skillId);
       logger.attachTrace(stepName, trace);
       await persistJsonArtifact(artifactLogger, stepName, "output", {
@@ -398,7 +402,7 @@ async function runSectionBatch(params: {
     throw new Error(summarizeFailures(`${batchLabel} section generation failed`, failures));
   }
 
-  return generatedFiles;
+  return { generatedFiles, pendingImages: allPendingImages };
 }
 
 async function generateSharedLayoutSections(params: {
@@ -408,12 +412,13 @@ async function generateSharedLayoutSections(params: {
   artifactLogger: ArtifactLogger;
   logger: StepLogger;
   skipSections?: Set<string>;
-}): Promise<string[]> {
+}): Promise<{ files: string[]; pendingImages: PendingImage[] }> {
   const { blueprint, designSystem, runtimeContext, artifactLogger, logger, skipSections } = params;
   const collectedFiles: string[] = [];
+  const collectedPendingImages: PendingImage[] = [];
 
   if (blueprint.site.layoutSections.length === 0) {
-    return collectedFiles;
+    return { files: collectedFiles, pendingImages: collectedPendingImages };
   }
 
   // Filter out already-generated sections
@@ -434,7 +439,7 @@ async function generateSharedLayoutSections(params: {
   }
 
   if (sectionsToGenerate.length > 0) {
-    const generatedFiles = await runSectionBatch({
+    const batchResult = await runSectionBatch({
       batchLabel: "layout",
       items: sectionsToGenerate.map((section) => ({
         scopeKey: "layout",
@@ -446,7 +451,8 @@ async function generateSharedLayoutSections(params: {
       artifactLogger,
       logger,
     });
-    collectedFiles.push(...generatedFiles);
+    collectedFiles.push(...batchResult.generatedFiles);
+    collectedPendingImages.push(...batchResult.pendingImages);
   }
 
   const layoutPath = await logger.timed(
@@ -463,7 +469,7 @@ async function generateSharedLayoutSections(params: {
     await persistSiteFileArtifact(artifactLogger, "compose_layout", layoutPath, "layout");
   }
 
-  return collectedFiles;
+  return { files: collectedFiles, pendingImages: collectedPendingImages };
 }
 
 async function generatePages(params: {
@@ -474,9 +480,10 @@ async function generatePages(params: {
   logger: StepLogger;
   skipSections?: Set<string>;
   skipPages?: Set<string>;
-}): Promise<string[]> {
+}): Promise<{ files: string[]; pendingImages: PendingImage[] }> {
   const { blueprint, designSystem, runtimeContext, artifactLogger, logger, skipSections, skipPages } = params;
   const collectedFiles: string[] = [];
+  const collectedPendingImages: PendingImage[] = [];
 
   // Pages are independent (distinct output paths per slug); run in parallel for wall-clock time.
   const pageOutcomes = await Promise.all(
@@ -513,8 +520,9 @@ async function generatePages(params: {
       }
 
       let generatedFiles: string[] = [];
+      let pagePendingImages: PendingImage[] = [];
       if (sectionsToGenerate.length > 0) {
-        generatedFiles = await runSectionBatch({
+        const batchResult = await runSectionBatch({
           batchLabel: `page ${page.slug}`,
           items: sectionsToGenerate.map((section) => ({
             scopeKey: page.slug,
@@ -535,13 +543,15 @@ async function generatePages(params: {
           artifactLogger,
           logger,
         });
+        generatedFiles = batchResult.generatedFiles;
+        pagePendingImages = batchResult.pendingImages;
       }
 
       // Skip compose_page if already done
       if (skipPages?.has(page.slug)) {
         const pagePath = page.slug === "home" ? "app/page.tsx" : `app/${page.slug}/page.tsx`;
         logger.logStep(getComposePageStepName(page.slug), "ok", "resumed from checkpoint");
-        return { files: [...resumedFiles, ...generatedFiles, pagePath] };
+        return { files: [...resumedFiles, ...generatedFiles, pagePath], pendingImages: pagePendingImages };
       }
 
       // Deduplicate sections by fileName before composing the page
@@ -564,15 +574,16 @@ async function generatePages(params: {
         "page"
       );
 
-      return { files: [...resumedFiles, ...generatedFiles, pagePath] };
+      return { files: [...resumedFiles, ...generatedFiles, pagePath], pendingImages: pagePendingImages };
     })
   );
 
-  for (const { files } of pageOutcomes) {
+  for (const { files, pendingImages } of pageOutcomes) {
     collectedFiles.push(...files);
+    collectedPendingImages.push(...pendingImages);
   }
 
-  return collectedFiles;
+  return { files: collectedFiles, pendingImages: collectedPendingImages };
 }
 
 async function runBuildWithRepair(params: {
@@ -837,19 +848,35 @@ export async function runGenerateProject(
         skipSections: cp?.generatedSections,
         skipPages: cp?.composedPages,
       }),
-    ]).then(([layoutFiles, pageFiles]) => {
-      appendGeneratedFiles(result, layoutFiles);
-      appendGeneratedFiles(result, pageFiles);
+    ]).then(([layoutResult, pageResult]) => {
+      appendGeneratedFiles(result, layoutResult.files);
+      appendGeneratedFiles(result, pageResult.files);
+      return [...layoutResult.pendingImages, ...pageResult.pendingImages];
     });
 
-    await Promise.all([designTokensPromise, sectionGenerationPromise]);
-    await autoInstallDependenciesForFiles({
-      scope: "generated",
-      files: result.generatedFiles,
-      artifactLogger,
-      result,
-      logger,
-    });
+    const [, allPendingImages] = await Promise.all([designTokensPromise, sectionGenerationPromise]);
+
+    // Await all background image generation before build — images must be on
+    // disk for Next.js to bundle them. This runs in parallel with dependency
+    // installation since they don't conflict.
+    const [imageStats] = await Promise.all([
+      awaitPendingImages(allPendingImages),
+      autoInstallDependenciesForFiles({
+        scope: "generated",
+        files: result.generatedFiles,
+        artifactLogger,
+        result,
+        logger,
+      }),
+    ]);
+
+    if (imageStats.total > 0) {
+      logger.logStep(
+        "await_images",
+        imageStats.failed > 0 ? "error" : "ok",
+        `${imageStats.settled}/${imageStats.total} images generated${imageStats.failed > 0 ? `, ${imageStats.failed} failed` : ""}`
+      );
+    }
     const buildLifecycle = await runBuildWithRepair({ blueprint, artifactLogger, result, logger });
     result.verificationStatus = buildLifecycle.verificationStatus;
     result.verificationOutput = buildLifecycle.verificationOutput;

@@ -36,6 +36,17 @@ export function clearTemplate(): ClearTemplateResult {
       }
     }
 
+    // 3. Generated images
+    const imagesDir = join(getSiteRoot(), "public", "images");
+    if (existsSync(imagesDir)) {
+      for (const f of readdirSync(imagesDir)) {
+        if (f.endsWith(".png") || f.endsWith(".jpg") || f.endsWith(".webp")) {
+          rmSync(join(imagesDir, f));
+          removed.push(`public/images/${f}`);
+        }
+      }
+    }
+
     // 3. app/[slug]/page.tsx (non-home pages)
     const appDir = join(getSiteRoot(), "app");
     if (existsSync(appDir)) {

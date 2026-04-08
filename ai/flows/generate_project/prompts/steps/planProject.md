@@ -8,6 +8,11 @@ Your job is to take a `ProjectBlueprint` (which has pages but NO sections yet) a
 2. Attaches a `designPlan` to every section and layout section
 3. Attaches a `pageDesignPlan` to every page
 
+### CRITICAL — This product is single-page only
+
+- The input blueprint has **exactly one** page: `**slug: "home"`** (route `/`). Do **not** invent additional pages, duplicate page objects, or split content across multiple slugs.
+- Brand / 官网 / marketing requests are **one long scrolling home page**: derive every content section (story, collections, lookbook, contact, etc.) inside `**pages[0].sections`** only. Navigation should use **in-page anchors** (`#id`), not links to other routes.
+
 ## Responsibilities
 
 - Derive the right sections for each page based on its description, supportingCapabilityIds, and journeyStage.
@@ -20,6 +25,7 @@ Your job is to take a `ProjectBlueprint` (which has pages but NO sections yet) a
 ## Section Derivation Rules
 
 When deriving sections for a page:
+
 - Start from the page's `description` and `supportingCapabilityIds` — these define what the page must do
 - Map each capability to 1-2 sections that fulfill it
 - Avoid redundancy: if two capabilities can be served by one section, merge them
@@ -30,7 +36,8 @@ When deriving sections for a page:
 
 ## CRITICAL: layoutSections vs page sections
 
-**`layoutSections` MUST contain ONLY globally shared shell components:**
+`**layoutSections` MUST contain ONLY globally shared shell components:**
+
 - `navigation` (navbar) — rendered on every page, before content
 - `footer` — rendered on every page, after content
 - Any other truly global shell (e.g. a global announcement bar)
@@ -141,7 +148,7 @@ Output a single valid JSON object matching this structure:
 
 - Do not change titles, slugs, descriptions, section types, file names, role IDs, task-loop IDs, or capability IDs unless absolutely necessary for validity.
 - Preserve the product-first chain:
-  MVP boundary -> roles -> task loops -> capabilities -> IA/page map -> page design -> section design.
+MVP boundary -> roles -> task loops -> capabilities -> IA/page map -> page design -> section design.
 - Treat `designPlan` as a concise design brief for downstream code generation.
 - Use `roleFit`, `taskLoopFocus`, `capabilityFocus`, and `taskLoopCoverage` to keep design decisions tied to product logic.
 - `projectGuardrailIds` should stay short and global.
@@ -159,3 +166,4 @@ Output a single valid JSON object matching this structure:
 - Do not skip the role/task/capability reasoning layer.
 - Do not turn the output into a free-form strategy memo.
 - Do not return markdown.
+

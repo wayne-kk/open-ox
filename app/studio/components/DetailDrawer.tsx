@@ -130,6 +130,42 @@ function ValidationSection({ result }: { result: NonNullable<StepTrace["validati
 
 // ─── IO Section ───────────────────────────────────────────────────────────────
 
+function GeneratedImagesSection({ images }: { images: Array<{ filename: string; prompt: string; path: string | null }> }) {
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+  if (images.length === 0) return null;
+
+  const handleCopy = (prompt: string, idx: number) => {
+    navigator.clipboard.writeText(prompt);
+    setCopiedIdx(idx);
+    setTimeout(() => setCopiedIdx(null), 1500);
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="font-mono text-[9px] uppercase tracking-widest text-violet-400/70">
+        Generated Images ({images.length})
+      </div>
+      {images.map((img, i) => (
+        <div key={i} className="rounded-lg border border-violet-500/10 bg-violet-500/5 p-2.5 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="font-mono text-[10px] text-violet-300/80">{img.path ?? img.filename}</span>
+            <button
+              type="button"
+              onClick={() => handleCopy(img.prompt, i)}
+              className="rounded px-1.5 py-0.5 text-[9px] text-violet-400/60 hover:bg-violet-500/10 hover:text-violet-300 transition-colors"
+            >
+              {copiedIdx === i ? "✓ 已复制" : "复制 prompt"}
+            </button>
+          </div>
+          <pre className="whitespace-pre-wrap break-words font-mono text-[10px] leading-[1.5] text-muted-foreground/60">
+            {img.prompt}
+          </pre>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function IoSection({ value }: { value: Record<string, unknown> }) {
   return (
     <pre className="max-h-[280px] overflow-y-auto whitespace-pre-wrap break-all rounded-lg bg-black/30 p-3 font-mono text-[11px] leading-[1.6] text-[#c7d0dc]/70 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.1)_transparent]">
@@ -188,7 +224,16 @@ function TraceSection({ trace }: { trace: StepTrace }) {
             <ValidationSection result={trace.validationResult} />
           )}
           {active === "input" && trace.input && <IoSection value={trace.input} />}
-          {active === "output" && trace.output && <IoSection value={trace.output} />}
+          {active === "output" && trace.output && (
+            <>
+              {Array.isArray(trace.output.generatedImages) && trace.output.generatedImages.length > 0 && (
+                <GeneratedImagesSection
+                  images={trace.output.generatedImages as Array<{ filename: string; prompt: string; path: string | null }>}
+                />
+              )}
+              <IoSection value={trace.output} />
+            </>
+          )}
         </div>
       </div>
     </div>
