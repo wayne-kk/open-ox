@@ -33,7 +33,7 @@ notes: |
 ## Visual Quality Rules
 
 1. **Quote marks** — use large decorative quote marks (`"` or `❝`) as a visual element. Size `text-4xl` to `text-6xl`, accent color, low opacity.
-2. **Avatar** — circular, `h-12 w-12` or `h-14 w-14`. Use initials in a colored circle as placeholder (since we can't use real photos). Background color derived from the person's name hash.
+2. **Avatar** — circular, `h-12 w-12` or `h-14 w-14`. Use initials in a colored circle (since we can't use real photos). Background color derived from the person's name hash.
 3. **Attribution** — name in bold, role/company in muted text below. Always include both.
 4. **Card style** — subtle border or background fill. Optional: left accent border in primary color.
 5. **Star rating** — optional. If used, show filled/empty stars with `lucide-react` Star icon.

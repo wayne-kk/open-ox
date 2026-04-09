@@ -302,7 +302,7 @@ The design system above is the single source of truth. A separate build step con
 ## Project Context
 - **Project**: ${projectContext.projectTitle}
 - **Description**: ${projectContext.projectDescription}
-- **Language**: ${projectContext.language} — ALL user-facing text MUST be in this language.
+- **Language**: ${projectContext.language} — ⚠️ CRITICAL: ALL user-facing text (headlines, buttons, copy, labels, alt text) MUST be written in this language. Do NOT mix with other languages. Skill examples showing English text are structural only — replace with real ${projectContext.language} content.
 - **Product Type**: ${projectContext.productScope.productType}
 - **Core Outcome**: ${projectContext.productScope.coreOutcome}
 - **Business Goal**: ${projectContext.productScope.businessGoal}

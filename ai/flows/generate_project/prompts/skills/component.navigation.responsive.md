@@ -37,7 +37,7 @@ notes: |
 1. **Backdrop blur** — use `bg-background/80 backdrop-blur-xl` for a glass effect when scrolling over content.
 2. **Mobile menu** — must be implemented. Use `useState` for open/close. Animate with height transition or slide-in. Include all nav links + CTA.
 3. **Active/hover states** — links need `hover:text-primary` or underline effect. Current page link should be visually distinct.
-4. **CTA button** — the primary action button (e.g. "开始使用", "Sign Up") should use the accent/primary filled style, visually distinct from nav links.
+4. **CTA button** — the primary action button should use the accent/primary filled style, visually distinct from nav links. Text must be in the project's language.
 5. **Border** — subtle bottom border `border-b border-white/10` to separate from content.
 6. **Scroll behavior** — optional: add shadow or background opacity change on scroll using `useEffect` + scroll listener.
 

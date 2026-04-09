@@ -104,7 +104,7 @@ export default function HeroSection() {
       <header className="z-30 flex w-full max-w-7xl items-center justify-between">
         <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }}
           className="text-xl font-bold tracking-wider">
-          [Logo text]
+          {/* Real brand name from project context */}
         </motion.div>
         <div className="hidden items-center space-x-8 md:flex">
           {/* Nav links: text-sm tracking-widest text-foreground/60 */}
@@ -123,8 +123,8 @@ export default function HeroSection() {
         {/* Left: body copy */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 1 }}
           className="z-20 order-2 text-center md:order-1 md:text-left">
-          <p className="mx-auto max-w-xs text-sm leading-relaxed text-foreground/80 md:mx-0">[Body copy]</p>
-          <a href="#" className="mt-4 inline-block text-sm font-medium text-foreground underline decoration-from-font">Read More</a>
+          <p className="mx-auto max-w-xs text-sm leading-relaxed text-foreground/80 md:mx-0">{/* Real body copy from project context, in project language */}</p>
+          <a href="#" className="mt-4 inline-block text-sm font-medium text-foreground underline decoration-from-font">{/* CTA text in project language */}</a>
         </motion.div>
 
         {/* Center: circle + overflowing image — SEE ABOVE */}
@@ -136,7 +136,7 @@ export default function HeroSection() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 1.2 }}
           className="z-20 order-3 flex items-center justify-center text-center md:justify-start">
           <h1 className="text-7xl font-extrabold text-foreground md:text-8xl lg:text-9xl">
-            [Line 1]<br />[Line 2]
+            {/* 2-line headline from project context, in project language */}
           </h1>
         </motion.div>
       </div>
@@ -149,7 +149,7 @@ export default function HeroSection() {
         </motion.div>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 1.3 }}
           className="text-sm font-medium text-foreground/80">
-          [Location text]
+          {/* Location from project context, in project language */}
         </motion.div>
       </footer>
     </div>

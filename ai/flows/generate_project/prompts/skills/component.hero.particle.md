@@ -123,7 +123,7 @@ import { useEffect, useRef } from "react"
 export default function HeroSection() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   // words = project-relevant terms from the design brief (headline, brand name, tagline)
-  const words = ["WORD_1", "WORD_2", "WORD_3"]  // replace with real content
+  const words = [/* real project-relevant words from brief: brand name, headline, tagline — in project language */]
 
   useEffect(() => {
     const canvas = canvasRef.current

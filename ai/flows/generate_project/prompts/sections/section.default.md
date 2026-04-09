@@ -13,6 +13,13 @@ You are a frontend engineer. Generate a single, production-ready, self-contained
 - Mobile-first responsive layout.
 - Follow `rules/outputTsx.md` as the single source of truth for TSX output format, `"use client"` placement, and sentinel-import bans.
 
+### Language Consistency — CRITICAL
+
+- **ALL user-facing text** (headlines, subheadings, body copy, button labels, navigation links, placeholder text, alt text, aria-labels, metadata) **MUST be written in the project's declared language** (see `Language` field in Project Context).
+- Do NOT mix languages. If the project language is `zh-CN`, every visible string must be Chinese — no English headlines, no English CTAs, no English placeholder text.
+- The only exceptions are: brand names that are intentionally in a foreign language, and technical terms with no standard translation (e.g. "API", "SaaS").
+- Skill prompt examples may show English placeholder text like "[Body copy]" or "Read More" — these are structural examples only. Replace ALL such text with real content in the project's language.
+
 ### Images — MUST use `generate_image` tool
 
 - **CRITICAL**: You MUST call the `generate_image` tool for every image. Do NOT invent image paths like `/images/xxx.png` — only paths returned by the tool exist on disk.
