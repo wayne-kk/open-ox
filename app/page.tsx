@@ -8,17 +8,19 @@ import { HeroPrompt } from "./components/HeroPrompt";
 import { SparkleHoverButton } from "@/components/ui/sparkle-hover-button";
 
 const AGENT_STEPS = [
-  { id: "analyze", label: "analyze_requirement", detail: "解析意图 · 规划页面 · 定义角色", color: "text-primary" },
-  { id: "plan", label: "plan_project", detail: "蓝图 · 组件规划 · 设计方向", color: "text-accent-tertiary" },
+  { id: "analyze", label: "analyze_project_requirement", detail: "解析需求 · 输出最小蓝图（brief/site）", color: "text-primary" },
+  { id: "infer", label: "infer_design_intent", detail: "独立推理 · 视觉风格意图", color: "text-accent-tertiary" },
+  { id: "plan", label: "plan_project", detail: "蓝图细化 · section 规划", color: "text-primary" },
   { id: "design", label: "generate_design_system", detail: "色彩 · 字体 · 动效", color: "text-primary" },
-  { id: "sections", label: "generate_sections ×N", detail: "并行生成 · 智能匹配 · 质量检查", color: "text-accent-tertiary" },
+  { id: "page-design", label: "describe_page_sections", detail: "先整页布局再拆分 section 设计", color: "text-accent-tertiary" },
+  { id: "sections", label: "generate_sections ×N", detail: "并行生成 · 按 section brief 落地", color: "text-primary" },
   { id: "build", label: "run_build", detail: "构建 · 类型检查 · 验证", color: "text-green-400" },
   { id: "repair", label: "repair_build", detail: "自动修复 · 最多 2 轮", color: "text-orange-400" },
 ];
 
 const STATS = [
   { value: "2.5m", label: "平均生成时间", sub: "从描述到可运行站点" },
-  { value: "6", label: "步流水线", sub: "每步有明确输入输出" },
+  { value: "8", label: "核心节点", sub: "每步有明确输入输出" },
   { value: "100+", label: "skill 发现", sub: "每个 section 运行时自发现 skill" },
   { value: "∞", label: "迭代修改", sub: "对话式持续优化" },
 ];
@@ -28,9 +30,9 @@ const FEATURES = [
     icon: Cpu,
     tag: "Engineering System",
     title: "不是聊天机器人",
-    body: "固定 6 步流水线，每步有明确的输入输出定义。没有 AI 漂移，没有幻觉。",
+    body: "固定 8 个核心节点（含独立风格推理与页面级设计拆分），每步有明确输入输出定义。",
     accent: "primary" as const,
-    metric: "6 steps",
+    metric: "8 nodes",
     metricLabel: "pipeline",
   },
   {
@@ -142,7 +144,7 @@ export default function Home() {
       <section className="relative mx-auto max-w-7xl px-6 py-24 lg:px-8">
         <div className="mb-12 text-center">
           <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-primary mb-3">// How it works</p>
-          <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">从描述到上线，只需 6 步</h2>
+          <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">从描述到上线，8 个核心节点</h2>
           <p className="mt-3 text-sm text-muted-foreground max-w-md mx-auto">
             结构化 AI 流水线 — 每一步都有明确职责，不漂移，不幻觉。
           </p>

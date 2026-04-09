@@ -231,6 +231,20 @@ function normalizeSectionSpec(value: unknown, index: number): SectionSpec {
   };
 }
 
+function normalizeShellSection(
+  value: unknown,
+  defaultType: "navigation" | "footer",
+  defaultFileName: string
+): SectionSpec {
+  const raw = (value && typeof value === "object" ? value : {}) as Partial<SectionSpec>;
+  const normalized = normalizeSectionSpec(value, 0);
+  return {
+    ...normalized,
+    type: defaultType,
+    fileName: typeof raw.fileName === "string" && raw.fileName.trim() ? raw.fileName : defaultFileName,
+  };
+}
+
 function normalizePageBlueprint(value: unknown, index: number): PageBlueprint {
   const candidate = (value && typeof value === "object" ? value : {}) as Partial<PageBlueprint>;
   const title = typeof candidate.title === "string" ? candidate.title : `Page ${index + 1}`;
@@ -337,12 +351,26 @@ function normalizeBrief(value: unknown): ProjectBrief {
 
 function normalizeExperience(value: unknown): ProjectExperience {
   if (!value || typeof value !== "object") {
-    throw new Error("analyze_project_requirement: experience is missing");
+    return {
+      designIntent: {
+        mood: ["clean", "trustworthy", "focused"],
+        colorDirection: "Neutral base with one clear accent direction.",
+        style: "Modern, content-first, conversion-oriented.",
+        keywords: ["clean", "professional", "focused", "confident", "modern"],
+      },
+    };
   }
 
   const candidate = value as Partial<ProjectExperience>;
-  if (!candidate.designIntent) {
-    throw new Error("analyze_project_requirement: experience.designIntent is missing");
+  if (!candidate.designIntent || typeof candidate.designIntent !== "object") {
+    return {
+      designIntent: {
+        mood: ["clean", "trustworthy", "focused"],
+        colorDirection: "Neutral base with one clear accent direction.",
+        style: "Modern, content-first, conversion-oriented.",
+        keywords: ["clean", "professional", "focused", "confident", "modern"],
+      },
+    };
   }
 
   return {
@@ -355,9 +383,12 @@ function normalizeSite(value: unknown): ProjectSiteBlueprint {
     throw new Error("analyze_project_requirement: site is missing");
   }
 
-  const candidate = value as Partial<ProjectSiteBlueprint>;
-  if (!Array.isArray(candidate.pages) || !isSectionSpecArray(candidate.layoutSections)) {
-    throw new Error("analyze_project_requirement: site must include layoutSections and pages");
+  const candidate = value as Partial<ProjectSiteBlueprint> & {
+    navigation?: unknown;
+    footer?: unknown;
+  };
+  if (!Array.isArray(candidate.pages)) {
+    throw new Error("analyze_project_requirement: site must include pages");
   }
 
   const pagesRaw = candidate.pages.map((page, index) => normalizePageBlueprint(page, index));
@@ -374,6 +405,13 @@ function normalizeSite(value: unknown): ProjectSiteBlueprint {
     journeyStage: page.journeyStage,
   }));
 
+  const layoutSections: SectionSpec[] = isSectionSpecArray(candidate.layoutSections)
+    ? candidate.layoutSections.map((section, index) => normalizeSectionSpec(section, index))
+    : [
+      normalizeShellSection(candidate.navigation, "navigation", "NavigationSection"),
+      normalizeShellSection(candidate.footer, "footer", "FooterSection"),
+    ];
+
   return {
     informationArchitecture: {
       ...baseIa,
@@ -382,9 +420,7 @@ function normalizeSite(value: unknown): ProjectSiteBlueprint {
         ? "Single-page site: all content on `/` (home). Primary navigation MUST use in-page anchor links (#section-id), not separate routes."
         : baseIa.navigationModel,
     },
-    layoutSections: candidate.layoutSections.map((section, index) =>
-      normalizeSectionSpec(section, index)
-    ),
+    layoutSections,
     pages,
   };
 }
@@ -403,6 +439,31 @@ export function asProjectBlueprint(value: unknown): ProjectBlueprint {
     };
   }
 
+  if (candidate.brief && candidate.site) {
+    return {
+      brief: normalizeBrief(candidate.brief),
+      experience: normalizeExperience(candidate.experience),
+      site: normalizeSite(candidate.site),
+    };
+  }
+
+  // Minimal nested shape compatibility:
+  // { brief, designIntent, site }  ->  { brief, experience.designIntent, site }
+  const minimalNested = value as {
+    brief?: unknown;
+    designIntent?: unknown;
+    site?: unknown;
+  };
+  if (minimalNested.brief && minimalNested.designIntent && minimalNested.site) {
+    return {
+      brief: normalizeBrief(minimalNested.brief),
+      experience: normalizeExperience({
+        designIntent: minimalNested.designIntent,
+      }),
+      site: normalizeSite(minimalNested.site),
+    };
+  }
+
   const flatCandidate = value as {
     projectTitle?: unknown;
     projectDescription?: unknown;
@@ -413,13 +474,17 @@ export function asProjectBlueprint(value: unknown): ProjectBlueprint {
     informationArchitecture?: unknown;
     designIntent?: unknown;
     layoutSections?: unknown;
+    navigation?: unknown;
+    footer?: unknown;
     pages?: unknown;
   };
   if (
     typeof flatCandidate.projectTitle === "string" &&
     typeof flatCandidate.projectDescription === "string" &&
     flatCandidate.designIntent &&
-    isSectionSpecArray(flatCandidate.layoutSections) &&
+    (isSectionSpecArray(flatCandidate.layoutSections) ||
+      flatCandidate.navigation !== undefined ||
+      flatCandidate.footer !== undefined) &&
     Array.isArray(flatCandidate.pages)
   ) {
     return {
@@ -437,6 +502,8 @@ export function asProjectBlueprint(value: unknown): ProjectBlueprint {
       site: normalizeSite({
         informationArchitecture: flatCandidate.informationArchitecture,
         layoutSections: flatCandidate.layoutSections,
+        navigation: flatCandidate.navigation,
+        footer: flatCandidate.footer,
         pages: flatCandidate.pages,
       }),
     };

@@ -14,7 +14,7 @@ Do not import or render layout-level sections in `page.tsx`.
 Each section component already implements its own layout: an outer full-width layer
 for background and an inner `container mx-auto px-* py-*` for content (per project
 section layout rules). **Do not** wrap section imports in extra `<section>`,
-`container`, `mx-auto`, `px-`*, `py-*`, or `max-w-*` — that duplicates padding and
+`container`, `mx-auto`, `px-`*, `py-`*, or `max-w-*` — that duplicates padding and
 width constraints and breaks rhythm.
 
 - Render sections **directly** as siblings inside `<main>`: `<HeroSection />`,

@@ -87,7 +87,7 @@ Tailwind v4 `@theme` tokens **automatically** generate utility classes. You MUST
 | `--animate-pulse: ...`  | `animate-pulse`                                | ~~`.ds-animate-pulse`~~                      |
 
 
-**Only create `ds-`* custom classes for effects that Tailwind CANNOT auto-generate:**
+*Only create `ds-` custom classes for effects that Tailwind CANNOT auto-generate:**
 
 - Composite effects combining multiple properties (glass, scanlines, grain overlays)
 - Clip-path shapes from `:root` CSS variables
@@ -127,7 +127,7 @@ Tailwind v4 `@theme` tokens **automatically** generate utility classes. You MUST
 
 **Do NOT:**
 
-- Create `.ds-font-`*, `.ds-bg-*`, `.ds-text-*`, `.ds-shadow-*`, `.ds-animate-*` classes that duplicate Tailwind auto-utilities from `@theme`
+- Create `.ds-font-`*, `.ds-bg-`*, `.ds-text-*`, `.ds-shadow-*`, `.ds-animate-*` classes that duplicate Tailwind auto-utilities from `@theme`
 - Output a JSON structure
 - Output anything outside the ````css` code block
 - Use `@tailwind base`, `@tailwind components`, `@tailwind utilities` (v3 syntax)

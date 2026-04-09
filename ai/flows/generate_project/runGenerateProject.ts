@@ -13,9 +13,11 @@ import { stepComposePage } from "./steps/composePage";
 import { stepGenerateProjectDesignSystem } from "./steps/generateProjectDesignSystem";
 import { stepGenerateSection } from "./steps/generateSection";
 import { stepInstallDependencies } from "./steps/installDependencies";
+import { stepInferDesignIntent } from "./steps/inferDesignIntent";
 import { stepPlanProject } from "./steps/planProject";
 import { stepRepairBuild } from "./steps/repairBuild";
 import { stepRunBuild } from "./steps/runBuild";
+import { stepDescribePageSections } from "./steps/describePageSections";
 import { normalizeBlueprint } from "./normalization/blueprintNormalizer";
 import {
   appendDependencyInstallFailures,
@@ -92,6 +94,7 @@ interface SectionBatchItem {
   section: PlannedSectionSpec;
   outputFileRelative: string;
   pageContext?: GenerateSectionParams["pageContext"];
+  sectionDesignBriefOverride?: string;
 }
 
 
@@ -238,6 +241,7 @@ async function runSectionBatch(params: {
         section: item.section,
         outputFileRelative: item.outputFileRelative,
         pageContext: item.pageContext,
+        sectionDesignBriefOverride: item.sectionDesignBriefOverride,
       })
     )
   );
@@ -388,6 +392,16 @@ async function generatePages(params: {
         ? dedupedSections.filter((s) => !skipSections.has(`${page.slug}:${s.fileName}`))
         : dedupedSections;
 
+      const pageDesign = await stepDescribePageSections({
+        designSystem,
+        language: runtimeContext.language,
+        page,
+        sections: dedupedSections,
+      });
+      const sectionBriefByFile = new Map(
+        pageDesign.sectionDesigns.map((design) => [design.fileName, design.sectionDesignBrief])
+      );
+
       // Log skipped sections
       const skippedCount = dedupedSections.length - sectionsToGenerate.length;
       if (skippedCount > 0) {
@@ -415,6 +429,7 @@ async function generatePages(params: {
             scopeKey: page.slug,
             section,
             outputFileRelative: buildSectionFilePath(page.slug, section.fileName),
+            sectionDesignBriefOverride: sectionBriefByFile.get(section.fileName),
             pageContext: {
               title: page.title,
               slug: page.slug,
@@ -452,6 +467,7 @@ async function generatePages(params: {
         pagePath,
         slug: page.slug,
         title: page.title,
+        pageStructure: pageDesign.pageStructure,
         sections: dedupedSections.map((section) => section.fileName),
       });
       await persistSiteFileArtifact(
@@ -604,11 +620,24 @@ export async function runGenerateProject(
 
     // ── Step: analyze_project_requirement ─────────────────────────────────
     let rawBlueprint: ProjectBlueprint;
+    let inferredDesignIntent: Awaited<ReturnType<typeof stepInferDesignIntent>> | null = null;
+
     if (cp?.skipAnalyze && cp.cachedBlueprint) {
       rawBlueprint = cp.cachedBlueprint;
       logger.logStep("analyze_project_requirement", "ok", "resumed from checkpoint");
+
+      if (rawBlueprint.experience?.designIntent?.keywords?.length) {
+        logger.logStep("infer_design_intent", "ok", "resumed from checkpoint");
+      } else {
+        inferredDesignIntent = await logger.timed(
+          "infer_design_intent",
+          () => stepInferDesignIntent(userInput),
+          (intent) => `${intent.style}`
+        );
+        await persistJsonArtifact(artifactLogger, "infer_design_intent", "output", inferredDesignIntent);
+      }
     } else {
-      rawBlueprint = await logger.timed(
+      const analyzePromise = logger.timed(
         "analyze_project_requirement",
         () => stepAnalyzeProjectRequirement(userInput, (name, args, result) => {
           onStep?.({
@@ -621,8 +650,30 @@ export async function runGenerateProject(
         }),
         (blueprint) => `${blueprint.brief.roles.length} roles, ${blueprint.site.pages.length} pages planned`
       );
+      const inferPromise = logger.timed(
+        "infer_design_intent",
+        () => stepInferDesignIntent(userInput),
+        (intent) => `${intent.style}`
+      );
+
+      [rawBlueprint, inferredDesignIntent] = await Promise.all([analyzePromise, inferPromise]);
       await persistJsonArtifact(artifactLogger, "analyze_project_requirement", "output", rawBlueprint);
+      await persistJsonArtifact(artifactLogger, "infer_design_intent", "output", inferredDesignIntent);
     }
+
+    if (!rawBlueprint.experience) {
+      rawBlueprint.experience = {
+        designIntent: inferredDesignIntent ?? {
+          mood: ["clean", "trustworthy", "focused"],
+          colorDirection: "Neutral base with one clear accent direction.",
+          style: "Modern, content-first, conversion-oriented.",
+          keywords: ["clean", "professional", "focused", "confident", "modern"],
+        },
+      };
+    } else if (inferredDesignIntent) {
+      rawBlueprint.experience.designIntent = inferredDesignIntent;
+    }
+
     const normalizedBlueprint = normalizeBlueprint(rawBlueprint);
 
     // ── Steps: plan_project + generate_project_design_system (parallel) ──
@@ -637,12 +688,20 @@ export async function runGenerateProject(
     } else {
       logger.startStep("plan_project");
       logger.startStep("generate_project_design_system");
+      const designIntentForSystem =
+        inferredDesignIntent ?? rawBlueprint.experience?.designIntent ?? {
+          mood: ["clean", "trustworthy", "focused"],
+          colorDirection: "Neutral base with one clear accent direction.",
+          style: "Modern, content-first, conversion-oriented.",
+          keywords: ["clean", "professional", "focused", "confident", "modern"],
+        };
+
       [blueprint, designSystem] = await Promise.all([
         stepPlanProject(normalizedBlueprint).then((bp) => {
           logger.logStep("plan_project", "ok", "section generation plans prepared");
           return bp;
         }),
-        stepGenerateProjectDesignSystem(normalizedBlueprint, options?.styleGuide).then((ds) => {
+        stepGenerateProjectDesignSystem(designIntentForSystem, options?.styleGuide).then((ds) => {
           logger.logStep("generate_project_design_system", "ok", "design-system.md written");
           return ds;
         }),

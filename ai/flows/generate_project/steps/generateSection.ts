@@ -27,6 +27,7 @@ import type {
   StepTrace,
 } from "../types";
 import { inferSectionGuardrailDefaults } from "../planners/guardrailPolicy";
+import { stepDescribeSectionDesign } from "./describeSectionDesign";
 
 export interface GenerateSectionParams {
   designSystem: string;
@@ -35,6 +36,7 @@ export interface GenerateSectionParams {
   section: PlannedSectionSpec;
   outputFileRelative: string;
   pageContext?: GenerateSectionPageContext;
+  sectionDesignBriefOverride?: string;
 }
 
 type GenerateSectionProjectContext = {
@@ -269,8 +271,9 @@ function buildUserMessage(params: {
   pageContext?: GenerateSectionPageContext;
   section: PlannedSectionSpec;
   skillMetadataBlock: string;
+  sectionDesignBrief: string;
 }) {
-  const { designSystem, projectContext, pageContext, section, skillMetadataBlock } = params;
+  const { designSystem, projectContext, pageContext, section, skillMetadataBlock, sectionDesignBrief } = params;
   const roles = filterRelevantRoles(section, projectContext, pageContext);
   const loops = filterRelevantTaskLoops(section, projectContext);
   const caps = filterRelevantCapabilities(section, projectContext, pageContext);
@@ -330,10 +333,14 @@ ${buildPageContextBlock(pageContext)}
 - **Primary Roles**: ${section.primaryRoleIds.join(", ") || "none"}
 - **Supporting Capabilities**: ${section.supportingCapabilityIds.join(", ") || "none"}
 
+## Section Design Brief (apply directly)
+${sectionDesignBrief}
+
 ${skillMetadataBlock ? `## Available Component Skills\nThe following skills are available for this section type. The selected skill's full guidance is already in the system prompt.\n${skillMetadataBlock}` : ""}
 
 Generate the complete ${section.fileName}.tsx component.
-Use the design system and project context to make all design decisions (layout, visual style, motion, interaction). Apply the Tailwind CSS mapping rules above to translate design tokens into utility classes. The section intent and content hints define WHAT to build; YOU decide HOW it looks.`;
+Use the design system and project context to make all design decisions (layout, visual style, motion, interaction). Apply the Tailwind CSS mapping rules above to translate design tokens into utility classes.
+Strictly follow the Section Design Brief's 3 items (布局 / 背景 / 层次) as the primary visual guidance for this section.`;
 }
 
 // ── Validation ──────────────────────────────────────────────────────────
@@ -365,6 +372,7 @@ export async function stepGenerateSection({
   section,
   outputFileRelative,
   pageContext,
+  sectionDesignBriefOverride,
 }: GenerateSectionParams): Promise<GenerateSectionResult> {
   const { skillId, skillPrompt, skillMetadataBlock } = await discoverAndSelectSkill(section.type, {
     intent: section.intent,
@@ -379,12 +387,20 @@ export async function stepGenerateSection({
     skillPrompt,
   });
 
+  const sectionDesignBrief = sectionDesignBriefOverride?.trim()
+    ? sectionDesignBriefOverride
+    : await stepDescribeSectionDesign({
+      section,
+      designSystem,
+    });
+
   const userMessage = buildUserMessage({
     designSystem,
     projectContext,
     pageContext,
     section,
     skillMetadataBlock,
+    sectionDesignBrief,
   });
 
   const componentName = section.fileName.replace(/\.tsx$/, "");

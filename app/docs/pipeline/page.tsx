@@ -43,15 +43,17 @@ function Callout({ type = "info", children }: { type?: "info" | "warn"; children
 const STEPS = [
   { n: "01", name: "clear_template", type: "fs", desc: "清理上次生成的文件。当提供了 projectId 时跳过（项目目录已初始化）。" },
   { n: "02", name: "analyze_project_requirement", type: "llm+tool", desc: "将用户 prompt 解析为结构化的 ProjectBlueprint。配备 web_search 工具 — 遇到未知品牌名或专业术语时自动搜索。最多 4 次工具调用迭代。" },
-  { n: "03", name: "plan_project", type: "llm", desc: "为每个 section 生成 SectionDesignPlan：布局意图、视觉意图、约束规则、结构化特征（traits）。与步骤 04 并行执行。" },
-  { n: "04", name: "generate_project_design_system", type: "llm", desc: "生成 design-system.md：颜色系统、字体规范、间距规则、组件风格指导。与步骤 03 并行执行。支持 /skill 命令注入 styleGuide。" },
-  { n: "05", name: "apply_project_design_tokens", type: "llm", desc: "读取 globals.css，提取已有 @theme tokens，写入新的 CSS 变量。与步骤 06 并行执行。" },
-  { n: "06", name: "generate_section ×N", type: "llm×N", desc: "并行生成，与步骤 05 并行。每个 section 运行时自发现 skill（score-based fallback），获得分层 system prompt：基础规则 + 类型规则 + skill + 约束 + traits。" },
-  { n: "07", name: "compose_layout", type: "llm", desc: "从生成的 layout sections（nav、footer）组装 layout.tsx。在 layout sections 生成完成后执行。" },
-  { n: "08", name: "compose_page ×M", type: "llm×M", desc: "并行页面组装。每个 page.tsx 导入其 sections 并组合在一起。import 去重 + 重复渲染检测 + 自动 rebuild。" },
-  { n: "09", name: "install_dependencies", type: "npm", desc: "扫描所有生成文件的 import 语句，与 package.json 对比，只安装缺失的包。" },
-  { n: "10", name: "run_build", type: "build", desc: "本地执行 next build。失败则进入修复流程。" },
-  { n: "11", name: "repair_build ×0-2", type: "llm+tool", desc: "Agent 工具循环：使用 read_file / edit_file / write_file / run_build 工具修复构建错误。每轮最多修复 3 个文件。最多 2 轮。" },
+  { n: "03", name: "infer_design_intent", type: "llm", desc: "独立风格推理节点。与步骤 02 并行，输出 designIntent（mood/colorDirection/style/keywords）。" },
+  { n: "04", name: "plan_project", type: "llm", desc: "将蓝图细化为页面与 section 规划。与步骤 05 并行执行。" },
+  { n: "05", name: "generate_project_design_system", type: "llm", desc: "基于 designIntent 生成 design-system.md（颜色、字体、间距、组件风格）。支持 /skill 注入 styleGuide。" },
+  { n: "06", name: "apply_project_design_tokens", type: "llm", desc: "读取 globals.css，提取已有 @theme tokens，写入新的 CSS 变量。与步骤 08 并行执行。" },
+  { n: "07", name: "describe_page_sections", type: "llm×M", desc: "按页面先生成整体结构描述，再拆分每个 section 的布局/背景/层次 brief。" },
+  { n: "08", name: "generate_section ×N", type: "llm×N", desc: "并行生成 section，优先消费页面级 section brief；每个 section 运行时自发现 skill。" },
+  { n: "09", name: "compose_layout", type: "llm", desc: "从生成的 layout sections（navigation/footer）组装 layout.tsx。" },
+  { n: "10", name: "compose_page ×M", type: "llm×M", desc: "并行页面组装。每个 page.tsx 导入其 sections 并组合在一起。import 去重 + 重复渲染检测 + 自动 rebuild。" },
+  { n: "11", name: "install_dependencies", type: "npm", desc: "扫描所有生成文件的 import 语句，与 package.json 对比，只安装缺失的包。" },
+  { n: "12", name: "run_build", type: "build", desc: "本地执行 next build。失败则进入修复流程。" },
+  { n: "13", name: "repair_build ×0-2", type: "llm+tool", desc: "Agent 工具循环：使用 read_file / edit_file / write_file / run_build 工具修复构建错误。每轮最多修复 3 个文件。最多 2 轮。" },
 ];
 
 const TOC = [
@@ -71,7 +73,7 @@ export default function PipelinePage() {
         </p>
         <h1 className="text-3xl font-bold tracking-tight">AI 生成流水线</h1>
         <p className="mt-3 text-[15px] leading-7 text-muted-foreground">
-          确定性的 11 步编排。每个步骤都有明确的输入、输出和失败处理。
+          确定性的 13 步编排（其中 8 个核心生成节点）。每个步骤都有明确的输入、输出和失败处理。
           生成阶段没有开放式 Agent 循环 — 只有修改阶段和构建修复才使用。
         </p>
 
@@ -99,22 +101,24 @@ export default function PipelinePage() {
 
         <section id="parallel" className="scroll-mt-24">
           <H2>并行策略</H2>
-          <P>三层并行大幅缩短端到端耗时：</P>
+          <P>当前并行策略包含三层：</P>
           <Pre>{`// 第一层：plan + design system 并行执行
+const [rawBlueprint, inferredDesignIntent] = await Promise.all([
+  stepAnalyzeProjectRequirement(userInput),
+  stepInferDesignIntent(userInput),
+]);
+
+// 第二层：plan + design system 并行执行
 const [blueprint, designSystem] = await Promise.all([
   stepPlanProject(normalizedBlueprint),
   stepGenerateProjectDesignSystem(normalizedBlueprint, styleGuide),
 ]);
 
-// 第二层：所有页面的所有 section 并行生成
+// 第三层：所有页面的所有 section 并行生成
 const results = await Promise.allSettled(
   items.map((item) => stepGenerateSection({ ... }))
 );
-
-// 第三层：所有页面并行组装
-const pageOutcomes = await Promise.all(
-  blueprint.site.pages.map(async (page) => { ... })
-);`}</Pre>
+`}</Pre>
           <Callout>
             对于一个有 2 个页面、8 个 section 的网站，section 生成步骤会同时发起 8 次 LLM 调用。
             该步骤的耗时等于最慢的单次调用，而非所有调用的总和。

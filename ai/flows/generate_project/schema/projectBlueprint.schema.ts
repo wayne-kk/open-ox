@@ -4,12 +4,12 @@ export function detectBlueprintInputShape(value: unknown): BlueprintInputShape {
   if (!value || typeof value !== "object") return "unknown";
   const v = value as Record<string, unknown>;
 
-  if (v.brief && v.experience && v.site) return "nested";
+  if (v.brief && v.site) return "nested";
   if (
     typeof v.projectTitle === "string" &&
     typeof v.projectDescription === "string" &&
     v.designIntent &&
-    Array.isArray(v.layoutSections) &&
+    (Array.isArray(v.layoutSections) || v.navigation || v.footer) &&
     Array.isArray(v.pages)
   ) {
     return "flat";

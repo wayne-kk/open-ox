@@ -12,6 +12,21 @@ interface ChangeEntry {
 
 const CHANGELOG: ChangeEntry[] = [
   {
+    version: "v1.2",
+    date: "2026-04-08",
+    tag: "major",
+    title: "生成链路升级 — 6 步到 8 核心节点",
+    body: "为提升页面整体一致性与风格稳定性，新增独立风格推理与页面级 section 设计描述两个节点；并将 requirement 输出收敛为最小结构。",
+    items: [
+      "analyze_project_requirement 输出收敛为最小结构：brief + site（不再混入 designIntent）",
+      "新增 infer_design_intent：独立风格推理节点，产物注入 generate_project_design_system",
+      "新增 describe_page_sections：先整页结构描述，再拆分每个 section 的布局/背景/层次",
+      "analyze_project_requirement 与 infer_design_intent 并行执行，减少串行等待",
+      "site shell 输入改为扁平结构：site.navigation / site.footer，与 pages 同层",
+      "normalizeBlueprint 兼容新旧输入形状，保证链路平滑迁移",
+    ],
+  },
+  {
     version: "v1.1",
     date: "2026-04-08",
     tag: "major",
