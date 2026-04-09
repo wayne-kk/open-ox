@@ -15,7 +15,6 @@ import { createImageExecutor } from "../../../tools/system/generateImageTool";
 import type { PendingImage } from "../../../tools/system/generateImageTool";
 import {
   discoverSkillsBySectionType,
-  toCompactMetadata,
 } from "../../../shared/skillDiscovery";
 import type {
   CapabilitySpec,
@@ -76,27 +75,37 @@ async function llmSelectSkill(
   context: { intent: string; contentHints: string; designKeywords: string[]; productType: string }
 ): Promise<string | null> {
   const skillList = candidates.map((c) => {
-    const meta = toCompactMetadata(c);
-    return `- id: "${c.id}" | notes: ${c.notes || "no description"} | triggers: ${JSON.stringify(meta.when ?? {})}`;
+    const w = c.when;
+    const parts = [`id: "${c.id}"`];
+    if (c.fallback) parts.push("(FALLBACK — only use when no specialized skill matches)");
+    if (c.notes) parts.push(`description: ${c.notes}`);
+    if (w?.designKeywords?.any?.length) parts.push(`matches keywords: [${w.designKeywords.any.join(", ")}]`);
+    if (w?.designKeywords?.none?.length) parts.push(`excludes keywords: [${w.designKeywords.none.join(", ")}]`);
+    if (w?.productTypes?.any?.length) parts.push(`for product types: [${w.productTypes.any.join(", ")}]`);
+    return `- ${parts.join(" | ")}`;
   }).join("\n");
 
-  const systemPrompt = `You are a skill selector. Given a section's context and a list of available component skills, pick the single best skill id.
-Reply with ONLY a JSON object: {"skillId": "<chosen-id>"}. No explanation.`;
+  const systemPrompt = `You select the best component skill for a UI section. You will receive the section's context and a list of candidate skills.
 
-  const userMessage = `## Section Context
-- Type: ${candidates[0]?.sectionTypes[0] ?? "unknown"}
+Selection rules (in priority order):
+1. Match the section's INTENT and CONTENT HINTS against each skill's description and keyword triggers. A skill whose keywords appear in (or are semantically equivalent to) the section context is the right choice.
+2. Skills marked FALLBACK are generic catch-alls. NEVER pick a fallback skill when a specialized skill's keywords match the section context — even partially or in a different language.
+3. When multiple specialized skills match, prefer the one with more keyword overlap.
+4. Only pick the fallback when NO specialized skill has any keyword relevance to the section.
+
+Respond with JSON only: {"skillId": "<id>"}`;
+
+  const userMessage = `## Section
 - Intent: ${context.intent}
 - Content Hints: ${context.contentHints}
 - Design Keywords: ${context.designKeywords.join(", ")}
 - Product Type: ${context.productType}
 
-## Available Skills
-${skillList}
-
-Pick the skill that best matches the section's intent and design keywords.`;
+## Candidate Skills
+${skillList}`;
 
   try {
-    const raw = await callLLM(systemPrompt, userMessage, 0, 200);
+    const raw = await callLLM(systemPrompt, userMessage, 0, 1024);
     const parsed = JSON.parse(extractJSON(raw)) as { skillId?: string };
     if (parsed.skillId && candidates.some((c) => c.id === parsed.skillId)) {
       return parsed.skillId;

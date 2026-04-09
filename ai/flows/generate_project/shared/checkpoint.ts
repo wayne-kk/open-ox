@@ -7,7 +7,6 @@
 
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
-import { getSiteRoot } from "@/ai/tools/system/common";
 import type { ProjectMetadata } from "@/lib/projectManager";
 import type { PlannedProjectBlueprint, BuildStep } from "../types";
 
@@ -48,7 +47,7 @@ const STEP_VALIDATORS: Record<string, StepValidator> = {
     plan_project: (ctx) => {
         if (!stepCompleted(ctx.buildSteps, "plan_project")) return false;
         const bp = ctx.project.blueprint as PlannedProjectBlueprint | undefined;
-        return !!(bp?.site?.pages?.length > 0);
+        return (bp?.site?.pages?.length ?? 0) > 0;
     },
 
     generate_project_design_system: (ctx) => {
