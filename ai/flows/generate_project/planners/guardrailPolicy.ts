@@ -154,18 +154,8 @@ export function inferProjectGuardrailDefaults(): string[] {
 }
 
 /**
- * Merge planner output with defaults so the LLM cannot drop baseline guardrails
- * (e.g. omitting `section.layout` when the user message only listed a subset).
+ * Merge planner output with defaults so the LLM cannot drop baseline guardrails.
  */
-export function mergeSectionGuardrailIds(
-  plannerIds: string[] | undefined,
-  defaults: string[]
-): string[] {
-  const allowed = sectionGuardrailIdSet();
-  const fromPlanner = (plannerIds ?? []).filter((id) => allowed.has(id));
-  return uniqueStrings([...defaults, ...fromPlanner]);
-}
-
 export function mergeProjectGuardrailIds(
   plannerIds: string[] | undefined,
   defaults: string[]

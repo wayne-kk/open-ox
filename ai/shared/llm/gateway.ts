@@ -23,6 +23,7 @@ export async function chatCompletion(params: ChatCompletionParams): Promise<Chat
         messages: params.messages,
         temperature: params.temperature,
         ...(params.max_tokens ? { max_tokens: params.max_tokens } : {}),
+        ...(params.thinking_level ? { thinking_level: params.thinking_level } : {}),
         ...(params.tools
           ? {
             tools: params.tools,

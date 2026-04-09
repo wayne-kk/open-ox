@@ -1,10 +1,7 @@
 import { buildDefaultProjectPlan } from "../planners/defaultProjectPlanner";
 import {
   getAllowedProjectGuardrailIds,
-  getAllowedSectionGuardrailIds,
-  inferSectionGuardrailDefaults,
   mergeProjectGuardrailIds,
-  mergeSectionGuardrailIds,
 } from "../planners/guardrailPolicy";
 import { composePromptBlocks, loadGuardrail, loadStepPrompt } from "../shared/files";
 import { callLLM, extractJSON } from "../shared/llm";
@@ -13,44 +10,7 @@ import type {
   PageDesignPlan,
   PlannedProjectBlueprint,
   ProjectBlueprint,
-  SectionDesignPlan,
-  SectionTraits,
 } from "../types";
-
-function isSectionTraits(value: unknown): value is SectionTraits {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-  const candidate = value as Partial<SectionTraits>;
-  const isObj = (v: unknown) => v != null && typeof v === "object";
-  return (
-    (candidate.layout == null || isObj(candidate.layout)) &&
-    (candidate.motion == null || isObj(candidate.motion)) &&
-    (candidate.visual == null || isObj(candidate.visual)) &&
-    (candidate.interaction == null || isObj(candidate.interaction))
-  );
-}
-
-function isSectionDesignPlan(value: unknown): value is SectionDesignPlan {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const candidate = value as Partial<SectionDesignPlan>;
-  return (
-    typeof candidate.role === "string" &&
-    typeof candidate.goal === "string" &&
-    typeof candidate.layoutIntent === "string" &&
-    typeof candidate.visualIntent === "string" &&
-    isStringArray(candidate.hierarchy) &&
-    isStringArray(candidate.guardrailIds) &&
-    isSectionTraits(candidate.traits) &&
-    isStringArray(candidate.constraints) &&
-    (candidate.shellPlacement == null ||
-      candidate.shellPlacement === "beforePageContent" ||
-      candidate.shellPlacement === "afterPageContent")
-  );
-}
 
 function isPageDesignPlan(value: unknown): value is PageDesignPlan {
   if (!value || typeof value !== "object") {
@@ -72,43 +32,14 @@ export async function stepPlanProject(
 ): Promise<PlannedProjectBlueprint> {
   const defaultPlan = buildDefaultProjectPlan(blueprint);
   const systemPrompt = composePromptBlocks([loadStepPrompt("planProject"), loadGuardrail("outputJson")]);
-  const rolesSummary = blueprint.brief.roles
-    .map(
-      (role) =>
-        `- ${role.roleName} (${role.roleId})\n  - Summary: ${role.summary}\n  - Goals: ${role.goals.join(" | ")}\n  - Core Actions: ${role.coreActions.join(" | ")}`
-    )
-    .join("\n");
-  const loopSummary = blueprint.brief.taskLoops
-    .map(
-      (loop) =>
-        `- ${loop.name} (${loop.loopId})\n  - Role: ${loop.roleId}\n  - Trigger: ${loop.entryTrigger}\n  - Steps: ${loop.steps.join(" -> ")}\n  - Success: ${loop.successState}`
-    )
-    .join("\n");
-  const capabilitySummary = blueprint.brief.capabilities
-    .map(
-      (capability) =>
-        `- ${capability.name} (${capability.capabilityId})\n  - Summary: ${capability.summary}\n  - Roles: ${capability.primaryRoleIds.join(", ") || "none"}\n  - Priority: ${capability.priority}`
-    )
-    .join("\n");
-
   const userMessage = `## Project: ${blueprint.brief.projectTitle}
 ${blueprint.brief.projectDescription}
 
-## Product Scope
+## Minimal Product Scope
 - Type: ${blueprint.brief.productScope.productType}
 - MVP: ${blueprint.brief.productScope.mvpDefinition}
-- Outcome: ${blueprint.brief.productScope.coreOutcome}
-- Audience: ${blueprint.brief.productScope.audienceSummary}
-- In Scope: ${blueprint.brief.productScope.inScope.join(" | ")}
-
-## Roles
-${rolesSummary}
-
-## Task Loops
-${loopSummary}
-
-## Capabilities
-${capabilitySummary || "- none"}
+- Core Outcome: ${blueprint.brief.productScope.coreOutcome}
+- Design Keywords: ${blueprint.experience.designIntent.keywords.join(", ")}
 
 ## Pages to plan sections for
 ${blueprint.site.pages.map((page) =>
@@ -125,15 +56,11 @@ ${blueprint.site.layoutSections.map((s) => `- ${s.type}: ${s.intent}`).join("\n"
 ## Allowed Project Guardrail IDs
 ${getAllowedProjectGuardrailIds().map((id) => `- ${id}`).join("\n")}
 
-## Allowed Section Guardrail IDs
-${getAllowedSectionGuardrailIds().map((id) => `- ${id}`).join("\n")}
-
-## Section Traits Contract
-- Every section designPlan must include a traits object.
-- traits.layout: optional object (type/ratio/direction/note)
-- traits.motion: optional object (intensity/trigger/note)
-- traits.visual: optional object (density/contrast/style/note)
-- traits.interaction: optional object (mode/note)`;
+## Keep it simple
+- Prefer the smallest section set that satisfies page goals.
+- Avoid repeated sections with overlapping intent.
+- Sections only need type, intent, contentHints, fileName, and role/capability/taskLoop IDs.
+- Do not include designPlan on sections — guardrails and skills are resolved at generation time.`;
 
   try {
     const raw = await callLLM(systemPrompt, userMessage, 0.2);
@@ -142,45 +69,6 @@ ${getAllowedSectionGuardrailIds().map((id) => `- ${id}`).join("\n")}
     if (!isStringArray(parsed.projectGuardrailIds)) {
       return defaultPlan;
     }
-
-    const mergeSectionPlans = <
-      T extends { fileName: string; designPlan: SectionDesignPlan; type: string }
-    >(
-      targetSections: T[],
-      incomingSections: unknown
-    ): T[] => {
-      if (!Array.isArray(incomingSections)) {
-        return targetSections;
-      }
-
-      const incomingMap = new Map<string, SectionDesignPlan>();
-      for (const value of incomingSections) {
-        if (!value || typeof value !== "object") {
-          continue;
-        }
-
-        const fileName = (value as { fileName?: unknown }).fileName;
-        const designPlan = (value as { designPlan?: unknown }).designPlan;
-        if (typeof fileName === "string" && isSectionDesignPlan(designPlan)) {
-          incomingMap.set(fileName, designPlan);
-        }
-      }
-
-      return targetSections.map((section) => {
-        const incoming = incomingMap.get(section.fileName);
-        if (!incoming) {
-          return section;
-        }
-        const defaults = inferSectionGuardrailDefaults(section);
-        return {
-          ...section,
-          designPlan: {
-            ...incoming,
-            guardrailIds: mergeSectionGuardrailIds(incoming.guardrailIds, defaults),
-          },
-        };
-      });
-    };
 
     const mergePageDesignPlan = (
       target: PageDesignPlan,
@@ -202,10 +90,6 @@ ${getAllowedSectionGuardrailIds().map((id) => `- ${id}`).join("\n")}
       ),
       site: {
         ...defaultPlan.site,
-        layoutSections: mergeSectionPlans(
-          defaultPlan.site.layoutSections,
-          parsed.site?.layoutSections
-        ),
         pages: defaultPlan.site.pages.map((page) => {
           const incomingPage = Array.isArray(parsed.site?.pages)
             ? parsed.site.pages.find(
@@ -219,7 +103,6 @@ ${getAllowedSectionGuardrailIds().map((id) => `- ${id}`).join("\n")}
           return {
             ...page,
             pageDesignPlan: mergePageDesignPlan(page.pageDesignPlan, incomingPage),
-            sections: mergeSectionPlans(page.sections, incomingPage?.sections),
           };
         }),
       },

@@ -41,6 +41,8 @@ export interface ChatCompletionParams {
   tools?: ChatCompletionTool[];
   tool_choice?: string;
   parallel_tool_calls?: boolean;
+  /** Forwarded to upstream chat/completions when set (e.g. Gemini-compatible gateways). */
+  thinking_level?: string;
 }
 
 export interface AgentToolCallRecord {

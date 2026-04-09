@@ -3,13 +3,13 @@ import {
   getSkillPromptsRoot,
   loadGuardrail,
   loadSectionPrompt,
+  loadSkillPrompt,
   loadSystem,
   writeSiteFile,
 } from "../shared/files";
-import { loadSelectedSkillPrompt } from "./selectComponentSkills";
 import { selectSectionPromptId } from "../selectors/sectionPromptSelector";
 import { callLLM, callLLMWithTools, extractContent, extractJSON } from "../shared/llm";
-import { getModelForStep } from "@/lib/config/models";
+import { getModelForStep, getThinkingLevelForStep } from "@/lib/config/models";
 import { getSystemToolDefinitions } from "../../../tools/systemToolCatalog";
 import { createImageExecutor } from "../../../tools/system/generateImageTool";
 import type { PendingImage } from "../../../tools/system/generateImageTool";
@@ -68,64 +68,6 @@ type GenerateSectionPageContext = {
 // ── Skill Discovery (runtime, per-section) ──────────────────────────────
 
 /**
- * Score-based fallback when LLM skill selection fails.
- * Uses word-boundary matching against section context.
- */
-function scoreSkillFallback(
-  candidates: ReturnType<typeof discoverSkillsBySectionType>,
-  haystack: string
-): typeof candidates[0] | null {
-  function haystackContains(keyword: string): boolean {
-    const kw = keyword.toLowerCase();
-    const re = new RegExp(`(?:^|[\\s,;|/()\\[\\]{}])${kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:$|[\\s,;|/()\\[\\]{}])`, "i");
-    return re.test(` ${haystack} `);
-  }
-
-  let bestMatch: typeof candidates[0] | null = null;
-  let bestScore = -1;
-
-  for (const candidate of candidates) {
-    let score = 0;
-    const w = candidate.when;
-    if (!w) { score = candidate.fallback ? 1 : 0; }
-    else {
-      if (w.designKeywords?.any) {
-        for (const kw of w.designKeywords.any) {
-          if (haystackContains(kw)) score += 2;
-        }
-      }
-      if (w.designKeywords?.none) {
-        for (const kw of w.designKeywords.none) {
-          if (haystackContains(kw)) { score = -100; break; }
-        }
-      }
-      if (w.traits?.any) {
-        for (const t of w.traits.any) {
-          if (haystackContains(t)) score += 1;
-        }
-      }
-      if (w.productTypes?.any) {
-        for (const pt of w.productTypes.any) {
-          if (haystackContains(pt)) score += 1;
-        }
-      }
-      if (w.productTypes?.none) {
-        for (const pt of w.productTypes.none) {
-          if (haystackContains(pt)) { score = -100; break; }
-        }
-      }
-    }
-    score += candidate.priority / 1000;
-    if (score > bestScore) { bestScore = score; bestMatch = candidate; }
-  }
-
-  if (!bestMatch || bestScore <= 0) {
-    bestMatch = candidates.find((c) => c.fallback) ?? candidates[0];
-  }
-  return bestMatch;
-}
-
-/**
  * Use LLM to select the best skill for a section.
  * Returns the skill id or null if LLM fails.
  */
@@ -160,7 +102,7 @@ Pick the skill that best matches the section's intent and design keywords.`;
       return parsed.skillId;
     }
   } catch {
-    // LLM failed — fall through to scoring fallback
+    // LLM failed — fall through
   }
   return null;
 }
@@ -184,30 +126,29 @@ async function discoverAndSelectSkill(
   if (candidates.length === 1) {
     return {
       skillId: candidates[0].id,
-      skillPrompt: loadSelectedSkillPrompt(candidates[0].id),
+      skillPrompt: loadSkillPrompt(candidates[0].id),
       skillMetadataBlock: metadataBlock,
     };
   }
 
-  // Primary: LLM-based selection
+  // LLM-based selection
   const llmChoice = await llmSelectSkill(candidates, context);
   if (llmChoice) {
     console.log(`[skill-select] LLM chose "${llmChoice}" for ${sectionType}`);
     return {
       skillId: llmChoice,
-      skillPrompt: loadSelectedSkillPrompt(llmChoice),
+      skillPrompt: loadSkillPrompt(llmChoice),
       skillMetadataBlock: metadataBlock,
     };
   }
 
-  // Fallback: score-based selection
-  const haystack = `${context.intent} ${context.contentHints} ${context.designKeywords.join(" ")} ${context.productType}`.toLowerCase();
-  const bestMatch = scoreSkillFallback(candidates, haystack);
-  console.log(`[skill-select] Fallback chose "${bestMatch?.id}" for ${sectionType}`);
+  // Fallback: use the skill marked as fallback, or first by priority
+  const fallback = candidates.find((c) => c.fallback) ?? candidates[0];
+  console.log(`[skill-select] Fallback to "${fallback.id}" for ${sectionType}`);
 
   return {
-    skillId: bestMatch?.id ?? null,
-    skillPrompt: bestMatch ? loadSelectedSkillPrompt(bestMatch.id) : "",
+    skillId: fallback.id,
+    skillPrompt: loadSkillPrompt(fallback.id),
     skillMetadataBlock: metadataBlock,
   };
 }
@@ -392,7 +333,6 @@ export interface GenerateSectionResult {
   filePath: string;
   skillId: string | null;
   trace: StepTrace;
-  /** Background image generation promises — await before build. */
   pendingImages: PendingImage[];
 }
 
@@ -417,7 +357,6 @@ export async function stepGenerateSection({
   outputFileRelative,
   pageContext,
 }: GenerateSectionParams): Promise<GenerateSectionResult> {
-  // Discover and select skill at runtime based on section context
   const { skillId, skillPrompt, skillMetadataBlock } = await discoverAndSelectSkill(section.type, {
     intent: section.intent,
     contentHints: section.contentHints,
@@ -441,15 +380,12 @@ export async function stepGenerateSection({
 
   const componentName = section.fileName.replace(/\.tsx$/, "");
   const filePath = outputFileRelative;
+  const sectionModel = getModelForStep("generate_section");
+  const sectionThinkingLevel = getThinkingLevelForStep("generate_section");
   const MAX_RETRIES = 1;
   let lastError = "";
 
-  // Provide generate_image tool so LLM can create images during section generation
   const imageTools = getSystemToolDefinitions(["generate_image"]);
-
-  // Create a scoped executor that auto-prefixes filenames and collects
-  // background generation promises. LLM gets paths instantly, Ark API
-  // runs in the background without blocking code generation.
   const { executor: imageExecutor, pendingImages } = createImageExecutor(componentName);
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -463,7 +399,8 @@ export async function stepGenerateSection({
       tools: imageTools,
       temperature: 0.7,
       maxIterations: 6,
-      model: getModelForStep("generate_section"),
+      model: sectionModel,
+      ...(sectionThinkingLevel ? { thinkingLevel: sectionThinkingLevel } : {}),
       executeToolOverrides: {
         generate_image: imageExecutor,
       },
@@ -476,9 +413,6 @@ export async function stepGenerateSection({
 
     const validationResult = validateSectionExports(tsx, componentName);
 
-    // Collect generated image info from tool calls for tracing.
-    // durationMs is populated asynchronously after the image finishes generating;
-    // by the time the user views the trace (post-build), it will be filled in.
     const generatedImages = pendingImages.map((img) => ({
       filename: img.filename,
       prompt: img.prompt,
@@ -501,7 +435,8 @@ export async function stepGenerateSection({
         generatedImages,
       },
       llmCall: {
-        model: getModelForStep("generate_section") ?? undefined,
+        model: sectionModel,
+        thinkingLevel: sectionThinkingLevel,
         systemPrompt: systemPrompt + retryHint,
         userMessage,
         rawResponse: llmResult.content,

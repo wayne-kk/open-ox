@@ -11,6 +11,10 @@ import { extractContent, callLLM } from "../shared/llm";
 import { buildSectionImportPath } from "../shared/paths";
 import type { PlannedProjectBlueprint, PlannedSectionSpec } from "../types";
 
+function isBeforePageContent(section: PlannedSectionSpec): boolean {
+  return section.type === "navigation";
+}
+
 export async function stepComposeLayout(
   layoutSections: PlannedSectionSpec[],
   blueprint: PlannedProjectBlueprint
@@ -27,12 +31,8 @@ export async function stepComposeLayout(
     )
     .join("\n");
 
-  const beforeSections = layoutSections.filter(
-    (section) => section.designPlan.shellPlacement === "beforePageContent"
-  );
-  const afterSections = layoutSections.filter(
-    (section) => section.designPlan.shellPlacement !== "beforePageContent"
-  );
+  const beforeSections = layoutSections.filter(isBeforePageContent);
+  const afterSections = layoutSections.filter((s) => !isBeforePageContent(s));
   const renderList = (sections: PlannedSectionSpec[]) =>
     sections.length > 0
       ? sections.map((section) => `<${section.fileName} />`).join(", ")
@@ -53,11 +53,8 @@ ${layoutSections
   .map(
     (section) => `### ${section.fileName}
 - Type: ${section.type}
-- Role: ${section.designPlan.role}
-- Goal: ${section.designPlan.goal}
-- Shell Placement: ${section.designPlan.shellPlacement ?? "afterPageContent"}
-- Layout Intent: ${section.designPlan.layoutIntent}
-- Visual Intent: ${section.designPlan.visualIntent}`
+- Intent: ${section.intent}
+- Placement: ${isBeforePageContent(section) ? "beforePageContent" : "afterPageContent"}`
   )
   .join("\n\n")}
 

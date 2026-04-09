@@ -48,11 +48,7 @@ const STEP_VALIDATORS: Record<string, StepValidator> = {
     plan_project: (ctx) => {
         if (!stepCompleted(ctx.buildSteps, "plan_project")) return false;
         const bp = ctx.project.blueprint as PlannedProjectBlueprint | undefined;
-        if (!bp?.site?.pages) return false;
-        // Every section should have a designPlan
-        return bp.site.pages.every((page) =>
-            page.sections.every((s) => !!(s as { designPlan?: unknown }).designPlan)
-        );
+        return !!(bp?.site?.pages?.length > 0);
     },
 
     generate_project_design_system: (ctx) => {

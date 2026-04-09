@@ -647,7 +647,29 @@ export async function runGenerateProject(
           return ds;
         }),
       ]);
-      await persistJsonArtifact(artifactLogger, "plan_project", "output", blueprint);
+      // Keep plan_project artifact focused on fields that are actually produced by
+      // this step and consumed downstream. Full blueprint is still persisted in
+      // final run/result artifacts.
+      await persistJsonArtifact(artifactLogger, "plan_project", "output", {
+        projectGuardrailIds: blueprint.projectGuardrailIds,
+        site: {
+          layoutSections: blueprint.site.layoutSections.map((section) => ({
+            type: section.type,
+            fileName: section.fileName,
+          })),
+          pages: blueprint.site.pages.map((page) => ({
+            slug: page.slug,
+            pageDesignPlan: page.pageDesignPlan,
+            sections: page.sections.map((section) => ({
+              type: section.type,
+              fileName: section.fileName,
+              primaryRoleIds: section.primaryRoleIds,
+              supportingCapabilityIds: section.supportingCapabilityIds,
+              sourceTaskLoopIds: section.sourceTaskLoopIds,
+            })),
+          })),
+        },
+      });
       await persistTextArtifact(
         artifactLogger,
         "generate_project_design_system",
@@ -782,17 +804,21 @@ export async function runGenerateProject(
       // Add generated image files to the result so they get uploaded to
       // Supabase Storage and are available after server restarts.
       const imagePaths = allPendingImages
+        .filter((img) => img.success)
         .map((img) => `public/images/${img.filename}.png`)
         .filter((p) => !result.generatedFiles.includes(p));
       appendGeneratedFiles(result, imagePaths);
     }
 
-    // ── Pre-build: run tsc once across all generated files, repair if needed ──
-    {
+    // ── Optional pre-build typecheck ──────────────────────────────────────────
+    // Running `tsc --noEmit` before `next build` duplicates heavy checks and can
+    // significantly slow verification for large section batches. Keep it opt-in.
+    const enablePrebuildTypecheck = process.env.ENABLE_PREBUILD_TSC === "1";
+    if (enablePrebuildTypecheck) {
       const tscStepName = "typecheck";
       logger.startStep(tscStepName);
       try {
-        const tscOutput = execSync("npx tsc --noEmit --pretty false 2>&1", {
+        execSync("npx tsc --noEmit --pretty false 2>&1", {
           cwd: getSiteRoot(),
           encoding: "utf-8",
           timeout: 60_000,
@@ -804,7 +830,6 @@ export async function runGenerateProject(
         const errorCount = (tscErrors.match(/error TS\d+/g) ?? []).length;
         console.warn(`[typecheck] ${errorCount} error(s) found, attempting repair...`);
 
-        // Use repair agent to fix type errors before build
         const repairResult = await stepRepairBuild({
           blueprint,
           buildOutput: tscErrors,
@@ -824,6 +849,8 @@ export async function runGenerateProject(
           repairResult: { success: repairResult.success, touchedFiles: repairResult.touchedFiles },
         });
       }
+    } else {
+      logger.logStep("typecheck", "ok", "skipped (ENABLE_PREBUILD_TSC!=1)");
     }
 
     const buildLifecycle = await runBuildWithRepair({ blueprint, artifactLogger, result, logger });

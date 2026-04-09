@@ -426,7 +426,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
             if (nextProjectId) {
               projectIdFromGenerationRef.current = nextProjectId;
               setProjectId(nextProjectId);
-              if (autoPreviewAfterBuildRef.current) {
+              if (autoPreviewAfterBuildRef.current && result.verificationStatus === "passed") {
                 void openPreviewAfterBuild(nextProjectId, false);
               }
             }
@@ -504,7 +504,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
             if (nextProjectId) {
               projectIdFromGenerationRef.current = nextProjectId;
               setProjectId(nextProjectId);
-              if (autoPreviewAfterBuildRef.current) {
+              if (autoPreviewAfterBuildRef.current && result.verificationStatus === "passed") {
                 void openPreviewAfterBuild(nextProjectId, true);
               }
             }

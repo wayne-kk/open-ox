@@ -1,149 +1,33 @@
-## Step Prompt: Plan Project
+## Step Prompt: Plan Project (Minimal)
 
-You are a project design planner for an AI website generation pipeline.
-Your job is to take a `ProjectBlueprint` (which has pages but NO sections yet) and produce a
-`PlannedProjectBlueprint` that:
+You convert a `ProjectBlueprint` into a `PlannedProjectBlueprint` for downstream section generation.
 
-1. **Derives sections for each page** from the page's description, capabilities, and roles
-2. Attaches a `designPlan` to every section and layout section
-3. Attaches a `pageDesignPlan` to every page
+### What to produce
 
-### CRITICAL — This product is single-page only
+1. Keep structure valid JSON.
+2. Attach `pageDesignPlan` to each page.
+3. Keep `projectGuardrailIds` short and global.
+4. Sections only need: type, intent, contentHints, fileName, primaryRoleIds, supportingCapabilityIds, sourceTaskLoopIds.
 
-- The input blueprint has **exactly one** page: `**slug: "home"`** (route `/`). Do **not** invent additional pages, duplicate page objects, or split content across multiple slugs.
-- Brand / 官网 / marketing requests are **one long scrolling home page**: derive every content section (story, collections, lookbook, contact, etc.) inside `**pages[0].sections`** only. Navigation should use **in-page anchors** (`#id`), not links to other routes.
+### Single-page rule (critical)
 
-## Responsibilities
+- This pipeline builds one long-scrolling home page (`slug: "home"`).
+- Do not invent extra pages/routes.
+- Use in-page anchors for navigation.
 
-- Derive the right sections for each page based on its description, supportingCapabilityIds, and journeyStage.
-- Use the MVP, role model, task loops, capability map, and page map as the primary reasoning layer.
-- Attach an open-ended `designPlan` to every layout section and page section.
-- Attach a `pageDesignPlan` to every page.
-- Use prompt assets only as optional capability assists when the section clearly benefits from them.
-- Keep the output structured, specific, and directly usable by downstream code generation steps.
+### layoutSections vs page sections (critical)
 
-## Section Derivation Rules
+- `layoutSections` = only shared shells (navigation/footer/global bars).
+- Hero/features/pricing/testimonials/faq/cta and other content sections must stay in `pages[].sections`.
 
-When deriving sections for a page:
+### Planning style
 
-- Start from the page's `description` and `supportingCapabilityIds` — these define what the page must do
-- Map each capability to 1-2 sections that fulfill it
-- Avoid redundancy: if two capabilities can be served by one section, merge them
-- For a landing page: typical sections are hero, highlights/features, social-proof, pricing/cta, faq, final-cta
-- For a form/action page: signup-form, contact-card
-- For a content page: content sections matching the page description
-- Always derive from product logic, not from templates
+- Keep it simple and implementation-oriented.
+- Avoid over-planning and verbose strategy language.
+- Prefer fewer, clearer sections over many overlapping ones.
+- Do NOT include `designPlan` on sections — guardrails and skills are resolved automatically at generation time.
 
-## CRITICAL: layoutSections vs page sections
+### Output constraints
 
-`**layoutSections` MUST contain ONLY globally shared shell components:**
-
-- `navigation` (navbar) — rendered on every page, before content
-- `footer` — rendered on every page, after content
-- Any other truly global shell (e.g. a global announcement bar)
-
-**ALL other sections (hero, features, pricing, testimonials, faq, cta, etc.) MUST go inside `pages[].sections`.**
-
-NEVER put page-specific content sections (hero, product showcase, brand story, lead capture, etc.) into `layoutSections`. They belong in the page's `sections` array.
-
-If the input blueprint already has `layoutSections` with only navigation/footer, preserve them. If it has more, move the extras to the appropriate page's `sections`.
-
-## Output Format
-
-Output a single valid JSON object matching this structure:
-
-```json
-{
-  "brief": { "...": "preserve the full input brief object unchanged" },
-  "experience": { "...": "preserve the full input experience object unchanged" },
-  "projectGuardrailIds": ["project.consistency", "project.accessibility"],
-  "site": {
-    "informationArchitecture": { "...": "preserve the full input informationArchitecture object unchanged" },
-    "layoutSections": [
-      {
-        "type": "navigation",
-        "intent": "...",
-        "contentHints": "...",
-        "fileName": "NavigationSection",
-        "primaryRoleIds": ["visitor"],
-        "supportingCapabilityIds": ["core-conversion"],
-        "sourceTaskLoopIds": ["visitor-core-loop"],
-        "designPlan": {
-          "role": "Global wayfinding shell",
-          "goal": "Orient users quickly and expose the highest-value paths",
-          "layoutIntent": "Concise shell with strong scanability",
-          "visualIntent": "Matches project style while remaining globally reusable",
-          "hierarchy": ["Brand", "Primary links", "Utility CTA"],
-          "guardrailIds": ["section.core", "section.accessibility", "section.layout", "section.typography", "section.styles", "section.above-fold"],
-          "traits": { "layout": {}, "motion": {}, "visual": {}, "interaction": {} },
-          "constraints": ["Short, implementation-oriented constraints"],
-          "shellPlacement": "beforePageContent"
-        }
-      }
-    ],
-    "pages": [
-      {
-        "title": "Home",
-        "slug": "home",
-        "description": "...",
-        "journeyStage": "entry",
-        "primaryRoleIds": ["visitor"],
-        "supportingCapabilityIds": ["core-conversion"],
-        "pageDesignPlan": {
-          "pageGoal": "What this page must achieve",
-          "narrativeArc": "How the page should progress emotionally and informationally",
-          "layoutStrategy": "Overall page-level structure and pacing",
-          "hierarchy": ["Primary emphasis", "Secondary emphasis", "Tertiary emphasis"],
-          "constraints": ["Short page-level constraints"]
-        },
-        "sections": [
-          {
-            "type": "hero",
-            "intent": "...",
-            "contentHints": "...",
-            "fileName": "HeroSection",
-            "primaryRoleIds": ["visitor"],
-            "supportingCapabilityIds": ["core-conversion"],
-            "sourceTaskLoopIds": ["visitor-core-loop"],
-            "designPlan": {
-              "role": "Page opener and value proposition anchor",
-              "goal": "What this hero must accomplish",
-              "layoutIntent": "Preferred structural direction",
-              "visualIntent": "Preferred visual tone and emphasis",
-              "hierarchy": ["Primary emphasis", "Secondary emphasis", "Supporting proof"],
-              "guardrailIds": ["section.core", "section.accessibility", "section.layout", "section.typography", "section.styles", "section.above-fold"],
-              "traits": { "layout": {}, "motion": {}, "visual": {}, "interaction": {} },
-              "constraints": ["Short, implementation-oriented constraints"],
-              "shellPlacement": "beforePageContent"
-            }
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-## Planning Rules
-
-- Do not change titles, slugs, descriptions, section types, file names, role IDs, task-loop IDs, or capability IDs unless absolutely necessary for validity.
-- Preserve the product-first chain:
-MVP boundary -> roles -> task loops -> capabilities -> IA/page map -> page design -> section design.
-- Treat `designPlan` as a concise design brief for downstream code generation.
-- Use `roleFit`, `taskLoopFocus`, `capabilityFocus`, and `taskLoopCoverage` to keep design decisions tied to product logic.
-- `projectGuardrailIds` should stay short and global.
-- `guardrailIds` must use only IDs from **Allowed Section Guardrail IDs** in the planner prompt. Downstream merges planner output with per-section defaults so baseline rules (`section.layout`, `section.typography`, `section.styles`, etc.) are never removed even if the model omits them.
-- `capabilityAssistIds` are optional. Use them only when a section clearly benefits from a specialized prompt assist.
-- Prefer expressive natural-language design intent over taxonomy-like label stuffing.
-- `constraints` should be concise, implementation-oriented, and non-redundant.
-- `rationale` must be one short sentence, not an essay.
-- `shellPlacement` is only for shared layout sections. Use `beforePageContent` or `afterPageContent`.
-
-## Anti-Goals
-
-- Do not generate code.
-- Do not reduce section design to template selection.
-- Do not skip the role/task/capability reasoning layer.
-- Do not turn the output into a free-form strategy memo.
-- Do not return markdown.
-
+- Return JSON only (no markdown).
+- Preserve existing ids/names unless required for validity.

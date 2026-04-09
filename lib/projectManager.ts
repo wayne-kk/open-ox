@@ -233,8 +233,34 @@ export async function updateProjectStatus(
     if (extra.totalDuration !== undefined) update.total_duration = extra.totalDuration;
     if (extra.modificationHistory !== undefined) update.modification_history = extra.modificationHistory;
   }
-  const { error } = await supabase.from("projects").update(update).eq("id", id);
-  if (error) throw new Error(`[projectManager] updateProjectStatus failed: ${error.message}`);
+  const maxRetries = 2;
+  let lastMessage = "";
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    const { error } = await supabase.from("projects").update(update).eq("id", id);
+    if (!error) return;
+
+    lastMessage = error.message ?? String(error);
+    const lower = lastMessage.toLowerCase();
+    const isRetryableNetworkError =
+      lower.includes("fetch failed") ||
+      lower.includes("network") ||
+      lower.includes("socket") ||
+      lower.includes("etimedout") ||
+      lower.includes("econnreset");
+
+    if (isRetryableNetworkError && attempt < maxRetries) {
+      const delayMs = 300 * (attempt + 1);
+      console.warn(
+        `[projectManager] updateProjectStatus transient error (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delayMs}ms: ${lastMessage}`
+      );
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      continue;
+    }
+
+    break;
+  }
+
+  throw new Error(`[projectManager] updateProjectStatus failed: ${lastMessage}`);
 }
 
 export async function renameProject(id: string, name: string): Promise<void> {

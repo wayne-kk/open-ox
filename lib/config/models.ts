@@ -28,6 +28,14 @@ export function getAllModels(): ModelConfig[] {
 export type ModelId = string;
 export const DEFAULT_MODEL: ModelId = "gemini-3-flash-preview";
 
+/** Values accepted by upstream for `thinking_level` on chat/completions */
+export const STEP_THINKING_LEVELS = ["minimal", "low", "medium", "high"] as const;
+export type StepThinkingLevel = (typeof STEP_THINKING_LEVELS)[number];
+
+export function isStepThinkingLevel(v: string): v is StepThinkingLevel {
+    return (STEP_THINKING_LEVELS as readonly string[]).includes(v);
+}
+
 /** Runtime override — set by API route per-request */
 let _runtimeModelId: ModelId | null = null;
 
@@ -50,13 +58,23 @@ export function getModifyModelId(): ModelId {
 
 /** Step-level model overrides */
 const _stepModelMap = new Map<string, ModelId>();
+const _stepThinkingLevelMap = new Map<string, StepThinkingLevel>();
 
 export function setStepModel(stepName: string, modelId: ModelId): void {
     _stepModelMap.set(stepName, modelId);
 }
 
+export function setStepThinkingLevel(stepName: string, level: StepThinkingLevel | null): void {
+    if (level == null) {
+        _stepThinkingLevelMap.delete(stepName);
+    } else {
+        _stepThinkingLevelMap.set(stepName, level);
+    }
+}
+
 export function clearStepModels(): void {
     _stepModelMap.clear();
+    _stepThinkingLevelMap.clear();
 }
 
 export function getStepModel(stepName: string): ModelId | null {
@@ -65,6 +83,15 @@ export function getStepModel(stepName: string): ModelId | null {
 
 export function getModelForStep(stepName: string): ModelId {
     return getStepModel(stepName) ?? getModelId();
+}
+
+export function getThinkingLevelForStep(stepName: string): StepThinkingLevel | undefined {
+    return _stepThinkingLevelMap.get(stepName);
+}
+
+export function clearStepConfig(stepName: string): void {
+    _stepModelMap.delete(stepName);
+    _stepThinkingLevelMap.delete(stepName);
 }
 
 /** Available generation steps that can have model overrides */
@@ -94,14 +121,39 @@ export function modelSupportsThinking(modelId: string): boolean {
 export async function loadStepModelsFromDB(): Promise<void> {
     try {
         const { supabase } = await import("@/lib/supabase");
-        const { data: rows } = await supabase
+        const { data: rows, error } = await supabase
             .from("step_model_configs")
-            .select("step_name, model_id");
+            .select("step_name, model_id, thinking_level");
 
-        if (rows) {
-            for (const row of rows) {
+        // Backward compatibility: if DB hasn't run the thinking_level migration yet,
+        // fall back to loading step->model mapping so generate_section override still works.
+        if (error) {
+            const needsFallback = error.message?.toLowerCase().includes("thinking_level");
+            if (!needsFallback) throw error;
+            const { data: legacyRows, error: legacyError } = await supabase
+                .from("step_model_configs")
+                .select("step_name, model_id");
+            if (legacyError) throw legacyError;
+            clearStepModels();
+            for (const row of legacyRows ?? []) {
                 const { step_name, model_id } = row as { step_name: string; model_id: string };
                 _stepModelMap.set(step_name, model_id);
+            }
+            return;
+        }
+
+        clearStepModels();
+        if (rows) {
+            for (const row of rows) {
+                const { step_name, model_id, thinking_level } = row as {
+                    step_name: string;
+                    model_id: string;
+                    thinking_level?: string | null;
+                };
+                _stepModelMap.set(step_name, model_id);
+                if (thinking_level && isStepThinkingLevel(thinking_level)) {
+                    _stepThinkingLevelMap.set(step_name, thinking_level);
+                }
             }
         }
     } catch (err) {

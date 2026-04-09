@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { ArrowLeft, Play, Loader2, Plus, Trash2, Settings, Zap, Save } from "lucide-react";
+import { ArrowLeft, Play, Loader2, Plus, Trash2, Settings, Zap } from "lucide-react";
 import { HamsterLoader } from "@/components/ui/hamster-loader";
 
 interface TestResult {
@@ -18,7 +18,7 @@ interface TestResult {
     code?: string;
     cause?: string;
     causeChain?: string[];
-    config?: { baseURL: string; model: string };
+    config?: { baseURL: string; model: string; thinking_level?: "minimal" | "low" | "medium" | "high" };
 }
 
 interface ModelInfo {
@@ -31,6 +31,10 @@ interface ModelInfo {
 interface StepInfo {
     id: string;
     label: string;
+}
+
+function isGeminiModelId(modelId: string): boolean {
+    return modelId.toLowerCase().includes("gemini");
 }
 
 const PRESETS = [
@@ -48,6 +52,8 @@ function ModelManagement() {
     const [models, setModels] = useState<ModelInfo[]>([]);
     const [steps, setSteps] = useState<StepInfo[]>([]);
     const [stepModels, setStepModels] = useState<Record<string, string>>({});
+    /** Per-step `thinking_level` for chat/completions (used by generate_section when set) */
+    const [stepThinkingLevels, setStepThinkingLevels] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(true);
 
     // New model form
@@ -64,6 +70,12 @@ function ModelManagement() {
         setModels(data.models ?? []);
         setSteps(data.steps ?? []);
         setStepModels(data.stepModels ?? {});
+        const rawThinking = (data.stepThinkingLevels ?? {}) as Record<string, string | null>;
+        const thinking: Record<string, string> = {};
+        for (const s of data.steps ?? []) {
+            thinking[s.id] = rawThinking[s.id] ?? "";
+        }
+        setStepThinkingLevels(thinking);
         setLoading(false);
     }, []);
 
@@ -95,11 +107,56 @@ function ModelManagement() {
     const handleStepModelChange = async (stepName: string, modelId: string) => {
         setSavingStep(stepName);
         setStepModels((prev) => ({ ...prev, [stepName]: modelId }));
-        await fetch("/api/models", {
+        const canUseThinkingLevel = stepName === "generate_section" && !!modelId && isGeminiModelId(modelId);
+        if (!modelId) {
+            setStepThinkingLevels((prev) => {
+                const next = { ...prev };
+                next[stepName] = "";
+                return next;
+            });
+        } else if (!canUseThinkingLevel) {
+            setStepThinkingLevels((prev) => {
+                const next = { ...prev };
+                next[stepName] = "";
+                return next;
+            });
+        }
+        const res = await fetch("/api/models", {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ stepName, modelId: modelId || null }),
+            body: JSON.stringify({
+                stepName,
+                modelId: modelId || null,
+                ...(canUseThinkingLevel ? { thinkingLevel: stepThinkingLevels[stepName] || null } : { thinkingLevel: null }),
+            }),
         });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({ error: "保存步骤模型失败" }));
+            alert(`保存失败：${err.error ?? "未知错误"}`);
+            await fetchModels();
+        }
+        setSavingStep(null);
+    };
+
+    const handleStepThinkingChange = async (stepName: string, level: string) => {
+        const modelId = stepModels[stepName];
+        if (!modelId) return;
+        setSavingStep(stepName);
+        setStepThinkingLevels((prev) => ({ ...prev, [stepName]: level }));
+        const res = await fetch("/api/models", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                stepName,
+                modelId,
+                thinkingLevel: level || null,
+            }),
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({ error: "保存 thinking_level 失败" }));
+            alert(`保存失败：${err.error ?? "未知错误"}`);
+            await fetchModels();
+        }
         setSavingStep(null);
     };
 
@@ -179,10 +236,20 @@ function ModelManagement() {
             {/* Step model assignment */}
             <div>
                 <h3 className="font-mono text-[10px] uppercase tracking-[0.3em] text-primary mb-4">步骤模型配置</h3>
-                <p className="font-mono text-[10px] text-muted-foreground/70 mb-4">为不同的生成步骤指定模型。留空则使用项目默认模型。</p>
+                <p className="font-mono text-[10px] text-muted-foreground/70 mb-4">
+                    为不同的生成步骤指定模型。留空则使用项目默认模型。组件生成步骤可额外设置{" "}
+                    <code className="text-muted-foreground/80">thinking_level</code>（会随 LLM 请求透传）。
+                </p>
                 <div className="space-y-2">
                     {steps.map((step) => (
-                        <div key={step.id} className="flex items-center justify-between rounded-xl border border-white/8 bg-white/[0.02] px-4 py-3">
+                        (() => {
+                            const selectedModelId = stepModels[step.id] ?? "";
+                            const showThinkingLevel =
+                                step.id === "generate_section" &&
+                                !!selectedModelId &&
+                                isGeminiModelId(selectedModelId);
+                            return (
+                        <div key={step.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/8 bg-white/[0.02] px-4 py-3">
                             <div className="flex items-center gap-3">
                                 <Zap className="h-3.5 w-3.5 text-primary/40" />
                                 <div>
@@ -190,7 +257,7 @@ function ModelManagement() {
                                     <span className="ml-2 font-mono text-[10px] text-muted-foreground/60">{step.id}</span>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                                 <select
                                     value={stepModels[step.id] ?? ""}
                                     onChange={(e) => handleStepModelChange(step.id, e.target.value)}
@@ -201,9 +268,26 @@ function ModelManagement() {
                                         <option key={m.id} value={m.id}>{m.displayName}</option>
                                     ))}
                                 </select>
+                                {showThinkingLevel && (
+                                    <select
+                                        value={stepThinkingLevels[step.id] ?? ""}
+                                        onChange={(e) => handleStepThinkingChange(step.id, e.target.value)}
+                                        disabled={!selectedModelId}
+                                        title={!selectedModelId ? "请先为该步骤选择 Gemini 模型" : "thinking_level"}
+                                        className="appearance-none rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 pr-8 font-mono text-[10px] text-muted-foreground outline-none cursor-pointer hover:border-primary/30 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                                    >
+                                        <option value="">thinking 默认</option>
+                                        <option value="minimal">minimal</option>
+                                        <option value="low">low</option>
+                                        <option value="medium">medium</option>
+                                        <option value="high">high</option>
+                                    </select>
+                                )}
                                 {savingStep === step.id && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
                             </div>
                         </div>
+                            );
+                        })()
                     ))}
                 </div>
             </div>
@@ -218,6 +302,7 @@ function LLMTestPanel() {
     const [prompt, setPrompt] = useState("Say hello in 5 words");
     const [model, setModel] = useState("");
     const [maxTokens, setMaxTokens] = useState(50);
+    const [thinkingLevel, setThinkingLevel] = useState<"" | "minimal" | "low" | "medium" | "high">("");
     const [useSDK, setUseSDK] = useState(false);
     const [running, setRunning] = useState(false);
     const [results, setResults] = useState<TestResult[]>([]);
@@ -233,7 +318,13 @@ function LLMTestPanel() {
             const res = await fetch("/api/llm-test", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ prompt, model: model || undefined, maxTokens: maxTokens || undefined, useSDK }),
+                body: JSON.stringify({
+                    prompt,
+                    model: model || undefined,
+                    maxTokens: maxTokens || undefined,
+                    useSDK,
+                    thinking_level: thinkingLevel || undefined,
+                }),
             });
             const data = await res.json();
             setResults((prev) => [data, ...prev]);
@@ -269,6 +360,22 @@ function LLMTestPanel() {
                           onChange={(e) => setMaxTokens(parseInt(e.target.value) || 0)}
                           className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 font-mono text-[11px] text-foreground focus:border-primary/50 outline-none"
                       />
+                  </div>
+                  <div>
+                      <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground block mb-1.5">thinking_level</label>
+                      <select
+                          value={thinkingLevel}
+                          onChange={(e) =>
+                              setThinkingLevel(e.target.value as "" | "minimal" | "low" | "medium" | "high")
+                          }
+                          className="w-full appearance-none rounded-lg border border-white/10 bg-white/5 px-3 py-2 font-mono text-[11px] text-foreground focus:border-primary/50 outline-none cursor-pointer"
+                      >
+                          <option value="">默认（不指定）</option>
+                          <option value="minimal">minimal</option>
+                          <option value="low">low</option>
+                          <option value="medium">medium</option>
+                          <option value="high">high</option>
+                      </select>
                   </div>
               </div>
 
@@ -325,7 +432,12 @@ function LLMTestPanel() {
                           {r.usage && <span className="font-mono text-[10px] text-muted-foreground/60">{r.usage.prompt_tokens}→{r.usage.completion_tokens} tokens</span>}
                 </div>
                 <div className="px-4 py-3 space-y-2">
-                          {r.config && <p className="font-mono text-[10px] text-muted-foreground/60">{r.config.baseURL} · {r.config.model}</p>}
+                          {r.config && (
+                              <p className="font-mono text-[10px] text-muted-foreground/60">
+                                  {r.config.baseURL} · {r.config.model}
+                                  {r.config.thinking_level ? ` · thinking_level=${r.config.thinking_level}` : ""}
+                              </p>
+                          )}
                     {r.content && (
                         <pre className="font-mono text-[10px] text-foreground/70 whitespace-pre-wrap leading-relaxed max-h-60 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                             {r.content}

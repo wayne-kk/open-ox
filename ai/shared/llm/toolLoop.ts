@@ -12,6 +12,7 @@ export async function callLLMWithTools(params: {
   temperature?: number;
   maxIterations?: number;
   model?: string;
+  thinkingLevel?: string;
   executeToolOverrides?: Record<string, (args: Record<string, unknown>) => Promise<ToolResult | string>>;
 }): Promise<{ content: string; toolCalls: AgentToolCallRecord[] }> {
   const {
@@ -39,6 +40,7 @@ export async function callLLMWithTools(params: {
         temperature,
         tools: activeTools.length > 0 ? activeTools : undefined,
         tool_choice: activeTools.length > 0 ? "auto" : undefined,
+        ...(params.thinkingLevel ? { thinking_level: params.thinkingLevel } : {}),
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

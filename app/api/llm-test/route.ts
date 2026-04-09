@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import OpenAI from "openai";
 
 export async function POST(req: Request) {
-    const { prompt, model, maxTokens, useSDK } = await req.json();
+    const { prompt, model, maxTokens, useSDK, thinking_level } = await req.json();
 
     const apiKey = process.env.OPENAI_API_KEY;
     const baseURL = process.env.OPENAI_API_URL;
@@ -13,6 +13,12 @@ export async function POST(req: Request) {
     }
 
     const start = Date.now();
+    const allowedLevels = new Set(["minimal", "low", "medium", "high"]);
+    const resolvedThinkingLevel =
+        typeof thinking_level === "string" && allowedLevels.has(thinking_level)
+            ? thinking_level
+            : undefined;
+    const thinkingLevelPayload = resolvedThinkingLevel ? { thinking_level: resolvedThinkingLevel } : {};
 
     // ── SDK path ───────────────────────────────────────────────────────────────
     if (useSDK) {
@@ -28,7 +34,8 @@ export async function POST(req: Request) {
                 model: resolvedModel,
                 messages: [{ role: "user", content: prompt || "Say hello" }],
                 ...(maxTokens ? { max_tokens: maxTokens } : {}),
-            });
+                ...thinkingLevelPayload,
+            } as never);
 
             const elapsed = Date.now() - start;
             return NextResponse.json({
@@ -39,7 +46,11 @@ export async function POST(req: Request) {
                 usage: res.usage,
                 model: res.model,
                 finishReason: res.choices[0]?.finish_reason,
-                config: { baseURL, model: resolvedModel },
+                config: {
+                    baseURL,
+                    model: resolvedModel,
+                    ...(resolvedThinkingLevel ? { thinking_level: resolvedThinkingLevel } : {}),
+                },
             });
         } catch (err: unknown) {
             const elapsed = Date.now() - start;
@@ -58,7 +69,11 @@ export async function POST(req: Request) {
                 code: e.code ?? e.cause?.code,
                 status: e.status,
                 causeChain: causes,
-                config: { baseURL, model: resolvedModel },
+                config: {
+                    baseURL,
+                    model: resolvedModel,
+                    ...(resolvedThinkingLevel ? { thinking_level: resolvedThinkingLevel } : {}),
+                },
             });
         }
     }
@@ -75,6 +90,7 @@ export async function POST(req: Request) {
                 model: resolvedModel,
                 messages: [{ role: "user", content: prompt || "Say hello" }],
                 ...(maxTokens ? { max_tokens: maxTokens } : {}),
+                ...thinkingLevelPayload,
             }),
             signal: AbortSignal.timeout(180_000),
         });
@@ -86,7 +102,11 @@ export async function POST(req: Request) {
             return NextResponse.json({
                 success: false, method: "native fetch", elapsed,
                 httpStatus: res.status, error: data,
-                config: { baseURL, model: resolvedModel },
+                config: {
+                    baseURL,
+                    model: resolvedModel,
+                    ...(resolvedThinkingLevel ? { thinking_level: resolvedThinkingLevel } : {}),
+                },
             });
         }
 
@@ -96,7 +116,11 @@ export async function POST(req: Request) {
             content: data.choices?.[0]?.message?.content ?? "",
             usage: data.usage, model: data.model,
             finishReason: data.choices?.[0]?.finish_reason,
-            config: { baseURL, model: resolvedModel },
+            config: {
+                baseURL,
+                model: resolvedModel,
+                ...(resolvedThinkingLevel ? { thinking_level: resolvedThinkingLevel } : {}),
+            },
         });
     } catch (err: unknown) {
         const elapsed = Date.now() - start;
@@ -104,7 +128,11 @@ export async function POST(req: Request) {
         return NextResponse.json({
             success: false, method: "native fetch", elapsed,
             error: e.message, code: e.code ?? e.cause?.code, cause: e.cause?.message,
-            config: { baseURL, model: resolvedModel },
+            config: {
+                baseURL,
+                model: resolvedModel,
+                ...(resolvedThinkingLevel ? { thinking_level: resolvedThinkingLevel } : {}),
+            },
         });
     }
 }

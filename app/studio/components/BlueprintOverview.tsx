@@ -178,12 +178,6 @@ export function BlueprintOverview({ blueprint }: { blueprint: PlannedProjectBlue
                                             {section.intent && (
                                                 <div className="mt-1 leading-4 text-[11px] text-muted-foreground">{section.intent}</div>
                                             )}
-                                            {section.designPlan?.rationale && (
-                                                <div className="mt-1.5 flex gap-1.5 rounded bg-white/4 px-2 py-1 text-[11px] leading-4 text-muted-foreground/70">
-                                                    <span className="shrink-0 text-primary/40">↳</span>
-                                                    {section.designPlan.rationale}
-                                                </div>
-                                            )}
                                         </div>
                                     ))}
                                 </div>

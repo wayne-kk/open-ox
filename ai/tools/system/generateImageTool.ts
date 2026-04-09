@@ -90,6 +90,8 @@ export interface PendingImage {
   promise: Promise<void>;
   /** Generation duration in ms — populated after promise resolves. */
   durationMs: number;
+  /** Whether the image was successfully generated and written to disk. */
+  success: boolean;
 }
 
 export function createImageExecutor(componentName: string): {
@@ -125,7 +127,7 @@ export function createImageExecutor(componentName: string): {
     }
 
     const pending: PendingImage = {
-      filename, prompt, size, publicPath, durationMs: 0,
+      filename, prompt, size, publicPath, durationMs: 0, success: false,
       promise: Promise.resolve(),
     };
 
@@ -145,9 +147,11 @@ export function createImageExecutor(componentName: string): {
 
         writeFileSync(join(imagesDir, `${filename}.png`), buf);
         pending.durationMs = Date.now() - t0;
+        pending.success = true;
         console.log(`[generate_image] Saved ${publicPath} (${buf.length} bytes, ${pending.durationMs}ms)`);
       } catch (err) {
         pending.durationMs = Date.now() - t0;
+        pending.success = false;
         const msg = err instanceof Error ? err.message : String(err);
         console.error(`[generate_image] Failed to generate "${filename}":`, msg);
       } finally {
@@ -173,13 +177,11 @@ export async function awaitPendingImages(
   if (pending.length === 0) return { total: 0, settled: 0, failed: 0 };
 
   console.log(`[generate_image] Awaiting ${pending.length} pending image(s)...`);
-  const results = await Promise.allSettled(pending.map((p) => p.promise));
+  await Promise.allSettled(pending.map((p) => p.promise));
 
-  let failed = 0;
-  for (const r of results) {
-    if (r.status === "rejected") failed++;
-  }
+  const failed = pending.filter((p) => !p.success).length;
+  const succeeded = pending.length - failed;
 
-  console.log(`[generate_image] ${pending.length} images done, ${failed} failed`);
-  return { total: pending.length, settled: pending.length - failed, failed };
+  console.log(`[generate_image] ${succeeded}/${pending.length} images succeeded, ${failed} failed`);
+  return { total: pending.length, settled: succeeded, failed };
 }
