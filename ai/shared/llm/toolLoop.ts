@@ -2,6 +2,7 @@ import { getModelId } from "@/lib/config/models";
 import { executeSystemTool } from "@/ai/tools";
 import type { ToolResult } from "@/ai/tools";
 import { chatCompletion } from "./gateway";
+import { throwClassifiedLLMError } from "./errorClassifier";
 import type { AgentToolCallRecord, ChatMessage } from "./types";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 
@@ -58,7 +59,7 @@ export async function callLLMWithTools(params: {
         activeTools = [];
         continue;
       }
-      throw err;
+      throwClassifiedLLMError(err, model);
     }
 
     const message = res.choices[0]?.message;

@@ -1,10 +1,10 @@
 import {
   loadStepPrompt,
-  loadSystem,
   readSiteFile,
   writeSiteFile,
 } from "../shared/files";
-import { callLLM, extractContent, extractJSON } from "../shared/llm";
+import { callLLMWithMeta, extractContent, extractJSON } from "../shared/llm";
+import { getModelForStep } from "@/lib/config/models";
 
 function looksLikeGlobalsCss(text: string): boolean {
   const t = text.trim();
@@ -58,7 +58,6 @@ function extractThemeBlock(css: string): string {
 }
 
 function extractRootVars(css: string): string {
-  // Extract :root { ... } block from @layer base
   const rootMatch = css.match(/:root\s*\{[^}]*\}/);
   return rootMatch ? rootMatch[0] : "";
 }
@@ -73,13 +72,8 @@ export async function stepApplyProjectDesignTokens(
 
   onProgress?.("reading design system + current tokens...");
 
-  const systemPrompt = [
-    loadSystem("frontend"),
-    "\n\n",
-    loadStepPrompt("applyProjectDesignTokens"),
-  ].join("");
+  const systemPrompt = loadStepPrompt("applyProjectDesignTokens");
 
-  // Send only the relevant parts, not the entire file
   const userMessage = `## Design System
 ${designSystem}
 
@@ -100,13 +94,40 @@ ${currentGlobalsCss}
 
 Generate the complete updated globals.css. Be concise — output only the CSS code block, no explanation.`;
 
-  onProgress?.("calling LLM to generate design tokens...");
+  const stepModel = getModelForStep("apply_project_design_tokens");
+  onProgress?.(`calling LLM (${stepModel}) to generate design tokens...`);
   const t0 = Date.now();
+  let heartbeat: ReturnType<typeof setInterval> | null = setInterval(() => {
+    const waitingSec = Math.floor((Date.now() - t0) / 1000);
+    onProgress?.(`waiting for model response... ${waitingSec}s`);
+  }, 10_000);
 
-  const raw = await callLLM(systemPrompt, userMessage, 0.3);
+  let raw: string;
+  let tokenUsage: { input?: number; output?: number } = {};
+  try {
+    const llmResult = await callLLMWithMeta(
+      systemPrompt,
+      userMessage,
+      0.3,
+      undefined,
+      stepModel
+    );
+    raw = llmResult.content;
+    tokenUsage = {
+      input: llmResult.inputTokens,
+      output: llmResult.outputTokens,
+    };
+  } finally {
+    if (heartbeat) {
+      clearInterval(heartbeat);
+      heartbeat = null;
+    }
+  }
 
   const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
-  onProgress?.(`LLM responded in ${elapsed}s, parsing CSS...`);
+  onProgress?.(
+    `LLM responded in ${elapsed}s (${stepModel}, in=${tokenUsage.input ?? "?"}, out=${tokenUsage.output ?? "?"}), parsing CSS...`
+  );
 
   const globalsCss = parseDesignTokensResponse(raw);
 

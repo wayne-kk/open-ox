@@ -7,6 +7,7 @@ import type { GraphNode, Stage, StageId, TopologyGraph } from "./types";
 
 const STAGE_MAP: Record<string, StageId> = {
   analyze_project_requirement: "understand",
+  infer_design_intent: "understand",
   plan_project: "plan",
   generate_project_design_system: "design",
   apply_project_design_tokens: "design",
@@ -98,13 +99,14 @@ export function parseStepsToTopology(steps: BuildStep[], flowStart: number): Top
       trace: stepWithExtra.trace,
     };
   });
+  nodes.sort((a, b) => (a.timestamp - b.timestamp) || (a.index - b.index));
 
   const stageOrder: StageId[] = [
     "understand",
     "plan",
     "design",
-    "compose",
     "generate",
+    "compose",
     "verify",
     "repair",
   ];
@@ -121,7 +123,9 @@ export function parseStepsToTopology(steps: BuildStep[], flowStart: number): Top
     .map((id) => ({
       id,
       label: STAGE_LABELS[id],
-      nodes: stageMap.get(id) ?? [],
+      nodes: (stageMap.get(id) ?? []).sort(
+        (a, b) => (a.timestamp - b.timestamp) || (a.index - b.index)
+      ),
     }));
 
   return {

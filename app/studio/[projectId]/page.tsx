@@ -1,9 +1,9 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import { Suspense } from "react";
 import Link from "next/link";
-import { ArrowLeft, GitBranch, Monitor, RefreshCw, ExternalLink } from "lucide-react";
+import { ArrowLeft, GitBranch, Monitor, RefreshCw, ExternalLink, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { HamsterLoader } from "@/components/ui/hamster-loader";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -23,6 +23,7 @@ function StudioInner({ projectId }: { projectId: string }) {
     autoPreviewAfterBuild, setAutoPreviewAfterBuild } = studio;
   const buildSteps = response?.buildSteps ?? [];
   const canPreview = !!projectId && !loading;
+  const [conversationCollapsed, setConversationCollapsed] = useState(false);
 
   if (projectLoading) {
     return (
@@ -110,11 +111,29 @@ function StudioInner({ projectId }: { projectId: string }) {
         </header>
 
         <div className="mx-auto flex w-full min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
-          <BuildConversation {...studio} />
+          {!conversationCollapsed && <BuildConversation {...studio} />}
 
           <section className="defi-glass flex min-h-0 flex-1 flex-col overflow-hidden">
             {/* Right panel toolbar */}
             <div className="flex h-11 items-center border-b border-white/8 px-3 gap-2">
+              <button
+                onClick={() => setConversationCollapsed((v) => !v)}
+                className="flex items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-2.5 h-7 font-mono text-[10px] text-muted-foreground/70 transition-all hover:border-white/15 hover:text-foreground"
+                title={conversationCollapsed ? "展开对话流" : "收起对话流"}
+              >
+                {conversationCollapsed ? (
+                  <>
+                    <PanelLeftOpen className="h-3 w-3" />
+                    Conversation
+                  </>
+                ) : (
+                  <>
+                    <PanelLeftClose className="h-3 w-3" />
+                    Conversation
+                  </>
+                )}
+              </button>
+
               {/* Tab switcher — left */}
               <div className="flex items-center rounded-lg border border-white/8 bg-white/3 overflow-hidden">
                 <button
