@@ -26,6 +26,7 @@ export async function POST(req: Request) {
     const retryProjectId: string | undefined = body.retryProjectId;
     const preCreatedProjectId: string | undefined = body.projectId;
     const styleGuide: string | undefined = body.styleGuide;
+    const enableSkills: boolean = body.enableSkills === true;
 
     // For retry or pre-created project: load existing project's prompt and model
     let effectivePrompt = userPrompt as string | undefined;
@@ -106,7 +107,7 @@ export async function POST(req: Request) {
             // Final buildSteps are persisted once via updateProjectStatus below.
               send({ type: "step", ...step });
             },
-            { projectId, styleGuide, checkpoint }
+            { projectId, styleGuide, enableSkills, checkpoint }
           );
 
           if (result.success) {

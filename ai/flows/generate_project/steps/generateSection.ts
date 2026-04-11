@@ -9,7 +9,7 @@ import {
 } from "../shared/files";
 import { selectSectionPromptId } from "../selectors/sectionPromptSelector";
 import { callLLM, callLLMWithTools, extractContent, extractJSON } from "../shared/llm";
-import { getModelForStep, getThinkingLevelForStep } from "@/lib/config/models";
+import { getModelForStep, getThinkingLevelForStep, isSectionSkillsEnabled } from "@/lib/config/models";
 import { getSystemToolDefinitions } from "../../../tools/systemToolCatalog";
 import { createImageExecutor } from "../../../tools/system/generateImageTool";
 import type { PendingImage } from "../../../tools/system/generateImageTool";
@@ -333,14 +333,14 @@ ${buildPageContextBlock(pageContext)}
 - **Primary Roles**: ${section.primaryRoleIds.join(", ") || "none"}
 - **Supporting Capabilities**: ${section.supportingCapabilityIds.join(", ") || "none"}
 
-## Section Design Brief (apply directly)
+## Section Design Brief
 ${sectionDesignBrief}
 
 ${skillMetadataBlock ? `## Available Component Skills\nThe following skills are available for this section type. The selected skill's full guidance is already in the system prompt.\n${skillMetadataBlock}` : ""}
 
 Generate the complete ${section.fileName}.tsx component.
 Use the design system and project context to make all design decisions (layout, visual style, motion, interaction). Apply the Tailwind CSS mapping rules above to translate design tokens into utility classes.
-Strictly follow the Section Design Brief's 3 items (布局 / 背景 / 层次) as the primary visual guidance for this section.`;
+The Section Design Brief above is your primary visual guidance — follow its layout, background, and atmosphere direction closely.`;
 }
 
 // ── Validation ──────────────────────────────────────────────────────────
@@ -374,12 +374,14 @@ export async function stepGenerateSection({
   pageContext,
   sectionDesignBriefOverride,
 }: GenerateSectionParams): Promise<GenerateSectionResult> {
-  const { skillId, skillPrompt, skillMetadataBlock } = await discoverAndSelectSkill(section.type, {
-    intent: section.intent,
-    contentHints: section.contentHints,
-    designKeywords: projectContext.designKeywords,
-    productType: projectContext.productScope.productType,
-  });
+  const { skillId, skillPrompt, skillMetadataBlock } = isSectionSkillsEnabled()
+    ? await discoverAndSelectSkill(section.type, {
+      intent: section.intent,
+      contentHints: section.contentHints,
+      designKeywords: projectContext.designKeywords,
+      productType: projectContext.productScope.productType,
+    })
+    : { skillId: null, skillPrompt: "", skillMetadataBlock: "" };
 
   const systemPrompt = buildSystemPrompt({
     section,

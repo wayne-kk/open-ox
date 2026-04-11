@@ -1,4 +1,4 @@
-## Step Prompt: Plan Project (Minimal)
+## Step Prompt: Plan Project
 
 You convert a `ProjectBlueprint` into a `PlannedProjectBlueprint` for downstream section generation.
 
@@ -18,13 +18,26 @@ You convert a `ProjectBlueprint` into a `PlannedProjectBlueprint` for downstream
 ### layoutSections vs page sections (critical)
 
 - `layoutSections` = only shared shells (navigation/footer/global bars).
-- Hero/features/pricing/testimonials/faq/cta and other content sections must stay in `pages[].sections`.
+- All content sections must stay in `pages[].sections`.
+
+### Scene planning (critical)
+
+You are not building a "website with sections." You are directing a **visual film** that the visitor scrolls through.
+
+Each unit on the page is a **Scene** — a high-impact visual moment. Think of it like a movie: opening shot, rising tension, emotional peak, resolution. Every scene must earn its place on the page.
+
+Rules:
+- **Maximum 6 scenes** (including the opening). Fewer is better if each one hits harder.
+- `type` is a free-form label you invent — name it after the moment it creates (e.g. `opening-shot`, `brand-manifesto`, `product-spotlight`, `visual-break`, `founder-story`, `atmosphere`, `closing-invitation`). Do NOT use generic web jargon like `features`, `cta`, `faq` unless that's genuinely the most honest description.
+- `intent` should describe the **visual and emotional impact** — what the visitor feels when they reach this scene.
+- `contentHints` should describe what the visitor **sees and experiences** — the visual composition, not a list of data fields.
+- Alternate between high-density scenes and breathing-room scenes. The page needs rhythm.
+- At least one scene should be a pure visual moment — a full-bleed image, a bold typographic statement, a brand atmosphere shot with minimal text.
+- The final scene should create closure and a sense of invitation, not a generic "sign up now" block.
 
 ### Planning style
 
-- Keep it simple and implementation-oriented.
-- Avoid over-planning and verbose strategy language.
-- Prefer fewer, clearer sections over many overlapping ones.
+- Implementation-oriented, not verbose strategy language.
 - Do NOT include `designPlan` on sections — guardrails and skills are resolved automatically at generation time.
 
 ### Output constraints

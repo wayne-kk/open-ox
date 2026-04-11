@@ -40,6 +40,7 @@ export function HeroPrompt() {
   const [chips, setChips] = useState<InjectedChip[]>([]);
   const [focused, setFocused] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [enableSkills, setEnableSkills] = useState(false);
 
   // ── Typewriter ─────────────────────────────────────────────────────────────
   const [placeholderIdx, setPlaceholderIdx] = useState(0);
@@ -200,6 +201,9 @@ export function HeroPrompt() {
       if (data.styleGuide) {
         sessionStorage.setItem(`styleGuide:${data.projectId}`, data.styleGuide);
       }
+      if (enableSkills) {
+        sessionStorage.setItem(`enableSkills:${data.projectId}`, "true");
+      }
       router.push(`/studio/${data.projectId}`);
     } catch (err) {
       console.error("[HeroPrompt] create project failed:", err);
@@ -295,14 +299,25 @@ export function HeroPrompt() {
 
         {/* Bottom bar */}
         <div className="flex items-center justify-between">
-          <span className="font-mono text-[11px] text-muted-foreground/40">
-            <kbd className="rounded border border-white/10 px-1 py-0.5 text-[10px]">/</kbd> 风格
-            {" · "}
-            <kbd className="rounded border border-white/10 px-1 py-0.5 text-[10px]">@</kbd> 参考项目
-            {" · "}
-            <kbd className="rounded border border-white/10 px-1 py-0.5 text-[10px]">#</kbd> 约束
-            {" · ⌘↵ 构建"}
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="font-mono text-[11px] text-muted-foreground/40">
+              <kbd className="rounded border border-white/10 px-1 py-0.5 text-[10px]">/</kbd> 风格
+              {" · "}
+              <kbd className="rounded border border-white/10 px-1 py-0.5 text-[10px]">@</kbd> 参考项目
+              {" · "}
+              <kbd className="rounded border border-white/10 px-1 py-0.5 text-[10px]">#</kbd> 约束
+              {" · ⌘↵ 构建"}
+            </span>
+            <label className="flex items-center gap-1.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={enableSkills}
+                onChange={(e) => setEnableSkills(e.target.checked)}
+                className="h-3 w-3 rounded border border-white/20 bg-transparent accent-primary"
+              />
+              <span className="font-mono text-[10px] text-muted-foreground/50">Skills</span>
+            </label>
+          </div>
           <SparkleHoverButton
             type="submit"
             disabled={!canSubmit}

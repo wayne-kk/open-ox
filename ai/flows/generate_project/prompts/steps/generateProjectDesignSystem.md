@@ -138,21 +138,9 @@ radius.full:   9999px — [usage: e.g., pills, avatars]
 --text-shadow-display: [value];
 ```
 
-[Include special effect CSS here if applicable: chromatic aberration, noise overlay, glow pulse, etc.]
+[Include special effect CSS here if applicable: chromatic aberration, glow pulse, etc. Do NOT include noise/grain textures.]
 
-### Textures & Patterns
-
-Each pattern must specify opacity cap and z-index behavior.
-
-1. **[Pattern Name]** — opacity cap: `opacity-[0.0X]`, placed as `absolute inset-0 pointer-events-none`:
-
-```css
-[CSS code]
-```
-
-1. **[Pattern Name]** — opacity cap: `opacity-[0.0X]`:
-
-```css
+---```css
 [CSS code]
 ```
 
@@ -283,11 +271,7 @@ These choices are mandatory. Each must be verifiable in the output code.
 }
 ```
 
-**Opacity caps for overlay elements**:
-
-- grain / noise: `opacity-[0.03]`
-- scanlines: `opacity-[0.04]`
-- grid overlay: `opacity-[0.06]`
+**Keyframe Animations** (define all used animations):
 
 ---
 
@@ -336,7 +320,7 @@ These choices are mandatory. Each must be verifiable in the output code.
 - H1 max size: `text-5xl` (48px). Never `text-6xl` or above.
 - Animations: global implementation only, no `styled-jsx`
 - `max-w-*`: forbidden everywhere in layout
-- Overlay opacity caps: grain ≤ 0.03 / scanlines ≤ 0.04 / grid ≤ 0.06
+- Do NOT output any Textures & Patterns section. No grain, noise, scanlines, film grain, or SVG noise overlays. Use solid color backgrounds only.
 - `clip-path / polygon()`: forbidden everywhere — no chamfered or custom clipping shapes
 - Output: Markdown document only, no explanation text
 - `H1` text size must never exceed `56px`.
