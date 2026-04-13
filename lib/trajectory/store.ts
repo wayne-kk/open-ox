@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { supabase } from "@/lib/supabase";
 import type { RunStartInput, TrajectoryEvent, TrajectoryPhase } from "./schema";
 
-const SCHEMA_VERSION = "tbx.0.1";
+const SCHEMA_VERSION = "tbx.0.2";
 
 export async function createTrajectoryRun(input: RunStartInput): Promise<{ runId: string; firstEvent: TrajectoryEvent }> {
   const runId = `run_${new Date().toISOString().replace(/[:.]/g, "-")}_${randomUUID().slice(0, 8)}`;
@@ -146,4 +146,92 @@ export async function createRunEndEvent(
     payload,
     meta: {},
   });
+}
+
+export interface TrajectoryRunRecord {
+  run_id: string;
+  task_id: string;
+  schema_version: string;
+  status: "running" | "finished";
+  last_seq: number;
+  created_at: string;
+  updated_at: string;
+  ended_at?: string | null;
+}
+
+export interface EvaluatorRunRecord {
+  id: string;
+  run_id: string;
+  verdict: "passed" | "failed" | "partial";
+  score: Record<string, unknown>;
+  failure_type: string | null;
+  summary: string;
+  created_at: string;
+}
+
+export async function listTrajectoryRuns(limit = 20, offset = 0): Promise<TrajectoryRunRecord[]> {
+  const result = await supabase
+    .from("trajectory_runs")
+    .select("run_id,task_id,schema_version,status,last_seq,created_at,updated_at,ended_at")
+    .order("created_at", { ascending: false })
+    .range(offset, offset + Math.max(0, limit - 1));
+
+  if (result.error) {
+    throw new Error(`[trajectory] Failed to list runs: ${result.error.message}`);
+  }
+  return (result.data ?? []) as TrajectoryRunRecord[];
+}
+
+export async function getTrajectoryRun(runId: string): Promise<TrajectoryRunRecord | null> {
+  const result = await supabase
+    .from("trajectory_runs")
+    .select("run_id,task_id,schema_version,status,last_seq,created_at,updated_at,ended_at")
+    .eq("run_id", runId)
+    .single();
+
+  if (result.error) {
+    if (result.error.code === "PGRST116") return null;
+    throw new Error(`[trajectory] Failed to fetch run: ${result.error.message}`);
+  }
+  return result.data as TrajectoryRunRecord;
+}
+
+export async function createEvaluatorRun(input: {
+  runId: string;
+  verdict: "passed" | "failed" | "partial";
+  score: Record<string, unknown>;
+  failureType?: string | null;
+  summary: string;
+}): Promise<EvaluatorRunRecord> {
+  const result = await supabase
+    .from("evaluator_runs")
+    .insert({
+      run_id: input.runId,
+      verdict: input.verdict,
+      score: input.score,
+      failure_type: input.failureType ?? null,
+      summary: input.summary,
+    })
+    .select("id,run_id,verdict,score,failure_type,summary,created_at")
+    .single();
+
+  if (result.error || !result.data) {
+    throw new Error(`[trajectory] Failed to create evaluator run: ${result.error?.message ?? "unknown error"}`);
+  }
+  return result.data as EvaluatorRunRecord;
+}
+
+export async function getLatestEvaluatorRun(runId: string): Promise<EvaluatorRunRecord | null> {
+  const result = await supabase
+    .from("evaluator_runs")
+    .select("id,run_id,verdict,score,failure_type,summary,created_at")
+    .eq("run_id", runId)
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  if (result.error) {
+    throw new Error(`[trajectory] Failed to get evaluator run: ${result.error.message}`);
+  }
+  const row = (result.data ?? [])[0];
+  return (row as EvaluatorRunRecord | undefined) ?? null;
 }

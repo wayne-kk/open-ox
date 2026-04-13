@@ -780,7 +780,7 @@ export async function runGenerateProject(
           () => stepInferDesignIntent(userInput),
           (text) => text.slice(0, 80)
         );
-        await persistTextArtifact(artifactLogger, "infer_design_intent", "output", "md", inferredDesignIntentText);
+        await persistTextArtifact(artifactLogger, "infer_design_intent", "output", inferredDesignIntentText, "md");
       }
     } else {
       const analyzePromise = logger.timed(
@@ -804,7 +804,7 @@ export async function runGenerateProject(
 
       [rawBlueprint, inferredDesignIntentText] = await Promise.all([analyzePromise, inferPromise]);
       await persistJsonArtifact(artifactLogger, "analyze_project_requirement", "output", rawBlueprint);
-      await persistTextArtifact(artifactLogger, "infer_design_intent", "output", "md", inferredDesignIntentText);
+      await persistTextArtifact(artifactLogger, "infer_design_intent", "output", inferredDesignIntentText, "md");
     }
 
     if (!rawBlueprint.experience) {

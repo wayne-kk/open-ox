@@ -81,7 +81,8 @@ export function createArtifactLogger(prefix = "generate_project"): ArtifactLogge
       );
     },
     writeText: async (step: string, name: string, content: string, extension = "txt") => {
-      const normalizedExtension = extension.replace(/^\.+/, "") || "txt";
+      const rawExtension = extension.replace(/^\.+/, "").trim();
+      const normalizedExtension = /^[a-zA-Z0-9]{1,16}$/.test(rawExtension) ? rawExtension : "txt";
       const safeName = sanitizeSegment(name);
       const fileName = `${safeName}.${normalizedExtension}`;
       return writeArtifactFile(runDirAbsolute, runDirRelative, step, fileName, content);

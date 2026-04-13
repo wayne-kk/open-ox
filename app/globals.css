@@ -201,6 +201,54 @@
 }
 
 @layer utilities {
+  .scrollbar-trajectories {
+    scrollbar-color: rgb(71 85 105 / 75%) rgb(15 23 42 / 45%);
+    scrollbar-width: thin;
+  }
+
+  .scrollbar-trajectories::-webkit-scrollbar {
+    height: 8px;
+    width: 8px;
+  }
+
+  .scrollbar-trajectories::-webkit-scrollbar-track {
+    background: rgb(15 23 42 / 45%);
+    border-radius: 9999px;
+  }
+
+  .scrollbar-trajectories::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgb(99 102 241 / 65%), rgb(71 85 105 / 80%));
+    border: 1px solid rgb(15 23 42 / 80%);
+    border-radius: 9999px;
+  }
+
+  .scrollbar-trajectories::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgb(129 140 248 / 85%), rgb(100 116 139 / 90%));
+  }
+
+  body.trajectories-theme {
+    scrollbar-color: rgb(71 85 105 / 75%) rgb(15 23 42 / 45%);
+    scrollbar-width: thin;
+  }
+
+  body.trajectories-theme::-webkit-scrollbar {
+    width: 10px;
+  }
+
+  body.trajectories-theme::-webkit-scrollbar-track {
+    background: rgb(2 6 23 / 88%);
+  }
+
+  body.trajectories-theme::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgb(99 102 241 / 62%), rgb(71 85 105 / 82%));
+    border: 2px solid rgb(2 6 23 / 88%);
+    border-radius: 9999px;
+  }
+
+  body.trajectories-theme::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgb(129 140 248 / 82%), rgb(100 116 139 / 94%));
+  }
+
   .font-heading {
     font-family: var(--font-space-grotesk), sans-serif;
   }

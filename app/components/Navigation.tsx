@@ -15,6 +15,7 @@ import {
 
 const NAV_LINKS = [
   { href: "/projects", label: "项目" },
+  { href: "/trajectories", label: "Trajectories" },
   { href: "/docs", label: "文档" },
   { href: "/llm-test", label: "LLM 测试" },
   { href: "/test-image", label: "图片测试" },

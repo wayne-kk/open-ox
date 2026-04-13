@@ -148,6 +148,19 @@ export function validateTrajectoryEvent(value: unknown): TrajectoryEvent {
   if (!isRecord(payload)) throw new Error("Missing or invalid 'payload'");
   if (meta !== undefined && !isRecord(meta)) throw new Error("Invalid 'meta'");
 
+  if (event_type === "shell_command") {
+    const command = payload.command;
+    if (!isNonEmptyString(command)) {
+      throw new Error("shell_command payload.command is required");
+    }
+  }
+  if (event_type === "shell_result") {
+    const exitCode = payload.exit_code;
+    if (exitCode !== undefined && (typeof exitCode !== "number" || !Number.isInteger(exitCode))) {
+      throw new Error("shell_result payload.exit_code must be integer when provided");
+    }
+  }
+
   return {
     schema_version,
     task_id,

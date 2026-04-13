@@ -10,6 +10,7 @@ import { buildFileTree, buildHistoryContext, buildInitialMessages, tryReadFile }
 import { FileSnapshotTracker, type DiffStats } from "./tracking/fileSnapshotTracker";
 import { runAgentLoop } from "./engine/loopEngine";
 import { SYSTEM_PROMPT } from "./prompt/systemPrompt";
+import { appendTrajectoryEvent, createRunEndEvent, createTrajectoryRun } from "@/lib/trajectory/store";
 
 export type ModifySSEEvent =
   | { type: "step"; name: string; status: "running" | "done" | "error"; message?: string }
@@ -39,8 +40,75 @@ export async function runModifyProject(
   const projectDir = pmGetSiteRoot(projectId);
   setSiteRoot(projectDir);
   onEvent({ type: "step", name: "resolve_project", status: "done" });
+  const taskId = `modify:${projectId}`;
+  let trajectory: { runId: string; taskId: string } | null = null;
+  let trajectoryQueue: Promise<void> = Promise.resolve();
+  let repairEpisodeSeq = 0;
+  let activeRepairEpisode: {
+    episodeId: string;
+    triggerTool: string;
+    errorSummary: string;
+    startedAt: number;
+    actionStarted: boolean;
+    latestBuildStatus: "ok" | "error" | "unknown";
+  } | null = null;
+  const enqueueTrajectoryEvent = (
+    event: Parameters<typeof appendTrajectoryEvent>[1]
+  ) => {
+    if (!trajectory) return;
+    trajectoryQueue = trajectoryQueue
+      .then(async () => {
+        await appendTrajectoryEvent(trajectory!.runId, event);
+      })
+      .catch((err) => {
+        console.warn("[modify] trajectory append failed:", err);
+      });
+  };
 
   try {
+    try {
+      const run = await createTrajectoryRun({
+        task_id: taskId,
+        goal: userInstruction,
+        task_spec_ref: "open-ox.modify-project",
+        environment: {
+          route: "/api/projects/[id]/modify",
+          project_id: projectId,
+          mode: "modify",
+        },
+        success_criteria: [
+          "modification applied or explicitly no-op",
+          "build verification result recorded",
+        ],
+        meta: { source: "modify_project_flow", model: modelOverride ?? null },
+      });
+      trajectory = { runId: run.runId, taskId };
+      const episodeId = `${projectId}-modify-repair-${++repairEpisodeSeq}`;
+      activeRepairEpisode = {
+        episodeId,
+        triggerTool: "requirement_mismatch",
+        errorSummary: userInstruction.slice(0, 240),
+        startedAt: Date.now(),
+        actionStarted: false,
+        latestBuildStatus: "unknown",
+      };
+      enqueueTrajectoryEvent({
+        task_id: taskId,
+        phase: "execution",
+        event_type: "repair_episode_started",
+        actor: "system",
+        payload: {
+          episode_id: episodeId,
+          trigger_step: "requirement_mismatch",
+          error_summary: activeRepairEpisode.errorSummary,
+          error_detail: userInstruction,
+        },
+        meta: { source: "modify_repair_episode" },
+      });
+    } catch (err) {
+      console.warn("[modify] trajectory run creation failed:", err);
+    }
+
     onEvent({ type: "step", name: "read_context", status: "running" });
     const fileTree = await buildFileTree(projectDir);
     const designSystem = (await tryReadFile(path.join(projectDir, "design-system.md"))) ?? "";
@@ -56,8 +124,113 @@ export async function runModifyProject(
     const collectingOnEvent = (event: ModifySSEEvent) => {
       if (event.type === "tool_call") {
         collectedToolCalls.push({ tool: event.tool, args: event.args, result: event.result });
+        const toolPhase = event.tool === "run_build" ? "verification" : "execution";
+        enqueueTrajectoryEvent({
+          task_id: taskId,
+          phase: toolPhase,
+          event_type: "shell_command",
+          actor: "tool",
+          payload: {
+            tool: event.tool,
+            args: event.args,
+          },
+          meta: { source: "modify_tool_call" },
+        });
+        enqueueTrajectoryEvent({
+          task_id: taskId,
+          phase: toolPhase,
+          event_type: "shell_result",
+          actor: "tool",
+          payload: {
+            tool: event.tool,
+            result: event.result,
+            success: !/failed|error|no overload matches|cannot find|type error/i.test(event.result),
+          },
+          meta: { source: "modify_tool_call" },
+        });
+
+        if (event.tool === "run_build") {
+          const failed = /failed|error|no overload matches|cannot find|type error/i.test(event.result);
+          if (failed) {
+            if (activeRepairEpisode) {
+              activeRepairEpisode.latestBuildStatus = "error";
+            }
+          } else if (activeRepairEpisode) {
+            activeRepairEpisode.latestBuildStatus = "ok";
+            enqueueTrajectoryEvent({
+              task_id: taskId,
+              phase: "verification",
+              event_type: "repair_verification_result",
+              actor: "system",
+              payload: {
+                episode_id: activeRepairEpisode.episodeId,
+                verification_step: "run_build",
+                status: "ok",
+                detail: event.result,
+              },
+              meta: { source: "modify_repair_episode" },
+            });
+            enqueueTrajectoryEvent({
+              task_id: taskId,
+              phase: "finalize",
+              event_type: "repair_episode_finished",
+              actor: "system",
+              payload: {
+                episode_id: activeRepairEpisode.episodeId,
+                outcome: "resolved",
+                trigger_step: activeRepairEpisode.triggerTool,
+                started_at: activeRepairEpisode.startedAt,
+                ended_at: Date.now(),
+              },
+              meta: { source: "modify_repair_episode" },
+            });
+            activeRepairEpisode = null;
+          }
+        } else if (activeRepairEpisode && (event.tool === "edit_file" || event.tool === "write_file")) {
+          if (!activeRepairEpisode.actionStarted) {
+            activeRepairEpisode.actionStarted = true;
+            enqueueTrajectoryEvent({
+              task_id: taskId,
+              phase: "execution",
+              event_type: "repair_action_started",
+              actor: "agent",
+              payload: {
+                episode_id: activeRepairEpisode.episodeId,
+                action: "apply_patch",
+              },
+              meta: { source: "modify_repair_episode" },
+            });
+          }
+          enqueueTrajectoryEvent({
+            task_id: taskId,
+            phase: "execution",
+            event_type: "repair_action_result",
+            actor: "agent",
+            payload: {
+              episode_id: activeRepairEpisode.episodeId,
+              action: event.tool,
+              status: "ok",
+              detail: event.result.slice(0, 500),
+            },
+            meta: { source: "modify_repair_episode" },
+          });
+        }
       } else if (event.type === "thinking") {
         collectedThinking.push(event.content);
+      }
+      if (event.type === "step") {
+        enqueueTrajectoryEvent({
+          task_id: taskId,
+          phase: "execution",
+          event_type: "checkpoint",
+          actor: "agent",
+          payload: {
+            step: event.name,
+            status: event.status,
+            detail: event.message ?? null,
+          },
+          meta: { source: "modify_step" },
+        });
       }
       onEvent(event);
     };
@@ -164,6 +337,28 @@ export async function runModifyProject(
       status: "done",
       message: `${touchedFiles.length} file(s): ${touchedFiles.join(", ")}`,
     });
+    if (activeRepairEpisode) {
+      const requirementResolved = touchedFiles.length > 0;
+      const verificationPassed = loopState.buildPassed || activeRepairEpisode.latestBuildStatus === "ok";
+      enqueueTrajectoryEvent({
+        task_id: taskId,
+        phase: "finalize",
+        event_type: "repair_episode_finished",
+        actor: "system",
+        payload: {
+          episode_id: activeRepairEpisode.episodeId,
+          outcome: requirementResolved && verificationPassed ? "resolved" : "unresolved",
+          trigger_step: activeRepairEpisode.triggerTool,
+          requirement_resolved: requirementResolved,
+          verification_passed: verificationPassed,
+          touched_files: touchedFiles.length,
+          started_at: activeRepairEpisode.startedAt,
+          ended_at: Date.now(),
+        },
+        meta: { source: "modify_repair_episode" },
+      });
+      activeRepairEpisode = null;
+    }
 
     await artifactLogger.writeJson("run", "result", {
       projectId,
@@ -172,10 +367,56 @@ export async function runModifyProject(
       buildPassed: loopState.buildPassed,
       iterations,
     });
+    if (trajectory) {
+      await trajectoryQueue;
+      await createRunEndEvent(trajectory.runId, trajectory.taskId, "system", {
+        success: true,
+        verificationStatus: loopState.buildPassed ? "passed" : "failed",
+        projectId,
+        touchedFiles: touchedFiles.length,
+        iterations,
+      }).catch((err) => {
+        console.warn("[modify] trajectory run_end failed:", err);
+      });
+    }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     onEvent({ type: "step", name: "agent_loop", status: "error", message: errMsg });
     onEvent({ type: "error", message: errMsg });
+    if (activeRepairEpisode) {
+      enqueueTrajectoryEvent({
+        task_id: taskId,
+        phase: "finalize",
+        event_type: "repair_episode_finished",
+        actor: "system",
+        payload: {
+          episode_id: activeRepairEpisode.episodeId,
+          outcome: "unresolved",
+          trigger_step: activeRepairEpisode.triggerTool,
+          started_at: activeRepairEpisode.startedAt,
+          ended_at: Date.now(),
+        },
+        meta: { source: "modify_repair_episode" },
+      });
+      activeRepairEpisode = null;
+    }
+    if (trajectory) {
+      await trajectoryQueue;
+      await appendTrajectoryEvent(trajectory.runId, {
+        task_id: trajectory.taskId,
+        phase: "finalize",
+        event_type: "error",
+        actor: "system",
+        payload: { message: errMsg, projectId },
+        meta: { source: "modify_error" },
+      }).catch(() => null);
+      await createRunEndEvent(trajectory.runId, trajectory.taskId, "system", {
+        success: false,
+        verificationStatus: "failed",
+        error: errMsg,
+        projectId,
+      }).catch(() => null);
+    }
   } finally {
     clearRevertSnapshots();
     clearFileReadTracking();
