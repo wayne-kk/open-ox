@@ -20,6 +20,7 @@ import {
 import { uploadGeneratedFiles } from "@/lib/storage";
 import { setRuntimeModelId, type ModelId } from "@/lib/config/models";
 import { loadStepModelsFromDB } from "@/lib/config/models";
+import { loadCoreStepPromptsFromDB, withCorePromptRuntime } from "@/lib/config/corePrompts";
 import type { BuildStep } from "@/ai/flows";
 import { SSE_RESPONSE_HEADERS } from "@/lib/sse-headers";
 import { NextResponse } from "next/server";
@@ -43,6 +44,7 @@ export async function POST(req: Request) {
     const preCreatedProjectId: string | undefined = body.projectId;
     const styleGuide: string | undefined = body.styleGuide;
     const enableSkills: boolean = body.enableSkills === true;
+    const useDatabasePrompts: boolean = body.useDatabasePrompts !== false;
     const folderId: string | null | undefined =
       typeof body.folderId === "string" ? body.folderId : body.folderId === null ? null : undefined;
     const requestGenerationMode: GenerationMode | undefined = body.generationMode;
@@ -77,6 +79,7 @@ export async function POST(req: Request) {
 
     // Load step-level model overrides from DB (ensures they survive process restarts)
     await loadStepModelsFromDB();
+    const corePromptOverrides = useDatabasePrompts ? await loadCoreStepPromptsFromDB() : new Map();
 
     if (!effectivePrompt || typeof effectivePrompt !== "string") {
       return NextResponse.json(
@@ -194,9 +197,15 @@ export async function POST(req: Request) {
 
           // Step 3: Run generation, writing files into sites/{projectId}/
           const runGeneration = effectiveGenerationMode === "app" ? runGenerateApp : runGenerateProject;
-          const result = await runGeneration(
-            effectivePrompt,
-            (step: BuildStep) => {
+          const result = await withCorePromptRuntime(
+            {
+              useDatabasePrompts,
+              dbPromptByStepId: corePromptOverrides,
+            },
+            () =>
+              runGeneration(
+                effectivePrompt,
+                (step: BuildStep) => {
               // SSE is the sole real-time channel — no DB writes during generation.
               // Final buildSteps are persisted once via updateProjectStatus below.
               send({ type: "step", ...step });
@@ -338,7 +347,8 @@ export async function POST(req: Request) {
                 meta: { source: "build_step" },
               });
             },
-            { projectId, styleGuide, enableSkills, checkpoint }
+                { projectId, styleGuide, enableSkills, useDatabasePrompts, checkpoint }
+              )
           );
 
           if (result.success) {

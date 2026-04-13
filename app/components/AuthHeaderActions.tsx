@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
-import { ChevronDown, LogOut } from "lucide-react";
+import { ChevronDown, LogOut, Shield, FileText } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
@@ -101,6 +103,22 @@ export function UserMenuDropdown({
   const router = useRouter();
   const displayName = getUserDisplayName(user);
   const subtitle = getUserAccountSubtitle(user);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/auth/user")
+      .then((res) => res.json())
+      .then((data: { isAdmin?: boolean }) => {
+        if (active) setIsAdmin(data.isAdmin === true);
+      })
+      .catch(() => {
+        if (active) setIsAdmin(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [user.id]);
 
   const signOut = async () => {
     const supabase = createSupabaseBrowserClient();
@@ -132,33 +150,50 @@ export function UserMenuDropdown({
       <DropdownMenuContent
         align="end"
         sideOffset={10}
-        className="w-[min(calc(100vw-1.5rem),144px)] overflow-hidden rounded-xl border border-white/12 bg-zinc-950/98 p-0 shadow-2xl shadow-black/50 backdrop-blur-xl"
+        className="w-[min(calc(100vw-1.5rem),166px)] overflow-hidden rounded-2xl border border-white/12 bg-zinc-950/98 p-0 shadow-2xl shadow-black/50 backdrop-blur-xl"
       >
-        <div className="relative border-b border-white/[0.08] bg-gradient-to-br from-primary/[0.12] via-transparent to-accent-tertiary/[0.06] px-2.5 py-3">
+        <div className="relative border-b border-white/[0.08] bg-gradient-to-br from-primary/[0.12] via-transparent to-accent-tertiary/[0.06] px-3 py-3.5">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-20%,rgba(247,147,26,0.12),transparent)]" />
-          <div className="relative flex gap-2">
+          <div className="relative flex gap-2.5">
             <UserAvatarButton
               user={user}
-              className="h-8 w-8 shrink-0 ring-2 ring-primary/30 shadow-md shadow-black/20"
+              className="h-10 w-10 shrink-0 ring-2 ring-primary/30 shadow-md shadow-black/20"
             />
-            <div className="min-w-0 flex-1 space-y-0.5 pt-0.5">
-              <p className="truncate text-[12px] font-semibold leading-tight tracking-tight text-foreground">
+            <div className="min-w-0 flex-1 space-y-1 pt-1">
+              <p className="truncate text-[14px] font-semibold leading-tight tracking-tight text-foreground">
                 {displayName}
               </p>
               {subtitle ? (
-                <p className="truncate font-mono text-[9px] leading-relaxed text-muted-foreground/85">
+                <p className="truncate font-mono text-[11px] leading-relaxed text-muted-foreground/85">
                   {subtitle}
                 </p>
               ) : null}
             </div>
           </div>
         </div>
-        <div className="p-1">
+        <div className="p-1.5">
+          {isAdmin ? (
+            <>
+              <DropdownMenuItem asChild className="cursor-pointer gap-2 rounded-xl px-3 py-2.5 text-[14px] leading-snug text-foreground/90">
+                <Link href="/admin">
+                  <Shield className="h-4 w-4 shrink-0 opacity-80" />
+                  Admin
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild className="cursor-pointer gap-2 rounded-xl px-3 py-2.5 text-[14px] leading-snug text-foreground/90">
+                <Link href="/admin/prompts">
+                  <FileText className="h-4 w-4 shrink-0 opacity-80" />
+                  Prompt
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="my-1 bg-white/10" />
+            </>
+          ) : null}
           <DropdownMenuItem
             onClick={() => void signOut()}
-            className="cursor-pointer gap-1.5 rounded-lg px-2 py-1.5 text-[10px] leading-snug text-foreground/90 focus:bg-red-500/[0.12] focus:text-red-300 data-[highlighted]:bg-red-500/[0.12] data-[highlighted]:text-red-200"
+            className="cursor-pointer gap-2 rounded-xl px-3 py-2.5 text-[14px] leading-snug text-foreground/90 focus:bg-red-500/[0.12] focus:text-red-300 data-[highlighted]:bg-red-500/[0.12] data-[highlighted]:text-red-200"
           >
-            <LogOut className="h-3 w-3 shrink-0 opacity-80" />
+            <LogOut className="h-4 w-4 shrink-0 opacity-80" />
             退出登录
           </DropdownMenuItem>
         </div>

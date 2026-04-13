@@ -199,7 +199,7 @@ export default function TrajectoriesPage() {
 
   return (
     <main className="min-h-screen bg-[#070b14] text-slate-100">
-      <div className="mx-auto mt-20 max-w-7xl px-4 py-6 md:px-6">
+      <div className="mx-auto max-w-7xl px-4 py-6 md:px-6">
         <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">轨迹数据控制台</h1>

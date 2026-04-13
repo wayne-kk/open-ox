@@ -717,7 +717,13 @@ async function runBuildWithRepair(params: {
 export async function runGenerateProject(
   userInput: string,
   onStep?: (step: BuildStep) => void,
-  options?: { projectId?: string; styleGuide?: string; enableSkills?: boolean; checkpoint?: CheckpointResult }
+  options?: {
+    projectId?: string;
+    styleGuide?: string;
+    enableSkills?: boolean;
+    useDatabasePrompts?: boolean;
+    checkpoint?: CheckpointResult;
+  }
 ): Promise<GenerateProjectResult> {
   const flowStart = Date.now();
   const logger = createStepLogger({ onStep, prefix: "generate_project" });

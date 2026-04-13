@@ -258,7 +258,7 @@ const TAG_STYLES: Record<ChangeEntry["tag"], string> = {
 
 export default function ChangelogPage() {
   return (
-    <main className="relative min-h-screen pt-[57px]">
+    <main className="relative min-h-screen ">
       <div className="mx-auto max-w-3xl px-6 py-12 lg:px-8">
         <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-primary mb-4">
           // changelog

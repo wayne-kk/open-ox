@@ -414,7 +414,7 @@ export default function ProjectsPage() {
   return (
     <Suspense
       fallback={
-        <main className="relative min-h-screen pt-[57px] flex items-center justify-center">
+        <main className="relative min-h-screen  flex items-center justify-center">
           <p className="font-mono text-sm text-white/40">加载…</p>
         </main>
       }
@@ -688,7 +688,7 @@ function ProjectsPageContent() {
   };
 
   return (
-    <main className="relative min-h-screen pt-[57px]">
+    <main className="relative min-h-screen ">
 
       {/* Confirm delete modal */}
       {pendingDeleteId && (
@@ -717,22 +717,20 @@ function ProjectsPageContent() {
             <button
               type="button"
               onClick={goGlobalGallery}
-              className={`rounded-full px-3 py-1 text-[12px] font-medium border transition-colors ${
-                !isMineView
+              className={`rounded-full px-3 py-1 text-[12px] font-medium border transition-colors ${!isMineView
                   ? "border-primary/50 bg-primary/10 text-primary"
                   : "border-white/10 text-white/50 hover:border-white/20"
-              }`}
+                }`}
             >
               全部成员
             </button>
             <button
               type="button"
               onClick={goMineProjects}
-              className={`rounded-full px-3 py-1 text-[12px] font-medium border transition-colors ${
-                isMineView
+              className={`rounded-full px-3 py-1 text-[12px] font-medium border transition-colors ${isMineView
                   ? "border-primary/50 bg-primary/10 text-primary"
                   : "border-white/10 text-white/50 hover:border-white/20"
-              }`}
+                }`}
             >
               我的项目
             </button>
@@ -746,22 +744,20 @@ function ProjectsPageContent() {
               <button
                 type="button"
                 onClick={() => applyFolderFilter("all")}
-                className={`rounded-full px-3 py-1 text-[12px] font-medium border transition-colors ${
-                  folderFilter === "all"
+                className={`rounded-full px-3 py-1 text-[12px] font-medium border transition-colors ${folderFilter === "all"
                     ? "border-primary/50 bg-primary/10 text-primary"
                     : "border-white/10 text-white/50 hover:border-white/20"
-                }`}
+                  }`}
               >
                 全部
               </button>
               <button
                 type="button"
                 onClick={() => applyFolderFilter("uncategorized")}
-                className={`rounded-full px-3 py-1 text-[12px] font-medium border transition-colors ${
-                  folderFilter === "uncategorized"
+                className={`rounded-full px-3 py-1 text-[12px] font-medium border transition-colors ${folderFilter === "uncategorized"
                     ? "border-primary/50 bg-primary/10 text-primary"
                     : "border-white/10 text-white/50 hover:border-white/20"
-                }`}
+                  }`}
               >
                 未分类
               </button>
@@ -770,11 +766,10 @@ function ProjectsPageContent() {
                   <button
                     type="button"
                     onClick={() => applyFolderFilter(f.id)}
-                    className={`rounded-full px-3 py-1 text-[12px] font-medium border transition-colors ${
-                      folderFilter === f.id
+                    className={`rounded-full px-3 py-1 text-[12px] font-medium border transition-colors ${folderFilter === f.id
                         ? "border-primary/50 bg-primary/10 text-primary"
                         : "border-white/10 text-white/50 hover:border-white/20"
-                    }`}
+                      }`}
                   >
                     {f.name}
                   </button>
