@@ -3,13 +3,14 @@ import { getSiteRoot as projectManagerGetSiteRoot } from "@/lib/projectManager";
 import { setSiteRoot, getSiteRoot } from "@/ai/tools/system/common";
 import { execSync } from "child_process";
 import { isLayoutSection } from "./registry/layoutSections";
-import { syncSiteValidationMarkers, readSiteFile } from "./shared/files";
+import { formatSiteFile, syncSiteValidationMarkers, readSiteFile, writeSiteFile } from "./shared/files";
 import { createArtifactLogger, createStepLogger } from "./shared/logging";
-import { buildSectionFilePath } from "./shared/paths";
+import { buildScreenFilePath, buildSectionFilePath } from "./shared/paths";
 import { stepAnalyzeProjectRequirement } from "./steps/analyzeProjectRequirement";
 import { stepApplyProjectDesignTokens } from "./steps/applyProjectDesignTokens";
 import { stepComposeLayout } from "./steps/composeLayout";
 import { stepComposePage } from "./steps/composePage";
+import { stepGenerateScreen } from "./steps/generateScreen";
 import { stepGenerateProjectDesignSystem } from "./steps/generateProjectDesignSystem";
 import { stepGenerateSection } from "./steps/generateSection";
 import { stepInstallDependencies } from "./steps/installDependencies";
@@ -31,6 +32,7 @@ import type { GenerateSectionParams } from "./steps/generateSection";
 import type { PendingImage } from "../../tools/system/generateImageTool";
 import { awaitPendingImages } from "../../tools/system/generateImageTool";
 import type { CheckpointResult } from "./shared/checkpoint";
+import { getPromptProfile } from "@/ai/prompts/core/profile";
 
 
 function summarizeFailures(prefix: string, failures: Array<{ name: string; message: string }>): string {
@@ -127,6 +129,10 @@ function getComposePageStepName(slug: string): string {
   return `compose_page:${slug}`;
 }
 
+function getGenerateScreenStepName(slug: string): string {
+  return `generate_screen:${slug}`;
+}
+
 function getBuildStepName(attempt: number): string {
   return attempt === 0 ? "run_build" : `run_build:retry_${attempt}`;
 }
@@ -137,6 +143,51 @@ function getRepairStepName(attempt: number): string {
 
 function getInstallDependenciesStepName(scope: string): string {
   return `install_dependencies:${scope}`;
+}
+
+function buildAppScreenFirstLayout(language: string): string {
+  const lang = language?.trim() || "en";
+  return `import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import "./globals.css";
+
+const inter = Inter({ subsets: ["latin"] });
+
+export const metadata: Metadata = {
+  title: "Generated App",
+  description: "Screen-first generated app experience.",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="${lang}">
+      <body className={inter.className}>{children}</body>
+    </html>
+  );
+}
+`;
+}
+
+async function ensureAppScreenFirstLayout(params: {
+  language: string;
+  artifactLogger: ArtifactLogger;
+}): Promise<string> {
+  const { language, artifactLogger } = params;
+  const layoutPath = "app/layout.tsx";
+  const content = buildAppScreenFirstLayout(language);
+  await writeSiteFile(layoutPath, content);
+  await formatSiteFile(layoutPath);
+  await persistJsonArtifact(artifactLogger, "compose_layout", "output", {
+    layoutPath,
+    mode: "app-screen-first",
+    language,
+  });
+  await persistSiteFileArtifact(artifactLogger, "compose_layout", layoutPath, "layout");
+  return layoutPath;
 }
 
 async function autoInstallDependenciesForFiles(params: {
@@ -369,16 +420,85 @@ async function generatePages(params: {
   runtimeContext: ProjectRuntimeContext;
   artifactLogger: ArtifactLogger;
   logger: StepLogger;
+  appScreenFirstEnabled: boolean;
   skipSections?: Set<string>;
   skipPages?: Set<string>;
 }): Promise<{ files: string[]; pendingImages: PendingImage[] }> {
-  const { blueprint, designSystem, runtimeContext, artifactLogger, logger, skipSections, skipPages } = params;
+  const {
+    blueprint,
+    designSystem,
+    runtimeContext,
+    artifactLogger,
+    logger,
+    appScreenFirstEnabled,
+    skipSections,
+    skipPages,
+  } = params;
   const collectedFiles: string[] = [];
   const collectedPendingImages: PendingImage[] = [];
 
   // Pages are independent (distinct output paths per slug); run in parallel for wall-clock time.
   const pageOutcomes = await Promise.all(
     blueprint.site.pages.map(async (page) => {
+      if (appScreenFirstEnabled) {
+        const screenStepName = getGenerateScreenStepName(page.slug);
+        const screenOutput = buildScreenFilePath(page.slug);
+        logger.startStep(screenStepName);
+        const screenResult = await stepGenerateScreen({
+          page,
+          designSystem,
+          projectContext: runtimeContext,
+          outputFileRelative: screenOutput,
+        });
+        logger.logStep(
+          screenStepName,
+          "ok",
+          `${screenResult.filePath}${screenResult.skillIds.length ? ` | ${screenResult.skillIds.join(", ")}` : ""}`
+        );
+        await persistJsonArtifact(artifactLogger, screenStepName, "output", {
+          slug: page.slug,
+          outputFile: screenResult.filePath,
+          skillIds: screenResult.skillIds,
+          appScreenPlan: page.appScreenPlan ?? null,
+        });
+        await persistSiteFileArtifact(
+          artifactLogger,
+          screenStepName,
+          screenResult.filePath,
+          "screen"
+        );
+
+        if (skipPages?.has(page.slug)) {
+          const pagePath = page.slug === "home" ? "app/page.tsx" : `app/${page.slug}/page.tsx`;
+          logger.logStep(getComposePageStepName(page.slug), "ok", "resumed from checkpoint");
+          return { files: [screenResult.filePath, pagePath], pendingImages: [] };
+        }
+
+        const pagePath = await logger.timed(
+          getComposePageStepName(page.slug),
+          () =>
+            stepComposePage(page, designSystem, [], {
+              appScreenComponentName: "AppScreen",
+            }),
+          (path) => path
+        );
+        await persistJsonArtifact(artifactLogger, getComposePageStepName(page.slug), "output", {
+          pagePath,
+          slug: page.slug,
+          title: page.title,
+          composeMode: "app-screen-first",
+          screenComponent: "AppScreen",
+          screenFile: screenResult.filePath,
+        });
+        await persistSiteFileArtifact(
+          artifactLogger,
+          getComposePageStepName(page.slug),
+          pagePath,
+          "page"
+        );
+        return { files: [screenResult.filePath, pagePath], pendingImages: [] };
+      }
+
       // Deduplicate page sections by fileName to prevent duplicate generation
       const seenFileNames = new Set<string>();
       const dedupedSections = page.sections.filter((s) => {
@@ -592,6 +712,7 @@ export async function runGenerateProject(
   }
 
   const cp = options?.checkpoint;
+  const appScreenFirstEnabled = getPromptProfile() === "app";
 
   try {
     await persistJsonArtifact(artifactLogger, "run", "input", {
@@ -719,6 +840,7 @@ export async function runGenerateProject(
           pages: blueprint.site.pages.map((page) => ({
             slug: page.slug,
             pageDesignPlan: page.pageDesignPlan,
+            appScreenPlan: page.appScreenPlan ?? null,
             sections: page.sections.map((section) => ({
               type: section.type,
               fileName: section.fileName,
@@ -762,9 +884,7 @@ export async function runGenerateProject(
     const runtimeContext = buildProjectRuntimeContext(blueprint);
     appendGeneratedFiles(result, ["design-system.md"]);
 
-    // ── Step: apply_project_design_tokens + Section generation (parallel) ──
-    // Sections now rely only on design-system.md (not globals.css), so we can
-    // run design-token application and section generation concurrently.
+    // ── Step: apply_project_design_tokens + UI generation (parallel) ──
     const designTokensPromise = (async () => {
       if (cp?.skipDesignTokens) {
         logger.logStep("apply_project_design_tokens", "ok", "resumed from checkpoint");
@@ -797,32 +917,58 @@ export async function runGenerateProject(
       appendGeneratedFiles(result, tokenFiles);
     })();
 
-    // Each section discovers and selects its own skill at runtime.
-    const sectionGenerationPromise = Promise.all([
-      generateSharedLayoutSections({
-        blueprint,
-        designSystem,
-        runtimeContext,
-        artifactLogger,
-        logger,
-        skipSections: cp?.generatedSections,
-      }),
-      generatePages({
-        blueprint,
-        designSystem,
-        runtimeContext,
-        artifactLogger,
-        logger,
-        skipSections: cp?.generatedSections,
-        skipPages: cp?.composedPages,
-      }),
-    ]).then(([layoutResult, pageResult]) => {
+    const uiGenerationPromise = (async () => {
+      if (appScreenFirstEnabled) {
+        const layoutPath = await logger.timed(
+          "compose_layout",
+          () =>
+            ensureAppScreenFirstLayout({
+              language: blueprint.brief.language,
+              artifactLogger,
+            }),
+          (path) => path
+        );
+        appendGeneratedFiles(result, [layoutPath]);
+
+        const pageResult = await generatePages({
+          blueprint,
+          designSystem,
+          runtimeContext,
+          artifactLogger,
+          logger,
+          appScreenFirstEnabled: true,
+          skipPages: cp?.composedPages,
+        });
+        appendGeneratedFiles(result, pageResult.files);
+        return pageResult.pendingImages;
+      }
+
+      const [layoutResult, pageResult] = await Promise.all([
+        generateSharedLayoutSections({
+          blueprint,
+          designSystem,
+          runtimeContext,
+          artifactLogger,
+          logger,
+          skipSections: cp?.generatedSections,
+        }),
+        generatePages({
+          blueprint,
+          designSystem,
+          runtimeContext,
+          artifactLogger,
+          logger,
+          appScreenFirstEnabled: false,
+          skipSections: cp?.generatedSections,
+          skipPages: cp?.composedPages,
+        }),
+      ]);
       appendGeneratedFiles(result, layoutResult.files);
       appendGeneratedFiles(result, pageResult.files);
       return [...layoutResult.pendingImages, ...pageResult.pendingImages];
-    });
+    })();
 
-    const [, allPendingImages] = await Promise.all([designTokensPromise, sectionGenerationPromise]);
+    const [, allPendingImages] = await Promise.all([designTokensPromise, uiGenerationPromise]);
 
     // Await all background image generation before build — images must be on
     // disk for Next.js to bundle them. This runs in parallel with dependency

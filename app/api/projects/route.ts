@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { listProjectsSummary, createProject } from "@/lib/projectManager";
+import { listProjectsSummary, createProject, type GenerationMode } from "@/lib/projectManager";
 
 export async function GET(req: Request) {
   try {
@@ -22,11 +22,19 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { userPrompt, modelId, styleGuide } = body as { userPrompt: string; modelId?: string; styleGuide?: string };
+    const { userPrompt, modelId, styleGuide, generationMode } = body as {
+      userPrompt: string;
+      modelId?: string;
+      styleGuide?: string;
+      generationMode?: GenerationMode;
+    };
+    if (generationMode !== undefined && generationMode !== "web" && generationMode !== "app") {
+      return NextResponse.json({ error: "Invalid generationMode" }, { status: 400 });
+    }
     if (!userPrompt?.trim()) {
       return NextResponse.json({ error: "userPrompt is required" }, { status: 400 });
     }
-    const project = await createProject(userPrompt.trim(), modelId);
+    const project = await createProject(userPrompt.trim(), modelId, generationMode ?? "web");
     return NextResponse.json({ projectId: project.id, styleGuide: styleGuide ?? null });
   } catch (err) {
     console.error("[POST /api/projects]", err);

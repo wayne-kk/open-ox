@@ -21,8 +21,8 @@ export interface ProjectGuardrailRuleMeta {
   plannerOnly: boolean;
 }
 
-let cachedSectionMetas: SectionGuardrailRuleMeta[] | null = null;
-let cachedProjectMetas: ProjectGuardrailRuleMeta[] | null = null;
+const cachedSectionMetasByRoot = new Map<string, SectionGuardrailRuleMeta[]>();
+const cachedProjectMetasByRoot = new Map<string, ProjectGuardrailRuleMeta[]>();
 
 function normalizeDefaultForScope(data: Record<string, unknown>): DefaultForScope {
   const raw = data.guardrailDefaultFor;
@@ -96,18 +96,26 @@ function discoverProjectGuardrailRuleMetas(): ProjectGuardrailRuleMeta[] {
 
 /** Section guardrails: one `section.*.md` per id under `prompts/rules/`. */
 export function getSectionGuardrailRuleMetas(): SectionGuardrailRuleMeta[] {
-  if (!cachedSectionMetas) {
-    cachedSectionMetas = discoverSectionGuardrailRuleMetas();
+  const root = getRulePromptsRoot();
+  const hit = cachedSectionMetasByRoot.get(root);
+  if (hit) {
+    return hit;
   }
-  return cachedSectionMetas;
+  const metas = discoverSectionGuardrailRuleMetas();
+  cachedSectionMetasByRoot.set(root, metas);
+  return metas;
 }
 
 /** Project guardrails: one `project.*.md` per id under `prompts/rules/`. */
 export function getProjectGuardrailRuleMetas(): ProjectGuardrailRuleMeta[] {
-  if (!cachedProjectMetas) {
-    cachedProjectMetas = discoverProjectGuardrailRuleMetas();
+  const root = getRulePromptsRoot();
+  const hit = cachedProjectMetasByRoot.get(root);
+  if (hit) {
+    return hit;
   }
-  return cachedProjectMetas;
+  const metas = discoverProjectGuardrailRuleMetas();
+  cachedProjectMetasByRoot.set(root, metas);
+  return metas;
 }
 
 export function getAllowedSectionGuardrailIds(): string[] {

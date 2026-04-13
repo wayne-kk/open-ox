@@ -9,6 +9,8 @@ import { PromptChips } from "@/app/components/ui/PromptChips";
 import { QuickTemplates } from "@/app/components/ui/QuickTemplates";
 import { SparkleHoverButton } from "@/components/ui/sparkle-hover-button";
 
+type GenerationMode = "web" | "app";
+
 // ── Typewriter placeholders ──────────────────────────────────────────────────
 const PLACEHOLDERS = [
   "一个项目管理工具的 SaaS 落地页...",
@@ -40,6 +42,7 @@ export function HeroPrompt() {
   const [chips, setChips] = useState<InjectedChip[]>([]);
   const [focused, setFocused] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [generationMode, setGenerationMode] = useState<GenerationMode>("web");
 
   // ── Typewriter ─────────────────────────────────────────────────────────────
   const [placeholderIdx, setPlaceholderIdx] = useState(0);
@@ -190,6 +193,7 @@ export function HeroPrompt() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userPrompt: finalPrompt,
+          generationMode,
           ...(styleGuide ? { styleGuide } : {}),
           ...(referenceProjectId ? { referenceProjectId } : {}),
           ...(referenceUrl ? { referenceUrl } : {}),
@@ -295,18 +299,47 @@ export function HeroPrompt() {
 
         {/* Bottom bar */}
         <div className="flex items-center justify-between">
-          <span className="font-mono text-[11px] text-muted-foreground/40">
-            <kbd className="rounded border border-white/10 px-1 py-0.5 text-[10px]">/</kbd> 风格
-            {" · "}
-            <kbd className="rounded border border-white/10 px-1 py-0.5 text-[10px]">@</kbd> 参考项目
-            {" · "}
-            <kbd className="rounded border border-white/10 px-1 py-0.5 text-[10px]">#</kbd> 约束
-            {" · ⌘↵ 构建"}
-          </span>
+          <div className="flex items-center gap-3">
+            <div className="inline-flex items-center rounded-lg border border-white/12 bg-white/3 p-0.5">
+              <button
+                type="button"
+                onClick={() => setGenerationMode("web")}
+                className={`rounded-md px-2.5 py-1 font-mono text-[11px] tracking-[0.08em] transition ${
+                  generationMode === "web"
+                    ? "bg-primary/20 text-primary"
+                    : "text-muted-foreground/70 hover:text-foreground"
+                }`}
+                aria-pressed={generationMode === "web"}
+              >
+                Web
+              </button>
+              <button
+                type="button"
+                onClick={() => setGenerationMode("app")}
+                className={`rounded-md px-2.5 py-1 font-mono text-[11px] tracking-[0.08em] transition ${
+                  generationMode === "app"
+                    ? "bg-primary/20 text-primary"
+                    : "text-muted-foreground/70 hover:text-foreground"
+                }`}
+                aria-pressed={generationMode === "app"}
+              >
+                App
+              </button>
+            </div>
+
+            <span className="font-mono text-[11px] text-muted-foreground/40">
+              <kbd className="rounded border border-white/10 px-1 py-0.5 text-[10px]">/</kbd> 风格
+              {" · "}
+              <kbd className="rounded border border-white/10 px-1 py-0.5 text-[10px]">@</kbd> 参考项目
+              {" · "}
+              <kbd className="rounded border border-white/10 px-1 py-0.5 text-[10px]">#</kbd> 约束
+              {" · ⌘↵ 构建"}
+            </span>
+          </div>
           <SparkleHoverButton
             type="submit"
             disabled={!canSubmit}
-            className="px-5 py-2.5 tracking-[0.1em] disabled:opacity-30 disabled:cursor-not-allowed"
+            className="px-5 py-2.5 tracking-widest disabled:opacity-30 disabled:cursor-not-allowed"
           >
             {submitting ? (
               <><span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" /> 创建中…</>

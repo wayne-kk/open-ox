@@ -13,6 +13,11 @@ import type {
   UserRole,
 } from "../types";
 import { isStringArray } from "../shared/typeGuards";
+import { getPromptProfile } from "@/ai/prompts/core/profile";
+
+function isAppProfile(): boolean {
+  return getPromptProfile() === "app";
+}
 
 function isSectionSpecArray(value: unknown): value is SectionSpec[] {
   return Array.isArray(value);
@@ -31,21 +36,33 @@ function normalizeStringArray(value: unknown, fallback: string[] = []): string[]
 }
 
 function normalizeProductScope(value: unknown, projectDescription: string): ProductScope {
+  const appProfile = isAppProfile();
   if (!value || typeof value !== "object") {
     return {
-      productType: "marketing website",
+      productType: appProfile ? "mobile app" : "marketing website",
       mvpDefinition: projectDescription,
       coreOutcome: projectDescription,
-      businessGoal: "Launch the smallest coherent website that proves the core value proposition.",
+      businessGoal: appProfile
+        ? "Ship the smallest coherent app experience that proves the core user loop."
+        : "Launch the smallest coherent website that proves the core value proposition.",
       audienceSummary: projectDescription,
-      inScope: ["Clarify the offer", "Support the primary user journey"],
-      outOfScope: ["Secondary workflows that are not required for the initial MVP"],
+      inScope: appProfile
+        ? ["Deliver the primary in-app workflow", "Support repeat usage with clear task flow"]
+        : ["Clarify the offer", "Support the primary user journey"],
+      outOfScope: appProfile
+        ? ["Secondary growth mechanics that are not required for the initial MVP"]
+        : ["Secondary workflows that are not required for the initial MVP"],
     };
   }
 
   const candidate = value as Partial<ProductScope>;
   return {
-    productType: typeof candidate.productType === "string" ? candidate.productType : "website",
+    productType:
+      typeof candidate.productType === "string"
+        ? candidate.productType
+        : appProfile
+          ? "mobile app"
+          : "website",
     mvpDefinition:
       typeof candidate.mvpDefinition === "string" ? candidate.mvpDefinition : projectDescription,
     coreOutcome:
@@ -53,10 +70,17 @@ function normalizeProductScope(value: unknown, projectDescription: string): Prod
     businessGoal:
       typeof candidate.businessGoal === "string"
         ? candidate.businessGoal
-        : "Launch the smallest coherent website that proves the core value proposition.",
+        : appProfile
+          ? "Ship the smallest coherent app experience that proves the core user loop."
+          : "Launch the smallest coherent website that proves the core value proposition.",
     audienceSummary:
       typeof candidate.audienceSummary === "string" ? candidate.audienceSummary : projectDescription,
-    inScope: normalizeStringArray(candidate.inScope, ["Clarify the core value proposition"]),
+    inScope: normalizeStringArray(
+      candidate.inScope,
+      appProfile
+        ? ["Deliver the core in-app workflow with clear interaction feedback"]
+        : ["Clarify the core value proposition"]
+    ),
     outOfScope: normalizeStringArray(candidate.outOfScope, []),
   };
 }
@@ -185,9 +209,12 @@ function normalizeInformationArchitecture(
   value: unknown,
   pages: PageBlueprint[]
 ): InformationArchitecture {
+  const appProfile = isAppProfile();
   if (!value || typeof value !== "object") {
     return {
-      navigationModel: "Simple top-level navigation aligned to the core MVP journey.",
+      navigationModel: appProfile
+        ? "Single-page app flow with bottom tab-bar style navigation aligned to the core MVP journey."
+        : "Simple top-level navigation aligned to the core MVP journey.",
       pageMap: pages.map((page) => ({
         slug: page.slug,
         title: page.title,
@@ -196,7 +223,7 @@ function normalizeInformationArchitecture(
         supportingCapabilityIds: page.supportingCapabilityIds,
         journeyStage: page.journeyStage,
       })),
-      sharedShells: ["Global navigation", "Global footer"],
+      sharedShells: appProfile ? ["Global bottom tab navigation"] : ["Global navigation", "Global footer"],
       notes: [],
     };
   }
@@ -206,9 +233,14 @@ function normalizeInformationArchitecture(
     navigationModel:
       typeof candidate.navigationModel === "string"
         ? candidate.navigationModel
-        : "Simple top-level navigation aligned to the core MVP journey.",
+        : appProfile
+          ? "Single-page app flow with bottom tab-bar style navigation aligned to the core MVP journey."
+          : "Simple top-level navigation aligned to the core MVP journey.",
     pageMap: normalizePageMap(candidate.pageMap),
-    sharedShells: normalizeStringArray(candidate.sharedShells, ["Global navigation", "Global footer"]),
+    sharedShells: normalizeStringArray(
+      candidate.sharedShells,
+      appProfile ? ["Global bottom tab navigation"] : ["Global navigation", "Global footer"]
+    ),
     notes: normalizeStringArray(candidate.notes, []),
   };
 }
@@ -245,6 +277,33 @@ function normalizeShellSection(
   };
 }
 
+function enforceAppLayoutSections(layoutSections: SectionSpec[]): SectionSpec[] {
+  const navigation = layoutSections.find((section) => section.type === "navigation");
+  const base = navigation ?? {
+    type: "navigation",
+    intent: "Provide primary bottom-tab navigation for app sections.",
+    contentHints: "Bottom tab bar, touch-friendly targets, compact labels, active state.",
+    fileName: "NavigationSection",
+    primaryRoleIds: [],
+    supportingCapabilityIds: [],
+    sourceTaskLoopIds: [],
+  };
+
+  return [
+    {
+      ...base,
+      type: "navigation",
+      fileName: "NavigationSection",
+      intent:
+        base.intent && base.intent.trim().length > 0
+          ? base.intent
+          : "Provide primary bottom-tab navigation for app sections.",
+      contentHints:
+        "Bottom tab bar for mobile app navigation. Fixed bottom dock, touch-friendly targets, concise labels, clear active state.",
+    },
+  ];
+}
+
 function normalizePageBlueprint(value: unknown, index: number): PageBlueprint {
   const candidate = (value && typeof value === "object" ? value : {}) as Partial<PageBlueprint>;
   const title = typeof candidate.title === "string" ? candidate.title : `Page ${index + 1}`;
@@ -271,14 +330,15 @@ function uniqueStrings(values: string[]): string[] {
 }
 
 function enforceSingleHomePage(pages: PageBlueprint[]): PageBlueprint[] {
+  const appProfile = isAppProfile();
   if (pages.length === 0) {
     return [
       {
         title: "Home",
         slug: "home",
-        description: "Single-page marketing site.",
-        journeyStage: "entry",
-        primaryRoleIds: ["visitor"],
+        description: appProfile ? "Single-screen app workspace." : "Single-page marketing site.",
+        journeyStage: appProfile ? "core flow" : "entry",
+        primaryRoleIds: [appProfile ? "user" : "visitor"],
         supportingCapabilityIds: [],
         sections: [],
       },
@@ -310,8 +370,8 @@ function enforceSingleHomePage(pages: PageBlueprint[]): PageBlueprint[] {
       description:
         mergedDescription.length > 24
           ? mergedDescription.slice(0, 800)
-          : base.description || mergedDescription || "Single-page brand site.",
-      journeyStage: base.journeyStage || "entry",
+          : base.description || mergedDescription || (appProfile ? "Single-screen app workspace." : "Single-page brand site."),
+      journeyStage: base.journeyStage || (appProfile ? "core flow" : "entry"),
       primaryRoleIds: primaryRoleIds.length > 0 ? primaryRoleIds : base.primaryRoleIds,
       supportingCapabilityIds:
         supportingCapabilityIds.length > 0 ? supportingCapabilityIds : base.supportingCapabilityIds,
@@ -350,13 +410,22 @@ function normalizeBrief(value: unknown): ProjectBrief {
 }
 
 function normalizeExperience(value: unknown): ProjectExperience {
+  const appProfile = isAppProfile();
   if (!value || typeof value !== "object") {
     return {
       designIntent: {
-        mood: ["clean", "trustworthy", "focused"],
-        colorDirection: "Neutral base with one clear accent direction.",
-        style: "Modern, content-first, conversion-oriented.",
-        keywords: ["clean", "professional", "focused", "confident", "modern"],
+        mood: appProfile
+          ? ["focused", "immersive", "energetic"]
+          : ["clean", "trustworthy", "focused"],
+        colorDirection: appProfile
+          ? "High-contrast functional accents over calm neutral surfaces."
+          : "Neutral base with one clear accent direction.",
+        style: appProfile
+          ? "Mobile-first, interaction-driven, feed-and-task oriented."
+          : "Modern, content-first, conversion-oriented.",
+        keywords: appProfile
+          ? ["mobile", "app", "feed", "interactive", "task-focused"]
+          : ["clean", "professional", "focused", "confident", "modern"],
       },
     };
   }
@@ -365,10 +434,18 @@ function normalizeExperience(value: unknown): ProjectExperience {
   if (!candidate.designIntent || typeof candidate.designIntent !== "object") {
     return {
       designIntent: {
-        mood: ["clean", "trustworthy", "focused"],
-        colorDirection: "Neutral base with one clear accent direction.",
-        style: "Modern, content-first, conversion-oriented.",
-        keywords: ["clean", "professional", "focused", "confident", "modern"],
+        mood: appProfile
+          ? ["focused", "immersive", "energetic"]
+          : ["clean", "trustworthy", "focused"],
+        colorDirection: appProfile
+          ? "High-contrast functional accents over calm neutral surfaces."
+          : "Neutral base with one clear accent direction.",
+        style: appProfile
+          ? "Mobile-first, interaction-driven, feed-and-task oriented."
+          : "Modern, content-first, conversion-oriented.",
+        keywords: appProfile
+          ? ["mobile", "app", "feed", "interactive", "task-focused"]
+          : ["clean", "professional", "focused", "confident", "modern"],
       },
     };
   }
@@ -379,6 +456,7 @@ function normalizeExperience(value: unknown): ProjectExperience {
 }
 
 function normalizeSite(value: unknown): ProjectSiteBlueprint {
+  const appProfile = isAppProfile();
   if (!value || typeof value !== "object") {
     throw new Error("analyze_project_requirement: site is missing");
   }
@@ -412,15 +490,21 @@ function normalizeSite(value: unknown): ProjectSiteBlueprint {
       normalizeShellSection(candidate.footer, "footer", "FooterSection"),
     ];
 
+  const normalizedLayoutSections = appProfile
+    ? enforceAppLayoutSections(layoutSections)
+    : layoutSections;
+
   return {
     informationArchitecture: {
       ...baseIa,
       pageMap,
       navigationModel: mergedFromMultiple
-        ? "Single-page site: all content on `/` (home). Primary navigation MUST use in-page anchor links (#section-id), not separate routes."
+        ? appProfile
+          ? "Single-page app flow: all content on `/` (home). Primary navigation uses bottom tab-bar style entry points and in-page anchors."
+          : "Single-page site: all content on `/` (home). Primary navigation MUST use in-page anchor links (#section-id), not separate routes."
         : baseIa.navigationModel,
     },
-    layoutSections,
+    layoutSections: normalizedLayoutSections,
     pages,
   };
 }
@@ -516,8 +600,11 @@ export function asProjectBlueprint(value: unknown): ProjectBlueprint {
     singlePage.designIntent &&
     isSectionSpecArray(singlePage.sections)
   ) {
-    const layoutSections = singlePage.sections.filter(
-      (section) => section.type === "navigation" || section.type === "footer"
+    const appProfile = isAppProfile();
+    const layoutSections = singlePage.sections.filter((section) =>
+      appProfile
+        ? section.type === "navigation"
+        : section.type === "navigation" || section.type === "footer"
     );
     const pageSections = singlePage.sections.filter(
       (section) => section.type !== "navigation" && section.type !== "footer"
@@ -551,7 +638,9 @@ export function asProjectBlueprint(value: unknown): ProjectBlueprint {
       },
       site: {
         informationArchitecture: normalizeInformationArchitecture(undefined, normalizedPages),
-        layoutSections: layoutSections.map((section, index) => normalizeSectionSpec(section, index)),
+        layoutSections: appProfile
+          ? enforceAppLayoutSections(layoutSections.map((section, index) => normalizeSectionSpec(section, index)))
+          : layoutSections.map((section, index) => normalizeSectionSpec(section, index)),
         pages: normalizedPages,
       },
     };

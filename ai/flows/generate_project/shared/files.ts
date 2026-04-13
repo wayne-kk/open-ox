@@ -2,16 +2,7 @@ import { existsSync, mkdirSync, readFileSync } from "fs";
 import { dirname, join } from "path";
 import { executeSystemTool } from "../../../tools";
 import { getSiteRoot } from "../../../tools/system/common";
-import { hasPrompt, loadPrompt, resolvePromptPath, composePrompt } from "@/ai/prompts/core";
-
-const FLOW_ROOT = join(process.cwd(), "ai", "flows", "generate_project");
-const STEP_PROMPTS_ROOT = join(FLOW_ROOT, "prompts", "steps");
-const SKILL_PROMPTS_ROOT = join(FLOW_ROOT, "prompts", "skills");
-const SECTION_PROMPTS_ROOT = join(FLOW_ROOT, "prompts", "sections");
-const RULE_PROMPTS_ROOT = join(FLOW_ROOT, "prompts", "rules");
-const MOTION_PROMPTS_ROOT = join(FLOW_ROOT, "prompts", "motions");
-const LAYOUT_PROMPTS_ROOT = join(FLOW_ROOT, "prompts", "layouts");
-const CAPABILITY_PROMPTS_ROOT = join(FLOW_ROOT, "prompts", "capabilities");
+import { hasPrompt, loadPrompt, resolvePromptPath, composePrompt, resolveGeneratePromptsRoot } from "@/ai/prompts/core";
 
 function readPromptFile(path: string): string {
   if (!existsSync(path)) {
@@ -30,7 +21,7 @@ export function getSectionPromptPath(promptId: string): string {
 }
 
 export function getSkillPromptsRoot(): string {
-  return SKILL_PROMPTS_ROOT;
+  return join(resolveGeneratePromptsRoot(), "skills");
 }
 
 export function getSkillPromptPath(promptId: string): string {
@@ -38,7 +29,7 @@ export function getSkillPromptPath(promptId: string): string {
 }
 
 export function getRulePromptsRoot(): string {
-  return RULE_PROMPTS_ROOT;
+  return join(resolveGeneratePromptsRoot(), "rules");
 }
 
 export function getRulePath(ruleId: string): string {

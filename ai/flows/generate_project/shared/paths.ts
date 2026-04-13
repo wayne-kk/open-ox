@@ -28,3 +28,16 @@ export function buildSectionFilePath(scopeSlug: string, sectionFileName: string)
 export function buildSectionImportPath(scopeSlug: string, sectionFileName: string): string {
   return `@/components/sections/${buildSectionFileStem(scopeSlug, sectionFileName)}`;
 }
+
+export function buildScreenFileStem(scopeSlug: string): string {
+  const normalizedScope = normalizeSlug(scopeSlug);
+  return `${normalizedScope}_AppScreen`;
+}
+
+export function buildScreenFilePath(scopeSlug: string): string {
+  return `components/screens/${buildScreenFileStem(scopeSlug)}.tsx`;
+}
+
+export function buildScreenImportPath(scopeSlug: string): string {
+  return `@/components/screens/${buildScreenFileStem(scopeSlug)}`;
+}

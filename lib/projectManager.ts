@@ -4,6 +4,7 @@ import { Dirent } from "fs";
 import { supabase } from "./supabase";
 
 export const WORKSPACE_ROOT = process.cwd();
+export type GenerationMode = "web" | "app";
 
 export interface ModificationRecord {
   instruction: string;
@@ -45,6 +46,7 @@ export interface ProjectMetadata {
   logDirectory?: string;
   totalDuration?: number;
   modelId?: string;
+  generationMode: GenerationMode;
   modificationHistory: ModificationRecord[];
 }
 
@@ -64,6 +66,7 @@ interface ProjectRow {
   log_directory: string | null;
   total_duration: number | null;
   model_id: string | null;
+  generation_mode: GenerationMode | null;
   modification_history: ModificationRecord[];
 }
 
@@ -84,6 +87,7 @@ function rowToMetadata(row: ProjectRow): ProjectMetadata {
     logDirectory: row.log_directory ?? undefined,
     totalDuration: row.total_duration ?? undefined,
     modelId: row.model_id ?? undefined,
+    generationMode: row.generation_mode ?? "web",
     modificationHistory: row.modification_history ?? [],
   };
 }
@@ -120,6 +124,7 @@ interface ProjectListRow {
   error: string | null;
   verification_status: "passed" | "failed" | null;
   model_id: string | null;
+  generation_mode: GenerationMode | null;
 }
 
 /**
@@ -133,7 +138,7 @@ export async function listProjectsSummary(options?: {
   let query = supabase
     .from("projects")
     .select(
-      "id,name,user_prompt,status,created_at,updated_at,completed_at,error,verification_status,model_id"
+      "id,name,user_prompt,status,created_at,updated_at,completed_at,error,verification_status,model_id,generation_mode"
     )
     .order("created_at", { ascending: false });
 
@@ -169,6 +174,7 @@ export async function listProjectsSummary(options?: {
     error: row.error ?? undefined,
     verificationStatus: row.verification_status ?? undefined,
     modelId: row.model_id ?? undefined,
+    generationMode: row.generation_mode ?? "web",
     modificationHistory: [],
   }));
 }
@@ -183,7 +189,11 @@ export async function getProject(id: string): Promise<ProjectMetadata | null> {
   return rowToMetadata(data as ProjectRow);
 }
 
-export async function createProject(userPrompt: string, modelId?: string): Promise<ProjectMetadata> {
+export async function createProject(
+  userPrompt: string,
+  modelId?: string,
+  generationMode: GenerationMode = "web"
+): Promise<ProjectMetadata> {
   const now = new Date();
   const timestamp = now.toISOString().replace(/:/g, "-").replace(/\./g, "-");
   const slug = userPrompt
@@ -204,6 +214,7 @@ export async function createProject(userPrompt: string, modelId?: string): Promi
     created_at: createdAt,
     updated_at: createdAt,
     model_id: modelId ?? null,
+    generation_mode: generationMode,
     modification_history: [],
   };
   const { data, error } = await supabase.from("projects").insert(row).select().single();

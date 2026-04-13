@@ -1,4 +1,5 @@
 export { runGenerateProject } from "./generate_project";
+export { runGenerateApp } from "./generate_app";
 export type {
   AutoInstalledDependency,
   BuildRepairResult,

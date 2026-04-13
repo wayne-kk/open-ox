@@ -7,9 +7,16 @@
  *   data: {"type":"error", "message": string}\n\n
  */
 
-import { runGenerateProject } from "@/ai/flows";
+import { runGenerateApp, runGenerateProject } from "@/ai/flows";
 import { detectCheckpoint } from "@/ai/flows/generate_project/shared/checkpoint";
-import { createProject, getProject, initProjectDir, updateProjectStatus, renameProject } from "@/lib/projectManager";
+import {
+  createProject,
+  getProject,
+  initProjectDir,
+  updateProjectStatus,
+  renameProject,
+  type GenerationMode,
+} from "@/lib/projectManager";
 import { uploadGeneratedFiles } from "@/lib/storage";
 import { setRuntimeModelId, type ModelId } from "@/lib/config/models";
 import { loadStepModelsFromDB } from "@/lib/config/models";
@@ -26,10 +33,19 @@ export async function POST(req: Request) {
     const retryProjectId: string | undefined = body.retryProjectId;
     const preCreatedProjectId: string | undefined = body.projectId;
     const styleGuide: string | undefined = body.styleGuide;
+    const requestGenerationMode: GenerationMode | undefined = body.generationMode;
+    if (
+      requestGenerationMode !== undefined &&
+      requestGenerationMode !== "web" &&
+      requestGenerationMode !== "app"
+    ) {
+      return NextResponse.json({ error: "Invalid generationMode" }, { status: 400 });
+    }
 
     // For retry or pre-created project: load existing project's prompt and model
     let effectivePrompt = userPrompt as string | undefined;
     let effectiveModel = modelOverride;
+    let effectiveGenerationMode: GenerationMode = requestGenerationMode ?? "web";
     if (retryProjectId || preCreatedProjectId) {
       const lookupId = retryProjectId ?? preCreatedProjectId!;
       const existing = await getProject(lookupId);
@@ -39,6 +55,7 @@ export async function POST(req: Request) {
       // For pre-created projects, use the stored prompt if none provided in body
       if (!effectivePrompt) effectivePrompt = existing.userPrompt;
       if (!effectiveModel && existing.modelId) effectiveModel = existing.modelId;
+      effectiveGenerationMode = existing.generationMode ?? "web";
     }
 
     // Set runtime model
@@ -76,7 +93,7 @@ export async function POST(req: Request) {
           // Project already created by the client — just scaffold the dir
           projectId = preCreatedProjectId;
         } else {
-          const project = await createProject(effectivePrompt, effectiveModel);
+          const project = await createProject(effectivePrompt, effectiveModel, effectiveGenerationMode);
           projectId = project.id;
         }
 
@@ -99,7 +116,8 @@ export async function POST(req: Request) {
           }
 
           // Step 3: Run generation, writing files into sites/{projectId}/
-          const result = await runGenerateProject(
+          const runGeneration = effectiveGenerationMode === "app" ? runGenerateApp : runGenerateProject;
+          const result = await runGeneration(
             effectivePrompt,
             (step: BuildStep) => {
             // SSE is the sole real-time channel — no DB writes during generation.
