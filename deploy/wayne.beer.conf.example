@@ -1,0 +1,120 @@
+# /etc/nginx/conf.d/wayne.beer.conf
+# 仅保留主站 wayne.beer，移除 sandbox
+#
+# 与线上区别：按需改 ssl 路径；部署后 nginx -t && systemctl reload nginx
+
+upstream main_app {
+    server 127.0.0.1:3000;
+    keepalive 32;
+}
+
+# HTTP -> HTTPS
+server {
+    listen 80;
+    server_name wayne.beer www.wayne.beer;
+    return 301 https://wayne.beer$request_uri;
+}
+
+# HTTPS 主站
+server {
+    listen 443 ssl http2;
+    server_name wayne.beer www.wayne.beer;
+
+    ssl_certificate     /etc/letsencrypt/live/wayne.beer/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/wayne.beer/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+
+    # 可选安全头（按需保留）
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+
+    # -------- SSE 路由（关键：禁用缓冲）--------
+    # Studio build 流
+    location = /api/ai {
+        proxy_pass http://main_app;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host  $host;
+        proxy_set_header Connection "";
+
+        proxy_buffering off;
+        proxy_cache off;
+        gzip off;
+
+        # 长任务超时
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    # 项目修改流（如你使用该接口）
+    location ~ ^/api/projects/[^/]+/modify$ {
+        proxy_pass http://main_app;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host  $host;
+        proxy_set_header Connection "";
+
+        proxy_buffering off;
+        proxy_cache off;
+        gzip off;
+
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    # style-eval SSE（如果该接口也走流）
+    location = /api/style-eval {
+        proxy_pass http://main_app;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host  $host;
+        proxy_set_header Connection "";
+
+        proxy_buffering off;
+        proxy_cache off;
+        gzip off;
+
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    # -------- 其余请求（Next.js）--------
+    location / {
+        proxy_pass http://main_app;
+        proxy_http_version 1.1;
+
+        # 兼容 websocket/hmr
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-Host  $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Supabase OAuth 回调等会返回较大的 Set-Cookie，默认 proxy_buffer_size 过小会报：
+        # upstream sent too big header while reading response header from upstream
+        proxy_buffer_size          128k;
+        proxy_buffers              4 256k;
+        proxy_busy_buffers_size    256k;
+
+        proxy_cache_bypass $http_upgrade;
+        proxy_connect_timeout 60s;
+        proxy_send_timeout    300s;
+        proxy_read_timeout    300s;
+    }
+}

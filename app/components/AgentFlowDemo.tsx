@@ -21,10 +21,12 @@ const PAUSE_MS = 3000;
  *   [0] ——→ [1] ——→ [2]
  *                     ↓
  *   [5] ←── [4] ←── [3]
- *    ↑ (repair loop back to [4])
+ *     ↓
+ *   [6] ——→ [7]
+ *    ↑ (demo repair loop back to [4] during step 5)
  */
 const EDGES: [number, number][] = [
-    [0, 1], [1, 2], [2, 3], [3, 4], [4, 5],
+    [0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7],
 ];
 
 /* ════════════════════════════════════════════════════
@@ -99,10 +101,10 @@ function Node({
                     </svg>
                 ) : state === "active" ? (
                     <span className="animate-[breathe_2s_ease-in-out_infinite]">
-                        {["⟐", "◆", "▲", "✦", "⬢", "●"][index]}
+                        {["⟐", "◆", "▲", "✦", "⬢", "●", "◇", "◎"][index] ?? "●"}
                     </span>
                     ) : (
-                            <span>{["⟐", "◆", "▲", "✦", "⬢", "●"][index]}</span>
+                            <span>{["⟐", "◆", "▲", "✦", "⬢", "●", "◇", "◎"][index] ?? "●"}</span>
                 )}
 
                 {/* Active ripple rings */}
@@ -450,6 +452,7 @@ export function AgentFlowDemo({ steps }: Props) {
     const allDone = activeIndex >= steps.length;
     const row0 = steps.slice(0, 3);
     const row1 = [steps[5], steps[4], steps[3]];
+    const row2 = steps.slice(6, 8);
 
     return (
         <div className="relative w-full rounded-3xl border border-white/[0.06] bg-[#060809] overflow-hidden">
@@ -496,7 +499,7 @@ export function AgentFlowDemo({ steps }: Props) {
                       <Node
                           step={step} index={realIndex} state={getState(realIndex)}
                           progress={activeIndex === realIndex ? progress : 0}
-                          isParallel={realIndex === 3}
+                          isParallel={realIndex === 5}
                           hovered={hoveredIndex === realIndex}
                           onHover={() => setHoveredIndex(realIndex)}
                           onLeave={() => setHoveredIndex(null)}
@@ -505,6 +508,28 @@ export function AgentFlowDemo({ steps }: Props) {
                   </div>
               );
           })}
+              </div>
+
+              {/* Row 2 — build + repair (indices 6–7) */}
+              <div className="relative z-10 mt-8 grid grid-cols-3 gap-4 sm:mt-12 sm:gap-8">
+                  {row2.map((step) => {
+                      const realIndex = steps.indexOf(step);
+                      return (
+                          <div key={step.id} ref={(el) => { nodeRefs.current[realIndex] = el; }}>
+                              <Node
+                                  step={step}
+                                  index={realIndex}
+                                  state={getState(realIndex)}
+                                  progress={activeIndex === realIndex ? progress : 0}
+                                  isParallel={false}
+                                  hovered={hoveredIndex === realIndex}
+                                  onHover={() => setHoveredIndex(realIndex)}
+                                  onLeave={() => setHoveredIndex(null)}
+                                  fx={fxMap[realIndex]}
+                              />
+                          </div>
+                      );
+                  })}
               </div>
 
               {/* Completion */}

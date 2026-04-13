@@ -68,60 +68,94 @@ type GenerateSectionPageContext = {
 
 // ── Skill Discovery (runtime, per-section) ──────────────────────────────
 
+/** Component skills in prompts/skills/ are hero-only; other section types rely on design system + section prompts. */
+function isHeroComponentSkillSectionType(sectionType: string): boolean {
+  return sectionType === "hero";
+}
+
+type SkillSelectionContext = {
+  intent: string;
+  contentHints: string;
+  designKeywords: string[];
+  productType: string;
+  journeyStage?: string;
+};
+
 /**
- * Use LLM to select the best skill for a section.
- * Returns the skill id or null if LLM fails.
+ * Use LLM to optionally select one component skill. Default is abstain (no skill).
+ * Returns the skill id or null when no skill is appropriate or the LLM abstains / fails.
  */
 async function llmSelectSkill(
   candidates: ReturnType<typeof discoverSkillsBySectionType>,
-  context: { intent: string; contentHints: string; designKeywords: string[]; productType: string }
+  context: SkillSelectionContext
 ): Promise<string | null> {
   const skillList = candidates.map((c) => {
     const w = c.when;
     const parts = [`id: "${c.id}"`];
-    if (c.fallback) parts.push("(FALLBACK — only use when no specialized skill matches)");
     if (c.notes) parts.push(`description: ${c.notes}`);
     if (w?.designKeywords?.any?.length) parts.push(`matches keywords: [${w.designKeywords.any.join(", ")}]`);
     if (w?.designKeywords?.none?.length) parts.push(`excludes keywords: [${w.designKeywords.none.join(", ")}]`);
+    if (w?.traits?.any?.length) parts.push(`traits match: [${w.traits.any.join(", ")}]`);
+    if (w?.traits?.none?.length) parts.push(`traits exclude: [${w.traits.none.join(", ")}]`);
+    if (w?.journeyStages?.any?.length) parts.push(`journey stages match: [${w.journeyStages.any.join(", ")}]`);
+    if (w?.journeyStages?.none?.length) parts.push(`journey stages exclude: [${w.journeyStages.none.join(", ")}]`);
     if (w?.productTypes?.any?.length) parts.push(`for product types: [${w.productTypes.any.join(", ")}]`);
     return `- ${parts.join(" | ")}`;
   }).join("\n");
 
-  const systemPrompt = `You select the best component skill for a UI section. You will receive the section's context and a list of candidate skills.
+  const systemPrompt = `You may attach at most ONE optional "component skill" to a hero section. These skills prescribe heavy visual effects (canvas, lighting, etc.).
 
-Selection rules (in priority order):
-1. Match the section's INTENT and CONTENT HINTS against each skill's description and keyword triggers. A skill whose keywords appear in (or are semantically equivalent to) the section context is the right choice.
-2. Skills marked FALLBACK are generic catch-alls. NEVER pick a fallback skill when a specialized skill's keywords match the section context — even partially or in a different language.
-3. When multiple specialized skills match, prefer the one with more keyword overlap.
-4. Only pick the fallback when NO specialized skill has any keyword relevance to the section.
+Default behavior: **do not select any skill** — use {"skillId": null} unless the section clearly needs that specific effect recipe.
 
-Respond with JSON only: {"skillId": "<id>"}`;
+Only set skillId when ALL of the following hold:
+1. The section intent, content hints, and design keywords align **strongly** with that skill's description and its "matches keywords / traits / journey stages" triggers (semantic match counts).
+2. A generic hero from the design system alone would **not** satisfy the stated visual direction (e.g. particle text, spotlight, dashboard chrome).
+3. Exactly one skill is the best fit. If two or more are plausible, prefer {"skillId": null}.
+
+Never pick a skill "just in case" or to fill the slot.
+
+Respond with JSON only: {"skillId": "<id>" | null}`;
+
+  const journeyLine = context.journeyStage?.trim()
+    ? `- Journey Stage (page): ${context.journeyStage}\n`
+    : "";
 
   const userMessage = `## Section
 - Intent: ${context.intent}
 - Content Hints: ${context.contentHints}
 - Design Keywords: ${context.designKeywords.join(", ")}
 - Product Type: ${context.productType}
-
+${journeyLine}
 ## Candidate Skills
 ${skillList}`;
 
   try {
     const raw = await callLLM(systemPrompt, userMessage, 0, 1024);
-    const parsed = JSON.parse(extractJSON(raw)) as { skillId?: string };
-    if (parsed.skillId && candidates.some((c) => c.id === parsed.skillId)) {
-      return parsed.skillId;
+    const parsed = JSON.parse(extractJSON(raw)) as { skillId?: string | null };
+    if (parsed.skillId === null || parsed.skillId === undefined) {
+      return null;
+    }
+    const id = typeof parsed.skillId === "string" ? parsed.skillId.trim() : "";
+    if (id === "") {
+      return null;
+    }
+    if (candidates.some((c) => c.id === id)) {
+      return id;
     }
   } catch {
-    // LLM failed — fall through
+    // LLM failed — abstain
   }
   return null;
 }
 
 async function discoverAndSelectSkill(
   sectionType: string,
-  context: { intent: string; contentHints: string; designKeywords: string[]; productType: string }
+  context: SkillSelectionContext
 ): Promise<{ skillId: string | null; skillPrompt: string; skillMetadataBlock: string }> {
+  if (!isHeroComponentSkillSectionType(sectionType)) {
+    return { skillId: null, skillPrompt: "", skillMetadataBlock: "" };
+  }
+
   const root = getSkillPromptsRoot();
   const candidates = discoverSkillsBySectionType(root, sectionType);
 
@@ -133,16 +167,6 @@ async function discoverAndSelectSkill(
     .map((c) => `- **${c.id}** (priority: ${c.priority}${c.fallback ? ", fallback" : ""}): ${c.notes || "no description"}`)
     .join("\n");
 
-  // If only one candidate, skip selection
-  if (candidates.length === 1) {
-    return {
-      skillId: candidates[0].id,
-      skillPrompt: loadSkillPrompt(candidates[0].id),
-      skillMetadataBlock: metadataBlock,
-    };
-  }
-
-  // LLM-based selection
   const llmChoice = await llmSelectSkill(candidates, context);
   if (llmChoice) {
     console.log(`[skill-select] LLM chose "${llmChoice}" for ${sectionType}`);
@@ -153,15 +177,8 @@ async function discoverAndSelectSkill(
     };
   }
 
-  // Fallback: use the skill marked as fallback, or first by priority
-  const fallback = candidates.find((c) => c.fallback) ?? candidates[0];
-  console.log(`[skill-select] Fallback to "${fallback.id}" for ${sectionType}`);
-
-  return {
-    skillId: fallback.id,
-    skillPrompt: loadSkillPrompt(fallback.id),
-    skillMetadataBlock: metadataBlock,
-  };
+  console.log(`[skill-select] No component skill (abstain) for ${sectionType}`);
+  return { skillId: null, skillPrompt: "", skillMetadataBlock: "" };
 }
 
 // ── Guardrail Assembly ──────────────────────────────────────────────────
@@ -297,8 +314,10 @@ The design system above is the single source of truth. A separate build step con
 **Animations** — Named animations map to \`animate-{name}\`:
 - "float" animation → \`animate-float\`, "pulse" animation → \`animate-pulse\`
 
-**Custom effects** — Composite effects use \`ds-\` prefix:
-- Glass/blur effects → \`ds-glass\`, clip-path shapes → \`ds-chamfer\`, texture overlays → \`ds-scanlines\`
+**Custom effects** — Use Tailwind utilities/arbitrary values (no prefixed helper classes):
+- Glass/blur effects → \`backdrop-blur-*\`, translucent backgrounds, border/opacity utilities
+- Clip-path shapes → \`[clip-path:polygon(...)]\`
+- Texture overlays → gradients/noise via Tailwind utilities and arbitrary values
 
 **Do NOT** define inline CSS variables, @keyframes, or custom classes that duplicate design system tokens. Trust that the Tailwind utilities exist.
 
@@ -380,6 +399,7 @@ export async function stepGenerateSection({
       contentHints: section.contentHints,
       designKeywords: projectContext.designKeywords,
       productType: projectContext.productScope.productType,
+      journeyStage: pageContext?.journeyStage,
     })
     : { skillId: null, skillPrompt: "", skillMetadataBlock: "" };
 
