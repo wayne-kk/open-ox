@@ -4,6 +4,7 @@ import { use, useEffect, useRef, useState } from "react";
 import { Suspense } from "react";
 import Link from "next/link";
 import { ArrowLeft, GitBranch, Monitor, RefreshCw, ExternalLink, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { HamsterLoader } from "@/components/ui/hamster-loader";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -68,76 +69,97 @@ function StudioInner({ projectId }: { projectId: string }) {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(247,147,26,0.14),transparent_28%),radial-gradient(circle_at_top_right,rgba(255,214,0,0.1),transparent_24%),radial-gradient(circle_at_bottom,rgba(234,88,12,0.1),transparent_30%)]" />
 
       <div className="relative z-1 flex h-full flex-col">
-        <header className="border-b border-white/8 bg-background/80 backdrop-blur-xl">
-          <div className="flex items-center justify-between gap-3 px-4 py-0 h-12">
-            {/* Left: back + brand */}
-            <div className="flex items-center gap-3 min-w-0">
-              <Link
-                href="/"
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-white/10 bg-white/4 text-muted-foreground transition-colors hover:border-white/20 hover:text-foreground"
-              >
-                <ArrowLeft className="h-3.5 w-3.5" />
-              </Link>
+        <div
+          className={cn(
+            "grid transition-[grid-template-rows] duration-300 ease-out",
+            conversationCollapsed ? "grid-rows-[0fr]" : "grid-rows-[1fr]",
+          )}
+        >
+          <div className="min-h-0 overflow-hidden">
+            <header className="border-b border-white/8 bg-background/80 backdrop-blur-xl">
+              <div className="flex items-center justify-between gap-3 px-4 py-0 h-12">
+                {/* Left: back + brand */}
+                <div className="flex items-center gap-3 min-w-0">
+                  <Link
+                    href="/"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-white/10 bg-white/4 text-muted-foreground transition-colors hover:border-white/20 hover:text-foreground"
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                  </Link>
 
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-primary/40 bg-primary/10">
-                  <span className="font-mono text-[9px] font-bold text-primary">OX</span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-primary/40 bg-primary/10">
+                      <span className="font-mono text-[9px] font-bold text-primary">OX</span>
+                    </div>
+                    <span className="font-mono text-[12px] font-semibold tracking-[0.12em] text-foreground hidden sm:block">
+                      STUDIO
+                    </span>
+                    <span className="text-white/15 hidden sm:block">/</span>
+                    <span className="font-mono text-[11px] text-muted-foreground/50 truncate max-w-[180px] hidden md:block">
+                      {studio.lastRunInput
+                        ? (studio.lastRunInput.length > 40 ? studio.lastRunInput.slice(0, 40) + "…" : studio.lastRunInput)
+                        : projectId.slice(0, 32) + "…"}
+                    </span>
+                  </div>
                 </div>
-                <span className="font-mono text-[12px] font-semibold tracking-[0.12em] text-foreground hidden sm:block">
-                  STUDIO
-                </span>
-                <span className="text-white/15 hidden sm:block">/</span>
-                <span className="font-mono text-[11px] text-muted-foreground/50 truncate max-w-[180px] hidden md:block">
-                  {studio.lastRunInput
-                    ? (studio.lastRunInput.length > 40 ? studio.lastRunInput.slice(0, 40) + "…" : studio.lastRunInput)
-                    : projectId.slice(0, 32) + "…"}
-                </span>
+
+                {/* Center: status pill */}
+                <div className="flex items-center gap-2">
+                  {loading ? (
+                    <div className="flex items-center gap-1.5 rounded-full border border-primary/25 bg-primary/8 px-3 py-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                      <span className="font-mono text-[10px] text-primary tracking-[0.15em]">
+                        BUILDING · {formatMs(elapsed)}
+                      </span>
+                    </div>
+                  ) : response?.error ? (
+                    <div className="flex items-center gap-1.5 rounded-full border border-red-400/25 bg-red-400/8 px-3 py-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
+                      <span className="font-mono text-[10px] text-red-400 tracking-[0.15em]">FAILED</span>
+                    </div>
+                  ) : response ? (
+                    <div className="flex items-center gap-1.5 rounded-full border border-green-400/25 bg-green-400/8 px-3 py-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
+                      <span className="font-mono text-[10px] text-green-400 tracking-[0.15em]">
+                        {response.buildTotalDuration ? `DONE · ${formatMs(response.buildTotalDuration)}` : "DONE"}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 rounded-full border border-white/10 px-3 py-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-white/20" />
+                      <span className="font-mono text-[10px] text-muted-foreground/50 tracking-[0.15em]">IDLE</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Right: actions */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <Link
+                    href="/projects"
+                    className="hidden sm:flex items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-3 py-1.5 font-mono text-[10px] text-muted-foreground transition-colors hover:border-white/15 hover:text-foreground"
+                  >
+                    Projects
+                  </Link>
+                </div>
               </div>
-            </div>
-
-            {/* Center: status pill */}
-            <div className="flex items-center gap-2">
-              {loading ? (
-                <div className="flex items-center gap-1.5 rounded-full border border-primary/25 bg-primary/8 px-3 py-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-                  <span className="font-mono text-[10px] text-primary tracking-[0.15em]">
-                    BUILDING · {formatMs(elapsed)}
-                  </span>
-                </div>
-              ) : response?.error ? (
-                <div className="flex items-center gap-1.5 rounded-full border border-red-400/25 bg-red-400/8 px-3 py-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
-                  <span className="font-mono text-[10px] text-red-400 tracking-[0.15em]">FAILED</span>
-                </div>
-              ) : response ? (
-                <div className="flex items-center gap-1.5 rounded-full border border-green-400/25 bg-green-400/8 px-3 py-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
-                  <span className="font-mono text-[10px] text-green-400 tracking-[0.15em]">
-                    {response.buildTotalDuration ? `DONE · ${formatMs(response.buildTotalDuration)}` : "DONE"}
-                  </span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-1.5 rounded-full border border-white/10 px-3 py-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-white/20" />
-                  <span className="font-mono text-[10px] text-muted-foreground/50 tracking-[0.15em]">IDLE</span>
-                </div>
-              )}
-            </div>
-
-            {/* Right: actions */}
-            <div className="flex items-center gap-2 shrink-0">
-              <Link
-                href="/projects"
-                className="hidden sm:flex items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-3 py-1.5 font-mono text-[10px] text-muted-foreground transition-colors hover:border-white/15 hover:text-foreground"
-              >
-                Projects
-              </Link>
-            </div>
+            </header>
           </div>
-        </header>
+        </div>
 
         <div className="mx-auto flex w-full min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
-          {!conversationCollapsed && <BuildConversation {...studio} />}
+          <div
+            className={cn(
+              "min-h-0 shrink-0 overflow-hidden transition-[max-height,width,min-width] duration-300 ease-out",
+              "max-lg:max-h-[min(100dvh,1600px)] lg:max-h-none",
+              conversationCollapsed
+                ? "max-lg:max-h-0 pointer-events-none lg:w-0 lg:min-w-0 lg:max-w-0 lg:max-h-none"
+                : "lg:w-[540px] lg:min-w-[540px] lg:max-w-[540px]",
+            )}
+          >
+            <div className="h-full min-h-0 max-h-full overflow-hidden lg:h-full">
+              <BuildConversation {...studio} />
+            </div>
+          </div>
 
           <section className="defi-glass flex min-h-0 flex-1 flex-col overflow-hidden">
             {/* Right panel toolbar */}

@@ -17,9 +17,9 @@ The project uses Tailwind CSS v4. All design tokens are defined in `globals.css`
 - Shadows: `shadow-glow`, `shadow-soft`, `shadow-neon`, etc.
 - Animations: `animate-float`, `animate-pulse-neon`, etc.
 
-Use these native Tailwind utilities directly. Do NOT use `ds-*` prefixed classes for tokens that Tailwind auto-generates (e.g. do NOT use `ds-bg-primary` when `bg-primary` exists).
+Use these native Tailwind utilities directly. Do NOT use custom prefixed helper classes.
 
-For custom composite effects defined as `ds-*` classes in `globals.css` (glass, scanlines, clip-paths, etc.), use those `ds-*` classNames directly.
+For composite effects (glass, scanlines, clip-paths, etc.), prefer Tailwind utilities and arbitrary values (`bg-*`, `backdrop-blur-*`, `[clip-path:*]`, gradients, opacity, blend modes) instead of custom prefixed class names.
 
 ### Required
 

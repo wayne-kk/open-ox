@@ -14,7 +14,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { Sandbox } from "e2b";
-import { supabase } from "./supabase";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSiteRoot, WORKSPACE_ROOT } from "./projectManager";
 import { restoreProjectFiles } from "./storage";
 
@@ -27,8 +27,8 @@ const SERVE_PORT = 3000;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-async function getSandboxId(projectId: string): Promise<string | null> {
-  const { data } = await supabase
+async function getSandboxId(db: SupabaseClient, projectId: string): Promise<string | null> {
+  const { data } = await db
     .from("projects")
     .select("sandbox_id")
     .eq("id", projectId)
@@ -36,15 +36,15 @@ async function getSandboxId(projectId: string): Promise<string | null> {
   return (data as { sandbox_id: string | null } | null)?.sandbox_id ?? null;
 }
 
-async function saveSandboxId(projectId: string, sandboxId: string): Promise<void> {
-  await supabase
+async function saveSandboxId(db: SupabaseClient, projectId: string, sandboxId: string): Promise<void> {
+  await db
     .from("projects")
     .update({ sandbox_id: sandboxId, updated_at: new Date().toISOString() })
     .eq("id", projectId);
 }
 
-async function clearSandboxId(projectId: string): Promise<void> {
-  await supabase
+async function clearSandboxId(db: SupabaseClient, projectId: string): Promise<void> {
+  await db
     .from("projects")
     .update({ sandbox_id: null, updated_at: new Date().toISOString() })
     .eq("id", projectId);
@@ -77,8 +77,8 @@ async function computeProjectFingerprint(projectId: string): Promise<string> {
   return hash.digest("hex").slice(0, 16); // 16 hex chars is plenty
 }
 
-async function getSavedFingerprint(projectId: string): Promise<string | null> {
-  const { data } = await supabase
+async function getSavedFingerprint(db: SupabaseClient, projectId: string): Promise<string | null> {
+  const { data } = await db
     .from("projects")
     .select("files_hash")
     .eq("id", projectId)
@@ -86,8 +86,8 @@ async function getSavedFingerprint(projectId: string): Promise<string | null> {
   return (data as { files_hash: string | null } | null)?.files_hash ?? null;
 }
 
-async function saveFingerprint(projectId: string, hash: string): Promise<void> {
-  await supabase
+async function saveFingerprint(db: SupabaseClient, projectId: string, hash: string): Promise<void> {
+  await db
     .from("projects")
     .update({ files_hash: hash, updated_at: new Date().toISOString() })
     .eq("id", projectId);
@@ -277,6 +277,7 @@ async function isServerUp(sandbox: Sandbox): Promise<boolean> {
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export async function startDevServer(
+  db: SupabaseClient,
   projectId: string
 ): Promise<{ url: string; port: number }> {
   const projectDir = getSiteRoot(projectId);
@@ -294,11 +295,11 @@ export async function startDevServer(
 
   // Compute current file fingerprint
   const currentHash = await computeProjectFingerprint(projectId);
-  const savedHash = await getSavedFingerprint(projectId);
+  const savedHash = await getSavedFingerprint(db, projectId);
   const filesChanged = currentHash !== savedHash;
 
   // 1. Try reconnecting to existing sandbox
-  const existingSandboxId = await getSandboxId(projectId);
+  const existingSandboxId = await getSandboxId(db, projectId);
   if (existingSandboxId) {
     try {
       const sandbox = await Sandbox.connect(existingSandboxId, e2bOpts());
@@ -351,15 +352,15 @@ export async function startDevServer(
         }
 
         await startServeAndWait(sandbox);
-        await saveSandboxId(projectId, sandbox.sandboxId);
-        await saveFingerprint(projectId, currentHash);
+        await saveSandboxId(db, projectId, sandbox.sandboxId);
+        await saveFingerprint(db, projectId, currentHash);
         await sandbox.setTimeout(SANDBOX_TIMEOUT_MS);
         return { url: previewUrl, port: SERVE_PORT };
       }
     } catch (err) {
       console.log("[e2b] Reconnect failed:", err instanceof Error ? err.message : err);
     }
-    await clearSandboxId(projectId);
+    await clearSandboxId(db, projectId);
   }
 
   // 2. Create fresh sandbox
@@ -418,8 +419,8 @@ export async function startDevServer(
     await startServeAndWait(sandbox);
 
     const previewUrl = `https://${sandbox.getHost(SERVE_PORT)}`;
-    await saveSandboxId(projectId, sandbox.sandboxId);
-    await saveFingerprint(projectId, currentHash);
+    await saveSandboxId(db, projectId, sandbox.sandboxId);
+    await saveFingerprint(db, projectId, currentHash);
     await sandbox.setTimeout(SANDBOX_TIMEOUT_MS);
     return { url: previewUrl, port: SERVE_PORT };
   } catch (err) {
@@ -428,11 +429,11 @@ export async function startDevServer(
   }
 }
 
-export async function stopDevServer(projectId: string): Promise<void> {
-  const sandboxId = await getSandboxId(projectId);
+export async function stopDevServer(db: SupabaseClient, projectId: string): Promise<void> {
+  const sandboxId = await getSandboxId(db, projectId);
   if (sandboxId) {
     try { await Sandbox.kill(sandboxId, e2bOpts()); } catch { /* already dead */ }
-    await clearSandboxId(projectId);
+    await clearSandboxId(db, projectId);
   }
 }
 
@@ -532,13 +533,14 @@ export function classifyModificationScope(
  * Only works for cosmetic changes (text, CSS, className).
  */
 export async function hotRefreshDevServer(
+  db: SupabaseClient,
   projectId: string,
   changedFiles: string[]
 ): Promise<{ url: string; port: number; mode: "hot" }> {
-  const sandboxId = await getSandboxId(projectId);
+  const sandboxId = await getSandboxId(db, projectId);
   if (!sandboxId) {
     // No sandbox — fall back to full start
-    const result = await startDevServer(projectId);
+    const result = await startDevServer(db, projectId);
     return { ...result, mode: "hot" };
   }
 
@@ -547,8 +549,8 @@ export async function hotRefreshDevServer(
     sandbox = await Sandbox.connect(sandboxId, e2bOpts());
     if (!(await sandbox.isRunning())) throw new Error("not running");
   } catch {
-    await clearSandboxId(projectId);
-    const result = await startDevServer(projectId);
+    await clearSandboxId(db, projectId);
+    const result = await startDevServer(db, projectId);
     return { ...result, mode: "hot" };
   }
 
@@ -575,7 +577,7 @@ export async function hotRefreshDevServer(
   if (buildResult.exitCode !== 0) {
     // Hot refresh failed — fall back to full rebuild
     console.warn("[e2b hot] Build failed, falling back to full rebuild");
-    const result = await rebuildDevServer(projectId);
+    const result = await rebuildDevServer(db, projectId);
     return { ...result, mode: "hot" };
   }
 
@@ -593,9 +595,10 @@ export async function hotRefreshDevServer(
  * the reconnect-and-reuse shortcut in startDevServer that would serve stale content).
  */
 export async function rebuildDevServer(
+  db: SupabaseClient,
   projectId: string
 ): Promise<{ url: string; port: number }> {
-  const sandboxId = await getSandboxId(projectId);
+  const sandboxId = await getSandboxId(db, projectId);
 
   let sandbox: Sandbox | null = null;
 
@@ -610,7 +613,7 @@ export async function rebuildDevServer(
       }
       sandbox = candidate;
     } catch {
-      await clearSandboxId(projectId);
+      await clearSandboxId(db, projectId);
     }
   }
 
@@ -676,9 +679,11 @@ export async function rebuildDevServer(
     await startServeAndWait(sandbox);
 
     const previewUrl = `https://${sandbox.getHost(SERVE_PORT)}`;
-    await saveSandboxId(projectId, sandbox.sandboxId);
+    await saveSandboxId(db, projectId, sandbox.sandboxId);
     // Save fingerprint so startDevServer knows files are in sync
-    try { await saveFingerprint(projectId, await computeProjectFingerprint(projectId)); } catch { /* non-fatal */ }
+    try {
+      await saveFingerprint(db, projectId, await computeProjectFingerprint(projectId));
+    } catch { /* non-fatal */ }
     await sandbox.setTimeout(SANDBOX_TIMEOUT_MS);
     return { url: previewUrl, port: SERVE_PORT };
   } catch (err) {
@@ -691,9 +696,10 @@ export async function rebuildDevServer(
 }
 
 export async function getDevServerStatus(
+  db: SupabaseClient,
   projectId: string
 ): Promise<{ status: "running" | "stopped"; url?: string }> {
-  const sandboxId = await getSandboxId(projectId);
+  const sandboxId = await getSandboxId(db, projectId);
   if (!sandboxId) return { status: "stopped" };
   try {
     const sandbox = await Sandbox.connect(sandboxId, e2bOpts());
@@ -702,6 +708,6 @@ export async function getDevServerStatus(
       return { status: "running", url };
     }
   } catch { /* unreachable */ }
-  await clearSandboxId(projectId);
+  await clearSandboxId(db, projectId);
   return { status: "stopped" };
 }

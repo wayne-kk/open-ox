@@ -77,18 +77,32 @@ jobs:
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY }}
+          ARK_API_KEY: ${{ secrets.ARK_API_KEY }}
+          ARK_BASE_URL: ${{ secrets.ARK_BASE_URL }}
+          ARK_IMAGE_MODEL: ${{ secrets.ARK_IMAGE_MODEL }}
+          ARK_IMAGE_SIZE: ${{ secrets.ARK_IMAGE_SIZE }}
         run: pnpm build
 
+      # Runtime env for pm2 `next start` on the server. Add matching Repository secrets under Settings → Secrets → Actions.
       - name: Generate .env.production
         run: |
           {
             echo "NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}"
             echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY }}"
+            echo "NEXT_PUBLIC_SITE_URL=${{ secrets.NEXT_PUBLIC_SITE_URL }}"
+            echo "SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}"
+            echo "FEISHU_APP_ID=${{ secrets.FEISHU_APP_ID }}"
+            echo "FEISHU_APP_SECRET=${{ secrets.FEISHU_APP_SECRET }}"
+            echo "FEISHU_OAUTH_HMAC_SECRET=${{ secrets.FEISHU_OAUTH_HMAC_SECRET }}"
             echo "E2B_API_KEY=${{ secrets.E2B_API_KEY }}"
             echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}"
             echo "OPENAI_API_URL=${{ secrets.OPENAI_API_URL }}"
             echo "DIFY_API_URL=${{ secrets.DIFY_API_URL }}"
             echo "DIFY_API_KEY=${{ secrets.DIFY_API_KEY }}"
+            echo "ARK_API_KEY=${{ secrets.ARK_API_KEY }}"
+            echo "ARK_BASE_URL=${{ secrets.ARK_BASE_URL }}"
+            echo "ARK_IMAGE_MODEL=${{ secrets.ARK_IMAGE_MODEL }}"
+            echo "ARK_IMAGE_SIZE=${{ secrets.ARK_IMAGE_SIZE }}"
           } > .env.production
 
       # Pack: source + build output (no node_modules, no .git)

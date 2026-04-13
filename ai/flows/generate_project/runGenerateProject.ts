@@ -1,6 +1,7 @@
 import { clearTemplate } from "@/lib/clearTemplate";
 import { getSiteRoot as projectManagerGetSiteRoot } from "@/lib/projectManager";
 import { setSiteRoot, getSiteRoot } from "@/ai/tools/system/common";
+import { setSectionSkillsEnabled } from "@/lib/config/models";
 import { execSync } from "child_process";
 import { isLayoutSection } from "./registry/layoutSections";
 import { formatSiteFile, syncSiteValidationMarkers, readSiteFile, writeSiteFile } from "./shared/files";
@@ -522,6 +523,27 @@ async function generatePages(params: {
         pageDesign.sectionDesigns.map((design) => [design.fileName, design.sectionDesignBrief])
       );
 
+      // Persist page design brief for topology inspection
+      const pageDesignDoc = [
+        `# ${page.title} (/${page.slug})`,
+        "",
+        "## 页面整体结构",
+        pageDesign.pageStructure,
+        "",
+        ...pageDesign.sectionDesigns.map((d) => [
+          `## ${d.fileName} (${d.sectionType})`,
+          d.sectionDesignBrief,
+          "",
+        ]).flat(),
+      ].join("\n");
+      await persistTextArtifact(
+        artifactLogger,
+        `describe_page_sections:${page.slug}`,
+        "output",
+        "md",
+        pageDesignDoc
+      );
+
       // Log skipped sections
       const skippedCount = dedupedSections.length - sectionsToGenerate.length;
       if (skippedCount > 0) {
@@ -695,13 +717,16 @@ async function runBuildWithRepair(params: {
 export async function runGenerateProject(
   userInput: string,
   onStep?: (step: BuildStep) => void,
-  options?: { projectId?: string; styleGuide?: string; checkpoint?: CheckpointResult }
+  options?: { projectId?: string; styleGuide?: string; enableSkills?: boolean; checkpoint?: CheckpointResult }
 ): Promise<GenerateProjectResult> {
   const flowStart = Date.now();
   const logger = createStepLogger({ onStep, prefix: "generate_project" });
   const artifactLogger = createArtifactLogger("generate_project");
   const result = createInitialResult(logger);
   result.logDirectory = artifactLogger.runDirRelative;
+
+  // Set section skills toggle — default off, user can enable from UI
+  setSectionSkillsEnabled(options?.enableSkills ?? false);
 
   // When a projectId is provided, point SITE_ROOT at the project directory and
   // skip clearing the template (the project dir was already initialised by the
@@ -741,7 +766,7 @@ export async function runGenerateProject(
 
     // ── Step: analyze_project_requirement ─────────────────────────────────
     let rawBlueprint: ProjectBlueprint;
-    let inferredDesignIntent: Awaited<ReturnType<typeof stepInferDesignIntent>> | null = null;
+    let inferredDesignIntentText: string | null = null;
 
     if (cp?.skipAnalyze && cp.cachedBlueprint) {
       rawBlueprint = cp.cachedBlueprint;
@@ -750,12 +775,12 @@ export async function runGenerateProject(
       if (rawBlueprint.experience?.designIntent?.keywords?.length) {
         logger.logStep("infer_design_intent", "ok", "resumed from checkpoint");
       } else {
-        inferredDesignIntent = await logger.timed(
+        inferredDesignIntentText = await logger.timed(
           "infer_design_intent",
           () => stepInferDesignIntent(userInput),
-          (intent) => `${intent.style}`
+          (text) => text.slice(0, 80)
         );
-        await persistJsonArtifact(artifactLogger, "infer_design_intent", "output", inferredDesignIntent);
+        await persistTextArtifact(artifactLogger, "infer_design_intent", "output", "md", inferredDesignIntentText);
       }
     } else {
       const analyzePromise = logger.timed(
@@ -774,25 +799,23 @@ export async function runGenerateProject(
       const inferPromise = logger.timed(
         "infer_design_intent",
         () => stepInferDesignIntent(userInput),
-        (intent) => `${intent.style}`
+        (text) => text.slice(0, 80)
       );
 
-      [rawBlueprint, inferredDesignIntent] = await Promise.all([analyzePromise, inferPromise]);
+      [rawBlueprint, inferredDesignIntentText] = await Promise.all([analyzePromise, inferPromise]);
       await persistJsonArtifact(artifactLogger, "analyze_project_requirement", "output", rawBlueprint);
-      await persistJsonArtifact(artifactLogger, "infer_design_intent", "output", inferredDesignIntent);
+      await persistTextArtifact(artifactLogger, "infer_design_intent", "output", "md", inferredDesignIntentText);
     }
 
     if (!rawBlueprint.experience) {
       rawBlueprint.experience = {
-        designIntent: inferredDesignIntent ?? {
+        designIntent: {
           mood: ["clean", "trustworthy", "focused"],
           colorDirection: "Neutral base with one clear accent direction.",
           style: "Modern, content-first, conversion-oriented.",
           keywords: ["clean", "professional", "focused", "confident", "modern"],
         },
       };
-    } else if (inferredDesignIntent) {
-      rawBlueprint.experience.designIntent = inferredDesignIntent;
     }
 
     const normalizedBlueprint = normalizeBlueprint(rawBlueprint);
@@ -809,13 +832,13 @@ export async function runGenerateProject(
     } else {
       logger.startStep("plan_project");
       logger.startStep("generate_project_design_system");
-      const designIntentForSystem =
-        inferredDesignIntent ?? rawBlueprint.experience?.designIntent ?? {
-          mood: ["clean", "trustworthy", "focused"],
-          colorDirection: "Neutral base with one clear accent direction.",
-          style: "Modern, content-first, conversion-oriented.",
-          keywords: ["clean", "professional", "focused", "confident", "modern"],
-        };
+
+      // Build a fallback markdown text from blueprint's designIntent if inferDesignIntent returned empty
+      const designIntentForSystem = inferredDesignIntentText || (() => {
+        const di = rawBlueprint.experience?.designIntent;
+        if (!di) return "";
+        return `## Design Intent\n- Mood: ${di.mood.join(", ")}\n- Color Direction: ${di.colorDirection}\n- Style: ${di.style}\n- Keywords: ${di.keywords.join(", ")}`;
+      })();
 
       [blueprint, designSystem] = await Promise.all([
         stepPlanProject(normalizedBlueprint).then((bp) => {
@@ -844,6 +867,8 @@ export async function runGenerateProject(
             sections: page.sections.map((section) => ({
               type: section.type,
               fileName: section.fileName,
+              intent: section.intent,
+              contentHints: section.contentHints,
               primaryRoleIds: section.primaryRoleIds,
               supportingCapabilityIds: section.supportingCapabilityIds,
               sourceTaskLoopIds: section.sourceTaskLoopIds,

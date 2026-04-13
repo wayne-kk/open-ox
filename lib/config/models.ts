@@ -94,6 +94,18 @@ export function clearStepConfig(stepName: string): void {
     _stepThinkingLevelMap.delete(stepName);
 }
 
+// ── Section Skills toggle ───────────────────────────────────────────────
+
+let _sectionSkillsEnabled = false;
+
+export function setSectionSkillsEnabled(enabled: boolean): void {
+    _sectionSkillsEnabled = enabled;
+}
+
+export function isSectionSkillsEnabled(): boolean {
+    return _sectionSkillsEnabled;
+}
+
 /** Available generation steps that can have model overrides */
 export const GENERATION_STEPS = [
     { id: "analyze_project_requirement", label: "需求分析" },

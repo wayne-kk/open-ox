@@ -449,6 +449,13 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
               return {};
             })()
             : {}),
+          ...(projectId && typeof sessionStorage !== "undefined"
+            ? (() => {
+              const sk = sessionStorage.getItem(`enableSkills:${projectId}`);
+              if (sk === "true") { sessionStorage.removeItem(`enableSkills:${projectId}`); return { enableSkills: true }; }
+              return {};
+            })()
+            : {}),
         }
       );
     } catch (err) {

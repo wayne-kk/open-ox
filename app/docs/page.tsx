@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Cpu, GitBranch, Layers, Zap, Eye, MessageSquare, Database, Palette, FileCode, LayoutTemplate } from "lucide-react";
+import { ArrowRight, Cpu, GitBranch, Layers, Zap, Eye, MessageSquare, Database, Palette, FileCode, LayoutTemplate, History, Plug } from "lucide-react";
 
 const CARDS = [
   {
@@ -14,7 +14,7 @@ const CARDS = [
     icon: GitBranch,
     href: "/docs/pipeline",
     title: "AI 生成流水线",
-    desc: "12 步生成流水线 — 并行执行、Skill 预选、构建自动修复。",
+    desc: "13 步编排（8 个核心生成节点）— 并行执行、运行时 Skill 发现、构建自动修复。",
     tag: "流水线",
     accent: "tertiary",
   },
@@ -86,7 +86,7 @@ const CARDS = [
 
 const METRICS = [
   { value: "~90s", label: "端到端生成时间" },
-  { value: "7+", label: "并行 AI Agent" },
+  { value: "8", label: "核心流水线节点" },
   { value: "0", label: "用户需要写的代码" },
   { value: "2", label: "最大自动修复轮次" },
 ];
@@ -135,6 +135,34 @@ export default function DocsPage() {
           </Link>{" "}
           深入生成流程细节。
         </p>
+      </div>
+
+      {/* Changelog + API */}
+      <div className="mt-6 grid gap-3 sm:grid-cols-2">
+        <Link
+          href="/changelog"
+          className="group flex gap-4 rounded-xl border border-white/10 bg-white/[0.02] p-4 transition-all hover:border-primary/30 hover:bg-primary/[0.04]"
+        >
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.03]">
+            <History className="h-4 w-4 text-primary" />
+          </div>
+          <div className="min-w-0">
+            <p className="font-heading text-[14px] font-semibold text-foreground group-hover:text-primary transition-colors">更新日志</p>
+            <p className="mt-0.5 text-[12px] leading-5 text-muted-foreground">版本迭代、工程决策与能力变更时间线。</p>
+          </div>
+        </Link>
+        <Link
+          href="/docs/api"
+          className="group flex gap-4 rounded-xl border border-white/10 bg-white/[0.02] p-4 transition-all hover:border-accent-tertiary/35 hover:bg-accent-tertiary/[0.04]"
+        >
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.03]">
+            <Plug className="h-4 w-4 text-accent-tertiary" />
+          </div>
+          <div className="min-w-0">
+            <p className="font-heading text-[14px] font-semibold text-foreground group-hover:text-accent-tertiary transition-colors">API 参考</p>
+            <p className="mt-0.5 text-[12px] leading-5 text-muted-foreground">HTTP 路由速查：项目、生成、预览、认证等。</p>
+          </div>
+        </Link>
       </div>
 
       {/* Cards grid */}

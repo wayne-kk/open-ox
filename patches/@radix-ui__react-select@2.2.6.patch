@@ -1,0 +1,26 @@
+diff --git a/dist/index.js b/dist/index.js
+index dc37ac4a018a086c4244a09a67215dbaa9b4de65..a88a554ec60ccdced47ae170a6cae4ffa70942ee 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -502,7 +502,7 @@ var SelectContentImpl = React.forwardRef(
+         position,
+         isPositioned,
+         searchRef,
+-        children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react_remove_scroll.RemoveScroll, { as: Slot, allowPinchZoom: true, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
++        children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react_remove_scroll.RemoveScroll, { as: Slot, allowPinchZoom: true, removeScrollBar: false, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+           import_react_focus_scope.FocusScope,
+           {
+             asChild: true,
+diff --git a/dist/index.mjs b/dist/index.mjs
+index f9b94f39dfddef678ef3086354f8d7413ae27e52..1133a4544d3076ad5fb2e4afb7457a5ed73fb4ba 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -435,7 +435,7 @@ var SelectContentImpl = React.forwardRef(
+         position,
+         isPositioned,
+         searchRef,
+-        children: /* @__PURE__ */ jsx(RemoveScroll, { as: Slot, allowPinchZoom: true, children: /* @__PURE__ */ jsx(
++        children: /* @__PURE__ */ jsx(RemoveScroll, { as: Slot, allowPinchZoom: true, removeScrollBar: false, children: /* @__PURE__ */ jsx(
+           FocusScope,
+           {
+             asChild: true,

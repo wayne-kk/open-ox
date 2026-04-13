@@ -1,12 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
-import { startDevServer, stopDevServer, rebuildDevServer, hotRefreshDevServer, classifyModificationScope } from "@/lib/devServerManager";
+import {
+  startDevServer,
+  stopDevServer,
+  rebuildDevServer,
+  hotRefreshDevServer,
+  classifyModificationScope,
+} from "@/lib/devServerManager";
+import { getSessionUser } from "@/lib/auth/session";
+import { getProject } from "@/lib/projectManager";
 
 type Params = { params: Promise<{ id: string }> };
 
 export async function POST(_req: NextRequest, { params }: Params) {
+  const session = await getSessionUser();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
+  }
+  const { supabase: db } = session;
   const { id } = await params;
+  const project = await getProject(db, id);
+  if (!project) {
+    return NextResponse.json(
+      { error: "Project not found", code: "PROJECT_NOT_FOUND" },
+      { status: 404 }
+    );
+  }
   try {
-    const result = await startDevServer(id);
+    const result = await startDevServer(db, id);
     return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -34,7 +54,19 @@ export async function POST(_req: NextRequest, { params }: Params) {
  *   - "rebuild": full resync + dep install + rebuild
  */
 export async function PUT(req: NextRequest, { params }: Params) {
+  const session = await getSessionUser();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
+  }
+  const { supabase: db } = session;
   const { id } = await params;
+  const project = await getProject(db, id);
+  if (!project) {
+    return NextResponse.json(
+      { error: "Project not found", code: "PROJECT_NOT_FOUND" },
+      { status: 404 }
+    );
+  }
   try {
     let body: {
       diffs?: Array<{ file: string; patch: string; stats: { additions: number; deletions: number } }>;
@@ -51,14 +83,14 @@ export async function PUT(req: NextRequest, { params }: Params) {
       const mode = classifyModificationScope(body.diffs);
       if (mode === "hot" && body.changedFiles && body.changedFiles.length > 0) {
         console.log(`[PUT /preview] Hot refresh for ${body.changedFiles.length} file(s)`);
-        const result = await hotRefreshDevServer(id, body.changedFiles);
+        const result = await hotRefreshDevServer(db, id, body.changedFiles);
         return NextResponse.json({ ...result, refreshMode: "hot" });
       }
     }
 
     // Full rebuild
     console.log(`[PUT /preview] Full rebuild for project ${id}`);
-    const result = await rebuildDevServer(id);
+    const result = await rebuildDevServer(db, id);
     console.log(`[PUT /preview] Rebuild complete: ${result.url}`);
     return NextResponse.json({ ...result, refreshMode: "rebuild" });
   } catch (err) {
@@ -72,7 +104,19 @@ export async function PUT(req: NextRequest, { params }: Params) {
 }
 
 export async function DELETE(_req: NextRequest, { params }: Params) {
+  const session = await getSessionUser();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
+  }
+  const { supabase: db } = session;
   const { id } = await params;
-  await stopDevServer(id);
+  const project = await getProject(db, id);
+  if (!project) {
+    return NextResponse.json(
+      { error: "Project not found", code: "PROJECT_NOT_FOUND" },
+      { status: 404 }
+    );
+  }
+  await stopDevServer(db, id);
   return new NextResponse(null, { status: 204 });
 }

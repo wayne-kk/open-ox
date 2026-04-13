@@ -172,9 +172,14 @@ export default function ArchitecturePage() {
           <div className="mt-4 space-y-2">
             {[
               { method: "POST", path: "/api/projects", desc: "创建项目记录，返回 projectId" },
-              { method: "GET", path: "/api/projects", desc: "获取所有项目列表" },
+              {
+                method: "GET",
+                path: "/api/projects",
+                desc: "项目列表（需登录）。默认返回全员项目；?mine=1 或 folder=uncategorized|… 时仅当前用户并按文件夹筛选",
+              },
               { method: "GET", path: "/api/projects/[id]", desc: "按 ID 获取项目（用于轮询）" },
-              { method: "DELETE", path: "/api/projects/[id]", desc: "删除项目及文件" },
+              { method: "PATCH", path: "/api/projects/[id]", desc: "重命名、移动文件夹等（仅所有者）" },
+              { method: "DELETE", path: "/api/projects/[id]", desc: "删除项目及文件（仅所有者）" },
               { method: "POST", path: "/api/ai", desc: "启动生成流水线（SSE 流）" },
               { method: "POST", path: "/api/projects/[id]/modify", desc: "启动修改 Agent（SSE 流）" },
               { method: "POST", path: "/api/projects/[id]/preview", desc: "启动 E2B 沙箱（首次）" },
@@ -182,7 +187,7 @@ export default function ArchitecturePage() {
               { method: "GET", path: "/api/models", desc: "获取可用 LLM 模型列表" },
               { method: "GET", path: "/api/skills", desc: "获取可用风格技能列表" },
             ].map(({ method, path, desc }) => (
-              <div key={path} className="flex items-start gap-3 rounded-lg border border-white/6 bg-white/[0.02] px-4 py-2.5">
+              <div key={`${method} ${path}`} className="flex items-start gap-3 rounded-lg border border-white/6 bg-white/[0.02] px-4 py-2.5">
                 <span className={`shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-bold ${method === "GET" ? "bg-blue-500/15 text-blue-400" :
                   method === "POST" ? "bg-green-500/15 text-green-400" :
                     method === "PUT" ? "bg-amber-500/15 text-amber-400" :
@@ -193,6 +198,11 @@ export default function ArchitecturePage() {
               </div>
             ))}
           </div>
+          <Callout>
+            <strong className="text-foreground/90">RLS：</strong>
+            已登录用户可 <Code>SELECT</Code> 全部 <Code>projects</Code> 行（便于项目广场按成员浏览）；
+            <Code>INSERT</Code> / <Code>UPDATE</Code> / <Code>DELETE</Code> 仍限制为资源所有者。
+          </Callout>
         </Section>
 
         {/* ── Trigger System ── */}
@@ -283,6 +293,9 @@ Phase 4: VERIFY  — run_build 验证编译`}</Pre>
               <tbody className="divide-y divide-white/5">
                 {[
                   ["id", "text PK", "{timestamp}_{slug} — URL 可读，全局唯一"],
+                  ["user_id", "uuid FK", "所属用户（auth.users）"],
+                  ["owner_username", "text", "创建时写入的展示名，用于全员列表按成员分组"],
+                  ["folder_id", "uuid FK?", "单层文件夹（project_folders），可空"],
                   ["status", "enum", "generating / ready / failed"],
                   ["blueprint", "jsonb", "analyze 步骤输出的完整 ProjectBlueprint"],
                   ["build_steps", "jsonb[]", "增量写入 — 每步完成后立即持久化"],

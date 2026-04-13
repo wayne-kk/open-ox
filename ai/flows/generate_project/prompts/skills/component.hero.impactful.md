@@ -1,9 +1,10 @@
 ---
+
 id: component.hero.impactful
 kind: component-skill
 sectionTypes: ["hero"]
 priority: 60
-fallback: true
+fallback: false
 when:
   designKeywords:
     any: ["bold", "vibrant", "energetic", "neon", "cyber", "futuristic", "tech", "glow", "festival", "rave", "acid", "dark", "dramatic", "immersive", "animated", "dynamic"]
@@ -18,9 +19,9 @@ when:
     any: ["marketing-site", "campaign-site", "brand-site", "portfolio"]
     none: []
 notes: |
-  Default high-impact hero skill. Use for energetic, bold, visually striking heroes
-  including neon/cyber/tech aesthetics. Fallback when no more specific skill applies.
----
+  High-impact hero: energetic, bold, visually striking heroes including neon/cyber/tech
+
+##   aesthetics. Select only when intent and keywords clearly match.
 
 # Component Skill: Hero — High-Impact
 
@@ -57,7 +58,7 @@ Use this skill when generating a hero section that must create immediate visual 
 ## Visual Impact
 
 - Use design tokens for color, shadow, and animation.
-- Contrast: Ensure headline and CTA stand out against background. Use `--color-accent`, `--shadow-*`, and semantic tokens.
+- Contrast: Ensure headline and CTA stand out against background. Use `--color-accent`, `--shadow-`*, and semantic tokens.
 - Depth: Layered backgrounds, subtle gradients, or texture classes from `globals.css` create depth without clutter.
 - Motion: If the section traits specify ambient or energetic motion, use restrained motion (e.g. subtle glow, gentle parallax). Never block the fold or slow load.
 

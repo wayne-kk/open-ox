@@ -104,7 +104,9 @@ export async function DELETE(req: NextRequest) {
 
 /** PUT /api/models — update step model assignment */
 export async function PUT(req: NextRequest) {
-  const { stepName, modelId, thinkingLevel } = await req.json();
+  const body = await req.json();
+
+  const { stepName, modelId, thinkingLevel } = body;
   if (!stepName) return NextResponse.json({ error: "stepName required" }, { status: 400 });
 
   if (!modelId) {

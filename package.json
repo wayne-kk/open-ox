@@ -60,5 +60,10 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.2"
+  },
+  "pnpm": {
+    "patchedDependencies": {
+      "@radix-ui/react-select@2.2.6": "patches/@radix-ui__react-select@2.2.6.patch"
+    }
   }
 }

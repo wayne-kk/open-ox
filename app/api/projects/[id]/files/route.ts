@@ -4,13 +4,18 @@ import { restoreProjectFiles, uploadGeneratedFiles, listProjectFiles } from "@/l
 import fs from "fs/promises";
 import path from "path";
 import { getSiteRoot } from "@/lib/projectManager";
+import { getSessionUser } from "@/lib/auth/session";
 
 type Params = { params: Promise<{ id: string }> };
 
 /** GET /api/projects/[id]/files — list files in Storage */
 export async function GET(_req: NextRequest, { params }: Params) {
+    const session = await getSessionUser();
+    if (!session) {
+        return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
+    }
     const { id } = await params;
-    const project = await getProject(id);
+    const project = await getProject(session.supabase, id);
     if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const files = await listProjectFiles(id);
@@ -19,8 +24,12 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
 /** POST /api/projects/[id]/files — restore files from Storage to local */
 export async function POST(_req: NextRequest, { params }: Params) {
+    const session = await getSessionUser();
+    if (!session) {
+        return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
+    }
     const { id } = await params;
-    const project = await getProject(id);
+    const project = await getProject(session.supabase, id);
     if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const restored = await restoreProjectFiles(id);
@@ -29,8 +38,12 @@ export async function POST(_req: NextRequest, { params }: Params) {
 
 /** PUT /api/projects/[id]/files — upload all local files to Storage */
 export async function PUT(_req: NextRequest, { params }: Params) {
+    const session = await getSessionUser();
+    if (!session) {
+        return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
+    }
     const { id } = await params;
-    const project = await getProject(id);
+    const project = await getProject(session.supabase, id);
     if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     // Collect all files in the project directory

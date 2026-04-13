@@ -9,13 +9,18 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getProject } from "@/lib/projectManager";
+import { getSessionUser } from "@/lib/auth/session";
 
 type Params = { params: Promise<{ id: string }> };
 
 export async function GET(req: NextRequest, { params }: Params) {
+    const session = await getSessionUser();
+    if (!session) {
+        return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
+    }
     const { id } = await params;
 
-    const project = await getProject(id);
+    const project = await getProject(session.supabase, id);
     if (!project) {
         return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }

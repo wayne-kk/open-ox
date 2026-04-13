@@ -35,7 +35,7 @@ export async function runBuildSite(
   input: string,
   callbacks: BuildSiteCallbacks,
   signal?: AbortSignal,
-  options?: { model?: string; retryProjectId?: string; projectId?: string; styleGuide?: string }
+  options?: { model?: string; retryProjectId?: string; projectId?: string; styleGuide?: string; enableSkills?: boolean }
 ): Promise<void> {
   const res = await fetch("/api/ai", {
     method: "POST",
@@ -46,9 +46,18 @@ export async function runBuildSite(
       ...(options?.retryProjectId ? { retryProjectId: options.retryProjectId } : {}),
       ...(options?.projectId ? { projectId: options.projectId } : {}),
       ...(options?.styleGuide ? { styleGuide: options.styleGuide } : {}),
+      ...(options?.enableSkills ? { enableSkills: true } : {}),
     }),
     signal,
   });
+
+  if (res.status === 401) {
+    if (typeof window !== "undefined") {
+      window.location.href = `/auth?redirect=${encodeURIComponent(window.location.pathname)}`;
+    }
+    callbacks.onError("请先登录");
+    return;
+  }
 
   const contentType = res.headers.get("content-type") ?? "";
 

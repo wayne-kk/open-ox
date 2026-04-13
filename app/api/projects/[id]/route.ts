@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getProject, renameProject, deleteProject } from "@/lib/projectManager";
+import { getProject, renameProject, deleteProject, setProjectFolder } from "@/lib/projectManager";
 import { deleteProjectFiles } from "@/lib/storage";
 import { getDevServerStatus, stopDevServer } from "@/lib/devServerManager";
+import { getSessionUser } from "@/lib/auth/session";
 
 type Params = { params: Promise<{ id: string }> };
 
 export async function GET(_req: NextRequest, { params }: Params) {
+  const session = await getSessionUser();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
+  }
   const { id } = await params;
-  const project = await getProject(id);
+  const project = await getProject(session.supabase, id);
   if (!project) {
     return NextResponse.json(
       { error: "Project not found", code: "PROJECT_NOT_FOUND" },
@@ -18,8 +23,13 @@ export async function GET(_req: NextRequest, { params }: Params) {
 }
 
 export async function PATCH(req: NextRequest, { params }: Params) {
+  const session = await getSessionUser();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
+  }
+  const { supabase: db } = session;
   const { id } = await params;
-  const project = await getProject(id);
+  const project = await getProject(db, id);
   if (!project) {
     return NextResponse.json(
       { error: "Project not found", code: "PROJECT_NOT_FOUND" },
@@ -27,7 +37,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     );
   }
 
-  let body: { name?: string };
+  let body: { name?: string; folderId?: string | null };
   try {
     body = await req.json();
   } catch {
@@ -37,21 +47,32 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     );
   }
 
-  if (!body.name || typeof body.name !== "string") {
-    return NextResponse.json(
-      { error: "Missing or invalid 'name' field", code: "INVALID_NAME" },
-      { status: 400 }
-    );
+  if (body.folderId !== undefined) {
+    await setProjectFolder(db, id, body.folderId ?? null);
   }
 
-  await renameProject(id, body.name);
-  const updated = await getProject(id);
+  if (body.name !== undefined) {
+    if (typeof body.name !== "string" || !body.name.trim()) {
+      return NextResponse.json(
+        { error: "Missing or invalid 'name' field", code: "INVALID_NAME" },
+        { status: 400 }
+      );
+    }
+    await renameProject(db, id, body.name.trim());
+  }
+
+  const updated = await getProject(db, id);
   return NextResponse.json(updated);
 }
 
 export async function DELETE(_req: NextRequest, { params }: Params) {
+  const session = await getSessionUser();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
+  }
+  const { supabase: db } = session;
   const { id } = await params;
-  const project = await getProject(id);
+  const project = await getProject(db, id);
   if (!project) {
     return NextResponse.json(
       { error: "Project not found", code: "PROJECT_NOT_FOUND" },
@@ -59,13 +80,12 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     );
   }
 
-  const serverStatus = await getDevServerStatus(id);
+  const serverStatus = await getDevServerStatus(db, id);
   if (serverStatus.status === "running") {
-    await stopDevServer(id);
+    await stopDevServer(db, id);
   }
 
-  await deleteProject(id);
-  // Clean up Storage files (non-blocking)
+  await deleteProject(db, id);
   deleteProjectFiles(id).catch((err) =>
     console.error("[DELETE /api/projects/:id] Storage cleanup failed:", err)
   );

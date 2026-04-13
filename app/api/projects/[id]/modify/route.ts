@@ -17,15 +17,22 @@ import { runModifyProject } from "@/ai/flows/modify_project/runModifyProject";
 import type { ModifySSEEvent } from "@/ai/flows/modify_project/runModifyProject";
 import { uploadGeneratedFiles } from "@/lib/storage";
 import { classifyModificationScope } from "@/lib/devServerManager";
+import { getSessionUser } from "@/lib/auth/session";
 
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const session = await getSessionUser();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
+  }
+  const { supabase: db } = session;
+
   const { id } = await params;
 
   // Validate project exists before streaming
-  const project = await getProject(id);
+  const project = await getProject(db, id);
   if (!project) {
     return NextResponse.json({ error: "Project not found", code: "NOT_FOUND" }, { status: 404 });
   }
@@ -58,12 +65,6 @@ export async function POST(
 
   const encoder = new TextEncoder();
 
-  // Model override is passed directly to runModifyProject instead of using
-  // the global _runtimeModelId. This avoids:
-  //   1. Generate flow's selectedModel leaking into modify (the old bug)
-  //   2. Concurrent request pollution via shared module-level global
-  // If no modelOverride is provided, runModifyProject uses MODIFY_DEFAULT_MODEL.
-
   const stream = new ReadableStream({
     async start(controller) {
       let closed = false;
@@ -76,30 +77,33 @@ export async function POST(
         }
       };
 
-      // Collect plan and diffs for persistence
-      let collectedPlan: { analysis: string; changes: Array<{ path: string; action: string; reasoning: string }> } | null = null;
       const collectedDiffs: Array<{ file: string; reasoning: string; patch: string; stats: { additions: number; deletions: number } }> = [];
       let buildPassed = false;
 
       try {
-        await runModifyProject(id, userInstruction, (event) => {
-          send(event);
-          if (event.type === "plan") {
-            collectedPlan = event.plan as typeof collectedPlan;
-          } else if (event.type === "diff") {
-            collectedDiffs.push({
-              file: (event as { file: string }).file,
-              reasoning: (event as { reasoning: string }).reasoning,
-              patch: (event as { patch: string }).patch,
-              stats: (event as { stats: { additions: number; deletions: number } }).stats,
-            });
-          } else if (event.type === "step" && event.name === "agent_loop") {
-            // Capture build status from agent_loop completion
-            if (event.message?.includes("build=passed")) buildPassed = true;
-          }
-        }, conversationHistory, clearContext, imageBase64, modelOverride);
+        await runModifyProject(
+          db,
+          id,
+          userInstruction,
+          (event) => {
+            send(event);
+            if (event.type === "diff") {
+              collectedDiffs.push({
+                file: (event as { file: string }).file,
+                reasoning: (event as { reasoning: string }).reasoning,
+                patch: (event as { patch: string }).patch,
+                stats: (event as { stats: { additions: number; deletions: number } }).stats,
+              });
+            } else if (event.type === "step" && event.name === "agent_loop") {
+              if (event.message?.includes("build=passed")) buildPassed = true;
+            }
+          },
+          conversationHistory,
+          clearContext,
+          imageBase64,
+          modelOverride
+        );
 
-        // Upload modified files to Storage (non-blocking)
         const touchedFiles = collectedDiffs.map((d) => d.file);
         if (touchedFiles.length > 0) {
           uploadGeneratedFiles(id, touchedFiles).catch((err) =>
@@ -107,7 +111,6 @@ export async function POST(
           );
         }
 
-        // Classify modification scope for preview optimization
         const refreshMode = classifyModificationScope(collectedDiffs);
 
         send({
