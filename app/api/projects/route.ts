@@ -79,6 +79,7 @@ export async function POST(req: Request) {
       ownerUsername: getUserDisplayName(user),
       modelId,
       folderId: folderId ?? null,
+      generationMode,
     });
     return NextResponse.json({ projectId: project.id, styleGuide: styleGuide ?? null });
   } catch (err) {

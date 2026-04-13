@@ -235,9 +235,17 @@ export async function createProject(
     ownerUsername: string;
     modelId?: string;
     folderId?: string | null;
+    generationMode?: GenerationMode;
   }
 ): Promise<ProjectMetadata> {
-  const { userPrompt, userId, ownerUsername, modelId, folderId } = args;
+  const {
+    userPrompt,
+    userId,
+    ownerUsername,
+    modelId,
+    folderId,
+    generationMode = "web",
+  } = args;
   const now = new Date();
   const timestamp = now.toISOString().replace(/:/g, "-").replace(/\./g, "-");
   const slug = userPrompt

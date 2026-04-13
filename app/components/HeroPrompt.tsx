@@ -19,6 +19,7 @@ interface PendingBuildPayload {
   chips: InjectedChip[];
   enableSkills: boolean;
   folderId: string | null;
+  generationMode: GenerationMode;
 }
 
 function savePendingBuild(p: PendingBuildPayload) {
@@ -220,7 +221,7 @@ export function HeroPrompt() {
           body: JSON.stringify({
             userPrompt: finalPrompt,
             ...(snapshot.folderId ? { folderId: snapshot.folderId } : {}),
-            generationMode,
+            generationMode: snapshot.generationMode,
           ...(styleGuide ? { styleGuide } : {}),
             ...(referenceProjectId ? { referenceProjectId } : {}),
             ...(referenceUrl ? { referenceUrl } : {}),
@@ -281,6 +282,7 @@ export function HeroPrompt() {
         chips: chipsSafe,
         enableSkills: Boolean(pending.enableSkills),
         folderId: pending.folderId ?? null,
+        generationMode: pending.generationMode ?? "web",
       });
     });
   }, [runCreateProject]);
@@ -296,7 +298,7 @@ export function HeroPrompt() {
       data: { session },
     } = await supabase.auth.getSession();
     if (!session) {
-      savePendingBuild({ v: 1, value, chips, enableSkills, folderId });
+      savePendingBuild({ v: 1, value, chips, enableSkills, folderId, generationMode });
       const here =
         typeof window !== "undefined"
           ? `${window.location.pathname}${window.location.search}`
@@ -305,7 +307,7 @@ export function HeroPrompt() {
       return;
     }
 
-    await runCreateProject({ v: 1, value, chips, enableSkills, folderId });
+    await runCreateProject({ v: 1, value, chips, enableSkills, folderId, generationMode });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
