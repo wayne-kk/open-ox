@@ -1,19 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isFeishuOAuthConfigured } from "@/lib/auth/feishu-env";
+import { getPublicOrigin } from "@/lib/auth/request-origin";
 import { buildFeishuAuthorizeUrl, generateOAuthState } from "@/lib/auth/feishu-oauth";
 
 /**
  * Redirects browser to Feishu authorize page; sets short-lived cookies for state + post-login path.
  */
 export async function GET(request: NextRequest) {
+  const origin = getPublicOrigin(request);
+
   if (!isFeishuOAuthConfigured()) {
-    const { origin } = new URL(request.url);
     return NextResponse.redirect(new URL("/auth?error=feishu_config", origin));
   }
 
   const clientId = process.env.FEISHU_APP_ID!.trim();
 
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
   const next = searchParams.get("next") ?? "/projects";
   if (!next.startsWith("/") || next.startsWith("//")) {
     return NextResponse.json({ error: "Invalid next" }, { status: 400 });

@@ -8,21 +8,24 @@ import {
   timingSafeEqualString,
 } from "@/lib/auth/feishu-oauth";
 import { provisionFeishuUserAndSignIn } from "@/lib/auth/feishu-supabase";
+import { getPublicOrigin } from "@/lib/auth/request-origin";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 
 /**
  * Feishu redirects here with ?code=&state= — exchange code server-side, then Supabase email session.
  */
 export async function GET(request: NextRequest) {
+  const origin = getPublicOrigin(request);
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
   if (!url || !anonKey) {
-    return NextResponse.redirect(new URL("/auth?error=config", request.url));
+    return NextResponse.redirect(new URL("/auth?error=config", origin));
   }
 
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
   if (searchParams.get("error") === "access_denied") {
-    return NextResponse.redirect(new URL("/auth?error=feishu_denied", request.url));
+    return NextResponse.redirect(new URL("/auth?error=feishu_denied", origin));
   }
 
   const code = searchParams.get("code");
@@ -42,13 +45,13 @@ export async function GET(request: NextRequest) {
   }
 
   if (!code || !state || !cookieState || !timingSafeEqualString(state, cookieState)) {
-    return NextResponse.redirect(new URL("/auth?error=feishu_state", request.url));
+    return NextResponse.redirect(new URL("/auth?error=feishu_state", origin));
   }
 
   const clientId = process.env.FEISHU_APP_ID;
   const clientSecret = process.env.FEISHU_APP_SECRET;
   if (!clientId || !clientSecret) {
-    return NextResponse.redirect(new URL("/auth?error=feishu_config", request.url));
+    return NextResponse.redirect(new URL("/auth?error=feishu_config", origin));
   }
 
   const redirectUri = `${origin}/api/auth/feishu/callback`;
