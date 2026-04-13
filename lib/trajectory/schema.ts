@@ -14,7 +14,12 @@ export type TrajectoryEventType =
   | "test_start"
   | "test_result"
   | "error"
-  | "checkpoint";
+  | "checkpoint"
+  | "repair_episode_started"
+  | "repair_action_started"
+  | "repair_action_result"
+  | "repair_verification_result"
+  | "repair_episode_finished";
 
 export type TrajectoryActor = "system" | "user" | "agent" | "tool" | "evaluator";
 
@@ -64,6 +69,11 @@ const ALLOWED_EVENT_TYPES: readonly TrajectoryEventType[] = [
   "test_result",
   "error",
   "checkpoint",
+  "repair_episode_started",
+  "repair_action_started",
+  "repair_action_result",
+  "repair_verification_result",
+  "repair_episode_finished",
 ];
 
 const ALLOWED_ACTORS: readonly TrajectoryActor[] = ["system", "user", "agent", "tool", "evaluator"];
