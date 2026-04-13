@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isFeishuOAuthConfigured } from "@/lib/auth/feishu-env";
 import { buildFeishuAuthorizeUrl, generateOAuthState } from "@/lib/auth/feishu-oauth";
 
 /**
  * Redirects browser to Feishu authorize page; sets short-lived cookies for state + post-login path.
  */
 export async function GET(request: NextRequest) {
-  const clientId = process.env.FEISHU_APP_ID;
-  if (!clientId) {
-    return NextResponse.json({ error: "FEISHU_APP_ID not configured" }, { status: 500 });
+  if (!isFeishuOAuthConfigured()) {
+    const { origin } = new URL(request.url);
+    return NextResponse.redirect(new URL("/auth?error=feishu_config", origin));
   }
+
+  const clientId = process.env.FEISHU_APP_ID!.trim();
 
   const { searchParams, origin } = new URL(request.url);
   const next = searchParams.get("next") ?? "/projects";

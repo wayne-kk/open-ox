@@ -79,11 +79,17 @@ jobs:
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY }}
         run: pnpm build
 
+      # Runtime env for pm2 `next start` on the server. Add matching Repository secrets under Settings → Secrets → Actions.
       - name: Generate .env.production
         run: |
           {
             echo "NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}"
             echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY }}"
+            echo "NEXT_PUBLIC_SITE_URL=${{ secrets.NEXT_PUBLIC_SITE_URL }}"
+            echo "SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}"
+            echo "FEISHU_APP_ID=${{ secrets.FEISHU_APP_ID }}"
+            echo "FEISHU_APP_SECRET=${{ secrets.FEISHU_APP_SECRET }}"
+            echo "FEISHU_OAUTH_HMAC_SECRET=${{ secrets.FEISHU_OAUTH_HMAC_SECRET }}"
             echo "E2B_API_KEY=${{ secrets.E2B_API_KEY }}"
             echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}"
             echo "OPENAI_API_URL=${{ secrets.OPENAI_API_URL }}"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { MessagesSquare } from "lucide-react";
@@ -13,12 +13,28 @@ export function FeishuAuthBlock() {
   const redirect = searchParams.get("redirect") ?? "/projects";
   const error = searchParams.get("error");
   const errorDetail = searchParams.get("msg");
+  const [feishuEnabled, setFeishuEnabled] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (error === "auth") {
       console.warn("[auth] OAuth code exchange failed");
     }
   }, [error]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/auth/config")
+      .then((r) => r.json())
+      .then((d: { feishuLoginEnabled?: boolean }) => {
+        if (!cancelled) setFeishuEnabled(d.feishuLoginEnabled === true);
+      })
+      .catch(() => {
+        if (!cancelled) setFeishuEnabled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const feishuStartUrl = `/api/auth/feishu/start?next=${encodeURIComponent(redirect)}`;
 
@@ -54,17 +70,39 @@ export function FeishuAuthBlock() {
         </p>
       )}
 
-      <p className="text-center text-xs text-muted-foreground">
-        使用飞书时将跳转授权，登录后回到站点（无需在 Supabase 配置飞书 Issuer）
-      </p>
+      {feishuEnabled === false ? (
+        <p className="text-center text-xs text-muted-foreground/90 leading-relaxed">
+          飞书登录未启用：请在部署环境配置{" "}
+          <span className="font-mono text-[10px] text-muted-foreground">
+            FEISHU_APP_ID、FEISHU_APP_SECRET、FEISHU_OAUTH_HMAC_SECRET、SUPABASE_SERVICE_ROLE_KEY
+          </span>
+          ，并将飞书后台重定向 URL 设为{" "}
+          <span className="font-mono text-[10px] break-all text-muted-foreground">
+            {"{你的站点}/api/auth/feishu/callback"}
+          </span>
+          ，且 <span className="font-mono text-[10px]">NEXT_PUBLIC_SITE_URL</span> 与线上域名一致。
+        </p>
+      ) : (
+        <>
+          <p className="text-center text-xs text-muted-foreground">
+            使用飞书时将跳转授权，登录后回到站点（无需在 Supabase 配置飞书 Issuer）
+          </p>
 
-      <Link
-        href={feishuStartUrl}
-        className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#3370ff]/35 bg-[#3370ff]/10 py-3 text-sm font-medium text-[#8eb5ff] transition hover:bg-[#3370ff]/18"
-      >
-        <MessagesSquare className="h-4 w-4 text-[#3370ff]" />
-        使用飞书登录
-      </Link>
+          {feishuEnabled === null ? (
+            <div className="flex w-full justify-center rounded-xl border border-white/8 bg-white/[0.03] py-3 text-xs text-muted-foreground">
+              检查登录方式…
+            </div>
+          ) : (
+            <Link
+              href={feishuStartUrl}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#3370ff]/35 bg-[#3370ff]/10 py-3 text-sm font-medium text-[#8eb5ff] transition hover:bg-[#3370ff]/18"
+            >
+              <MessagesSquare className="h-4 w-4 text-[#3370ff]" />
+              使用飞书登录
+            </Link>
+          )}
+        </>
+      )}
     </div>
   );
 }
