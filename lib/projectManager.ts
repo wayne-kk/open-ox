@@ -4,6 +4,7 @@ import { Dirent } from "fs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const WORKSPACE_ROOT = process.cwd();
+export type GenerationMode = "web" | "app";
 
 export interface ModificationRecord {
   instruction: string;
@@ -45,6 +46,7 @@ export interface ProjectMetadata {
   logDirectory?: string;
   totalDuration?: number;
   modelId?: string;
+  generationMode: GenerationMode;
   folderId?: string | null;
   modificationHistory: ModificationRecord[];
   /** Set when row includes ownership columns */
@@ -68,6 +70,7 @@ interface ProjectRow {
   log_directory: string | null;
   total_duration: number | null;
   model_id: string | null;
+  generation_mode: GenerationMode | null;
   user_id: string | null;
   folder_id: string | null;
   owner_username?: string | null;
@@ -91,6 +94,7 @@ function rowToMetadata(row: ProjectRow): ProjectMetadata {
     logDirectory: row.log_directory ?? undefined,
     totalDuration: row.total_duration ?? undefined,
     modelId: row.model_id ?? undefined,
+    generationMode: row.generation_mode ?? "web",
     folderId: row.folder_id ?? undefined,
     modificationHistory: row.modification_history ?? [],
     ...(row.user_id
@@ -134,6 +138,7 @@ interface ProjectListRow {
   error: string | null;
   verification_status: "passed" | "failed" | null;
   model_id: string | null;
+  generation_mode: GenerationMode | null;
   folder_id: string | null;
   user_id: string | null;
   owner_username: string | null;
@@ -160,7 +165,7 @@ export async function listProjectsSummary(
   let query = db
     .from("projects")
     .select(
-      "id,name,user_prompt,status,created_at,updated_at,completed_at,error,verification_status,model_id,folder_id,user_id,owner_username"
+      "id,name,user_prompt,status,created_at,updated_at,completed_at,error,verification_status,model_id,generation_mode,folder_id,user_id,owner_username"
     )
     .order("created_at", { ascending: false });
 
@@ -208,6 +213,7 @@ export async function listProjectsSummary(
     error: row.error ?? undefined,
     verificationStatus: row.verification_status ?? undefined,
     modelId: row.model_id ?? undefined,
+    generationMode: row.generation_mode ?? "web",
     folderId: row.folder_id ?? undefined,
     modificationHistory: [],
     ownerUserId: row.user_id ?? undefined,
@@ -229,9 +235,17 @@ export async function createProject(
     ownerUsername: string;
     modelId?: string;
     folderId?: string | null;
+    generationMode?: GenerationMode;
   }
 ): Promise<ProjectMetadata> {
-  const { userPrompt, userId, ownerUsername, modelId, folderId } = args;
+  const {
+    userPrompt,
+    userId,
+    ownerUsername,
+    modelId,
+    folderId,
+    generationMode = "web",
+  } = args;
   const now = new Date();
   const timestamp = now.toISOString().replace(/:/g, "-").replace(/\./g, "-");
   const slug = userPrompt
@@ -252,6 +266,7 @@ export async function createProject(
     created_at: createdAt,
     updated_at: createdAt,
     model_id: modelId ?? null,
+    generation_mode: generationMode,
     user_id: userId,
     owner_username: ownerUsername,
     folder_id: folderId ?? null,

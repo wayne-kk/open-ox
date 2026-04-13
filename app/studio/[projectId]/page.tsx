@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import { Suspense } from "react";
 import Link from "next/link";
 import { ArrowLeft, GitBranch, Monitor, RefreshCw, ExternalLink, PanelLeftClose, PanelLeftOpen } from "lucide-react";
@@ -18,13 +18,39 @@ function formatMs(ms: number): string {
 }
 
 function StudioInner({ projectId }: { projectId: string }) {
+  const APP_PREVIEW_WIDTH = 440;
+  const APP_PREVIEW_HEIGHT = 956;
   const studio = useBuildStudio(projectId);
   const { loading, response, elapsed, rightPanel, setRightPanel,
     previewUrl, previewState, previewError, previewVersion, startPreview, iframeRef, projectLoading,
-    autoPreviewAfterBuild, setAutoPreviewAfterBuild } = studio;
+    autoPreviewAfterBuild, setAutoPreviewAfterBuild, generationMode } = studio;
   const buildSteps = response?.buildSteps ?? [];
   const canPreview = !!projectId && !loading;
   const [conversationCollapsed, setConversationCollapsed] = useState(false);
+  const appPreviewViewportRef = useRef<HTMLDivElement | null>(null);
+  const [appPreviewScale, setAppPreviewScale] = useState(1);
+
+  useEffect(() => {
+    if (generationMode !== "app" || rightPanel !== "preview" || previewState !== "ready") return;
+
+    const viewport = appPreviewViewportRef.current;
+    if (!viewport) return;
+
+    const updateScale = () => {
+      const availableWidth = Math.max(viewport.clientWidth - 8, 1);
+      const availableHeight = Math.max(viewport.clientHeight - 8, 1);
+      const widthRatio = availableWidth / APP_PREVIEW_WIDTH;
+      const heightRatio = availableHeight / APP_PREVIEW_HEIGHT;
+      const nextScale = Math.min(widthRatio, heightRatio, 1);
+      setAppPreviewScale(nextScale > 0 ? nextScale : 1);
+    };
+
+    updateScale();
+    const observer = new ResizeObserver(updateScale);
+    observer.observe(viewport);
+
+    return () => observer.disconnect();
+  }, [generationMode, previewState, rightPanel]);
 
   if (projectLoading) {
     return (
@@ -266,7 +292,48 @@ function StudioInner({ projectId }: { projectId: string }) {
                     </div>
                   )}
                   {previewState === "ready" && previewUrl && (
-                    <iframe key={`${previewUrl}_${previewVersion}`} ref={iframeRef} src={previewUrl} className="flex-1 w-full border-0" title="Project Preview" />
+                    generationMode === "app" ? (
+                      <div className="flex h-full w-full items-center justify-center overflow-hidden overscroll-none bg-[linear-gradient(180deg,rgba(255,255,255,0.02),rgba(0,0,0,0.22))] p-6">
+                        <div ref={appPreviewViewportRef} className="flex h-full w-full items-center justify-center overflow-hidden overscroll-none">
+                          <div
+                            className="relative shrink-0"
+                            style={{
+                              width: APP_PREVIEW_WIDTH * appPreviewScale,
+                              height: APP_PREVIEW_HEIGHT * appPreviewScale,
+                            }}
+                          >
+                            <div
+                              className="absolute left-0 top-0 h-[956px] w-[440px]"
+                              style={{
+                                transform: `scale(${appPreviewScale})`,
+                                transformOrigin: "top left",
+                              }}
+                            >
+                              <div className="absolute inset-0 rounded-[3rem] border border-white/20 bg-neutral-900 p-[3px] shadow-[0_24px_90px_rgba(0,0,0,0.5)]">
+                                <div className="relative h-full w-full overflow-hidden overscroll-none rounded-[2.7rem] bg-black">
+                                  <iframe
+                                    key={`${previewUrl}_${previewVersion}`}
+                                    ref={iframeRef}
+                                    src={previewUrl}
+                                    className="h-full w-full border-0"
+                                    title="App Preview"
+                                    style={{ overscrollBehavior: "none" }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <iframe
+                        key={`${previewUrl}_${previewVersion}`}
+                        ref={iframeRef}
+                        src={previewUrl}
+                        className="flex-1 w-full border-0"
+                        title="Project Preview"
+                      />
+                    )
                   )}
                 </div>
               )}

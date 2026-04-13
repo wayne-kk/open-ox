@@ -66,6 +66,7 @@ export interface BuildStudioState {
   projectId: string | null;
   setProjectId: (id: string | null) => void;
   projectLoading: boolean;
+  generationMode: "web" | "app";
 
   // Right panel toggle
   rightPanel: RightPanel;
@@ -151,6 +152,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
 
   const [projectId, setProjectId] = useState<string | null>(initialProjectId ?? null);
   const [projectLoading, setProjectLoading] = useState<boolean>(!!initialProjectId);
+  const [generationMode, setGenerationMode] = useState<"web" | "app">("web");
   const [rightPanel, setRightPanel] = useState<RightPanel>("topology");
 
   const [autoPreviewAfterBuild, setAutoPreviewAfterBuildState] = useState(true);
@@ -222,6 +224,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
 
   type ProjectData = {
     id: string; status: string; userPrompt: string; modelId?: string;
+    generationMode?: "web" | "app";
     buildSteps?: unknown[]; generatedFiles?: string[]; blueprint?: unknown;
     verificationStatus?: string; logDirectory?: string; error?: string;
     totalDuration?: number;
@@ -238,6 +241,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
 
   const applyProjectData = useCallback((project: ProjectData) => {
     setLastRunInput(project.userPrompt ?? null);
+    setGenerationMode(project.generationMode ?? "web");
     if (project.modelId) setSelectedModel(project.modelId);
     if (project.modificationHistory?.length) {
       setModifyHistory(project.modificationHistory.map((r) => ({
@@ -307,6 +311,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         if (sseActiveRef.current) {
           // Still apply non-step metadata (prompt, model, history)
           setLastRunInput(project.userPrompt ?? null);
+          setGenerationMode(project.generationMode ?? "web");
           if (project.modelId) setSelectedModel(project.modelId);
           setProjectLoading(false);
           return;
@@ -786,6 +791,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     handleRun, handleClear, handleRetry,
     selectedModel, setSelectedModel, availableModels,
     projectId, setProjectId, projectLoading,
+    generationMode,
     rightPanel, setRightPanel,
     previewUrl, previewState, previewError, previewVersion, startPreview, rebuildPreview,
     autoPreviewAfterBuild, setAutoPreviewAfterBuild,

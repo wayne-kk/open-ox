@@ -1,0 +1,1 @@
+export { runGenerateApp } from "./runGenerateApp";

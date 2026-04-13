@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import type { ProjectFolderFilter } from "@/lib/projectManager";
+import type { GenerationMode, ProjectFolderFilter } from "@/lib/projectManager";
 import { createProject, listProjectsSummary } from "@/lib/projectManager";
 import { getSessionUser } from "@/lib/auth/session";
 import { getUserDisplayName } from "@/lib/auth/display-name";
@@ -60,12 +60,16 @@ export async function POST(req: Request) {
     const { supabase: db, user } = session;
 
     const body = await req.json();
-    const { userPrompt, modelId, styleGuide, folderId } = body as {
+    const { userPrompt, modelId, styleGuide, folderId, generationMode } = body as {
       userPrompt: string;
       modelId?: string;
       styleGuide?: string;
       folderId?: string | null;
+      generationMode?: GenerationMode;
     };
+    if (generationMode !== undefined && generationMode !== "web" && generationMode !== "app") {
+      return NextResponse.json({ error: "Invalid generationMode" }, { status: 400 });
+    }
     if (!userPrompt?.trim()) {
       return NextResponse.json({ error: "userPrompt is required" }, { status: 400 });
     }
@@ -75,6 +79,7 @@ export async function POST(req: Request) {
       ownerUsername: getUserDisplayName(user),
       modelId,
       folderId: folderId ?? null,
+      generationMode,
     });
     return NextResponse.json({ projectId: project.id, styleGuide: styleGuide ?? null });
   } catch (err) {

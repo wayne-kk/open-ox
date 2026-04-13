@@ -19,6 +19,7 @@ interface PendingBuildPayload {
   chips: InjectedChip[];
   enableSkills: boolean;
   folderId: string | null;
+  generationMode: GenerationMode;
 }
 
 function savePendingBuild(p: PendingBuildPayload) {
@@ -28,6 +29,8 @@ function savePendingBuild(p: PendingBuildPayload) {
     /* quota / private mode */
   }
 }
+
+type GenerationMode = "web" | "app";
 
 // ── Typewriter placeholders ──────────────────────────────────────────────────
 const PLACEHOLDERS = [
@@ -63,6 +66,7 @@ export function HeroPrompt() {
   const [focused, setFocused] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [enableSkills, setEnableSkills] = useState(false);
+  const [generationMode, setGenerationMode] = useState<GenerationMode>("web");
 
   // ── Typewriter ─────────────────────────────────────────────────────────────
   const [placeholderIdx, setPlaceholderIdx] = useState(0);
@@ -217,7 +221,8 @@ export function HeroPrompt() {
           body: JSON.stringify({
             userPrompt: finalPrompt,
             ...(snapshot.folderId ? { folderId: snapshot.folderId } : {}),
-            ...(styleGuide ? { styleGuide } : {}),
+            generationMode: snapshot.generationMode,
+          ...(styleGuide ? { styleGuide } : {}),
             ...(referenceProjectId ? { referenceProjectId } : {}),
             ...(referenceUrl ? { referenceUrl } : {}),
           }),
@@ -277,6 +282,7 @@ export function HeroPrompt() {
         chips: chipsSafe,
         enableSkills: Boolean(pending.enableSkills),
         folderId: pending.folderId ?? null,
+        generationMode: pending.generationMode ?? "web",
       });
     });
   }, [runCreateProject]);
@@ -292,7 +298,7 @@ export function HeroPrompt() {
       data: { session },
     } = await supabase.auth.getSession();
     if (!session) {
-      savePendingBuild({ v: 1, value, chips, enableSkills, folderId });
+      savePendingBuild({ v: 1, value, chips, enableSkills, folderId, generationMode });
       const here =
         typeof window !== "undefined"
           ? `${window.location.pathname}${window.location.search}`
@@ -301,7 +307,7 @@ export function HeroPrompt() {
       return;
     }
 
-    await runCreateProject({ v: 1, value, chips, enableSkills, folderId });
+    await runCreateProject({ v: 1, value, chips, enableSkills, folderId, generationMode });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -393,14 +399,42 @@ export function HeroPrompt() {
         {/* Bottom bar */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3">
+            <div className="inline-flex items-center rounded-lg border border-white/12 bg-white/3 p-0.5">
+              <button
+                type="button"
+                onClick={() => setGenerationMode("web")}
+                className={`rounded-md px-2.5 py-1 font-mono text-[11px] tracking-[0.08em] transition ${
+                  generationMode === "web"
+                    ? "bg-primary/20 text-primary"
+                    : "text-muted-foreground/70 hover:text-foreground"
+                }`}
+                aria-pressed={generationMode === "web"}
+              >
+                Web
+              </button>
+              <button
+                type="button"
+                onClick={() => setGenerationMode("app")}
+                className={`rounded-md px-2.5 py-1 font-mono text-[11px] tracking-[0.08em] transition ${
+                  generationMode === "app"
+                    ? "bg-primary/20 text-primary"
+                    : "text-muted-foreground/70 hover:text-foreground"
+                }`}
+                aria-pressed={generationMode === "app"}
+              >
+                App
+              </button>
+            </div>
+
             <span className="font-mono text-[11px] text-muted-foreground/40">
-              <kbd className="rounded border border-white/10 px-1 py-0.5 text-[10px]">/</kbd> 风格
-              {" · "}
-              <kbd className="rounded border border-white/10 px-1 py-0.5 text-[10px]">@</kbd> 参考项目
-              {" · "}
-              <kbd className="rounded border border-white/10 px-1 py-0.5 text-[10px]">#</kbd> 约束
-              {" · ⌘↵ 构建"}
-            </span>
+                <kbd className="rounded border border-white/10 px-1 py-0.5 text-[10px]">/</kbd> 风格
+                {" · "}
+                <kbd className="rounded border border-white/10 px-1 py-0.5 text-[10px]">@</kbd> 参考项目
+                {" · "}
+                <kbd className="rounded border border-white/10 px-1 py-0.5 text-[10px]">#</kbd> 约束
+                {" · ⌘↵ 构建"}
+              </span>
             <label className="flex items-center gap-1.5 cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -411,10 +445,11 @@ export function HeroPrompt() {
               <span className="font-mono text-[10px] text-muted-foreground/50">Skills</span>
             </label>
           </div>
+          </div>
           <SparkleHoverButton
             type="submit"
             disabled={!canSubmit}
-            className="px-5 py-2.5 tracking-[0.1em] disabled:opacity-30 disabled:cursor-not-allowed"
+            className="px-5 py-2.5 tracking-widest disabled:opacity-30 disabled:cursor-not-allowed"
           >
             {submitting ? (
               <><span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" /> 创建中…</>

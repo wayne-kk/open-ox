@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "fs";
 import matter from "gray-matter";
 import { resolvePromptPath } from "./catalog";
+import { getPromptProfile } from "./profile";
 import type { PromptKind } from "./types";
 
 const cache = new Map<string, string>();
@@ -13,7 +14,7 @@ function withFrontmatterStripped(kind: PromptKind, raw: string): string {
 }
 
 export function loadPrompt(kind: PromptKind, id: string): string {
-  const key = `${kind}:${id}`;
+  const key = `${getPromptProfile()}:${kind}:${id}`;
   const hit = cache.get(key);
   if (hit) return hit;
 

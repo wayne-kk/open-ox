@@ -99,9 +99,33 @@ export interface PageDesignPlan {
   constraints: string[];
 }
 
+export interface AppScreenRegionPlan {
+  id: string;
+  title: string;
+  intent: string;
+  contentHints: string;
+  priority: "primary" | "secondary" | "supporting";
+}
+
+export interface AppScreenInteractionModel {
+  navigationStyle: string;
+  primaryActionModel: string;
+  feedbackPattern: string;
+}
+
+export interface AppScreenPlan {
+  screenType: string;
+  shellStyle: string;
+  narrative: string;
+  regions: AppScreenRegionPlan[];
+  interactionModel: AppScreenInteractionModel;
+  preferredSkillIds?: string[];
+}
+
 export interface PlannedPageBlueprint extends Omit<PageBlueprint, "sections"> {
   pageDesignPlan: PageDesignPlan;
   sections: PlannedSectionSpec[];
+  appScreenPlan?: AppScreenPlan;
 }
 
 export interface ProjectBrief {
