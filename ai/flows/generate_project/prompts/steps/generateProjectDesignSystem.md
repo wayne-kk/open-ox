@@ -24,6 +24,7 @@ The design system must also fit the product logic:
 - No `max-w-*` anywhere in layout definitions
 - No font role substitution: `font-display` ≠ `font-header`, never interchange them
 - No `clip-path` or `polygon()` — all shape boundaries must use `border-radius` only; chamfered / custom clipping shapes are forbidden
+- No organic shapes, petal masks, blob shapes, or any non-rectangular image containers — images must always be rectangular or rounded-rectangular (`border-radius`)
 
 ---
 
@@ -121,7 +122,7 @@ radius.full:   9999px — [usage: e.g., pills, avatars]
 
 **Border Width**: [default `1px` / emphasis `2px` — specify when each applies]
 
-[⛔ `clip-path / polygon()` is forbidden. All shape boundaries must use border-radius only.]
+[⛔ `clip-path / polygon()` is forbidden. No organic shapes, petal masks, blob shapes. All shape boundaries must use border-radius only. Images are always rectangular or rounded-rectangular.]
 
 ### Shadows & Effects
 

@@ -1,5 +1,6 @@
  "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
 import { ArrowRight, Cpu, GitBranch, Shield, Zap, Layers, Paintbrush } from "lucide-react";
 import { AgentFlowDemo } from "./components/AgentFlowDemo";
@@ -112,7 +113,9 @@ export default function Home() {
             <span className="bitcoin-gradient-text">Build it.</span>
           </h1>
 
-          <HeroPrompt />
+          <Suspense fallback={<div className="mx-auto w-full max-w-4xl h-40 rounded-2xl border border-white/10 bg-white/[0.02] animate-pulse" />}>
+            <HeroPrompt />
+          </Suspense>
         </div>
 
         <div className="relative z-10 mt-16 w-full max-w-5xl">
@@ -246,6 +249,12 @@ export default function Home() {
               className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/3 px-6 py-3 font-mono text-[12px] font-medium tracking-[0.1em] text-muted-foreground transition-all hover:border-white/20 hover:text-foreground"
             >
               查看文档
+            </Link>
+            <Link
+              href="/changelog"
+              className="inline-flex items-center gap-2 rounded-xl border border-white/8 bg-transparent px-5 py-3 font-mono text-[12px] font-medium tracking-[0.08em] text-muted-foreground/90 transition-all hover:border-primary/25 hover:text-foreground"
+            >
+              更新日志
             </Link>
           </div>
         </div>

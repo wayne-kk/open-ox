@@ -1,4 +1,5 @@
 import path from "path";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { setSiteRoot, clearSiteRoot } from "@/ai/tools/system/common";
 import { getProject, getSiteRoot as pmGetSiteRoot, updateProjectStatus } from "@/lib/projectManager";
 import type { ModificationRecord } from "@/lib/projectManager";
@@ -20,6 +21,7 @@ export type ModifySSEEvent =
   | { type: "error"; message: string };
 
 export async function runModifyProject(
+  db: SupabaseClient,
   projectId: string,
   userInstruction: string,
   onEvent: (event: ModifySSEEvent) => void,
@@ -32,7 +34,7 @@ export async function runModifyProject(
   await artifactLogger.writeJson("run", "input", { projectId, userInstruction });
 
   onEvent({ type: "step", name: "resolve_project", status: "running" });
-  const project = await getProject(projectId);
+  const project = await getProject(db, projectId);
   if (!project) throw new Error(`Project not found: ${projectId}`);
   const projectDir = pmGetSiteRoot(projectId);
   setSiteRoot(projectDir);
@@ -152,7 +154,7 @@ export async function runModifyProject(
       image: imageBase64 ? (imageBase64.length > 200_000 ? imageBase64.slice(0, 200_000) : imageBase64) : null,
     };
     const existingHistory = project.modificationHistory ?? [];
-    await updateProjectStatus(projectId, "ready", {
+    await updateProjectStatus(db, projectId, "ready", {
       modificationHistory: [...existingHistory, record],
       verificationStatus: loopState.buildPassed ? "passed" : "failed",
     });

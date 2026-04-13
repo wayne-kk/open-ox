@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowLeft, Eye, EyeOff, Mail } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FeishuAuthBlock } from "@/components/auth/feishu-auth-block";
 
 interface PupilProps {
   size?: number;
@@ -832,16 +833,16 @@ function AuthPage() {
             </Button>
           </form>
 
-          <div className="mt-6">
-            <Button
-              variant="outline"
-              className="w-full h-12 bg-background border-border/60 hover:bg-accent"
-              type="button"
-            >
-              <Mail className="mr-2 size-5" />
-              Continue with Google
-            </Button>
+          <div className="relative mt-6">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-border/60" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase tracking-wide">
+              <span className="bg-background px-2 text-muted-foreground">或</span>
+            </div>
           </div>
+
+          <FeishuAuthBlock />
 
           <div className="text-center text-sm text-muted-foreground mt-8">
             {mode === "login" ? (

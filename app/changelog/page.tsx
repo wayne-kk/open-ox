@@ -12,6 +12,19 @@ interface ChangeEntry {
 
 const CHANGELOG: ChangeEntry[] = [
   {
+    version: "v1.3",
+    date: "2026-04-12",
+    tag: "major",
+    title: "账号主流程 · 全员项目广场",
+    body: "飞书登录与回跳闭环、会话与退出体验优化；未登录发起构建可接续；项目列表默认按成员浏览团队全部作品。",
+    items: [
+      "独立 /auth 登录流程：飞书授权、错误提示、登录后按 redirect 回到来源页（含首页构建场景）",
+      "未登录在首页填写需求并点「构建」→ 完成登录后自动恢复草稿并继续创建项目，无需再点一次",
+      "项目页「全部成员 / 我的项目」：默认展示所有人项目并按创建者分组；「我的」下仍可用文件夹筛选",
+      "全员列表仅本人项目显示删除；退出登录路径优化，减轻顶栏布局抖动与不必要的全页刷新",
+    ],
+  },
+  {
     version: "v1.2",
     date: "2026-04-08",
     tag: "major",
@@ -252,13 +265,12 @@ export default function ChangelogPage() {
         </p>
         <h1 className="text-3xl font-bold tracking-tight">更新日志</h1>
         <p className="mt-3 text-[14px] text-muted-foreground">
-          工程决策、性能优化与新能力。
+          新功能、体验优化与工程改进。
         </p>
 
         <div className="mt-12 space-y-0">
           {CHANGELOG.map((entry, i) => (
             <div key={`${entry.version}-${i}`} className="relative flex gap-6">
-              {/* Timeline line */}
               <div className="flex flex-col items-center">
                 <div className="mt-1 h-2.5 w-2.5 rounded-full border-2 border-primary bg-background shrink-0" />
                 {i < CHANGELOG.length - 1 && (
@@ -266,7 +278,6 @@ export default function ChangelogPage() {
                 )}
               </div>
 
-              {/* Content */}
               <div className="pb-12 min-w-0 flex-1">
                 <div className="flex items-center gap-3 flex-wrap">
                   <span className="font-mono text-[13px] font-bold text-foreground">{entry.version}</span>
@@ -298,7 +309,7 @@ export default function ChangelogPage() {
             className="flex items-center gap-2 text-[13px] text-muted-foreground hover:text-primary transition-colors"
           >
             <ArrowUpRight className="h-3.5 w-3.5" />
-            查看完整文档
+            查看技术文档
           </Link>
         </div>
       </div>

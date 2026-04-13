@@ -16,9 +16,17 @@ import { loadStepModelsFromDB } from "@/lib/config/models";
 import type { BuildStep } from "@/ai/flows";
 import { SSE_RESPONSE_HEADERS } from "@/lib/sse-headers";
 import { NextResponse } from "next/server";
+import { getSessionUser } from "@/lib/auth/session";
+import { getUserDisplayName } from "@/lib/auth/display-name";
 
 export async function POST(req: Request) {
   try {
+    const session = await getSessionUser();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
+    }
+    const { supabase: db, user } = session;
+
     const body = await req.json();
     // Accept both "userPrompt" (new) and "input" (legacy) field names
     const userPrompt: unknown = body.userPrompt ?? body.input;
@@ -27,13 +35,15 @@ export async function POST(req: Request) {
     const preCreatedProjectId: string | undefined = body.projectId;
     const styleGuide: string | undefined = body.styleGuide;
     const enableSkills: boolean = body.enableSkills === true;
+    const folderId: string | null | undefined =
+      typeof body.folderId === "string" ? body.folderId : body.folderId === null ? null : undefined;
 
     // For retry or pre-created project: load existing project's prompt and model
     let effectivePrompt = userPrompt as string | undefined;
     let effectiveModel = modelOverride;
     if (retryProjectId || preCreatedProjectId) {
       const lookupId = retryProjectId ?? preCreatedProjectId!;
-      const existing = await getProject(lookupId);
+      const existing = await getProject(db, lookupId);
       if (!existing) {
         return NextResponse.json({ error: "Project not found" }, { status: 404 });
       }
@@ -72,25 +82,31 @@ export async function POST(req: Request) {
         if (retryProjectId) {
           projectId = retryProjectId;
           // Clear stale buildSteps so old "active" nodes don't ghost in the UI
-          await updateProjectStatus(projectId, "generating", { error: undefined, buildSteps: [] });
+          await updateProjectStatus(db, projectId, "generating", { error: undefined, buildSteps: [] });
         } else if (preCreatedProjectId) {
           // Project already created by the client — just scaffold the dir
           projectId = preCreatedProjectId;
         } else {
-          const project = await createProject(effectivePrompt, effectiveModel);
+          const project = await createProject(db, {
+            userPrompt: effectivePrompt,
+            userId: user.id,
+            ownerUsername: getUserDisplayName(user),
+            modelId: effectiveModel,
+            folderId: folderId ?? null,
+          });
           projectId = project.id;
         }
 
         try {
           // Step 2: Scaffold project directory from template (skip for retry — dir already exists)
           if (!retryProjectId) {
-            await initProjectDir(projectId);
+            await initProjectDir(db, projectId);
           }
 
           // Step 2.5: Detect checkpoint for resume (retry or interrupted generation)
           let checkpoint;
           if (retryProjectId || preCreatedProjectId) {
-            const existing = await getProject(projectId);
+            const existing = await getProject(db, projectId);
             if (existing && existing.buildSteps && existing.buildSteps.length > 0) {
               checkpoint = detectCheckpoint(existing);
               if (checkpoint.hasCheckpoint) {
@@ -117,7 +133,7 @@ export async function POST(req: Request) {
             );
 
             // Step 5: Mark project as ready
-            await updateProjectStatus(projectId, "ready", {
+            await updateProjectStatus(db, projectId, "ready", {
               completedAt: new Date().toISOString(),
               verificationStatus: result.verificationStatus,
               blueprint: result.blueprint,
@@ -130,11 +146,11 @@ export async function POST(req: Request) {
             // Step 6: Update project name from blueprint's projectTitle
             const projectTitle = (result.blueprint as { brief?: { projectTitle?: string } })?.brief?.projectTitle;
             if (projectTitle && projectTitle.trim()) {
-              await renameProject(projectId, projectTitle.trim());
+              await renameProject(db, projectId, projectTitle.trim());
             }
           } else {
             // Generation completed but reported failure — still persist steps for debugging
-            await updateProjectStatus(projectId, "failed", {
+            await updateProjectStatus(db, projectId, "failed", {
               error: result.error ?? "Generation failed",
               buildSteps: result.steps,
             });
@@ -181,7 +197,7 @@ export async function POST(req: Request) {
           // initProjectDir already sets status to "failed" on its own errors,
           // but we also handle runGenerateProject errors here.
           try {
-            await updateProjectStatus(projectId, "failed", { error: message });
+            await updateProjectStatus(db, projectId, "failed", { error: message });
           } catch {
             // best-effort — don't mask the original error
           }

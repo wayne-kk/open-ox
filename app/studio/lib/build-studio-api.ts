@@ -51,6 +51,14 @@ export async function runBuildSite(
     signal,
   });
 
+  if (res.status === 401) {
+    if (typeof window !== "undefined") {
+      window.location.href = `/auth?redirect=${encodeURIComponent(window.location.pathname)}`;
+    }
+    callbacks.onError("请先登录");
+    return;
+  }
+
   const contentType = res.headers.get("content-type") ?? "";
 
   if (contentType.includes("text/event-stream")) {

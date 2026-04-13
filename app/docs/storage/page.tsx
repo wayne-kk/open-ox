@@ -89,6 +89,9 @@ export default function StoragePage() {
           <P><Code>projects</Code> 表保存项目的完整生命周期数据：</P>
           <Pre>{`-- projects 表核心字段
 id              TEXT PRIMARY KEY   -- 时间戳_slug 格式
+user_id         UUID               -- 所有者（auth.users）
+owner_username  TEXT               -- 创建时写入，用于全员列表展示 / 分组
+folder_id       UUID               -- 可选，单层文件夹 project_folders.id
 name            TEXT               -- 用户可编辑的项目名
 status          TEXT               -- generating | ready | failed
 blueprint       JSONB              -- ProjectBlueprint（含 PlannedProjectBlueprint）

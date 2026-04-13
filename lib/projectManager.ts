@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { Dirent } from "fs";
-import { supabase } from "./supabase";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const WORKSPACE_ROOT = process.cwd();
 
@@ -45,7 +45,11 @@ export interface ProjectMetadata {
   logDirectory?: string;
   totalDuration?: number;
   modelId?: string;
+  folderId?: string | null;
   modificationHistory: ModificationRecord[];
+  /** Set when row includes ownership columns */
+  ownerUserId?: string;
+  ownerUsername?: string | null;
 }
 
 interface ProjectRow {
@@ -64,6 +68,9 @@ interface ProjectRow {
   log_directory: string | null;
   total_duration: number | null;
   model_id: string | null;
+  user_id: string | null;
+  folder_id: string | null;
+  owner_username?: string | null;
   modification_history: ModificationRecord[];
 }
 
@@ -84,7 +91,14 @@ function rowToMetadata(row: ProjectRow): ProjectMetadata {
     logDirectory: row.log_directory ?? undefined,
     totalDuration: row.total_duration ?? undefined,
     modelId: row.model_id ?? undefined,
+    folderId: row.folder_id ?? undefined,
     modificationHistory: row.modification_history ?? [],
+    ...(row.user_id
+      ? {
+          ownerUserId: row.user_id,
+          ownerUsername: row.owner_username ?? undefined,
+        }
+      : {}),
   };
 }
 
@@ -97,8 +111,8 @@ export function getSiteRoot(projectId: string): string {
   return resolved;
 }
 
-export async function listProjects(): Promise<ProjectMetadata[]> {
-  const { data, error } = await supabase
+export async function listProjects(db: SupabaseClient): Promise<ProjectMetadata[]> {
+  const { data, error } = await db
     .from("projects")
     .select("*")
     .order("created_at", { ascending: false });
@@ -120,25 +134,50 @@ interface ProjectListRow {
   error: string | null;
   verification_status: "passed" | "failed" | null;
   model_id: string | null;
+  folder_id: string | null;
+  user_id: string | null;
+  owner_username: string | null;
 }
+
+export type ProjectFolderFilter = "all" | "uncategorized" | string;
 
 /**
  * Fast list query for dashboard/autocomplete.
  * Avoid selecting heavy JSON columns (blueprint/build_steps/generated_files/modification_history).
+ * Pass `userId` to scope to one account (folder filters apply). Omit `userId` for all users (global gallery).
  */
-export async function listProjectsSummary(options?: {
-  limit?: number;
-  offset?: number;
-}): Promise<ProjectMetadata[]> {
-  let query = supabase
+export async function listProjectsSummary(
+  db: SupabaseClient,
+  options: {
+    userId?: string;
+    limit?: number;
+    offset?: number;
+    folder?: ProjectFolderFilter;
+    /** When listing globally (`userId` omitted), optionally restrict to one owner */
+    filterOwnerUserId?: string | null;
+  }
+): Promise<ProjectMetadata[]> {
+  let query = db
     .from("projects")
     .select(
-      "id,name,user_prompt,status,created_at,updated_at,completed_at,error,verification_status,model_id"
+      "id,name,user_prompt,status,created_at,updated_at,completed_at,error,verification_status,model_id,folder_id,user_id,owner_username"
     )
     .order("created_at", { ascending: false });
 
+  if (options.userId) {
+    query = query.eq("user_id", options.userId);
+    const folder = options.folder ?? "all";
+    if (folder === "uncategorized") {
+      query = query.is("folder_id", null);
+    } else if (folder !== "all") {
+      query = query.eq("folder_id", folder);
+    }
+  } else if (options.filterOwnerUserId) {
+    query = query.eq("user_id", options.filterOwnerUserId);
+  }
+
   if (
-    typeof options?.limit === "number" &&
+    typeof options.limit === "number" &&
     Number.isFinite(options.limit) &&
     options.limit > 0
   ) {
@@ -169,21 +208,30 @@ export async function listProjectsSummary(options?: {
     error: row.error ?? undefined,
     verificationStatus: row.verification_status ?? undefined,
     modelId: row.model_id ?? undefined,
+    folderId: row.folder_id ?? undefined,
     modificationHistory: [],
+    ownerUserId: row.user_id ?? undefined,
+    ownerUsername: row.owner_username ?? undefined,
   }));
 }
 
-export async function getProject(id: string): Promise<ProjectMetadata | null> {
-  const { data, error } = await supabase
-    .from("projects")
-    .select("*")
-    .eq("id", id)
-    .single();
+export async function getProject(db: SupabaseClient, id: string): Promise<ProjectMetadata | null> {
+  const { data, error } = await db.from("projects").select("*").eq("id", id).single();
   if (error || !data) return null;
   return rowToMetadata(data as ProjectRow);
 }
 
-export async function createProject(userPrompt: string, modelId?: string): Promise<ProjectMetadata> {
+export async function createProject(
+  db: SupabaseClient,
+  args: {
+    userPrompt: string;
+    userId: string;
+    ownerUsername: string;
+    modelId?: string;
+    folderId?: string | null;
+  }
+): Promise<ProjectMetadata> {
+  const { userPrompt, userId, ownerUsername, modelId, folderId } = args;
   const now = new Date();
   const timestamp = now.toISOString().replace(/:/g, "-").replace(/\./g, "-");
   const slug = userPrompt
@@ -204,9 +252,12 @@ export async function createProject(userPrompt: string, modelId?: string): Promi
     created_at: createdAt,
     updated_at: createdAt,
     model_id: modelId ?? null,
+    user_id: userId,
+    owner_username: ownerUsername,
+    folder_id: folderId ?? null,
     modification_history: [],
   };
-  const { data, error } = await supabase.from("projects").insert(row).select().single();
+  const { data, error } = await db.from("projects").insert(row).select().single();
   if (error || !data) {
     throw new Error(`[projectManager] createProject failed: ${error?.message}`);
   }
@@ -214,6 +265,7 @@ export async function createProject(userPrompt: string, modelId?: string): Promi
 }
 
 export async function updateProjectStatus(
+  db: SupabaseClient,
   id: string,
   status: ProjectMetadata["status"],
   extra?: Partial<ProjectMetadata>
@@ -236,7 +288,7 @@ export async function updateProjectStatus(
   const maxRetries = 2;
   let lastMessage = "";
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
-    const { error } = await supabase.from("projects").update(update).eq("id", id);
+    const { error } = await db.from("projects").update(update).eq("id", id);
     if (!error) return;
 
     lastMessage = error.message ?? String(error);
@@ -263,51 +315,55 @@ export async function updateProjectStatus(
   throw new Error(`[projectManager] updateProjectStatus failed: ${lastMessage}`);
 }
 
-export async function renameProject(id: string, name: string): Promise<void> {
-  const { error } = await supabase
+export async function setProjectFolder(
+  db: SupabaseClient,
+  projectId: string,
+  folderId: string | null
+): Promise<void> {
+  const { error } = await db
+    .from("projects")
+    .update({ folder_id: folderId, updated_at: new Date().toISOString() })
+    .eq("id", projectId);
+  if (error) throw new Error(`[projectManager] setProjectFolder failed: ${error.message}`);
+}
+
+export async function renameProject(db: SupabaseClient, id: string, name: string): Promise<void> {
+  const { error } = await db
     .from("projects")
     .update({ name, updated_at: new Date().toISOString() })
     .eq("id", id);
   if (error) throw new Error(`[projectManager] renameProject failed: ${error.message}`);
 }
 
-export async function deleteProject(id: string): Promise<void> {
-  const { error } = await supabase.from("projects").delete().eq("id", id);
+export async function deleteProject(db: SupabaseClient, id: string): Promise<void> {
+  const { error } = await db.from("projects").delete().eq("id", id);
   if (error) throw new Error(`[projectManager] deleteProject failed: ${error.message}`);
   await fs.rm(getSiteRoot(id), { recursive: true, force: true });
 }
 
-// appendBuildStep is retained for potential future use (e.g. checkpoint
-// persistence) but is NOT called during normal generation flow.
-// During generation, the SSE stream is the sole real-time channel;
-// final buildSteps are persisted once via updateProjectStatus.
-export async function appendBuildStep(id: string, step: unknown): Promise<void> {
-  const { data: row, error: fetchErr } = await supabase
-    .from("projects")
-    .select("build_steps")
-    .eq("id", id)
-    .single();
+export async function appendBuildStep(db: SupabaseClient, id: string, step: unknown): Promise<void> {
+  const { data: row, error: fetchErr } = await db.from("projects").select("build_steps").eq("id", id).single();
   if (fetchErr || !row) return;
   const existing: unknown[] = (row as { build_steps: unknown[] | null }).build_steps ?? [];
   const stepObj = step as { step?: string };
   const idx = existing.findIndex((s) => (s as { step?: string }).step === stepObj.step);
-  const updated = idx >= 0
-    ? [...existing.slice(0, idx), step, ...existing.slice(idx + 1)]
-    : [...existing, step];
-  await supabase
+  const updated =
+    idx >= 0 ? [...existing.slice(0, idx), step, ...existing.slice(idx + 1)] : [...existing, step];
+  await db
     .from("projects")
     .update({ build_steps: updated, updated_at: new Date().toISOString() })
     .eq("id", id);
 }
 
 export async function addModificationRecord(
+  db: SupabaseClient,
   id: string,
   record: ModificationRecord
 ): Promise<void> {
-  const project = await getProject(id);
+  const project = await getProject(db, id);
   if (!project) throw new Error(`Project not found: ${id}`);
   const history = [...(project.modificationHistory ?? []), record];
-  const { error } = await supabase
+  const { error } = await db
     .from("projects")
     .update({ modification_history: history, updated_at: new Date().toISOString() })
     .eq("id", id);
@@ -347,14 +403,14 @@ async function copyTemplateDir(src: string, dest: string, templateRoot: string):
   }
 }
 
-export async function initProjectDir(projectId: string): Promise<void> {
+export async function initProjectDir(db: SupabaseClient, projectId: string): Promise<void> {
   const templateDir = path.join(WORKSPACE_ROOT, "sites", "template");
   const projectDir = getSiteRoot(projectId);
 
   try {
     await fs.access(templateDir);
   } catch {
-    await updateProjectStatus(projectId, "failed", {
+    await updateProjectStatus(db, projectId, "failed", {
       error: `Template directory not found: ${templateDir}`,
     });
     throw new Error(`Template directory not found: ${templateDir}`);
@@ -421,7 +477,7 @@ export async function initProjectDir(projectId: string): Promise<void> {
   } catch (err: unknown) {
     await fs.rm(projectDir, { recursive: true, force: true });
     const message = err instanceof Error ? err.message : String(err);
-    await updateProjectStatus(projectId, "failed", { error: message });
+    await updateProjectStatus(db, projectId, "failed", { error: message });
     throw err;
   }
 }

@@ -1,13 +1,33 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import { usePromptTriggers, detectUrl, type TriggerItem, type InjectedChip } from "@/app/hooks/usePromptTriggers";
 import { TriggerMenu } from "@/app/components/ui/TriggerMenu";
 import { PromptChips } from "@/app/components/ui/PromptChips";
 import { QuickTemplates } from "@/app/components/ui/QuickTemplates";
 import { SparkleHoverButton } from "@/components/ui/sparkle-hover-button";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+
+/** Survives redirect to /auth so we can resume POST /api/projects after login. */
+const PENDING_BUILD_KEY = "open-ox:pending-project-build";
+
+interface PendingBuildPayload {
+  v: 1;
+  value: string;
+  chips: InjectedChip[];
+  enableSkills: boolean;
+  folderId: string | null;
+}
+
+function savePendingBuild(p: PendingBuildPayload) {
+  try {
+    sessionStorage.setItem(PENDING_BUILD_KEY, JSON.stringify(p));
+  } catch {
+    /* quota / private mode */
+  }
+}
 
 // ── Typewriter placeholders ──────────────────────────────────────────────────
 const PLACEHOLDERS = [
@@ -34,6 +54,8 @@ const HASH_TAGS: TriggerItem[] = [
 
 export function HeroPrompt() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const folderId = searchParams.get("folder");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [value, setValue] = useState("");
@@ -88,23 +110,28 @@ export function HeroPrompt() {
       })
       .catch(() => { });
 
-    // Load projects (@ trigger)
-    fetch("/api/projects")
-      .then((r) => r.json())
-      .then((projects: { id: string; userPrompt: string; status: string }[]) => {
-        const projectItems: TriggerItem[] = projects
-          .filter((p) => p.status === "ready")
-          .slice(0, 20)
-          .map((p) => ({
-            id: p.id.slice(0, 20),
-            label: p.userPrompt?.slice(0, 30) || p.id.slice(0, 20),
-            description: `参考此项目的设计风格`,
-            type: "at" as const,
-            meta: { projectId: p.id },
-          }));
-        setTriggerItems((prev) => [...prev.filter((i) => i.type !== "at"), ...projectItems]);
-      })
-      .catch(() => { });
+    // Load projects (@ trigger) — only when logged in
+    const supabase = createSupabaseBrowserClient();
+    void supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) return;
+      fetch("/api/projects?mine=1&limit=40")
+        .then((r) => (r.ok ? r.json() : []))
+        .then((projects: { id: string; userPrompt: string; status: string }[]) => {
+          if (!Array.isArray(projects)) return;
+          const projectItems: TriggerItem[] = projects
+            .filter((p) => p.status === "ready")
+            .slice(0, 20)
+            .map((p) => ({
+              id: p.id.slice(0, 20),
+              label: p.userPrompt?.slice(0, 30) || p.id.slice(0, 20),
+              description: `参考此项目的设计风格`,
+              type: "at" as const,
+              meta: { projectId: p.id },
+            }));
+          setTriggerItems((prev) => [...prev.filter((i) => i.type !== "at"), ...projectItems]);
+        })
+        .catch(() => { });
+    });
   }, []);
 
   // ── Trigger menu ───────────────────────────────────────────────────────────
@@ -163,52 +190,118 @@ export function HeroPrompt() {
     setChips((prev) => prev.filter((c) => c.id !== id));
   }, []);
 
+  // ── Create project (snapshot-based so login resume does not depend on React state timing) ──
+  const runCreateProject = useCallback(
+    async (snapshot: PendingBuildPayload) => {
+      const base = snapshot.value.trim();
+      if (!base && snapshot.chips.length === 0) return;
+
+      setSubmitting(true);
+      try {
+        const constraints = snapshot.chips
+          .filter((c) => c.type === "hash")
+          .map((c) => c.payload.constraint)
+          .join("、");
+        const constraintSuffix = constraints ? `\n\n约束条件：${constraints}` : "";
+        const finalPrompt = (base || "根据提供的风格指南生成网站") + constraintSuffix;
+
+        const styleGuide = snapshot.chips.find((c) => c.type === "slash")?.payload.styleGuide as string | undefined;
+        const referenceProjectId = snapshot.chips.find((c) => c.type === "at")?.payload.referenceProjectId as
+          | string
+          | undefined;
+        const referenceUrl = snapshot.chips.find((c) => c.type === "url")?.payload.referenceUrl as string | undefined;
+
+        const res = await fetch("/api/projects", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userPrompt: finalPrompt,
+            ...(snapshot.folderId ? { folderId: snapshot.folderId } : {}),
+            ...(styleGuide ? { styleGuide } : {}),
+            ...(referenceProjectId ? { referenceProjectId } : {}),
+            ...(referenceUrl ? { referenceUrl } : {}),
+          }),
+        });
+        if (res.status === 401) {
+          savePendingBuild(snapshot);
+          const here =
+            typeof window !== "undefined"
+              ? `${window.location.pathname}${window.location.search}`
+              : "/";
+          router.push(`/auth?redirect=${encodeURIComponent(here)}`);
+          setSubmitting(false);
+          return;
+        }
+        const data = await res.json() as { projectId?: string; styleGuide?: string | null; error?: string };
+        if (!data.projectId) throw new Error(data.error ?? "Failed to create project");
+        if (data.styleGuide) {
+          sessionStorage.setItem(`styleGuide:${data.projectId}`, data.styleGuide);
+        }
+        if (snapshot.enableSkills) {
+          sessionStorage.setItem(`enableSkills:${data.projectId}`, "true");
+        }
+        router.push(`/studio/${data.projectId}`);
+      } catch (err) {
+        console.error("[HeroPrompt] create project failed:", err);
+        setSubmitting(false);
+      }
+    },
+    [router],
+  );
+
+  // After login: if we saved a pending build, restore UI and continue the POST (atomic remove avoids double-submit).
+  useEffect(() => {
+    const supabase = createSupabaseBrowserClient();
+    void supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) return;
+      const raw = sessionStorage.getItem(PENDING_BUILD_KEY);
+      if (!raw) return;
+      sessionStorage.removeItem(PENDING_BUILD_KEY);
+
+      let pending: PendingBuildPayload;
+      try {
+        pending = JSON.parse(raw) as PendingBuildPayload;
+      } catch {
+        return;
+      }
+      if (pending.v !== 1) return;
+      if (!pending.value?.trim() && (!pending.chips || pending.chips.length === 0)) return;
+
+      const chipsSafe = Array.isArray(pending.chips) ? pending.chips : [];
+      setValue(pending.value);
+      setChips(chipsSafe);
+      setEnableSkills(Boolean(pending.enableSkills));
+      void runCreateProject({
+        v: 1,
+        value: pending.value,
+        chips: chipsSafe,
+        enableSkills: Boolean(pending.enableSkills),
+        folderId: pending.folderId ?? null,
+      });
+    });
+  }, [runCreateProject]);
+
   // ── Submit ─────────────────────────────────────────────────────────────────
   const submit = async () => {
     const base = value.trim();
     if (!base && chips.length === 0) return;
     if (submitting) return;
 
-    setSubmitting(true);
-    try {
-      // Build constraint string from # chips
-      const constraints = chips
-        .filter((c) => c.type === "hash")
-        .map((c) => c.payload.constraint)
-        .join("、");
-      const constraintSuffix = constraints ? `\n\n约束条件：${constraints}` : "";
-
-      // Build the final prompt
-      const finalPrompt = (base || "根据提供的风格指南生成网站") + constraintSuffix;
-
-      // Collect payloads
-      const styleGuide = chips.find((c) => c.type === "slash")?.payload.styleGuide as string | undefined;
-      const referenceProjectId = chips.find((c) => c.type === "at")?.payload.referenceProjectId as string | undefined;
-      const referenceUrl = chips.find((c) => c.type === "url")?.payload.referenceUrl as string | undefined;
-
-      const res = await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userPrompt: finalPrompt,
-          ...(styleGuide ? { styleGuide } : {}),
-          ...(referenceProjectId ? { referenceProjectId } : {}),
-          ...(referenceUrl ? { referenceUrl } : {}),
-        }),
-      });
-      const data = await res.json() as { projectId?: string; styleGuide?: string | null; error?: string };
-      if (!data.projectId) throw new Error(data.error ?? "Failed to create project");
-      if (data.styleGuide) {
-        sessionStorage.setItem(`styleGuide:${data.projectId}`, data.styleGuide);
-      }
-      if (enableSkills) {
-        sessionStorage.setItem(`enableSkills:${data.projectId}`, "true");
-      }
-      router.push(`/studio/${data.projectId}`);
-    } catch (err) {
-      console.error("[HeroPrompt] create project failed:", err);
-      setSubmitting(false);
+    const supabase = createSupabaseBrowserClient();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session) {
+      savePendingBuild({ v: 1, value, chips, enableSkills, folderId });
+      const here =
+        typeof window !== "undefined"
+          ? `${window.location.pathname}${window.location.search}`
+          : "/";
+      router.push(`/auth?redirect=${encodeURIComponent(here)}`);
+      return;
     }
+
+    await runCreateProject({ v: 1, value, chips, enableSkills, folderId });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

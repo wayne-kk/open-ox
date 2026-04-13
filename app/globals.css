@@ -100,8 +100,10 @@
     @apply border-border outline-ring/50;
   }
 
+  /* 避免打开下拉/弹层时滚动条显隐导致整页（含 fixed 顶栏）横向抖动 */
   html {
     @apply bg-background font-sans text-foreground;
+    scrollbar-gutter: stable;
   }
 
   body {
