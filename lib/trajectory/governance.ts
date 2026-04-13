@@ -57,7 +57,8 @@ export function computeFieldCoverage(records: Array<{ events: TrajectoryEvent[] 
     for (const evt of record.events) {
       total += 1;
       for (const key of required) {
-        if ((evt as Record<string, unknown>)[key] !== undefined && (evt as Record<string, unknown>)[key] !== null) {
+        const eventRecord = evt as unknown as Record<string, unknown>;
+        if (eventRecord[key] !== undefined && eventRecord[key] !== null) {
           hits[key] += 1;
         }
       }

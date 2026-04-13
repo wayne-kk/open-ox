@@ -120,9 +120,10 @@ export async function POST(req: Request) {
           event: Parameters<typeof appendTrajectoryEvent>[1]
         ) => {
           if (!trajectory) return;
+          const runId = trajectory.runId;
           trajectoryQueue = trajectoryQueue
             .then(async () => {
-              await appendTrajectoryEvent(trajectory.runId, event);
+              await appendTrajectoryEvent(runId, event);
             })
             .catch((err) => {
               console.warn("[AI API] trajectory append failed:", err);

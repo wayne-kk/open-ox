@@ -42,7 +42,7 @@ export async function GET(req: Request) {
     }
 
     const selectedRunsBase = runId
-      ? [await getTrajectoryRun(runId)].filter(Boolean)
+      ? [await getTrajectoryRun(runId)].filter((run): run is NonNullable<typeof run> => run !== null)
       : await listTrajectoryRuns(limit, offset);
     const selectedRuns = selectedRunsBase.filter((run) => {
       const t = Date.parse(run.created_at);
