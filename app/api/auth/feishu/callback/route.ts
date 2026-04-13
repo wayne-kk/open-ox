@@ -110,7 +110,13 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  const admin = createSupabaseServiceRoleClient();
+  let admin;
+  try {
+    admin = createSupabaseServiceRoleClient();
+  } catch {
+    return NextResponse.redirect(new URL("/auth?error=feishu_config", origin));
+  }
+
   const result = await provisionFeishuUserAndSignIn(admin, supabase, {
     email,
     password,

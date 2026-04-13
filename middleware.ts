@@ -4,6 +4,17 @@ import { NextResponse, type NextRequest } from "next/server";
 const PROTECTED_PREFIXES = ["/projects", "/studio"];
 
 export async function middleware(request: NextRequest) {
+  const path = request.nextUrl.pathname;
+  const needsAuth = PROTECTED_PREFIXES.some(
+    (p) => path === p || path.startsWith(`${p}/`)
+  );
+
+  // Only /projects and /studio need a session check. Calling getUser() on every request
+  // (including OAuth callbacks and /api/*) adds latency and can contribute to upstream timeouts → 502 behind nginx.
+  if (!needsAuth) {
+    return NextResponse.next();
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -31,12 +42,7 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const path = request.nextUrl.pathname;
-  const needsAuth = PROTECTED_PREFIXES.some(
-    (p) => path === p || path.startsWith(`${p}/`)
-  );
-
-  if (needsAuth && !user) {
+  if (!user) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/auth";
     redirectUrl.searchParams.set("redirect", `${path}${request.nextUrl.search}`);
