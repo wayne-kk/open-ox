@@ -8,7 +8,10 @@
  */
 
 import { runGenerateApp, runGenerateProject } from "@/ai/flows";
-import { detectCheckpoint } from "@/ai/flows/generate_project/shared/checkpoint";
+import {
+  detectCheckpoint,
+  type CheckpointResult,
+} from "@/ai/flows/generate_project/shared/checkpoint";
 import {
   createProject,
   getProject,
@@ -184,7 +187,7 @@ export async function POST(req: Request) {
           }
 
           // Step 2.5: Detect checkpoint for resume (retry or interrupted generation)
-          let checkpoint;
+          let checkpoint: CheckpointResult | undefined;
           if (retryProjectId || preCreatedProjectId) {
             const existing = await getProject(db, projectId);
             if (existing && existing.buildSteps && existing.buildSteps.length > 0) {
