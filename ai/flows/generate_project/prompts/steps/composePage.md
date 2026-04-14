@@ -19,10 +19,12 @@ width constraints and breaks rhythm.
 
 - Render sections **directly** as siblings inside `<main>`: `<HeroSection />`,
 `<FeaturesSection />`, etc.
-- Page-level composition may add **only**: global fixed overlays outside `<main>`,
-optional decorative non-layout elements, or a minimal wrapper when an effect truly
-requires a positioned ancestor (e.g. one absolute child next to the hero). Never
-use `border-t` / `border-b` / `divide-`* / `<hr />` between sections on the page
+- Page-level composition may add **only**: a minimal wrapper when an effect truly
+requires a positioned ancestor (e.g. one absolute child next to the hero). **Do not**
+add scanlines, film grain, repeating gradients, dot grids, noise textures, vignettes,
+or other purely decorative full-viewport overlays unless the **page design plan text**
+explicitly asks for that effect. Default composition is sections inside `<main>` only.
+Never use `border-t` / `border-b` / `divide-`* / `<hr />` between sections on the page
 file; spacing and separation belong inside section components or via background
 contrast.
 
@@ -37,17 +39,20 @@ contrast.
 - Output only the raw TSX code.
 - **CRITICAL: Copy the provided import statements VERBATIM. Do not change the import paths, component names, or file names. The import paths are pre-computed and correct.**
 - Render all sections inside a single `<main>` element in the provided order.
-- Use only global overlays or minimal decorative structure when needed; do not add
-per-section spacing or container wrappers (see Section Layout Contract above).
-- If the design system specifies a global page-level overlay, add it as a fixed
-`pointer-events-none` element outside `<main>`.
+- Do not add per-section spacing or container wrappers (see Section Layout Contract above).
+- If and only if the page design plan explicitly specifies a global overlay (e.g. grain,
+grid, vignette), add it as a single fixed `pointer-events-none` element outside `<main>`.
+Otherwise omit overlays entirely.
 - The page component is pure composition: no business logic, no state, no
 `"use client"`.
 - Do not import sentinel packages like `client-only` or `server-only` in `page.tsx`.
 - Export `metadata` and `export default function Page() {}`.
 - Do not hardcode route assumptions beyond the supplied path and metadata.
 
-## Example Structure
+## Example Structure (default — no decorative overlays)
+
+The example below is the **baseline**. Do not copy decorative layers from other pages
+or from memory; only add an overlay when the design plan explicitly requires it.
 
 ```tsx
 import type { Metadata } from "next";
@@ -63,17 +68,11 @@ export const metadata: Metadata = {
 
 export default function Page() {
   return (
-    <>
-      <div
-        className="pointer-events-none fixed inset-0 z-50 [background:repeating-linear-gradient(0deg,transparent,transparent_2px,rgba(0,0,0,0.15)_2px,rgba(0,0,0,0.15)_4px)]"
-        aria-hidden="true"
-      />
-      <main className="relative min-h-screen">
-        <HeroSection />
-        <FeaturesSection />
-        <PricingSection />
-      </main>
-    </>
+    <main className="relative min-h-screen">
+      <HeroSection />
+      <FeaturesSection />
+      <PricingSection />
+    </main>
   );
 }
 ```

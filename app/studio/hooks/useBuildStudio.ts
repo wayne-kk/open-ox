@@ -83,6 +83,10 @@ export interface BuildStudioState {
   autoPreviewAfterBuild: boolean;
   setAutoPreviewAfterBuild: (v: boolean) => void;
 
+  /** When true, load core step prompt overrides from Supabase; when false, use repo prompts only */
+  useDatabasePrompts: boolean;
+  setUseDatabasePrompts: (v: boolean) => void;
+
   // Modify
   modifyInstruction: string;
   setModifyInstruction: (v: string) => void;
@@ -104,11 +108,21 @@ export interface BuildStudioState {
 }
 
 const AUTO_PREVIEW_STORAGE_KEY = "open-ox:studio:autoPreviewAfterBuild";
+const USE_DB_PROMPTS_STORAGE_KEY = "open-ox:studio:useDatabasePrompts";
 
 function readAutoPreviewAfterBuild(): boolean {
   if (typeof window === "undefined") return true;
   try {
     return localStorage.getItem(AUTO_PREVIEW_STORAGE_KEY) !== "false";
+  } catch {
+    return true;
+  }
+}
+
+function readUseDatabasePrompts(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    return localStorage.getItem(USE_DB_PROMPTS_STORAGE_KEY) !== "false";
   } catch {
     return true;
   }
@@ -158,10 +172,19 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
   const [autoPreviewAfterBuild, setAutoPreviewAfterBuildState] = useState(true);
   const autoPreviewAfterBuildRef = useRef(true);
 
+  const [useDatabasePrompts, setUseDatabasePromptsState] = useState(true);
+  const useDatabasePromptsRef = useRef(true);
+
   useEffect(() => {
     const v = readAutoPreviewAfterBuild();
     autoPreviewAfterBuildRef.current = v;
     setAutoPreviewAfterBuildState(v);
+  }, []);
+
+  useEffect(() => {
+    const v = readUseDatabasePrompts();
+    useDatabasePromptsRef.current = v;
+    setUseDatabasePromptsState(v);
   }, []);
 
   const setAutoPreviewAfterBuild = useCallback((next: boolean) => {
@@ -171,6 +194,16 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       localStorage.setItem(AUTO_PREVIEW_STORAGE_KEY, next ? "true" : "false");
     } catch {
       /* ignore quota / private mode */
+    }
+  }, []);
+
+  const setUseDatabasePrompts = useCallback((next: boolean) => {
+    useDatabasePromptsRef.current = next;
+    setUseDatabasePromptsState(next);
+    try {
+      localStorage.setItem(USE_DB_PROMPTS_STORAGE_KEY, next ? "true" : "false");
+    } catch {
+      /* ignore */
     }
   }, []);
 
@@ -456,6 +489,18 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
               return {};
             })()
             : {}),
+          ...(() => {
+            let effective = useDatabasePromptsRef.current;
+            if (projectId && typeof sessionStorage !== "undefined") {
+              const k = `useDatabasePrompts:${projectId}`;
+              const oneShot = sessionStorage.getItem(k);
+              if (oneShot !== null) {
+                sessionStorage.removeItem(k);
+                effective = oneShot === "true";
+              }
+            }
+            return effective ? {} : { useDatabasePrompts: false };
+          })(),
         }
       );
     } catch (err) {
@@ -524,7 +569,11 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
           onError: (msg) => setResponse({ content: "", error: msg }),
         },
         abortRef.current.signal,
-        { model: selectedModel, retryProjectId: retryId }
+        {
+          model: selectedModel,
+          retryProjectId: retryId,
+          ...(useDatabasePromptsRef.current ? {} : { useDatabasePrompts: false }),
+        }
       );
     } catch (err) {
       if ((err as Error).name !== "AbortError") {
@@ -795,6 +844,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     rightPanel, setRightPanel,
     previewUrl, previewState, previewError, previewVersion, startPreview, rebuildPreview,
     autoPreviewAfterBuild, setAutoPreviewAfterBuild,
+    useDatabasePrompts, setUseDatabasePrompts,
     modifyInstruction, setModifyInstruction, modifyImage, setModifyImage, modifying,
     modifySteps, modifyPlan, modifyDiffs, modifyToolCalls, modifyThinking, modifyError, handleModify,
     clearModifyHistory: () => {

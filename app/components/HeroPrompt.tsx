@@ -18,6 +18,8 @@ interface PendingBuildPayload {
   value: string;
   chips: InjectedChip[];
   enableSkills: boolean;
+  /** When true (default), POST /api/ai loads core prompts from DB; false uses repo prompts only */
+  useDatabasePrompts: boolean;
   folderId: string | null;
   generationMode: GenerationMode;
 }
@@ -66,6 +68,7 @@ export function HeroPrompt() {
   const [focused, setFocused] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [enableSkills, setEnableSkills] = useState(false);
+  const [useDatabasePrompts, setUseDatabasePrompts] = useState(true);
   const [generationMode, setGenerationMode] = useState<GenerationMode>("web");
 
   // ── Typewriter ─────────────────────────────────────────────────────────────
@@ -245,6 +248,10 @@ export function HeroPrompt() {
         if (snapshot.enableSkills) {
           sessionStorage.setItem(`enableSkills:${data.projectId}`, "true");
         }
+        sessionStorage.setItem(
+          `useDatabasePrompts:${data.projectId}`,
+          snapshot.useDatabasePrompts !== false ? "true" : "false"
+        );
         router.push(`/studio/${data.projectId}`);
       } catch (err) {
         console.error("[HeroPrompt] create project failed:", err);
@@ -276,11 +283,13 @@ export function HeroPrompt() {
       setValue(pending.value);
       setChips(chipsSafe);
       setEnableSkills(Boolean(pending.enableSkills));
+      setUseDatabasePrompts(pending.useDatabasePrompts !== false);
       void runCreateProject({
         v: 1,
         value: pending.value,
         chips: chipsSafe,
         enableSkills: Boolean(pending.enableSkills),
+        useDatabasePrompts: pending.useDatabasePrompts !== false,
         folderId: pending.folderId ?? null,
         generationMode: pending.generationMode ?? "web",
       });
@@ -298,7 +307,7 @@ export function HeroPrompt() {
       data: { session },
     } = await supabase.auth.getSession();
     if (!session) {
-      savePendingBuild({ v: 1, value, chips, enableSkills, folderId, generationMode });
+      savePendingBuild({ v: 1, value, chips, enableSkills, useDatabasePrompts, folderId, generationMode });
       const here =
         typeof window !== "undefined"
           ? `${window.location.pathname}${window.location.search}`
@@ -307,7 +316,7 @@ export function HeroPrompt() {
       return;
     }
 
-    await runCreateProject({ v: 1, value, chips, enableSkills, folderId, generationMode });
+    await runCreateProject({ v: 1, value, chips, enableSkills, useDatabasePrompts, folderId, generationMode });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -435,6 +444,15 @@ export function HeroPrompt() {
                 <kbd className="rounded border border-white/10 px-1 py-0.5 text-[10px]">#</kbd> 约束
                 {" · ⌘↵ 构建"}
               </span>
+            <label className="flex items-center gap-1.5 cursor-pointer select-none" title="使用 Supabase 中配置的核心步骤提示词；关闭则仅使用代码仓库内置 Prompt">
+              <input
+                type="checkbox"
+                checked={useDatabasePrompts}
+                onChange={(e) => setUseDatabasePrompts(e.target.checked)}
+                className="h-3 w-3 rounded border border-white/20 bg-transparent accent-primary"
+              />
+              <span className="font-mono text-[10px] text-muted-foreground/50">云端 Prompt</span>
+            </label>
             <label className="flex items-center gap-1.5 cursor-pointer select-none">
               <input
                 type="checkbox"
