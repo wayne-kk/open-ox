@@ -42,6 +42,14 @@ function chooseScreenSkillIds(plan: AppScreenPlan | undefined, keywords: string[
   }
 
   const joined = keywords.join(" ").toLowerCase();
+  const colorAuditIntent =
+    /(color|colour|palette|theme|branding|brand color|配色|色彩|颜色|主题色|色板|视觉规范|design token)/.test(
+      joined
+    );
+  if (colorAuditIntent && hasSkillPrompt("screen.color.system.audit")) {
+    ids.push("screen.color.system.audit");
+  }
+
   if (ids.length === 0) {
     if (/(feed|discovery|social|community|xiaohongshu|小红书|瀑布流|卡片)/.test(joined)) {
       ids.push("screen.feed.discovery");
@@ -52,7 +60,7 @@ function chooseScreenSkillIds(plan: AppScreenPlan | undefined, keywords: string[
     }
   }
 
-  return ids.filter((id) => hasSkillPrompt(id));
+  return Array.from(new Set(ids.filter((id) => hasSkillPrompt(id))));
 }
 
 function buildScreenPrompt(plan: AppScreenPlan | undefined): string {
