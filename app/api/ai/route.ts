@@ -23,7 +23,11 @@ import {
 import { uploadGeneratedFiles } from "@/lib/storage";
 import { setRuntimeModelId, type ModelId } from "@/lib/config/models";
 import { loadStepModelsFromDB } from "@/lib/config/models";
-import { loadCoreStepPromptsFromDB, withCorePromptRuntime } from "@/lib/config/corePrompts";
+import {
+  loadCoreStepPromptsFromDB,
+  normalizePromptProfile,
+  withCorePromptRuntime,
+} from "@/lib/config/corePrompts";
 import type { BuildStep } from "@/ai/flows";
 import { SSE_RESPONSE_HEADERS } from "@/lib/sse-headers";
 import { NextResponse } from "next/server";
@@ -74,6 +78,7 @@ export async function POST(req: Request) {
       if (!effectiveModel && existing.modelId) effectiveModel = existing.modelId;
       effectiveGenerationMode = existing.generationMode ?? "web";
     }
+    const promptProfile = normalizePromptProfile(effectiveGenerationMode);
 
     // Set runtime model
     if (effectiveModel) {
@@ -82,7 +87,9 @@ export async function POST(req: Request) {
 
     // Load step-level model overrides from DB (ensures they survive process restarts)
     await loadStepModelsFromDB();
-    const corePromptOverrides = useDatabasePrompts ? await loadCoreStepPromptsFromDB() : new Map();
+    const corePromptOverrides = useDatabasePrompts
+      ? await loadCoreStepPromptsFromDB(promptProfile)
+      : new Map();
 
     if (!effectivePrompt || typeof effectivePrompt !== "string") {
       return NextResponse.json(
@@ -202,6 +209,7 @@ export async function POST(req: Request) {
           const runGeneration = effectiveGenerationMode === "app" ? runGenerateApp : runGenerateProject;
           const result = await withCorePromptRuntime(
             {
+              promptProfile,
               useDatabasePrompts,
               dbPromptByStepId: corePromptOverrides,
             },
