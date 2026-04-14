@@ -86,7 +86,7 @@ export function StepRow({ step, flowStart }: { step: BuildStep; flowStart: numbe
               </div>
               <div>
                 <div className="text-[10px] text-muted-foreground/70 mb-1">Result</div>
-                <pre className="text-[10px] text-foreground/80 whitespace-pre-wrap break-words max-h-40 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">{toolDetail.result}</pre>
+                <pre className="text-[10px] text-foreground/80 whitespace-pre-wrap break-words max-h-40 overflow-y-auto scrollbar-hidden">{toolDetail.result}</pre>
               </div>
             </div>
           ) : (

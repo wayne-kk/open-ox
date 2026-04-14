@@ -16,6 +16,7 @@ export const CORE_STEP_PROMPTS: CorePromptDefinition[] = [
   { stepId: "plan_project", kind: "step", promptId: "planProject", label: "项目规划" },
   { stepId: "generate_project_design_system", kind: "step", promptId: "generateProjectDesignSystem", label: "设计系统生成" },
   { stepId: "apply_project_design_tokens", kind: "step", promptId: "applyProjectDesignTokens", label: "设计 Token 生成" },
+  { stepId: "describe_page_sections", kind: "step", promptId: "describePageSections", label: "页面分段设计描述" },
   { stepId: "generate_section_default", kind: "section", promptId: "section.default", label: "Section 默认 Prompt" },
   { stepId: "compose_layout", kind: "step", promptId: "composeLayout", label: "布局组合" },
   { stepId: "compose_page", kind: "step", promptId: "composePage", label: "页面组合" },

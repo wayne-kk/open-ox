@@ -74,7 +74,7 @@ function LlmSection({ llmCall }: { llmCall: StepLlmCall }) {
               </button>
             ))}
           </div>
-          <div className="max-h-[320px] overflow-y-auto [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.1)_transparent]">
+          <div className="max-h-[320px] overflow-y-auto scrollbar-unified">
             {active === "system" && llmCall.systemPrompt && (
               <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-[1.6] text-muted-foreground/70">
                 {llmCall.systemPrompt}
@@ -171,7 +171,7 @@ function GeneratedImagesSection({ images }: { images: Array<{ filename: string; 
 
 function IoSection({ value }: { value: Record<string, unknown> }) {
   return (
-    <pre className="max-h-[280px] overflow-y-auto whitespace-pre-wrap break-all rounded-lg bg-black/30 p-3 font-mono text-[11px] leading-[1.6] text-[#c7d0dc]/70 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.1)_transparent]">
+    <pre className="max-h-[280px] overflow-y-auto whitespace-pre-wrap break-all rounded-lg bg-black/30 p-3 font-mono text-[11px] leading-[1.6] text-[#c7d0dc]/70 scrollbar-unified">
       {JSON.stringify(value, null, 2)}
     </pre>
   );
@@ -295,7 +295,7 @@ export function DetailDrawer({
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-5 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.1)_transparent]">
+        <div className="flex-1 overflow-y-auto p-4 space-y-5 scrollbar-unified">
           {/* Status badges */}
           <div className="flex flex-wrap gap-2">
             <span className={`rounded-md px-2.5 py-1 text-[11px] font-medium ${node.status === "ok" ? "bg-emerald-500/20 text-emerald-300" : "bg-red-500/20 text-red-300"

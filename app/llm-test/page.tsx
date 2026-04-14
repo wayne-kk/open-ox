@@ -439,7 +439,7 @@ function LLMTestPanel() {
                               </p>
                           )}
                     {r.content && (
-                        <pre className="font-mono text-[10px] text-foreground/70 whitespace-pre-wrap leading-relaxed max-h-60 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                        <pre className="font-mono text-[10px] text-foreground/70 whitespace-pre-wrap leading-relaxed max-h-60 overflow-y-auto scrollbar-hidden">
                             {r.content}
                         </pre>
                     )}

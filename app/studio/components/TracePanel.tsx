@@ -93,7 +93,7 @@ function LlmCallTab({ llmCall }: { llmCall: NonNullable<StepTrace["llmCall"]> })
                 )}
             </div>
 
-            <div className="max-h-[360px] overflow-y-auto [scrollbar-width:none]">
+            <div className="max-h-[360px] overflow-y-auto scrollbar-hidden">
                 {activeSection === "system" && llmCall.systemPrompt && (
                     <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-5 text-muted-foreground">
                         {llmCall.systemPrompt}

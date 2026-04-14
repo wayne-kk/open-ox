@@ -13,6 +13,7 @@ const STAGE_MAP: Record<string, StageId> = {
   apply_project_design_tokens: "design",
   compose_layout: "compose",
   compose_page: "compose",
+  describe_page_sections: "compose",
   generate_section: "generate",
   install_dependencies: "verify",
   run_build: "verify",
@@ -32,6 +33,7 @@ const STAGE_LABELS: Record<StageId, string> = {
 };
 
 function inferStage(stepName: string): StageId {
+  if (stepName.startsWith("describe_page_sections:")) return "compose";
   if (stepName.startsWith("generate_section:")) return "generate";
   if (stepName.startsWith("compose_page:")) return "compose";
   if (stepName.startsWith("install_dependencies:")) return "verify";
@@ -45,6 +47,7 @@ function inferKind(stepName: string, stage: StageId): GraphNode["kind"] {
   if (stage === "repair") return "repair";
   if (stepName.startsWith("run_build") || stepName.startsWith("install_dependencies")) return "verification";
   if (stepName.startsWith("generate_section") || stepName.startsWith("compose_page")) return "generation";
+  if (stepName.startsWith("describe_page_sections")) return "transform";
   if (stepName.startsWith("analyze_") || stepName.startsWith("plan_")) return "transform";
   if (stepName.startsWith("generate_project_design") || stepName.startsWith("apply_project")) return "transform";
   if (stepName.startsWith("compose_layout")) return "transform";
@@ -52,6 +55,9 @@ function inferKind(stepName: string, stage: StageId): GraphNode["kind"] {
 }
 
 function formatStepLabel(step: string): string {
+  if (step.startsWith("describe_page_sections:")) {
+    return `describe:${step.replace("describe_page_sections:", "")}`;
+  }
   if (step.startsWith("generate_section:")) {
     const parts = step.replace("generate_section:", "").split(":");
     return parts.length >= 2 ? `section:${parts[0]}:${parts[1]}` : step;

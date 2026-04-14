@@ -98,6 +98,28 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    scrollbar-color: rgb(148 163 184 / 65%) rgb(15 23 42 / 45%);
+    scrollbar-width: thin;
+  }
+
+  *::-webkit-scrollbar {
+    height: 8px;
+    width: 8px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: rgb(15 23 42 / 45%);
+    border-radius: 9999px;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgb(148 163 184 / 70%), rgb(100 116 139 / 85%));
+    border: 1px solid rgb(15 23 42 / 80%);
+    border-radius: 9999px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgb(203 213 225 / 85%), rgb(148 163 184 / 90%));
   }
 
   /* 避免打开下拉/弹层时滚动条显隐导致整页（含 fixed 顶栏）横向抖动 */
@@ -201,6 +223,40 @@
 }
 
 @layer utilities {
+  .scrollbar-unified {
+    scrollbar-color: rgb(148 163 184 / 65%) rgb(15 23 42 / 45%);
+    scrollbar-width: thin;
+  }
+
+  .scrollbar-unified::-webkit-scrollbar {
+    height: 8px;
+    width: 8px;
+  }
+
+  .scrollbar-unified::-webkit-scrollbar-track {
+    background: rgb(15 23 42 / 45%);
+    border-radius: 9999px;
+  }
+
+  .scrollbar-unified::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgb(148 163 184 / 70%), rgb(100 116 139 / 85%));
+    border: 1px solid rgb(15 23 42 / 80%);
+    border-radius: 9999px;
+  }
+
+  .scrollbar-unified::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgb(203 213 225 / 85%), rgb(148 163 184 / 90%));
+  }
+
+  .scrollbar-hidden {
+    -ms-overflow-style: none !important;
+    scrollbar-width: none !important;
+  }
+
+  .scrollbar-hidden::-webkit-scrollbar {
+    display: none !important;
+  }
+
   .scrollbar-trajectories {
     scrollbar-color: rgb(71 85 105 / 75%) rgb(15 23 42 / 45%);
     scrollbar-width: thin;

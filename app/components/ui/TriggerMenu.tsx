@@ -29,7 +29,7 @@ export function TriggerMenu({ matches, activeIndex, activeTriggerType, onSelect,
   const style = activeTriggerType ? TRIGGER_LABELS[activeTriggerType] : TRIGGER_LABELS.slash;
 
   return (
-    <div className="max-h-[280px] overflow-y-auto rounded-lg border border-white/8 bg-[#0a0c10]/98 backdrop-blur-xl shadow-2xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div className="max-h-[280px] overflow-y-auto rounded-lg border border-white/8 bg-[#0a0c10]/98 backdrop-blur-xl shadow-2xl scrollbar-hidden">
       {matches.map((item, i) => (
         <button
           key={`${item.type}-${item.id}`}

@@ -64,7 +64,7 @@ export function MemoryDebugPanel({
       </button>
 
       {isOpen && (
-        <div className="px-4 pb-4 space-y-4 max-h-[500px] overflow-y-auto [scrollbar-width:thin]">
+        <div className="px-4 pb-4 space-y-4 max-h-[500px] overflow-y-auto scrollbar-unified">
           {loading && <p className="text-[10px] text-muted-foreground animate-pulse">Loading...</p>}
 
           {data && (

@@ -237,6 +237,13 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
   const modifyThinkingRef = useRef<string[]>([]);
   const modifyToolCallsRef = useRef<ModifyToolCall[]>([]);
 
+  const finishBuildLiveState = useCallback((totalDuration?: number) => {
+    if (typeof totalDuration === "number" && Number.isFinite(totalDuration) && totalDuration >= 0) {
+      setElapsed(totalDuration);
+    }
+    setLoading(false);
+  }, []);
+
   // ── Elapsed timer ──────────────────────────────────────────────────────
   useEffect(() => {
     if (loading && startedAt) {
@@ -457,6 +464,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         {
           onStep: handleStepEvent,
           onDone: (result) => {
+            finishBuildLiveState(result.buildTotalDuration);
             // done payload carries the authoritative final buildSteps from the server.
             // This replaces whatever the SSE stream built up, ensuring consistency.
             setResponse((prev) => ({ ...result, buildSteps: result.buildSteps ?? prev?.buildSteps }));
@@ -469,7 +477,10 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
               }
             }
           },
-          onError: (msg) => setResponse({ content: "", error: msg }),
+          onError: (msg) => {
+            finishBuildLiveState();
+            setResponse({ content: "", error: msg });
+          },
         },
         abortRef.current.signal,
         {
@@ -509,6 +520,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       }
     } finally {
       sseActiveRef.current = false;
+      // Loading is usually stopped by onDone/onError to avoid UI lag after final SSE event.
       setLoading(false);
     }
   }
@@ -556,6 +568,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         {
           onStep: handleStepEvent,
           onDone: (result) => {
+            finishBuildLiveState(result.buildTotalDuration);
             setResponse((prev) => ({ ...result, buildSteps: result.buildSteps ?? prev?.buildSteps }));
             const nextProjectId = result.projectId ?? retryId;
             if (nextProjectId) {
@@ -566,7 +579,10 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
               }
             }
           },
-          onError: (msg) => setResponse({ content: "", error: msg }),
+          onError: (msg) => {
+            finishBuildLiveState();
+            setResponse({ content: "", error: msg });
+          },
         },
         abortRef.current.signal,
         {
@@ -581,6 +597,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       }
     } finally {
       sseActiveRef.current = false;
+      // Loading is usually stopped by onDone/onError to avoid UI lag after final SSE event.
       setLoading(false);
     }
   }

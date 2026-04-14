@@ -130,7 +130,7 @@ export function PromptAdminPanel() {
               <p className="text-xs text-muted-foreground">{activeItem.stepId}</p>
             </div>
             <textarea
-              className="min-h-[280px] w-full rounded-md border border-white/15 bg-black/20 p-3 text-xs outline-none focus:border-primary/50"
+              className="min-h-[280px] w-full scrollbar-unified rounded-md border border-white/15 bg-black/20 p-3 text-xs outline-none focus:border-primary/50"
               value={drafts[activeItem.stepId] ?? ""}
               onChange={(e) =>
                 setDrafts((prev) => ({

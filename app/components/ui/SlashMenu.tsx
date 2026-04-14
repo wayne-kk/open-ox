@@ -22,7 +22,7 @@ export function SlashMenu({ matches, activeIndex, onSelect, onHover }: SlashMenu
   return (
     <div
       ref={listRef}
-      className="max-h-[280px] overflow-y-auto rounded-lg border border-white/8 bg-[#0a0c10]/98 backdrop-blur-xl shadow-2xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="max-h-[280px] overflow-y-auto rounded-lg border border-white/8 bg-[#0a0c10]/98 backdrop-blur-xl shadow-2xl scrollbar-hidden"
     >
       {matches.map((cmd, i) => (
         <button

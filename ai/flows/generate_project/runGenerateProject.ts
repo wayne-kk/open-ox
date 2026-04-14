@@ -130,6 +130,10 @@ function getComposePageStepName(slug: string): string {
   return `compose_page:${slug}`;
 }
 
+function getDescribePageSectionsStepName(slug: string): string {
+  return `describe_page_sections:${slug}`;
+}
+
 function getGenerateScreenStepName(slug: string): string {
   return `generate_screen:${slug}`;
 }
@@ -513,12 +517,18 @@ async function generatePages(params: {
         ? dedupedSections.filter((s) => !skipSections.has(`${page.slug}:${s.fileName}`))
         : dedupedSections;
 
-      const pageDesign = await stepDescribePageSections({
-        designSystem,
-        language: runtimeContext.language,
-        page,
-        sections: dedupedSections,
-      });
+      const describeStepName = getDescribePageSectionsStepName(page.slug);
+      const pageDesign = await logger.timed(
+        describeStepName,
+        () =>
+          stepDescribePageSections({
+            designSystem,
+            language: runtimeContext.language,
+            page,
+            sections: dedupedSections,
+          }),
+        () => `${dedupedSections.length} section brief(s)`
+      );
       const sectionBriefByFile = new Map(
         pageDesign.sectionDesigns.map((design) => [design.fileName, design.sectionDesignBrief])
       );
@@ -538,7 +548,7 @@ async function generatePages(params: {
       ].join("\n");
       await persistTextArtifact(
         artifactLogger,
-        `describe_page_sections:${page.slug}`,
+        describeStepName,
         "output",
         "md",
         pageDesignDoc

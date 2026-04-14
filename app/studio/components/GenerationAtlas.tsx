@@ -126,7 +126,7 @@ export function GenerationAtlas({
 
             <div className="flex-1 min-h-0 overflow-hidden">
                 {showEventStream ? (
-                    <div className="h-full overflow-y-auto p-4 [scrollbar-width:none]">
+                    <div className="h-full overflow-y-auto p-4 scrollbar-hidden">
                         <EventStream nodes={topology.nodes} flowStart={flowStart} />
                     </div>
                 ) : (

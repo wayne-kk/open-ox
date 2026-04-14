@@ -308,7 +308,7 @@ export function BuildConversation({
                 </span>
             </div>
 
-            <div ref={chatRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div ref={chatRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-5 scrollbar-hidden">
                 <div className="space-y-5">
                     {!response && !loading ? (
                         <ChatBubble role="assistant">
@@ -629,7 +629,7 @@ export function BuildConversation({
                             id="modify-input"
                             rows={1}
                             disabled={modifying}
-                            className="w-full resize-none border-0 bg-transparent px-1 py-1 font-body text-[14px] leading-7 text-foreground outline-none placeholder:text-white/50 max-h-[200px] overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="w-full resize-none border-0 bg-transparent px-1 py-1 font-body text-[14px] leading-7 text-foreground outline-none placeholder:text-white/50 max-h-[200px] overflow-y-auto scrollbar-hidden disabled:opacity-40 disabled:cursor-not-allowed"
                             value={modifyInstruction}
                             onChange={(e) => {
                                 setModifyInstruction(e.target.value);

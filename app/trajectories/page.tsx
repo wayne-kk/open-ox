@@ -261,13 +261,13 @@ export default function TrajectoriesPage() {
               <button className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200" onClick={() => { setFrom(""); setTo(""); setManifestResult(null); }}>清空</button>
             </div>
           </div>
-          {manifestResult ? <pre className="mt-3 overflow-auto rounded-lg border border-slate-800 bg-[#0a1020] p-2 text-[11px] text-slate-300">{JSON.stringify(manifestResult, null, 2)}</pre> : null}
+          {manifestResult ? <pre className="mt-3 overflow-auto scrollbar-unified rounded-lg border border-slate-800 bg-[#0a1020] p-2 text-[11px] text-slate-300">{JSON.stringify(manifestResult, null, 2)}</pre> : null}
         </div>
 
         <div className="grid gap-4 md:grid-cols-[360px_1fr]">
           <section className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/70">
             <div className="border-b border-slate-800 px-4 py-3 text-sm font-medium text-slate-200">最近运行</div>
-            <div className="max-h-[72vh] overflow-auto">
+            <div className="max-h-[72vh] overflow-auto scrollbar-unified">
               {runs.length === 0 ? (
                 <div className="px-3 py-5 text-sm text-slate-400">{loadingRuns ? "加载中..." : "暂无轨迹运行数据。"}</div>
               ) : (
@@ -290,7 +290,7 @@ export default function TrajectoriesPage() {
               <div className="text-sm font-medium text-slate-100">运行详情</div>
               {selectedRun ? <div className="mt-1 text-xs text-slate-400">{selectedRun.task_id} · created {fmtTime(selectedRun.created_at)}</div> : null}
             </div>
-            <div className="max-h-[72vh] overflow-auto p-4">
+            <div className="max-h-[72vh] overflow-auto scrollbar-unified p-4">
               {!selectedRunId ? (
                 <div className="text-sm text-slate-400">请先选择一条运行。</div>
               ) : loadingDetail ? (
@@ -344,7 +344,7 @@ export default function TrajectoriesPage() {
                         <div className="text-slate-500">{fmtTime(evt.ts)}</div>
                       </div>
                       <div className="mb-2 text-slate-500">phase={evt.phase} · actor={evt.actor}</div>
-                      <pre className="overflow-auto rounded-lg border border-slate-800 bg-[#0a1020] p-2 text-[11px] text-slate-300">
+                      <pre className="overflow-auto scrollbar-unified rounded-lg border border-slate-800 bg-[#0a1020] p-2 text-[11px] text-slate-300">
                         {JSON.stringify(evt.payload, null, 2)}
                       </pre>
                     </div>
