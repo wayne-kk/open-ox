@@ -99,7 +99,7 @@ export default function TestImagePage() {
     };
 
     return (
-        <div className="min-h-screen bg-[#0a0a0b] text-zinc-100 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+        <div className="min-h-screen bg-[#0a0a0b] text-zinc-100 scrollbar-hidden">
             {/* Header */}
             <div className="border-b border-white/[0.06] bg-[#0a0a0b]/80 backdrop-blur-xl sticky top-16 z-30">
                 <div className="max-w-6xl mx-auto px-6 py-4">

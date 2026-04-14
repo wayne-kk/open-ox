@@ -82,8 +82,7 @@ export function HeroTerminal() {
                 {/* Terminal body */}
                 <div
                     ref={containerRef}
-                    className="h-[340px] overflow-y-auto p-5 font-mono text-[12px] leading-6 scrollbar-none"
-                    style={{ scrollbarWidth: "none" }}
+                    className="h-[340px] overflow-y-auto p-5 font-mono text-[12px] leading-6 scrollbar-hidden"
                 >
                     {LINES.slice(0, visibleCount).map((line, i) => (
                         <div

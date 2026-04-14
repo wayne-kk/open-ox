@@ -14,7 +14,12 @@ export type TrajectoryEventType =
   | "test_start"
   | "test_result"
   | "error"
-  | "checkpoint";
+  | "checkpoint"
+  | "repair_episode_started"
+  | "repair_action_started"
+  | "repair_action_result"
+  | "repair_verification_result"
+  | "repair_episode_finished";
 
 export type TrajectoryActor = "system" | "user" | "agent" | "tool" | "evaluator";
 
@@ -64,6 +69,11 @@ const ALLOWED_EVENT_TYPES: readonly TrajectoryEventType[] = [
   "test_result",
   "error",
   "checkpoint",
+  "repair_episode_started",
+  "repair_action_started",
+  "repair_action_result",
+  "repair_verification_result",
+  "repair_episode_finished",
 ];
 
 const ALLOWED_ACTORS: readonly TrajectoryActor[] = ["system", "user", "agent", "tool", "evaluator"];
@@ -147,6 +157,19 @@ export function validateTrajectoryEvent(value: unknown): TrajectoryEvent {
   }
   if (!isRecord(payload)) throw new Error("Missing or invalid 'payload'");
   if (meta !== undefined && !isRecord(meta)) throw new Error("Invalid 'meta'");
+
+  if (event_type === "shell_command") {
+    const command = payload.command;
+    if (!isNonEmptyString(command)) {
+      throw new Error("shell_command payload.command is required");
+    }
+  }
+  if (event_type === "shell_result") {
+    const exitCode = payload.exit_code;
+    if (exitCode !== undefined && (typeof exitCode !== "number" || !Number.isInteger(exitCode))) {
+      throw new Error("shell_result payload.exit_code must be integer when provided");
+    }
+  }
 
   return {
     schema_version,

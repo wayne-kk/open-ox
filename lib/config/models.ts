@@ -112,6 +112,7 @@ export const GENERATION_STEPS = [
     { id: "plan_project", label: "项目规划" },
     { id: "generate_project_design_system", label: "设计系统" },
     { id: "apply_project_design_tokens", label: "设计 Token" },
+    { id: "describe_page_sections", label: "页面分段设计" },
     { id: "preselect_skills", label: "技能匹配" },
     { id: "generate_screen", label: "整屏生成" },
     { id: "generate_section", label: "组件生成" },

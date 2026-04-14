@@ -35,7 +35,15 @@ export async function runBuildSite(
   input: string,
   callbacks: BuildSiteCallbacks,
   signal?: AbortSignal,
-  options?: { model?: string; retryProjectId?: string; projectId?: string; styleGuide?: string; enableSkills?: boolean }
+  options?: {
+    model?: string;
+    retryProjectId?: string;
+    projectId?: string;
+    styleGuide?: string;
+    enableSkills?: boolean;
+    /** When false, core step prompts use repo defaults only (skip DB overrides). Default on server is true. */
+    useDatabasePrompts?: boolean;
+  }
 ): Promise<void> {
   const res = await fetch("/api/ai", {
     method: "POST",
@@ -47,6 +55,7 @@ export async function runBuildSite(
       ...(options?.projectId ? { projectId: options.projectId } : {}),
       ...(options?.styleGuide ? { styleGuide: options.styleGuide } : {}),
       ...(options?.enableSkills ? { enableSkills: true } : {}),
+      ...(options?.useDatabasePrompts === false ? { useDatabasePrompts: false } : {}),
     }),
     signal,
   });

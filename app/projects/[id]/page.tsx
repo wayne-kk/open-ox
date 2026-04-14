@@ -276,7 +276,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             )}
           </div>
 
-          <div className="flex-1 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex-1 overflow-y-auto scrollbar-hidden">
             <div className="px-5 py-4 space-y-4">
               {modifySteps.length === 0 && !modifyError && !modifyPlan && (
                 <div className="flex flex-col items-center gap-2 py-12 text-center">
@@ -348,7 +348,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                       <p className="text-[9px] text-primary/50 leading-relaxed">{diff.reasoning}</p>
                     </div>
                   )}
-                  <div className="overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                  <div className="overflow-x-auto scrollbar-hidden">
                     <pre className="px-4 py-3 font-mono text-[9px] leading-[1.6]">
                       {diff.patch.split("\n").map((line, i) => (
                         <div

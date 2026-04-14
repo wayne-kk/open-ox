@@ -6,6 +6,8 @@ import { withPromptProfile } from "@/ai/prompts/core/profile";
 interface RunGenerateAppOptions {
   projectId?: string;
   styleGuide?: string;
+  enableSkills?: boolean;
+  useDatabasePrompts?: boolean;
   checkpoint?: CheckpointResult;
 }
 
@@ -22,6 +24,8 @@ export async function runGenerateApp(
     runGenerateProject(userInput, onStep, {
       projectId: options?.projectId,
       styleGuide: options?.styleGuide,
+      enableSkills: options?.enableSkills,
+      useDatabasePrompts: options?.useDatabasePrompts,
       checkpoint: options?.checkpoint,
     })
   );

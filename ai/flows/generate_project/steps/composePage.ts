@@ -102,11 +102,12 @@ ${pageSections
   )
   .join("\n\n")}
 
-## Design System (for global effects)
+## Design System (tokens and tone — not a mandate for overlays)
 ${designSystem}
 
 Generate the page component source for this page route.
-Treat the page design plan as the composition strategy, not just a list of imports.`;
+Treat the page design plan as the composition strategy, not just a list of imports.
+Do not add scanlines, grain, dot grids, or other decorative full-viewport layers unless a **Page Constraint** or **Layout Strategy** line above explicitly requests that effect.`;
 
   const raw = await callLLM(systemPrompt, userMessage, 0.3, undefined, getModelForStep("compose_page"));
   let tsx = extractContent(raw, "tsx");

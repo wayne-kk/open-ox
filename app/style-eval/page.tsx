@@ -222,7 +222,7 @@ export default function StyleEvalPage() {
     const isRunning = batchRunning || !!runningId;
 
     return (
-        <main className="relative min-h-screen bg-background pt-[57px]">
+        <main className="relative min-h-screen bg-background ">
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(247,147,26,0.14),transparent_28%),radial-gradient(circle_at_top_right,rgba(255,214,0,0.1),transparent_24%),radial-gradient(circle_at_bottom,rgba(234,88,12,0.1),transparent_30%)]" />
 
             <header className="relative z-10 border-b border-white/8 bg-background/75 backdrop-blur-xl">

@@ -15,6 +15,7 @@ import {
 
 const NAV_LINKS = [
   { href: "/projects", label: "项目" },
+  { href: "/trajectories", label: "Trajectories" },
   { href: "/docs", label: "文档" },
   { href: "/llm-test", label: "LLM 测试" },
   { href: "/test-image", label: "图片测试" },
@@ -27,6 +28,7 @@ export function Navigation() {
   const { user, ready } = useAuthUser();
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const isHome = pathname === "/";
 
   useEffect(() => {
     const handler = () => setScrolled(window.scrollY > 24);
@@ -44,11 +46,10 @@ export function Navigation() {
   return (
     <>
       <header
-        className={`fixed top-0 left-0 right-0 z-50 transition-[background-color,backdrop-filter,border-color] duration-300 ${
-          scrolled
-            ? "border-b border-white/8 bg-background/85 backdrop-blur-2xl"
-            : "border-b border-transparent bg-transparent"
-        }`}
+        className={`${isHome ? "fixed left-0 right-0 top-0" : "sticky top-0"} z-50 transition-[background-color,backdrop-filter,border-color] duration-300 ${scrolled || !isHome
+          ? "border-b border-white/8 bg-background/85 backdrop-blur-2xl"
+          : "border-b border-transparent bg-transparent"
+          }`}
       >
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 lg:px-8">
           {/* Logo */}
@@ -67,9 +68,8 @@ export function Navigation() {
                 <Link
                   key={href}
                   href={href}
-                  className={`relative px-4 py-2 text-[13px] font-medium transition-colors ${
-                    active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-                  }`}
+                  className={`relative px-4 py-2 text-[13px] font-medium transition-colors ${active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                    }`}
                 >
                   {label}
                   {active && (
@@ -122,9 +122,8 @@ export function Navigation() {
                   key={href}
                   href={href}
                   onClick={() => setOpen(false)}
-                  className={`block rounded-lg px-4 py-3 text-[15px] font-medium transition-colors ${
-                    active ? "bg-primary/10 text-primary" : "text-muted-foreground"
-                  }`}
+                  className={`block rounded-lg px-4 py-3 text-[15px] font-medium transition-colors ${active ? "bg-primary/10 text-primary" : "text-muted-foreground"
+                    }`}
                 >
                   {label}
                 </Link>

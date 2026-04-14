@@ -439,7 +439,7 @@ function LLMTestPanel() {
                               </p>
                           )}
                     {r.content && (
-                        <pre className="font-mono text-[10px] text-foreground/70 whitespace-pre-wrap leading-relaxed max-h-60 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                        <pre className="font-mono text-[10px] text-foreground/70 whitespace-pre-wrap leading-relaxed max-h-60 overflow-y-auto scrollbar-hidden">
                             {r.content}
                         </pre>
                     )}
@@ -464,7 +464,7 @@ export default function LLMTestPage() {
     const [tab, setTab] = useState<Tab>("test");
 
     return (
-        <main className="relative min-h-screen bg-background pt-[57px]">
+        <main className="relative min-h-screen bg-background ">
 
             <div className="relative z-1 mx-auto max-w-4xl px-6 py-8">
                 <div className="flex items-center justify-between mb-8">

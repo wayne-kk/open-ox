@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const PROTECTED_PREFIXES = ["/projects", "/studio"];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const needsAuth = PROTECTED_PREFIXES.some(
     (p) => path === p || path.startsWith(`${p}/`)

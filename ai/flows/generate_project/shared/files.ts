@@ -3,6 +3,7 @@ import { dirname, join } from "path";
 import { executeSystemTool } from "../../../tools";
 import { getSiteRoot } from "../../../tools/system/common";
 import { hasPrompt, loadPrompt, resolvePromptPath, composePrompt, resolveGeneratePromptsRoot } from "@/ai/prompts/core";
+import { getCoreStepPromptOverride } from "@/lib/config/corePrompts";
 
 function readPromptFile(path: string): string {
   if (!existsSync(path)) {
@@ -74,10 +75,18 @@ export function hasCapabilityAssist(capabilityId: string): boolean {
 }
 
 export function loadStepPrompt(promptId: string): string {
+  const override = getCoreStepPromptOverride({ kind: "step", promptId });
+  if (override) {
+    return override;
+  }
   return loadPrompt("step", promptId);
 }
 
 export function loadSectionPrompt(promptId: string): string {
+  const override = getCoreStepPromptOverride({ kind: "section", promptId });
+  if (override) {
+    return override;
+  }
   return loadPrompt("section", promptId);
 }
 

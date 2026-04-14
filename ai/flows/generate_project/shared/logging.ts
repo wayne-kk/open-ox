@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from "fs/promises";
-import { join } from "path";
+import { sep } from "path";
 import { WORKSPACE_ROOT } from "../../../tools/system/common";
 import type { BuildStep, StepTrace } from "../types";
 
@@ -29,6 +29,25 @@ export interface ArtifactLogger {
 
 const ARTIFACT_ROOT_RELATIVE = ".open-ox/logs/generate_project";
 
+/** Runtime FS paths only — avoids Turbopack inferring project-wide globs from `path.join()`. */
+function appendAbsolutePath(base: string, ...segments: string[]): string {
+  let out = base;
+  for (const seg of segments) {
+    const trimmed = seg.replace(/^[/\\]+|[/\\]+$/g, "");
+    if (!trimmed) continue;
+    out = out.replace(/[/\\]+$/, "") + sep + trimmed;
+  }
+  return out;
+}
+
+/** Relative log paths (posix-style) for display and persistence. */
+function appendRelativePath(...segments: string[]): string {
+  return segments
+    .map((s) => s.replace(/^\/+|\/+$/g, ""))
+    .filter(Boolean)
+    .join("/");
+}
+
 function sanitizeSegment(value: string): string {
   return value
     .trim()
@@ -55,17 +74,20 @@ async function writeArtifactFile(
   content: string
 ): Promise<string> {
   const stepDirName = sanitizeSegment(step);
-  const targetDir = join(runDirAbsolute, stepDirName);
+  const targetDir = appendAbsolutePath(runDirAbsolute, stepDirName);
   await ensureDir(targetDir);
-  const absolutePath = join(targetDir, fileName);
+  const absolutePath = appendAbsolutePath(targetDir, fileName);
   await writeFile(absolutePath, content, "utf-8");
-  return join(runDirRelative, stepDirName, fileName);
+  return appendRelativePath(runDirRelative, stepDirName, fileName);
 }
 
 export function createArtifactLogger(prefix = "generate_project"): ArtifactLogger {
   const runId = createRunId();
-  const runDirRelative = join(ARTIFACT_ROOT_RELATIVE, `${sanitizeSegment(prefix)}_${runId}`);
-  const runDirAbsolute = join(WORKSPACE_ROOT, runDirRelative);
+  const runDirRelative = appendRelativePath(
+    ARTIFACT_ROOT_RELATIVE,
+    `${sanitizeSegment(prefix)}_${runId}`
+  );
+  const runDirAbsolute = appendAbsolutePath(WORKSPACE_ROOT, runDirRelative);
 
   return {
     runDirAbsolute,
@@ -81,7 +103,8 @@ export function createArtifactLogger(prefix = "generate_project"): ArtifactLogge
       );
     },
     writeText: async (step: string, name: string, content: string, extension = "txt") => {
-      const normalizedExtension = extension.replace(/^\.+/, "") || "txt";
+      const rawExtension = extension.replace(/^\.+/, "").trim();
+      const normalizedExtension = /^[a-zA-Z0-9]{1,16}$/.test(rawExtension) ? rawExtension : "txt";
       const safeName = sanitizeSegment(name);
       const fileName = `${safeName}.${normalizedExtension}`;
       return writeArtifactFile(runDirAbsolute, runDirRelative, step, fileName, content);
