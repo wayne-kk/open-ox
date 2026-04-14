@@ -20,8 +20,8 @@ when:
     none: []
 notes: |
   High-impact hero: energetic, bold, visually striking heroes including neon/cyber/tech
-
-##   aesthetics. Select only when intent and keywords clearly match.
+  aesthetics. Select only when intent and keywords clearly match.
+---
 
 # Component Skill: Hero — High-Impact
 

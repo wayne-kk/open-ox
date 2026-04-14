@@ -2,9 +2,10 @@ import { clearTemplate } from "@/lib/clearTemplate";
 import { getSiteRoot as projectManagerGetSiteRoot } from "@/lib/projectManager";
 import { setSiteRoot, getSiteRoot } from "@/ai/tools/system/common";
 import { setSectionSkillsEnabled } from "@/lib/config/models";
+import { validateSkillFrontmatter } from "@/ai/shared/skillDiscovery";
 import { execSync } from "child_process";
 import { isLayoutSection } from "./registry/layoutSections";
-import { formatSiteFile, syncSiteValidationMarkers, readSiteFile, writeSiteFile } from "./shared/files";
+import { formatSiteFile, syncSiteValidationMarkers, readSiteFile, writeSiteFile, getSkillPromptsRoot } from "./shared/files";
 import { createArtifactLogger, createStepLogger } from "./shared/logging";
 import { buildScreenFilePath, buildSectionFilePath } from "./shared/paths";
 import { stepAnalyzeProjectRequirement } from "./steps/analyzeProjectRequirement";
@@ -756,6 +757,16 @@ export async function runGenerateProject(
   const appScreenFirstEnabled = getPromptProfile() === "app";
 
   try {
+    if (options?.enableSkills) {
+      const skillFrontmatterErrors = validateSkillFrontmatter(getSkillPromptsRoot());
+      if (skillFrontmatterErrors.length > 0) {
+        const detail = skillFrontmatterErrors.map((e) => `${e.fileName}: ${e.message}`).join(" | ");
+        logger.logStep("validate_skill_prompts", "error", detail);
+        throw new Error(`Invalid skill prompt frontmatter: ${detail}`);
+      }
+      logger.logStep("validate_skill_prompts", "ok", "all skill frontmatter parsed");
+    }
+
     await persistJsonArtifact(artifactLogger, "run", "input", {
       userInput,
       checkpoint: cp ? { hasCheckpoint: cp.hasCheckpoint, summary: cp.summary } : null,

@@ -19,6 +19,9 @@ importers:
       '@e2b/code-interpreter':
         specifier: ^2.4.0
         version: 2.4.0
+      '@open-ox/sdk':
+        specifier: ^0.1.0
+        version: 0.1.0(openai@4.104.0(ws@8.20.0)(zod@3.25.76))
       '@supabase/ssr':
         specifier: ^0.10.0
         version: 0.10.0(@supabase/supabase-js@2.101.1)
@@ -768,6 +771,12 @@ packages:
 
   '@open-draft/until@2.1.0':
     resolution: {integrity: sha512-U69T3ItWHvLwGg5eJ0n3I62nWuE6ilHlmz7zM0npLBRvPRd7e6NYmg54vvRtP5mZG7kZqZCFVdsTWo7BPtBujg==}
+
+  '@open-ox/sdk@0.1.0':
+    resolution: {integrity: sha512-7F9G29aoJtXqk/4z9IyUBH6rJH2H76wfhSTx+zILkMpbrBBJFIwme6tQkxxLPysKEXsN9rWV+z1EZ7to6i+Adg==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      openai: '>=4.0.0'
 
   '@oxc-project/types@0.122.0':
     resolution: {integrity: sha512-oLAl5kBpV4w69UtFZ9xqcmTi+GENWOcPF7FCrczTiBbmC0ibXxCwyvZGbO39rCVEuLGAZM84DH0pUIyyv/YJzA==}
@@ -5664,6 +5673,12 @@ snapshots:
       outvariant: 1.4.3
 
   '@open-draft/until@2.1.0': {}
+
+  '@open-ox/sdk@0.1.0(openai@4.104.0(ws@8.20.0)(zod@3.25.76))':
+    dependencies:
+      gray-matter: 4.0.3
+      openai: 4.104.0(ws@8.20.0)(zod@3.25.76)
+      undici: 8.0.2
 
   '@oxc-project/types@0.122.0': {}
 

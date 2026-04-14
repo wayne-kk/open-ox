@@ -12,6 +12,7 @@
   "dependencies": {
     "@base-ui/react": "^1.3.0",
     "@e2b/code-interpreter": "^2.4.0",
+    "@open-ox/sdk": "^0.1.0",
     "@supabase/ssr": "^0.10.0",
     "@supabase/supabase-js": "^2.101.1",
     "class-variance-authority": "^0.7.1",

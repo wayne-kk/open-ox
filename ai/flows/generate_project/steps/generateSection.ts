@@ -68,9 +68,16 @@ type GenerateSectionPageContext = {
 
 // ── Skill Discovery (runtime, per-section) ──────────────────────────────
 
-/** Component skills in prompts/skills/ are hero-only; other section types rely on design system + section prompts. */
-function isHeroComponentSkillSectionType(sectionType: string): boolean {
-  return sectionType === "hero";
+/** Component skills in prompts/skills/ are hero-only; support common hero aliases from planners. */
+function isHeroComponentSkillSectionType(section: PlannedSectionSpec): boolean {
+  const sectionType = section.type.trim().toLowerCase();
+  if (sectionType === "hero") return true;
+  // Planner aliases seen in real outputs
+  if (sectionType === "opening-shot" || sectionType === "opening_shot") return true;
+  // Fallback guards: if name/intent clearly indicates hero, allow skill selection path.
+  if (/^hero(section)?$/i.test(section.fileName.trim())) return true;
+  if (/hero|opening shot|首屏|头图/i.test(section.intent)) return true;
+  return false;
 }
 
 type SkillSelectionContext = {
@@ -150,14 +157,18 @@ ${skillList}`;
 
 async function discoverAndSelectSkill(
   sectionType: string,
-  context: SkillSelectionContext
+  context: SkillSelectionContext,
+  section: PlannedSectionSpec
 ): Promise<{ skillId: string | null; skillPrompt: string; skillMetadataBlock: string }> {
-  if (!isHeroComponentSkillSectionType(sectionType)) {
+  if (!isHeroComponentSkillSectionType(section)) {
     return { skillId: null, skillPrompt: "", skillMetadataBlock: "" };
   }
 
   const root = getSkillPromptsRoot();
-  const candidates = discoverSkillsBySectionType(root, sectionType);
+  const normalizedType = sectionType.trim().toLowerCase();
+  const skillSectionType =
+    normalizedType === "opening-shot" || normalizedType === "opening_shot" ? "hero" : normalizedType;
+  const candidates = discoverSkillsBySectionType(root, skillSectionType);
 
   if (candidates.length === 0) {
     return { skillId: null, skillPrompt: "", skillMetadataBlock: "" };
@@ -400,7 +411,7 @@ export async function stepGenerateSection({
       designKeywords: projectContext.designKeywords,
       productType: projectContext.productScope.productType,
       journeyStage: pageContext?.journeyStage,
-    })
+    }, section)
     : { skillId: null, skillPrompt: "", skillMetadataBlock: "" };
 
   const systemPrompt = buildSystemPrompt({

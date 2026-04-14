@@ -1,4 +1,5 @@
 ---
+
 id: component.hero.particle
 kind: component-skill
 sectionTypes: ["hero"]
@@ -173,7 +174,7 @@ export default function HeroSection() {
 - Overlay content sits in the **lower half**: subheading at roughly 60–70% height, CTA buttons below that. This creates a natural top-to-bottom reading flow: particle headline → subheading → CTA.
 - Background: always `bg-black` or near-black. Particle colors should contrast.
 - Pick particle colors from the design system's primary/accent tokens or derive from the mood keywords.
-- The overlay `<div>` must be fully transparent — NO `bg-*`, NO `backdrop-blur`. Use `text-shadow` for readability if needed.
+- The overlay `<div>` must be fully transparent — NO `bg-`*, NO `backdrop-blur`. Use `text-shadow` for readability if needed.
 
 ## Canvas Sizing
 
@@ -194,7 +195,7 @@ function animate() {
 
 ## Word Cycling
 
-Cycle words every ~240 frames (~4s at 60fps). On each cycle, call `assignTargets(nextWord)` which maps existing particles to new pixel targets and spawns new ones as needed. Kill surplus particles by sending them off-screen.
+Cycle words every ~~240 frames (~~4s at 60fps). On each cycle, call `assignTargets(nextWord)` which maps existing particles to new pixel targets and spawns new ones as needed. Kill surplus particles by sending them off-screen.
 
 ## Mouse Interaction
 
@@ -208,3 +209,4 @@ Right-click + drag: destroy particles within radius 60 of cursor. Optional, keep
 - Font size for text rasterization: `Math.floor(canvas.height * 0.28)` — scales with canvas.
 - Pixel sampling step: 5–6 for performance.
 - **TypeScript strict mode**: Never use non-null assertions (`!`). Always null-check `canvasRef.current` and `canvas.getContext("2d")` with early returns. Every function that accesses `canvas` or `ctx` must guard against null. The code must compile with `strict: true` in tsconfig.
+

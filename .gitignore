@@ -46,3 +46,22 @@ sites/*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# tsc compiled output in source dirs (should never be committed)
+ai/**/*.js
+ai/**/*.d.ts
+ai/**/*.js.map
+ai/**/*.d.ts.map
+lib/**/*.d.ts
+lib/**/*.d.ts.map
+lib/**/*.js.map
+
+# sdk build artifacts
+sdk/dist/
+sdk/src/engine/flows/
+sdk/src/engine/shared/
+sdk/src/engine/tools/
+sdk/src/engine/prompts/
+sdk/src/engine/prompt-files/
+sdk/src/engine/shims/
+sdk-real-test/

@@ -33,6 +33,11 @@ export interface SkillMetadata {
   notes: string;
 }
 
+export interface SkillFrontmatterError {
+  fileName: string;
+  message: string;
+}
+
 /**
  * 从 frontmatter 解析出 SkillMetadata，兼容缺失字段
  */
@@ -81,7 +86,17 @@ export function discoverSkills(rootPath: string): SkillMetadata[] {
       continue;
     }
 
-    const stripped = matter(content);
+    let stripped: { data: unknown };
+    try {
+      stripped = matter(content);
+    } catch (error) {
+      console.warn(
+        `[skill-discovery] Invalid frontmatter in ${entry.name}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+      continue;
+    }
     const frontmatter = stripped.data as Record<string, unknown>;
     const id = frontmatter.id as string | undefined;
     if (!id || typeof id !== "string") {
@@ -97,6 +112,42 @@ export function discoverSkills(rootPath: string): SkillMetadata[] {
   }
 
   return result;
+}
+
+/**
+ * Validate all skill markdown frontmatter under a directory.
+ * Returns structured errors so callers can fail fast with a clear message.
+ */
+export function validateSkillFrontmatter(rootPath: string): SkillFrontmatterError[] {
+  if (!existsSync(rootPath)) return [];
+  const entries = readdirSync(rootPath, { withFileTypes: true });
+  const errors: SkillFrontmatterError[] = [];
+
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
+    const fullPath = join(rootPath, entry.name);
+    let content: string;
+    try {
+      content = readFileSync(fullPath, "utf-8");
+    } catch (error) {
+      errors.push({
+        fileName: entry.name,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      continue;
+    }
+
+    try {
+      matter(content);
+    } catch (error) {
+      errors.push({
+        fileName: entry.name,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return errors;
 }
 
 /**
