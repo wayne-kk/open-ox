@@ -37,6 +37,8 @@ export interface GenerateSectionParams {
   outputFileRelative: string;
   pageContext?: GenerateSectionPageContext;
   sectionDesignBriefOverride?: string;
+  /** Optional: callback to collect conversation messages for trajectory logging */
+  onMessage?: (msg: import("@/ai/shared/llm/types").ChatMessage) => void;
 }
 
 type GenerateSectionProjectContext = {
@@ -395,15 +397,16 @@ function validateSectionExports(tsx: string, componentName: string): NonNullable
 
 // ── Main Entry ──────────────────────────────────────────────────────────
 
-export async function stepGenerateSection({
-  designSystem,
-  projectGuardrailIds,
-  projectContext,
-  section,
-  outputFileRelative,
-  pageContext,
-  sectionDesignBriefOverride,
-}: GenerateSectionParams): Promise<GenerateSectionResult> {
+export async function stepGenerateSection(params: GenerateSectionParams): Promise<GenerateSectionResult> {
+  const {
+    designSystem,
+    projectGuardrailIds,
+    projectContext,
+    section,
+    outputFileRelative,
+    pageContext,
+    sectionDesignBriefOverride,
+  } = params;
   const { skillId, skillPrompt, skillMetadataBlock } = isSectionSkillsEnabled()
     ? await discoverAndSelectSkill(section.type, {
       intent: section.intent,
@@ -462,6 +465,7 @@ export async function stepGenerateSection({
       executeToolOverrides: {
         generate_image: imageExecutor,
       },
+      onMessage: params.onMessage,
     });
 
     const tsx = extractContent(llmResult.content, "tsx");

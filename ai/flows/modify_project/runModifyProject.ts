@@ -11,6 +11,10 @@ import { FileSnapshotTracker, type DiffStats } from "./tracking/fileSnapshotTrac
 import { runAgentLoop } from "./engine/loopEngine";
 import { SYSTEM_PROMPT } from "./prompt/systemPrompt";
 import { appendTrajectoryEvent, createRunEndEvent, createTrajectoryRun } from "@/lib/trajectory/store";
+import type { TrajectoryData } from "./trajectory";
+
+type TrajectoryToolCall = NonNullable<TrajectoryData["messages"][number]["tool_calls"]>[number];
+const ALL_TOOLS_FOR_TRAJECTORY = ["read_file", "search_code", "list_dir", "edit_file", "write_file", "run_build", "exec_shell", "think", "revert_file"];
 
 export type ModifySSEEvent =
   | { type: "step"; name: string; status: "running" | "done" | "error"; message?: string }
@@ -258,7 +262,7 @@ export async function runModifyProject(
     const { loopState, iterations } = await runAgentLoop(
       messages,
       tracker,
-      collectingOnEvent as (event: { type: "step" | "plan" | "diff" | "tool_call" | "thinking" | "done" | "error"; [key: string]: unknown }) => void,
+      collectingOnEvent as (event: { type: "step" | "plan" | "diff" | "tool_call" | "thinking" | "done" | "error";[key: string]: unknown }) => void,
       userInstruction,
       modelOverride
     );
@@ -367,6 +371,33 @@ export async function runModifyProject(
       buildPassed: loopState.buildPassed,
       iterations,
     });
+
+    // Save conversation trajectory to local filesystem
+    try {
+      const { saveTrajectory } = await import("./trajectory");
+      await saveTrajectory({
+        meta: {
+          projectId,
+          instruction: userInstruction,
+          model: modelOverride ?? "default",
+          tools: ALL_TOOLS_FOR_TRAJECTORY,
+          skills: [],
+          iterations,
+          buildPassed: loopState.buildPassed,
+          touchedFiles,
+          timestamp: new Date().toISOString(),
+        },
+        messages: messages.map(m => ({
+          role: m.role as "system" | "user" | "assistant" | "tool",
+          content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+          tool_calls: m.tool_calls as TrajectoryToolCall[] | undefined,
+          tool_call_id: m.tool_call_id,
+        })),
+      });
+    } catch (trajErr) {
+      console.warn("[modify] trajectory save failed:", trajErr);
+    }
+
     if (trajectory) {
       await trajectoryQueue;
       await createRunEndEvent(trajectory.runId, trajectory.taskId, "system", {

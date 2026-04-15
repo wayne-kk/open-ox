@@ -1,7 +1,7 @@
 import { clearTemplate } from "@/lib/clearTemplate";
 import { getSiteRoot as projectManagerGetSiteRoot } from "@/lib/projectManager";
 import { setSiteRoot, getSiteRoot } from "@/ai/tools/system/common";
-import { setSectionSkillsEnabled } from "@/lib/config/models";
+import { setSectionSkillsEnabled, getModelId } from "@/lib/config/models";
 import { validateSkillFrontmatter } from "@/ai/shared/skillDiscovery";
 import { execSync } from "child_process";
 import { isLayoutSection } from "./registry/layoutSections";
@@ -281,8 +281,9 @@ async function runSectionBatch(params: {
   runtimeContext: ProjectRuntimeContext;
   artifactLogger: ArtifactLogger;
   logger: StepLogger;
+  trajectoryCollector?: import("./trajectoryCollector").GenerateTrajectoryCollector;
 }): Promise<{ generatedFiles: string[]; pendingImages: PendingImage[] }> {
-  const { batchLabel, items, designSystem, runtimeContext, artifactLogger, logger } = params;
+  const { batchLabel, items, designSystem, runtimeContext, artifactLogger, logger, trajectoryCollector } = params;
   if (items.length === 0) {
     return { generatedFiles: [], pendingImages: [] };
   }
@@ -290,8 +291,11 @@ async function runSectionBatch(params: {
   items.forEach((item) => logger.startStep(getSectionStepName(item.scopeKey, item.section.fileName)));
 
   const results = await Promise.allSettled(
-    items.map((item) =>
-      stepGenerateSection({
+    items.map((item) => {
+      const onMessage = trajectoryCollector
+        ? trajectoryCollector.createEpisodeCollector(`generate_section:${item.section.fileName}`)
+        : undefined;
+      return stepGenerateSection({
         designSystem,
         projectGuardrailIds: runtimeContext.projectGuardrailIds,
         projectContext: runtimeContext,
@@ -299,8 +303,9 @@ async function runSectionBatch(params: {
         outputFileRelative: item.outputFileRelative,
         pageContext: item.pageContext,
         sectionDesignBriefOverride: item.sectionDesignBriefOverride,
-      })
-    )
+        onMessage,
+      });
+    })
   );
 
   const generatedFiles: string[] = [];
@@ -360,8 +365,9 @@ async function generateSharedLayoutSections(params: {
   artifactLogger: ArtifactLogger;
   logger: StepLogger;
   skipSections?: Set<string>;
+  trajectoryCollector?: import("./trajectoryCollector").GenerateTrajectoryCollector;
 }): Promise<{ files: string[]; pendingImages: PendingImage[] }> {
-  const { blueprint, designSystem, runtimeContext, artifactLogger, logger, skipSections } = params;
+  const { blueprint, designSystem, runtimeContext, artifactLogger, logger, skipSections, trajectoryCollector } = params;
   const collectedFiles: string[] = [];
   const collectedPendingImages: PendingImage[] = [];
 
@@ -398,6 +404,7 @@ async function generateSharedLayoutSections(params: {
       runtimeContext,
       artifactLogger,
       logger,
+      trajectoryCollector,
     });
     collectedFiles.push(...batchResult.generatedFiles);
     collectedPendingImages.push(...batchResult.pendingImages);
@@ -429,6 +436,7 @@ async function generatePages(params: {
   appScreenFirstEnabled: boolean;
   skipSections?: Set<string>;
   skipPages?: Set<string>;
+  trajectoryCollector?: import("./trajectoryCollector").GenerateTrajectoryCollector;
 }): Promise<{ files: string[]; pendingImages: PendingImage[] }> {
   const {
     blueprint,
@@ -439,6 +447,7 @@ async function generatePages(params: {
     appScreenFirstEnabled,
     skipSections,
     skipPages,
+    trajectoryCollector,
   } = params;
   const collectedFiles: string[] = [];
   const collectedPendingImages: PendingImage[] = [];
@@ -597,6 +606,7 @@ async function generatePages(params: {
           runtimeContext,
           artifactLogger,
           logger,
+          trajectoryCollector,
         });
         generatedFiles = batchResult.generatedFiles;
         pagePendingImages = batchResult.pendingImages;
@@ -741,6 +751,14 @@ export async function runGenerateProject(
   const artifactLogger = createArtifactLogger("generate_project");
   const result = createInitialResult(logger);
   result.logDirectory = artifactLogger.runDirRelative;
+
+  // Trajectory collector — records conversation history from agent steps
+  const { GenerateTrajectoryCollector } = await import("./trajectoryCollector");
+  const trajectoryCollector = new GenerateTrajectoryCollector(
+    options?.projectId ?? "unknown",
+    userInput,
+    getModelId()
+  );
 
   // Set section skills toggle — default off, user can enable from UI
   setSectionSkillsEnabled(options?.enableSkills ?? false);
@@ -990,6 +1008,7 @@ export async function runGenerateProject(
           logger,
           appScreenFirstEnabled: true,
           skipPages: cp?.composedPages,
+          trajectoryCollector,
         });
         appendGeneratedFiles(result, pageResult.files);
         return pageResult.pendingImages;
@@ -1003,6 +1022,7 @@ export async function runGenerateProject(
           artifactLogger,
           logger,
           skipSections: cp?.generatedSections,
+          trajectoryCollector,
         }),
         generatePages({
           blueprint,
@@ -1013,6 +1033,7 @@ export async function runGenerateProject(
           appScreenFirstEnabled: false,
           skipSections: cp?.generatedSections,
           skipPages: cp?.composedPages,
+          trajectoryCollector,
         }),
       ]);
       appendGeneratedFiles(result, layoutResult.files);
@@ -1137,6 +1158,13 @@ export async function runGenerateProject(
       dependencyInstallFailures: result.dependencyInstallFailures,
     });
     result.success = true;
+
+    // Save trajectory
+    trajectoryCollector.save(
+      result.generatedFiles,
+      result.verificationStatus === "passed",
+      result.steps?.length ?? 0
+    ).catch(err => console.warn("[trajectory] Generate trajectory save failed:", err));
   } catch (error) {
     result.error = error instanceof Error ? error.message : String(error);
     result.success = false;
