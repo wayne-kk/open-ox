@@ -101,6 +101,42 @@ interface SectionBatchItem {
   sectionDesignBriefOverride?: string;
 }
 
+const SECTION_PARALLELISM = Math.max(
+  1,
+  Number(process.env.GENERATE_SECTION_PARALLELISM ?? 2)
+);
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>
+): Promise<Array<PromiseSettledResult<R>>> {
+  const results: Array<PromiseSettledResult<R>> = new Array(items.length);
+  let cursor = 0;
+
+  const runWorker = async () => {
+    while (true) {
+      const current = cursor;
+      cursor += 1;
+      if (current >= items.length) {
+        return;
+      }
+      try {
+        const value = await worker(items[current], current);
+        results[current] = { status: "fulfilled", value };
+      } catch (error) {
+        results[current] = { status: "rejected", reason: error };
+      }
+    }
+  };
+
+  const runners = Array.from({ length: Math.min(concurrency, items.length) }, () =>
+    runWorker()
+  );
+  await Promise.all(runners);
+  return results;
+}
+
 
 function buildProjectRuntimeContext(blueprint: PlannedProjectBlueprint): ProjectRuntimeContext {
   return {
@@ -119,6 +155,7 @@ function buildProjectRuntimeContext(blueprint: PlannedProjectBlueprint): Project
     })),
     projectGuardrailIds: blueprint.projectGuardrailIds,
     designKeywords: blueprint.experience.designIntent.keywords ?? [],
+    rawUserInput: "",
   };
 }
 
@@ -288,10 +325,9 @@ async function runSectionBatch(params: {
     return { generatedFiles: [], pendingImages: [] };
   }
 
-  items.forEach((item) => logger.startStep(getSectionStepName(item.scopeKey, item.section.fileName)));
-
-  const results = await Promise.allSettled(
-    items.map((item) => {
+  const results = await mapWithConcurrency(items, SECTION_PARALLELISM, (item) => {
+      const stepName = getSectionStepName(item.scopeKey, item.section.fileName);
+      logger.startStep(stepName);
       const onMessage = trajectoryCollector
         ? trajectoryCollector.createEpisodeCollector(`generate_section:${item.section.fileName}`)
         : undefined;
@@ -305,7 +341,7 @@ async function runSectionBatch(params: {
         sectionDesignBriefOverride: item.sectionDesignBriefOverride,
         onMessage,
       });
-    })
+    }
   );
 
   const generatedFiles: string[] = [];
@@ -952,6 +988,7 @@ export async function runGenerateProject(
 
     result.blueprint = blueprint;
     const runtimeContext = buildProjectRuntimeContext(blueprint);
+    runtimeContext.rawUserInput = userInput;
     appendGeneratedFiles(result, ["design-system.md"]);
 
     // ── Step: apply_project_design_tokens + UI generation (parallel) ──

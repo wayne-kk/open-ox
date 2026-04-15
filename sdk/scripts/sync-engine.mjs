@@ -270,7 +270,8 @@ const imageShimContent = [
   '    throw new Error("ARK_API_KEY is not set — image generation skipped");',
   '  }',
   '',
-  '  const size = opts.size ?? "1K";',
+  '  const sizeArg = String(opts.size ?? "1k").trim();',
+  '  const size = /^\\d+[kK]$/.test(sizeArg) ? `${sizeArg.slice(0, -1)}k` : sizeArg;',
   '  const url = `${arkBaseUrl()}/images/generations`;',
   '',
   '  const res = await fetch(url, {',
@@ -319,6 +320,7 @@ const STRIP_PATTERNS = [
   /import\s+\{[^}]*\}\s+from\s+["']@\/lib\/supabase[^"']*["'];?\n?/g,
   /import\s+\{[^}]*\}\s+from\s+["']@\/lib\/auth\/[^"']*["'];?\n?/g,
   /import\s+\{[^}]*\}\s+from\s+["']@\/lib\/storage["'];?\n?/g,
+  /import\s+\{[^}]*\}\s+from\s+["']\.\.\/modify_project\/[^"']*["'];?\n?/g,
 ];
 
 // These map @/... paths to directories relative to sdk/src/engine/
@@ -408,6 +410,20 @@ function walkAndRewrite(dir) {
 
 walkAndRewrite(join(SDK, "src", "engine"));
 console.log("\n  ✏️  Import paths rewritten");
+
+// ─── Step 4b: Patch trajectoryCollector to add no-op saveTrajectory ──────────
+
+const trajPath = join(SDK, "src", "engine", "flows", "generate_project", "trajectoryCollector.ts");
+if (existsSync(trajPath)) {
+  let content = readFileSync(trajPath, "utf-8");
+  // Add a no-op saveTrajectory after the stripped import
+  content = content.replace(
+    "// [SDK] stripped\n",
+    "// [SDK] stripped\nconst saveTrajectory = async (_opts: any) => null;\n"
+  );
+  writeFileSync(trajPath, content, "utf-8");
+  console.log("  🔧 Patched trajectoryCollector.ts: added no-op saveTrajectory");
+}
 
 // ─── Step 5: Patch common.ts to remove WORKSPACE_ROOT/sites/ restriction ─────
 

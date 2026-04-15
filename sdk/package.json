@@ -1,6 +1,6 @@
 {
   "name": "@open-ox/sdk",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Open OX project generation SDK - generate Next.js projects from natural language descriptions",
   "main": "dist/index.js",
   "module": "dist/index.js",

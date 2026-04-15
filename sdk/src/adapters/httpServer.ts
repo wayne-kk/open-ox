@@ -115,6 +115,7 @@ async function handleGenerate(
     projectId,
     styleGuide,
     mode,
+    enableSkills: Boolean(enableSkills),
     onStep: (step) => {
       writeSSE(res, { type: "step", ...step });
     },

@@ -32,6 +32,17 @@ function StudioInner({ projectId }: { projectId: string }) {
   const [conversationCollapsed, setConversationCollapsed] = useState(false);
   const appPreviewViewportRef = useRef<HTMLDivElement | null>(null);
   const [appPreviewScale, setAppPreviewScale] = useState(1);
+  const [previewMountNonce, setPreviewMountNonce] = useState(0);
+  const previewIframeSrc =
+    previewUrl
+      ? `${previewUrl}${previewUrl.includes("?") ? "&" : "?"}v=${previewVersion}&m=${previewMountNonce}`
+      : null;
+
+  useEffect(() => {
+    if (rightPanel === "preview" && previewState === "ready" && previewUrl) {
+      setPreviewMountNonce((n) => n + 1);
+    }
+  }, [rightPanel, previewState, previewUrl]);
 
   useEffect(() => {
     if (generationMode !== "app" || rightPanel !== "preview" || previewState !== "ready") return;
@@ -271,7 +282,7 @@ function StudioInner({ projectId }: { projectId: string }) {
                     Rebuild
                   </button>
                   <a
-                    href={previewUrl}
+                    href={previewIframeSrc ?? previewUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-2.5 h-7 font-mono text-[10px] text-muted-foreground/70 transition-all hover:border-white/15 hover:text-foreground"
@@ -346,9 +357,9 @@ function StudioInner({ projectId }: { projectId: string }) {
                               <div className="absolute inset-0 rounded-[3rem] border border-white/20 bg-neutral-900 p-[3px] shadow-[0_24px_90px_rgba(0,0,0,0.5)]">
                                 <div className="relative h-full w-full overflow-hidden overscroll-none rounded-[2.7rem] bg-black">
                                   <iframe
-                                    key={`${previewUrl}_${previewVersion}`}
+                                    key={previewIframeSrc ?? `${previewUrl}_${previewVersion}`}
                                     ref={iframeRef}
-                                    src={previewUrl}
+                                    src={previewIframeSrc ?? previewUrl}
                                     className="h-full w-full border-0"
                                     title="App Preview"
                                     style={{ overscrollBehavior: "none" }}
@@ -361,9 +372,9 @@ function StudioInner({ projectId }: { projectId: string }) {
                       </div>
                     ) : (
                       <iframe
-                        key={`${previewUrl}_${previewVersion}`}
+                        key={previewIframeSrc ?? `${previewUrl}_${previewVersion}`}
                         ref={iframeRef}
-                        src={previewUrl}
+                        src={previewIframeSrc ?? previewUrl}
                         className="flex-1 w-full border-0"
                         title="Project Preview"
                       />

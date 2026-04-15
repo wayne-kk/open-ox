@@ -71,8 +71,9 @@ async function computeProjectFingerprint(projectId: string): Promise<string> {
   const hash = createHash("sha256");
   for (const relPath of files) {
     const fullPath = path.join(projectDir, relPath);
-    const stat = await fs.stat(fullPath);
-    hash.update(`${relPath}:${stat.size}:${stat.mtimeMs}\n`);
+    const content = await fs.readFile(fullPath);
+    const fileHash = createHash("sha256").update(content).digest("hex");
+    hash.update(`${relPath}:${fileHash}\n`);
   }
   return hash.digest("hex").slice(0, 16); // 16 hex chars is plenty
 }
@@ -268,7 +269,9 @@ async function isServerUp(sandbox: Sandbox): Promise<boolean> {
   try {
     const res = await fetch(previewUrl, { signal: AbortSignal.timeout(3000) });
     const text = await res.text().catch(() => "");
-    return res.ok && !text.includes("Closed Port Error");
+    if (!res.ok) return false;
+    const lowered = text.toLowerCase();
+    return !lowered.includes("closed port error") && !lowered.includes("there's no service running on port 3000");
   } catch {
     return false;
   }
@@ -321,6 +324,9 @@ export async function startDevServer(
             console.log("[e2b] Files unchanged, restarting serve from existing /out");
             await sandbox.commands.run("pkill -f 'serve out' || true");
             await startServeAndWait(sandbox);
+            if (!(await isServerUp(sandbox))) {
+              throw new Error("serve restart reported ready but port 3000 is still unavailable");
+            }
             await sandbox.setTimeout(SANDBOX_TIMEOUT_MS);
             return { url: previewUrl, port: SERVE_PORT };
           }
@@ -352,6 +358,9 @@ export async function startDevServer(
         }
 
         await startServeAndWait(sandbox);
+        if (!(await isServerUp(sandbox))) {
+          throw new Error("serve restart reported ready but port 3000 is still unavailable");
+        }
         await saveSandboxId(db, projectId, sandbox.sandboxId);
         await saveFingerprint(db, projectId, currentHash);
         await sandbox.setTimeout(SANDBOX_TIMEOUT_MS);
@@ -417,6 +426,9 @@ export async function startDevServer(
     // 7. Start static file server
     console.log("[e2b] Starting static server...");
     await startServeAndWait(sandbox);
+    if (!(await isServerUp(sandbox))) {
+      throw new Error("serve startup reported ready but port 3000 is still unavailable");
+    }
 
     const previewUrl = `https://${sandbox.getHost(SERVE_PORT)}`;
     await saveSandboxId(db, projectId, sandbox.sandboxId);
@@ -705,7 +717,10 @@ export async function getDevServerStatus(
     const sandbox = await Sandbox.connect(sandboxId, e2bOpts());
     if (await sandbox.isRunning()) {
       const url = `https://${sandbox.getHost(SERVE_PORT)}`;
-      return { status: "running", url };
+      if (await isServerUp(sandbox)) {
+        return { status: "running", url };
+      }
+      return { status: "stopped" };
     }
   } catch { /* unreachable */ }
   await clearSandboxId(db, projectId);

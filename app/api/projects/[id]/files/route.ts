@@ -8,6 +8,20 @@ import { getSessionUser } from "@/lib/auth/session";
 
 type Params = { params: Promise<{ id: string }> };
 
+async function ensureWorkspaceReady(projectId: string, projectDir: string): Promise<void> {
+    try {
+        await fs.access(projectDir);
+        return;
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+            throw error;
+        }
+    }
+
+    await fs.mkdir(projectDir, { recursive: true });
+    await restoreProjectFiles(projectId);
+}
+
 /** GET /api/projects/[id]/files — list files in Storage */
 export async function GET(_req: NextRequest, { params }: Params) {
     const session = await getSessionUser();
@@ -21,8 +35,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
     const requestUrl = new URL(_req.url);
     const requestedPath = requestUrl.searchParams.get("path");
     const listSource = requestUrl.searchParams.get("source");
+    const projectDir = getSiteRoot(id);
+
     if (requestedPath) {
-        const projectDir = getSiteRoot(id);
         const normalizedPath = path.normalize(requestedPath).replace(/^(\.\.(\/|\\|$))+/, "");
         const filePath = path.resolve(projectDir, normalizedPath);
         const isInsideProject = filePath === projectDir || filePath.startsWith(`${projectDir}${path.sep}`);
@@ -38,18 +53,41 @@ export async function GET(_req: NextRequest, { params }: Params) {
             return NextResponse.json({ path: normalizedPath, content });
         } catch (error) {
             if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-                return NextResponse.json({ error: "File not found", code: "FILE_NOT_FOUND" }, { status: 404 });
+                try {
+                    await ensureWorkspaceReady(id, projectDir);
+                    const stat = await fs.stat(filePath);
+                    if (!stat.isFile()) {
+                        return NextResponse.json({ error: "Not a file", code: "NOT_A_FILE" }, { status: 400 });
+                    }
+                    const content = await fs.readFile(filePath, "utf8");
+                    return NextResponse.json({ path: normalizedPath, content });
+                } catch (retryError) {
+                    if ((retryError as NodeJS.ErrnoException).code === "ENOENT") {
+                        return NextResponse.json({ error: "File not found", code: "FILE_NOT_FOUND" }, { status: 404 });
+                    }
+                    console.error("[GET /api/projects/:id/files path retry]", retryError);
+                    return NextResponse.json({ error: "Failed to read file", code: "FILE_READ_FAILED" }, { status: 500 });
+                }
             }
+            console.error("[GET /api/projects/:id/files path]", error);
             return NextResponse.json({ error: "Failed to read file", code: "FILE_READ_FAILED" }, { status: 500 });
         }
     }
 
     /** Workspace listing matches local reads (`path` query); default remains Storage for API compat. */
     if (listSource === "workspace") {
-        const projectDir = getSiteRoot(id);
-        const files = await collectFiles(projectDir, projectDir);
-        files.sort((a, b) => a.localeCompare(b));
-        return NextResponse.json({ files, count: files.length, source: "workspace" });
+        try {
+            await ensureWorkspaceReady(id, projectDir);
+            const files = await collectFiles(projectDir, projectDir);
+            files.sort((a, b) => a.localeCompare(b));
+            return NextResponse.json({ files, count: files.length, source: "workspace" });
+        } catch (error) {
+            console.error("[GET /api/projects/:id/files workspace]", error);
+            return NextResponse.json(
+                { error: "Failed to list workspace files", code: "WORKSPACE_LIST_FAILED" },
+                { status: 500 }
+            );
+        }
     }
 
     const files = await listProjectFiles(id);

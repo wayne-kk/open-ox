@@ -14,7 +14,10 @@ import { generateArkImageBase64 } from "@/lib/ark-image-generate";
 
 // ── Concurrency limiter for Ark API ─────────────────────────────────────
 
-const MAX_CONCURRENT_GENERATIONS = 5;
+const MAX_CONCURRENT_GENERATIONS = Math.max(
+  1,
+  Number(process.env.ARK_IMAGE_MAX_CONCURRENCY ?? 2)
+);
 let _activeCount = 0;
 const _waitQueue: Array<() => void> = [];
 
@@ -62,7 +65,7 @@ export const generateImageTool: ChatCompletionTool = {
         size: {
           type: "string",
           description:
-            'Image size: "1K" for normal images, "2K" for hero/full-bleed backgrounds. Default "1K".',
+            'Ignored for now. Image size is fixed to "1k".',
         },
       },
       required: ["filename", "prompt"],
@@ -77,6 +80,11 @@ function sanitizeFilename(raw: string): string {
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 80) || "image";
+}
+
+function sanitizePrompt(raw: string): string {
+  const normalized = raw.replace(/\s+/g, " ").trim();
+  return normalized.length > 160 ? normalized.slice(0, 160) : normalized;
 }
 
 // ── Pending image tracking ──────────────────────────────────────────────
@@ -105,8 +113,8 @@ export function createImageExecutor(componentName: string): {
   ): Promise<ToolResult> => {
     const rawName = String(args.filename ?? "image");
     const filename = sanitizeFilename(`${componentName}-${rawName}`);
-    const prompt = String(args.prompt ?? "");
-    const size = String(args.size ?? "1K");
+    const prompt = sanitizePrompt(String(args.prompt ?? ""));
+    const size = "1k";
     const publicPath = `/images/${filename}.png`;
 
     if (!prompt.trim()) {
@@ -115,8 +123,8 @@ export function createImageExecutor(componentName: string): {
 
     const apiKey = process.env.ARK_API_KEY?.trim();
     if (!apiKey) {
-      const w = size === "2K" ? 1920 : 1200;
-      const h = size === "2K" ? 1080 : 675;
+      const w = 1200;
+      const h = 675;
       const fallbackUrl = `https://picsum.photos/seed/${filename}/${w}/${h}`;
       console.warn(`[generate_image] ARK_API_KEY not set, using placeholder: ${fallbackUrl}`);
       return {

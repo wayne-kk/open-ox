@@ -99,6 +99,8 @@ export interface GenerateProjectOptions {
   styleGuide?: string;
   /** Generation mode: "web" for website, "app" for application */
   mode?: "web" | "app";
+  /** Enable section skill selection during generation */
+  enableSkills?: boolean;
   /** Model override (e.g. "gpt-4o") */
   model?: string;
   /** Callback for real-time step progress */

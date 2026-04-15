@@ -45,6 +45,7 @@ type GenerateSectionProjectContext = {
   projectTitle: string;
   projectDescription: string;
   language: string;
+  rawUserInput?: string;
   productScope: ProductScope;
   roles: UserRole[];
   taskLoops: TaskLoop[];
@@ -88,54 +89,115 @@ type SkillSelectionContext = {
   designKeywords: string[];
   productType: string;
   journeyStage?: string;
+  rawUserInput?: string;
 };
 
-/**
- * Use LLM to optionally select one component skill. Default is abstain (no skill).
- * Returns the skill id or null when no skill is appropriate or the LLM abstains / fails.
- */
+function scoreMatches(source: string, terms: string[] | undefined): number {
+  if (!terms || terms.length === 0) return 0;
+  let score = 0;
+  for (const term of terms) {
+    const t = term.trim().toLowerCase();
+    if (!t) continue;
+    if (source.includes(t)) {
+      score += 1;
+    }
+  }
+  return score;
+}
+
+function chooseSkillDeterministically(
+  candidates: ReturnType<typeof discoverSkillsBySectionType>,
+  context: SkillSelectionContext
+): { skillId: string | null; strong: boolean } {
+  const source = [
+    context.rawUserInput ?? "",
+    context.intent,
+    context.contentHints,
+    context.productType,
+    context.journeyStage ?? "",
+    context.designKeywords.join(" "),
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  let bestId = "";
+  let bestScore = Number.NEGATIVE_INFINITY;
+  let secondBest = Number.NEGATIVE_INFINITY;
+
+  for (const candidate of candidates) {
+    let score = candidate.priority;
+    const when = candidate.when;
+
+    score += scoreMatches(source, when?.designKeywords?.any) * 6;
+    score += scoreMatches(source, when?.traits?.any) * 4;
+    score += scoreMatches(source, when?.journeyStages?.any) * 3;
+    score += scoreMatches(source, when?.productTypes?.any) * 3;
+
+    score -= scoreMatches(source, when?.designKeywords?.none) * 8;
+    score -= scoreMatches(source, when?.traits?.none) * 6;
+    score -= scoreMatches(source, when?.journeyStages?.none) * 5;
+
+    // Skill-specific boost for explicit visual effect signals.
+    if (candidate.id.includes(".particle")) {
+      score += scoreMatches(source, ["particle", "particles", "粒子", "粒子化", "point cloud", "canvas text"]) * 12;
+    } else if (candidate.id.includes(".lighting")) {
+      score += scoreMatches(source, ["lighting", "glow", "neon", "light beam", "光效", "霓虹", "辉光"]) * 8;
+    } else if (candidate.id.includes(".dashboard")) {
+      score += scoreMatches(source, ["dashboard", "analytics", "metrics", "数据看板", "仪表盘"]) * 8;
+    }
+
+    if (score > bestScore) {
+      secondBest = bestScore;
+      bestScore = score;
+      bestId = candidate.id;
+    } else if (score > secondBest) {
+      secondBest = score;
+    }
+  }
+
+  // Only auto-pick when signal is clear enough and winner margin is obvious.
+  const strong = bestScore >= 10 && bestScore - secondBest >= 4;
+  return { skillId: bestId || null, strong };
+}
+
 async function llmSelectSkill(
   candidates: ReturnType<typeof discoverSkillsBySectionType>,
   context: SkillSelectionContext
 ): Promise<string | null> {
-  const skillList = candidates.map((c) => {
-    const w = c.when;
-    const parts = [`id: "${c.id}"`];
-    if (c.notes) parts.push(`description: ${c.notes}`);
-    if (w?.designKeywords?.any?.length) parts.push(`matches keywords: [${w.designKeywords.any.join(", ")}]`);
-    if (w?.designKeywords?.none?.length) parts.push(`excludes keywords: [${w.designKeywords.none.join(", ")}]`);
-    if (w?.traits?.any?.length) parts.push(`traits match: [${w.traits.any.join(", ")}]`);
-    if (w?.traits?.none?.length) parts.push(`traits exclude: [${w.traits.none.join(", ")}]`);
-    if (w?.journeyStages?.any?.length) parts.push(`journey stages match: [${w.journeyStages.any.join(", ")}]`);
-    if (w?.journeyStages?.none?.length) parts.push(`journey stages exclude: [${w.journeyStages.none.join(", ")}]`);
-    if (w?.productTypes?.any?.length) parts.push(`for product types: [${w.productTypes.any.join(", ")}]`);
-    return `- ${parts.join(" | ")}`;
-  }).join("\n");
+  const skillList = candidates
+    .map((c) => {
+      const w = c.when;
+      const parts = [`id: "${c.id}"`];
+      if (c.notes) parts.push(`description: ${c.notes}`);
+      if (w?.designKeywords?.any?.length) parts.push(`matches keywords: [${w.designKeywords.any.join(", ")}]`);
+      if (w?.designKeywords?.none?.length) parts.push(`excludes keywords: [${w.designKeywords.none.join(", ")}]`);
+      if (w?.traits?.any?.length) parts.push(`traits match: [${w.traits.any.join(", ")}]`);
+      if (w?.traits?.none?.length) parts.push(`traits exclude: [${w.traits.none.join(", ")}]`);
+      if (w?.journeyStages?.any?.length) parts.push(`journey stages match: [${w.journeyStages.any.join(", ")}]`);
+      if (w?.journeyStages?.none?.length) parts.push(`journey stages exclude: [${w.journeyStages.none.join(", ")}]`);
+      if (w?.productTypes?.any?.length) parts.push(`for product types: [${w.productTypes.any.join(", ")}]`);
+      return `- ${parts.join(" | ")}`;
+    })
+    .join("\n");
 
-  const systemPrompt = `You may attach at most ONE optional "component skill" to a hero section. These skills prescribe heavy visual effects (canvas, lighting, etc.).
+  const systemPrompt = `Select at most ONE component skill for this hero section.
 
-Default behavior: **do not select any skill** — use {"skillId": null} unless the section clearly needs that specific effect recipe.
+Rules:
+1. If user intent clearly asks for a concrete visual effect (e.g. particle text, glow lighting, dashboard hero), choose the matching skill.
+2. If there is no clear effect intent, return {"skillId": null}.
+3. Do not use fallback thinking. Pick only when there is explicit or strongly implied alignment.
+4. Prefer precision over novelty.
 
-Only set skillId when ALL of the following hold:
-1. The section intent, content hints, and design keywords align **strongly** with that skill's description and its "matches keywords / traits / journey stages" triggers (semantic match counts).
-2. A generic hero from the design system alone would **not** satisfy the stated visual direction (e.g. particle text, spotlight, dashboard chrome).
-3. Exactly one skill is the best fit. If two or more are plausible, prefer {"skillId": null}.
+Return JSON only: {"skillId":"<id>"|null}`;
 
-Never pick a skill "just in case" or to fill the slot.
+  const userMessage = `Section intent: ${context.intent}
+Section content hints: ${context.contentHints}
+Design keywords: ${context.designKeywords.join(", ")}
+Product type: ${context.productType}
+Journey stage: ${context.journeyStage ?? ""}
+Original user request: ${context.rawUserInput ?? ""}
 
-Respond with JSON only: {"skillId": "<id>" | null}`;
-
-  const journeyLine = context.journeyStage?.trim()
-    ? `- Journey Stage (page): ${context.journeyStage}\n`
-    : "";
-
-  const userMessage = `## Section
-- Intent: ${context.intent}
-- Content Hints: ${context.contentHints}
-- Design Keywords: ${context.designKeywords.join(", ")}
-- Product Type: ${context.productType}
-${journeyLine}
-## Candidate Skills
+Candidate skills:
 ${skillList}`;
 
   try {
@@ -143,24 +205,16 @@ ${skillList}`;
       systemPrompt,
       userMessage,
       0,
-      1024,
+      128,
       getModelForStep("preselect_skills")
     );
     const parsed = JSON.parse(extractJSON(raw)) as { skillId?: string | null };
-    if (parsed.skillId === null || parsed.skillId === undefined) {
-      return null;
-    }
     const id = typeof parsed.skillId === "string" ? parsed.skillId.trim() : "";
-    if (id === "") {
-      return null;
-    }
-    if (candidates.some((c) => c.id === id)) {
-      return id;
-    }
+    if (!id) return null;
+    return candidates.some((c) => c.id === id) ? id : null;
   } catch {
-    // LLM failed — abstain
+    return null;
   }
-  return null;
 }
 
 async function discoverAndSelectSkill(
@@ -186,9 +240,19 @@ async function discoverAndSelectSkill(
     .map((c) => `- **${c.id}** (priority: ${c.priority}${c.fallback ? ", fallback" : ""}): ${c.notes || "no description"}`)
     .join("\n");
 
+  const deterministic = chooseSkillDeterministically(candidates, context);
+  if (deterministic.skillId && deterministic.strong) {
+    console.log(`[skill-select] deterministic strong match "${deterministic.skillId}" for ${sectionType}`);
+    return {
+      skillId: deterministic.skillId,
+      skillPrompt: loadSkillPrompt(deterministic.skillId),
+      skillMetadataBlock: metadataBlock,
+    };
+  }
+
   const llmChoice = await llmSelectSkill(candidates, context);
   if (llmChoice) {
-    console.log(`[skill-select] LLM chose "${llmChoice}" for ${sectionType}`);
+    console.log(`[skill-select] llm choice "${llmChoice}" for ${sectionType}`);
     return {
       skillId: llmChoice,
       skillPrompt: loadSkillPrompt(llmChoice),
@@ -196,7 +260,7 @@ async function discoverAndSelectSkill(
     };
   }
 
-  console.log(`[skill-select] No component skill (abstain) for ${sectionType}`);
+  console.log(`[skill-select] No component skill selected for ${sectionType}`);
   return { skillId: null, skillPrompt: "", skillMetadataBlock: "" };
 }
 
@@ -420,6 +484,7 @@ export async function stepGenerateSection(params: GenerateSectionParams): Promis
       designKeywords: projectContext.designKeywords,
       productType: projectContext.productScope.productType,
       journeyStage: pageContext?.journeyStage,
+      rawUserInput: projectContext.rawUserInput,
     }, section)
     : { skillId: null, skillPrompt: "", skillMetadataBlock: "" };
 

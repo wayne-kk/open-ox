@@ -15,6 +15,7 @@ import { join } from "path";
 import matter from "gray-matter";
 
 const NOTES_MAX_LENGTH = 80;
+const _skillDiscoveryCache = new Map<string, SkillMetadata[]>();
 
 export interface SkillWhenCondition {
   designKeywords?: { any: string[]; none: string[] };
@@ -66,6 +67,11 @@ function parseSkillMetadata(raw: Record<string, unknown>, id: string): SkillMeta
  * 仅包含有 id 且 id 非空的 skill
  */
 export function discoverSkills(rootPath: string): SkillMetadata[] {
+  const cached = _skillDiscoveryCache.get(rootPath);
+  if (cached) {
+    return [...cached];
+  }
+
   if (!existsSync(rootPath)) {
     return [];
   }
@@ -111,7 +117,8 @@ export function discoverSkills(rootPath: string): SkillMetadata[] {
     result.push(parseSkillMetadata(frontmatter, id));
   }
 
-  return result;
+  _skillDiscoveryCache.set(rootPath, result);
+  return [...result];
 }
 
 /**

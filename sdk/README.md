@@ -29,7 +29,32 @@ console.log(result.generatedFiles);    // ["app/page.tsx", ...]
 console.log(result.verificationStatus); // "passed"
 ```
 
-就这么多。SDK 内置了项目模板、prompt 模板和生成引擎，你只需要提供一个 OpenAI 兼容的 API Key。
+SDK 内置了项目模板、prompt 模板和生成引擎。你只需要提供一个 OpenAI 兼容的 API Key。
+
+## 依赖管理
+
+生成的项目需要 `next`、`react`、`tailwind` 等依赖才能构建验证。SDK 自动处理：
+
+**首次生成**：自动运行 `npm install`，完成后缓存 `node_modules` 到 `outputDir/_node_modules_cache/`。
+
+**后续生成**：自动 symlink 缓存的 `node_modules`，秒级完成。
+
+**高频使用**：预装一个模板目录，所有项目共享：
+
+```bash
+# 一次性准备
+mkdir my-template && cd my-template
+npm init -y
+npm install next@16 react@19 react-dom@19 tailwindcss@4 @tailwindcss/postcss typescript @types/react @types/node
+```
+
+```ts
+const client = new OpenOxClient({
+  apiKey: "...",
+  outputDir: "./projects",
+  templateDir: "./my-template",  // 所有项目共享这个 node_modules
+});
+```
 
 ## 配置
 
@@ -39,21 +64,29 @@ const client = new OpenOxClient({
   apiKey: "sk-...",
   outputDir: "./projects",
 
-  // 可选
+  // 可选：LLM
   baseURL: "https://api.openai.com/v1",  // 支持任何 OpenAI 兼容网关
   model: "gpt-4o",                        // 默认模型（默认 gpt-4o-mini）
 
   // 可选：每个步骤用不同模型
   stepModels: {
-    analyze_project_requirement: "gpt-4o",     // 需求分析用强模型
-    generate_section: "gpt-4o-mini",           // 组件生成用快模型
-    repair_build: "gpt-4o",                    // 修复用强模型
+    analyze_project_requirement: "gpt-4o",
+    generate_section: "gpt-4o-mini",
+    repair_build: "gpt-4o",
   },
 
-  // 可选：推理深度（支持 thinking 的模型）
+  // 可选：推理深度
   stepThinkingLevels: {
     plan_project: "high",
   },
+
+  // 可选：AI 图片生成（火山引擎 Ark）
+  imageApiKey: "ark-...",
+  imageBaseURL: "https://ark.cn-beijing.volces.com/api/v3",
+  imageModel: "doubao-seedream-4-0-250828",
+
+  // 可选：预装模板目录（跳过 npm install）
+  templateDir: "./my-template",
 });
 ```
 
@@ -84,11 +117,11 @@ const result = await client.generate({
 ## 返回值
 
 ```ts
-interface GenerateProjectResult {
+{
   success: boolean;
   projectId: string;                     // 生成的项目 ID
   projectPath: string;                   // 项目绝对路径
-  verificationStatus: "passed"|"failed"; // 构建是否通过
+  verificationStatus: "passed"|"failed"; // next build 是否通过
   generatedFiles: string[];              // 生成的文件列表
   blueprint: PlannedProjectBlueprint;    // 项目蓝图
   steps: BuildStep[];                    // 步骤执行记录
@@ -97,23 +130,24 @@ interface GenerateProjectResult {
 }
 ```
 
-## 实时进度
+## 构建验证与自动修复
+
+SDK 生成代码后会自动：
+
+1. 运行 `next build` 验证项目能否构建
+2. 如果构建失败，LLM 分析错误日志并自动修复代码
+3. 再次构建验证
+4. 结果写入 `verificationStatus`
+
+整个过程通过 `onStep` 回调实时推送：
 
 ```ts
-client.generate({
-  prompt: "...",
-  onStep: (step) => {
-    // step.step     = "analyze_project_requirement"
-    // step.status   = "ok" | "error" | "active"
-    // step.duration = 3200 (ms)
-    // step.detail   = "3 pages, 12 sections"
-  },
-});
+onStep({ step: "run_build", status: "error", detail: "Type error in HeroSection.tsx" })
+onStep({ step: "repair_build", status: "active", detail: "Fixing..." })
+onStep({ step: "run_build", status: "ok", detail: "Build passed" })
 ```
 
 ## 输出目录结构
-
-生成的项目是一个完整的 Next.js 项目：
 
 ```
 projects/proj_xxx/
@@ -127,41 +161,12 @@ projects/proj_xxx/
 ├── public/images/       # AI 生成的图片
 ├── design-system.md
 ├── tailwind.config.ts
-└── package.json
-```
-
-生成完成后，进入目录安装依赖即可运行：
-
-```bash
-cd projects/proj_xxx
-npm install
-npm run dev
-```
-
-## Python 使用
-
-SDK 是 Node.js 包，Python 可以通过子进程调用：
-
-```python
-import subprocess, json
-
-result = subprocess.run(
-    ["node", "-e", """
-    const { OpenOxClient } = require("@open-ox/sdk");
-    const client = new OpenOxClient({
-      apiKey: process.env.OPENAI_API_KEY,
-      outputDir: "./projects",
-    });
-    client.generate({ prompt: "A coffee shop website" })
-      .then(r => console.log(JSON.stringify(r)))
-      .catch(e => console.error(e));
-    """],
-    capture_output=True, text=True
-)
-print(json.loads(result.stdout))
+├── package.json
+└── node_modules/        # symlink 到缓存
 ```
 
 ## 要求
 
 - Node.js >= 18
 - OpenAI 兼容的 API Key
+- npm（用于自动安装项目依赖）
