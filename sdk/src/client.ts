@@ -75,6 +75,37 @@ function validateConfig(config: OpenOxClientConfig): void {
   }
 }
 
+/** Safe directory segment under outputDir (no path separators or ".."). */
+function resolveProjectId(explicit: string | undefined): string {
+  if (explicit !== undefined && explicit.trim() !== "") {
+    const id = explicit.trim();
+    if (!/^[a-zA-Z0-9._-]+$/.test(id)) {
+      throw new Error("OpenOxClient: projectId may only contain letters, digits, ., _, -");
+    }
+    return id;
+  }
+  return `proj_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+async function listFilesUnderDir(rootDir: string): Promise<string[]> {
+  const path = await import("path");
+  const fs = await import("fs/promises");
+  const out: string[] = [];
+  async function walk(current: string): Promise<void> {
+    const entries = await fs.readdir(current, { withFileTypes: true });
+    for (const e of entries) {
+      const full = path.join(current, e.name);
+      if (e.isDirectory()) {
+        await walk(full);
+      } else {
+        out.push(path.relative(rootDir, full).split(path.sep).join("/"));
+      }
+    }
+  }
+  await walk(rootDir);
+  return out.sort();
+}
+
 /**
  * Open OX SDK — generate complete Next.js projects from natural language.
  *
@@ -108,7 +139,7 @@ export class OpenOxClient {
     const { join } = await import("path");
     const { mkdirSync, existsSync } = await import("fs");
 
-    const projectId = `proj_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    const projectId = resolveProjectId(options.projectId);
     const projectPath = join(this.config.outputDir, projectId);
 
     if (!existsSync(projectPath)) {
@@ -144,15 +175,15 @@ export class OpenOxClient {
     try {
       // 5. Run generation
       const { runGenerateProject } = await import("./engine/flows/generate_project/runGenerateProject");
+      const { withPromptProfile } = await import("./engine/prompts/core/profile");
+      const profile = options.mode === "app" ? "app" : "web";
 
-      const result = await runGenerateProject(
-        options.prompt,
-        options.onStep,
-        {
+      const result = await withPromptProfile(profile, () =>
+        runGenerateProject(options.prompt, options.onStep, {
           projectId,
           styleGuide: options.styleGuide,
           enableSkills: false,
-        }
+        })
       );
 
       return {
@@ -173,6 +204,35 @@ export class OpenOxClient {
    */
   getProjectPath(projectId: string): string {
     return `${this.config.outputDir}/${projectId}`;
+  }
+
+  /**
+   * List relative file paths under the project directory (recursive).
+   * Returns an empty array if the project directory does not exist.
+   */
+  async listProjectFiles(projectId: string): Promise<string[]> {
+    const path = await import("path");
+    const { existsSync } = await import("fs");
+    const root = path.join(this.config.outputDir, projectId);
+    if (!existsSync(root)) {
+      return [];
+    }
+    return listFilesUnderDir(root);
+  }
+
+  /**
+   * Read a UTF-8 file from the project directory. `relativePath` is relative to the project root.
+   */
+  async readProjectFile(projectId: string, relativePath: string): Promise<string> {
+    const path = await import("path");
+    const fs = await import("fs/promises");
+    const root = path.resolve(this.config.outputDir, projectId);
+    const target = path.resolve(root, relativePath);
+    const rel = path.relative(root, target);
+    if (rel.startsWith("..") || path.isAbsolute(rel)) {
+      throw new Error("OpenOxClient: invalid file path");
+    }
+    return fs.readFile(target, "utf-8");
   }
 
   private setupEnv(projectPath: string) {

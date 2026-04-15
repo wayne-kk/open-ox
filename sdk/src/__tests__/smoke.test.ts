@@ -39,16 +39,12 @@ describe("SDK smoke test", () => {
 
   it("client + adapters wire up correctly", async () => {
     const { OpenOxClient } = await import("../client");
-    const { createNodeAdapters } = await import("../adapters");
 
     const client = new OpenOxClient({
-      llm: {
-        apiKey: "sk-test-not-real",
-        model: "gpt-4o",
-        stepModels: { analyze_project_requirement: "gpt-4o-mini" },
-      },
-      projectsRoot: "/tmp/sdk-smoke-test",
-      ...createNodeAdapters(),
+      apiKey: "sk-test-not-real",
+      outputDir: "/tmp/sdk-smoke-test",
+      model: "gpt-4o",
+      stepModels: { analyze_project_requirement: "gpt-4o-mini" },
     });
 
     expect(client).toBeDefined();

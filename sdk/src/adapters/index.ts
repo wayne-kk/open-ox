@@ -17,9 +17,8 @@ export interface NodeAdapters {
  * @example
  * ```ts
  * const client = new OpenOxClient({
- *   llm: { apiKey: "sk-..." },
- *   projectsRoot: "./projects",
- *   ...createNodeAdapters(),
+ *   apiKey: "sk-...",
+ *   outputDir: "./projects",
  * });
  * ```
  */

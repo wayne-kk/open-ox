@@ -10,9 +10,8 @@
  * import { createNodeAdapters, createHttpServer } from "@open-ox/sdk/server";
  *
  * const client = new OpenOxClient({
- *   llm: { apiKey: process.env.OPENAI_API_KEY! },
- *   projectsRoot: "./projects",
- *   ...createNodeAdapters(),
+ *   apiKey: process.env.OPENAI_API_KEY!,
+ *   outputDir: "./projects",
  * });
  *
  * const server = createHttpServer(client, { port: 3100 });
@@ -113,6 +112,7 @@ async function handleGenerate(
 
   const result = await client.generate({
     prompt,
+    projectId,
     styleGuide,
     mode,
     onStep: (step) => {
@@ -132,14 +132,9 @@ async function handleModify(
   sendJson(res, 501, { error: "Modify is not yet supported in SDK mode" });
 }
 
-async function handleListFiles(
-  _client: OpenOxClient,
-  projectId: string,
-  res: ServerResponse
-): Promise<void> {
-  // In HTTP-client mode, the SDK doesn't have local file access.
-  // This endpoint is a pass-through placeholder.
-  sendJson(res, 200, { projectId, files: [] });
+async function handleListFiles(client: OpenOxClient, projectId: string, res: ServerResponse): Promise<void> {
+  const files = await client.listProjectFiles(projectId);
+  sendJson(res, 200, { projectId, files });
 }
 
 // ─── Utilities ───────────────────────────────────────────────────────────────

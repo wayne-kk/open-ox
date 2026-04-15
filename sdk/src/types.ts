@@ -90,6 +90,11 @@ export type PromptKind =
 export interface GenerateProjectOptions {
   /** User's natural language description of the project */
   prompt: string;
+  /**
+   * Directory name under `outputDir` for this generation.
+   * If omitted, a unique id is generated automatically.
+   */
+  projectId?: string;
   /** Style guide text to influence design system generation */
   styleGuide?: string;
   /** Generation mode: "web" for website, "app" for application */

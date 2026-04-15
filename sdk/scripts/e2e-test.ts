@@ -27,7 +27,6 @@ async function main() {
 
   // Dynamic imports to test the SDK entry points
   const { OpenOxClient } = await import("../src/client");
-  const { createNodeAdapters } = await import("../src/adapters");
 
   const projectsRoot = join(process.cwd(), ".sdk-e2e-test-output");
   const projectId = `e2e_${Date.now()}`;
@@ -42,13 +41,10 @@ async function main() {
   console.log("═══════════════════════════════════════════\n");
 
   const client = new OpenOxClient({
-    llm: {
-      apiKey,
-      baseURL: process.env.OPENAI_API_URL,
-      model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
-    },
-    projectsRoot,
-    ...createNodeAdapters(),
+    apiKey,
+    baseURL: process.env.OPENAI_API_URL,
+    model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+    outputDir: projectsRoot,
   });
 
   console.log(`Project ID:   ${projectId}`);
@@ -66,7 +62,7 @@ async function main() {
   const startTime = Date.now();
 
   try {
-    const result = await client.generateProject({
+    const result = await client.generate({
       prompt,
       projectId,
       mode: "web",

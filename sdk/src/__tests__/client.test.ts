@@ -1,50 +1,14 @@
 /**
  * Unit tests for OpenOxClient
  *
- * These tests verify the SDK's public API surface using mocked adapters.
- * No real LLM calls or file system access.
+ * Validates config, path helpers, and filesystem helpers without calling the LLM.
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "fs";
+import { join } from "path";
+import { tmpdir } from "os";
 import { OpenOxClient } from "../client";
-import type { FileSystem, ShellExecutor } from "../types";
-
-// ─── Mock Adapters ───────────────────────────────────────────────────────────
-
-function createMockFileSystem(): FileSystem {
-  const store = new Map<string, string>();
-  return {
-    readFile: vi.fn(async (path: string) => {
-      const content = store.get(path);
-      if (!content) throw new Error(`ENOENT: ${path}`);
-      return content;
-    }),
-    writeFile: vi.fn(async (path: string, content: string) => {
-      store.set(path, content);
-    }),
-    exists: vi.fn(async (path: string) => store.has(path)),
-    mkdir: vi.fn(async () => {}),
-    readdir: vi.fn(async (path: string) => {
-      const prefix = path.endsWith("/") ? path : path + "/";
-      return Array.from(store.keys())
-        .filter((k) => k.startsWith(prefix))
-        .map((k) => k.slice(prefix.length).split("/")[0])
-        .filter((v, i, a) => a.indexOf(v) === i);
-    }),
-    unlink: vi.fn(async (path: string) => {
-      store.delete(path);
-    }),
-    tryReadFile: vi.fn(async (path: string) => store.get(path) ?? null),
-  };
-}
-
-function createMockShellExecutor(): ShellExecutor {
-  return {
-    exec: vi.fn(async () => ({ stdout: "", stderr: "", exitCode: 0 })),
-  };
-}
-
-// ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe("OpenOxClient", () => {
   describe("constructor validation", () => {
@@ -52,28 +16,26 @@ describe("OpenOxClient", () => {
       expect(
         () =>
           new OpenOxClient({
-            llm: { apiKey: "" },
-            projectsRoot: "./projects",
+            apiKey: "",
+            outputDir: "./projects",
           })
-      ).toThrow("llm.apiKey is required");
+      ).toThrow("OpenOxClient: apiKey is required");
     });
 
-    it("throws if projectsRoot is missing", () => {
+    it("throws if outputDir is missing", () => {
       expect(
         () =>
           new OpenOxClient({
-            llm: { apiKey: "sk-test" },
-            projectsRoot: "",
+            apiKey: "sk-test",
+            outputDir: "",
           })
-      ).toThrow("projectsRoot is required");
+      ).toThrow("OpenOxClient: outputDir is required");
     });
 
     it("creates client with valid config", () => {
       const client = new OpenOxClient({
-        llm: { apiKey: "sk-test" },
-        projectsRoot: "./projects",
-        fileSystem: createMockFileSystem(),
-        shellExecutor: createMockShellExecutor(),
+        apiKey: "sk-test",
+        outputDir: "./projects",
       });
       expect(client).toBeDefined();
     });
@@ -82,8 +44,8 @@ describe("OpenOxClient", () => {
   describe("getProjectPath", () => {
     it("returns correct path", () => {
       const client = new OpenOxClient({
-        llm: { apiKey: "sk-test" },
-        projectsRoot: "./generated-projects",
+        apiKey: "sk-test",
+        outputDir: "./generated-projects",
       });
       expect(client.getProjectPath("abc123")).toBe("./generated-projects/abc123");
     });
@@ -91,48 +53,54 @@ describe("OpenOxClient", () => {
 
   describe("listProjectFiles", () => {
     it("returns empty array if project does not exist", async () => {
-      const fs = createMockFileSystem();
-      const client = new OpenOxClient({
-        llm: { apiKey: "sk-test" },
-        projectsRoot: "./projects",
-        fileSystem: fs,
-      });
-      const files = await client.listProjectFiles("nonexistent");
-      expect(files).toEqual([]);
-    });
-
-    it("throws if fileSystem is not provided", async () => {
-      const client = new OpenOxClient({
-        llm: { apiKey: "sk-test" },
-        projectsRoot: "./projects",
-      });
-      await expect(client.listProjectFiles("test")).rejects.toThrow("fileSystem adapter required");
+      const dir = mkdtempSync(join(tmpdir(), "ox-sdk-list-"));
+      try {
+        const client = new OpenOxClient({
+          apiKey: "sk-test",
+          outputDir: dir,
+        });
+        const files = await client.listProjectFiles("nonexistent");
+        expect(files).toEqual([]);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
     });
   });
 
   describe("readProjectFile", () => {
-    it("reads file through fileSystem adapter", async () => {
-      const fs = createMockFileSystem();
-      await fs.writeFile("./projects/proj1/index.tsx", "export default function Home() {}");
+    it("reads file from project directory", async () => {
+      const dir = mkdtempSync(join(tmpdir(), "ox-sdk-read-"));
+      try {
+        mkdirSync(join(dir, "proj1"), { recursive: true });
+        writeFileSync(join(dir, "proj1", "index.tsx"), "export default function Home() {}");
 
-      const client = new OpenOxClient({
-        llm: { apiKey: "sk-test" },
-        projectsRoot: "./projects",
-        fileSystem: fs,
-      });
+        const client = new OpenOxClient({
+          apiKey: "sk-test",
+          outputDir: dir,
+        });
 
-      const content = await client.readProjectFile("proj1", "index.tsx");
-      expect(content).toBe("export default function Home() {}");
+        const content = await client.readProjectFile("proj1", "index.tsx");
+        expect(content).toBe("export default function Home() {}");
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
     });
 
     it("throws for missing file", async () => {
-      const fs = createMockFileSystem();
-      const client = new OpenOxClient({
-        llm: { apiKey: "sk-test" },
-        projectsRoot: "./projects",
-        fileSystem: fs,
-      });
-      await expect(client.readProjectFile("proj1", "missing.tsx")).rejects.toThrow("ENOENT");
+      const dir = mkdtempSync(join(tmpdir(), "ox-sdk-read-miss-"));
+      try {
+        mkdirSync(join(dir, "proj1"), { recursive: true });
+
+        const client = new OpenOxClient({
+          apiKey: "sk-test",
+          outputDir: dir,
+        });
+        await expect(client.readProjectFile("proj1", "missing.tsx")).rejects.toMatchObject({
+          code: "ENOENT",
+        });
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
     });
   });
 });

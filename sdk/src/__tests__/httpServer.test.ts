@@ -13,7 +13,7 @@ import type { OpenOxClient } from "../client";
 
 function createMockClient(): OpenOxClient {
   return {
-    generateProject: async (options: any) => {
+    generate: async (options: any) => {
       // Simulate calling onStep
       options.onStep?.({
         step: "test_step",
