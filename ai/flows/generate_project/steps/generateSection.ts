@@ -17,12 +17,7 @@ import {
   discoverSkillsBySectionType,
 } from "../../../shared/skillDiscovery";
 import type {
-  CapabilitySpec,
   GuardrailId,
-  PageDesignPlan,
-  ProductScope,
-  TaskLoop,
-  UserRole,
   PlannedSectionSpec,
   StepTrace,
 } from "../types";
@@ -46,10 +41,6 @@ type GenerateSectionProjectContext = {
   projectDescription: string;
   language: string;
   rawUserInput?: string;
-  productScope: ProductScope;
-  roles: UserRole[];
-  taskLoops: TaskLoop[];
-  capabilities: CapabilitySpec[];
   pages: Array<{
     slug: string;
     title: string;
@@ -64,9 +55,6 @@ type GenerateSectionPageContext = {
   slug: string;
   description: string;
   journeyStage: string;
-  primaryRoleIds: string[];
-  supportingCapabilityIds: string[];
-  pageDesignPlan: PageDesignPlan;
 };
 
 // ── Skill Discovery (runtime, per-section) ──────────────────────────────
@@ -306,61 +294,20 @@ function buildSystemPrompt(params: {
 
 // ── Formatting Helpers ──────────────────────────────────────────────────
 
-function formatRolesBlock(roles: UserRole[]) {
-  return roles
-    .map((r) => `- ${r.roleName} (${r.roleId}): ${r.summary}\n  - Goals: ${r.goals.join(" | ")}\n  - Core Actions: ${r.coreActions.join(" | ")}`)
-    .join("\n");
-}
-
-function formatTaskLoopsBlock(taskLoops: TaskLoop[]) {
-  return taskLoops
-    .map((l) => `- ${l.name} (${l.loopId})\n  - Role: ${l.roleId}\n  - Trigger: ${l.entryTrigger}\n  - Steps: ${l.steps.join(" -> ")}\n  - Success: ${l.successState}`)
-    .join("\n");
-}
-
-function formatCapabilitiesBlock(capabilities: CapabilitySpec[]) {
-  return capabilities
-    .map((c) => `- ${c.name} (${c.capabilityId})\n  - Summary: ${c.summary}\n  - Roles: ${c.primaryRoleIds.join(", ") || "none"}`)
-    .join("\n");
-}
-
 function formatKnownRoutesBlock(pages: GenerateSectionProjectContext["pages"]) {
   return pages
-    .map((p) => `- ${p.title} (${p.slug}): ${p.slug === "home" ? "/" : `/${p.slug}`} — ${p.description} [${p.journeyStage}]`)
+    .map((p) => `- ${p.title}: ${p.slug === "home" ? "/" : `/${p.slug}`}`)
     .join("\n");
-}
-
-function filterRelevantRoles(section: PlannedSectionSpec, ctx: GenerateSectionProjectContext, page?: GenerateSectionPageContext) {
-  const ids = new Set([...section.primaryRoleIds, ...(page?.primaryRoleIds ?? [])]);
-  return ctx.roles.filter((r) => ids.has(r.roleId));
-}
-
-function filterRelevantTaskLoops(section: PlannedSectionSpec, ctx: GenerateSectionProjectContext) {
-  const ids = new Set(section.sourceTaskLoopIds);
-  return ctx.taskLoops.filter((l) => ids.has(l.loopId));
-}
-
-function filterRelevantCapabilities(section: PlannedSectionSpec, ctx: GenerateSectionProjectContext, page?: GenerateSectionPageContext) {
-  const ids = new Set([...section.supportingCapabilityIds, ...(page?.supportingCapabilityIds ?? [])]);
-  return ctx.capabilities.filter((c) => ids.has(c.capabilityId));
 }
 
 function buildPageContextBlock(pageContext?: GenerateSectionPageContext) {
   if (!pageContext) {
     return `## Page Context\nThis is a shared layout section. Design it to work coherently across the whole project.`;
   }
-  const p = pageContext.pageDesignPlan;
   return `## Page Context
 - **Title**: ${pageContext.title}
 - **Route**: ${pageContext.slug === "home" ? "/" : `/${pageContext.slug}`}
-- **Description**: ${pageContext.description}
-- **Journey Stage**: ${pageContext.journeyStage}
-
-## Page Design Plan
-- **Page Goal**: ${p.pageGoal}
-- **Narrative Arc**: ${p.narrativeArc}
-- **Layout Strategy**: ${p.layoutStrategy}
-- **Hierarchy**: ${p.hierarchy.join(" | ")}`;
+- **Description**: ${pageContext.description}`;
 }
 
 // ── User Message ────────────────────────────────────────────────────────
@@ -374,9 +321,6 @@ function buildUserMessage(params: {
   sectionDesignBrief: string;
 }) {
   const { designSystem, projectContext, pageContext, section, skillMetadataBlock, sectionDesignBrief } = params;
-  const roles = filterRelevantRoles(section, projectContext, pageContext);
-  const loops = filterRelevantTaskLoops(section, projectContext);
-  const caps = filterRelevantCapabilities(section, projectContext, pageContext);
 
   return `## Design System
 ${designSystem}
@@ -408,18 +352,6 @@ The design system above is the single source of truth. A separate build step con
 - **Project**: ${projectContext.projectTitle}
 - **Description**: ${projectContext.projectDescription}
 - **Language**: ${projectContext.language} — ⚠️ CRITICAL: ALL user-facing text (headlines, buttons, copy, labels, alt text) MUST be written in this language. Do NOT mix with other languages. Skill examples showing English text are structural only — replace with real ${projectContext.language} content.
-- **Product Type**: ${projectContext.productScope.productType}
-- **Core Outcome**: ${projectContext.productScope.coreOutcome}
-- **Business Goal**: ${projectContext.productScope.businessGoal}
-
-## Roles
-${formatRolesBlock(roles) || "- none"}
-
-## Task Loops
-${formatTaskLoopsBlock(loops) || "- none"}
-
-## Capabilities
-${formatCapabilitiesBlock(caps) || "- none"}
 
 ## Known Routes
 **These are the ONLY valid routes. Navigation must use exactly these routes.**
@@ -432,8 +364,6 @@ ${buildPageContextBlock(pageContext)}
 - **Component Name**: ${section.fileName}
 - **Intent**: ${section.intent}
 - **Content Hints**: ${section.contentHints}
-- **Primary Roles**: ${section.primaryRoleIds.join(", ") || "none"}
-- **Supporting Capabilities**: ${section.supportingCapabilityIds.join(", ") || "none"}
 
 ## Section Design Brief
 ${sectionDesignBrief}
@@ -442,7 +372,7 @@ ${skillMetadataBlock ? `## Available Component Skills\nThe following skills are 
 
 Generate the complete ${section.fileName}.tsx component.
 Use the design system and project context to make all design decisions (layout, visual style, motion, interaction). Apply the Tailwind CSS mapping rules above to translate design tokens into utility classes.
-The Section Design Brief above is your primary visual guidance — follow its layout, background, and atmosphere direction closely.`;
+The Section Design Brief above is your primary visual guidance — follow its background, and atmosphere direction closely.`;
 }
 
 // ── Validation ──────────────────────────────────────────────────────────
@@ -482,7 +412,7 @@ export async function stepGenerateSection(params: GenerateSectionParams): Promis
       intent: section.intent,
       contentHints: section.contentHints,
       designKeywords: projectContext.designKeywords,
-      productType: projectContext.productScope.productType,
+      productType: "",
       journeyStage: pageContext?.journeyStage,
       rawUserInput: projectContext.rawUserInput,
     }, section)

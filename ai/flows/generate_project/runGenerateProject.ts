@@ -143,10 +143,6 @@ function buildProjectRuntimeContext(blueprint: PlannedProjectBlueprint): Project
     projectTitle: blueprint.brief.projectTitle,
     projectDescription: blueprint.brief.projectDescription,
     language: blueprint.brief.language ?? "en",
-    productScope: blueprint.brief.productScope,
-    roles: blueprint.brief.roles,
-    taskLoops: blueprint.brief.taskLoops,
-    capabilities: blueprint.brief.capabilities,
     pages: blueprint.site.pages.map((page) => ({
       slug: page.slug,
       title: page.title,
@@ -326,22 +322,22 @@ async function runSectionBatch(params: {
   }
 
   const results = await mapWithConcurrency(items, SECTION_PARALLELISM, (item) => {
-      const stepName = getSectionStepName(item.scopeKey, item.section.fileName);
-      logger.startStep(stepName);
-      const onMessage = trajectoryCollector
-        ? trajectoryCollector.createEpisodeCollector(`generate_section:${item.section.fileName}`)
-        : undefined;
-      return stepGenerateSection({
-        designSystem,
-        projectGuardrailIds: runtimeContext.projectGuardrailIds,
-        projectContext: runtimeContext,
-        section: item.section,
-        outputFileRelative: item.outputFileRelative,
-        pageContext: item.pageContext,
-        sectionDesignBriefOverride: item.sectionDesignBriefOverride,
-        onMessage,
-      });
-    }
+    const stepName = getSectionStepName(item.scopeKey, item.section.fileName);
+    logger.startStep(stepName);
+    const onMessage = trajectoryCollector
+      ? trajectoryCollector.createEpisodeCollector(`generate_section:${item.section.fileName}`)
+      : undefined;
+    return stepGenerateSection({
+      designSystem,
+      projectGuardrailIds: runtimeContext.projectGuardrailIds,
+      projectContext: runtimeContext,
+      section: item.section,
+      outputFileRelative: item.outputFileRelative,
+      pageContext: item.pageContext,
+      sectionDesignBriefOverride: item.sectionDesignBriefOverride,
+      onMessage,
+    });
+  }
   );
 
   const generatedFiles: string[] = [];
@@ -633,9 +629,6 @@ async function generatePages(params: {
               slug: page.slug,
               description: page.description,
               journeyStage: page.journeyStage,
-              primaryRoleIds: page.primaryRoleIds,
-              supportingCapabilityIds: page.supportingCapabilityIds,
-              pageDesignPlan: page.pageDesignPlan,
             },
           })),
           designSystem,

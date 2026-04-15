@@ -73,34 +73,12 @@ ${blueprint.description}
 
 ## Product Mapping
 - **Journey Stage**: ${blueprint.journeyStage}
-- **Primary Roles**: ${blueprint.primaryRoleIds.join(", ") || "none"}
-- **Supporting Capabilities**: ${blueprint.supportingCapabilityIds.join(", ") || "none"}
-
-## Page Design Plan
-- **Page Goal**: ${blueprint.pageDesignPlan.pageGoal}
-- **Narrative Arc**: ${blueprint.pageDesignPlan.narrativeArc}
-- **Layout Strategy**: ${blueprint.pageDesignPlan.layoutStrategy}
-- **Hierarchy**: ${blueprint.pageDesignPlan.hierarchy.join(" | ")}
-- **Page Constraints**:
-${blueprint.pageDesignPlan.constraints.map((constraint) => `  - ${constraint}`).join("\n")}
 
 ## Import Statements
 ${importStatements}
 
 ## Content Sections to Compose (in order, navigation and footer are in layout.tsx — do NOT include them)
 ${pageSections.map((section, index) => `${index + 1}. ${section.fileName}`).join("\n")}
-
-## Section Design Briefs
-${pageSections
-  .map(
-    (section) => `### ${section.fileName}
-- Type: ${section.type}
-- Intent: ${section.intent}
-- Content Hints: ${section.contentHints}
-- Primary Roles: ${section.primaryRoleIds.join(", ") || "none"}
-- Supporting Capabilities: ${section.supportingCapabilityIds.join(", ") || "none"}`
-  )
-  .join("\n\n")}
 
 ## Design System (tokens and tone — not a mandate for overlays)
 ${designSystem}

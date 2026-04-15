@@ -197,40 +197,7 @@ Shared base: [list shared Tailwind classes all buttons inherit]
 
 ## 4. Layout System
 
-### 4.1 Section Structure (Mandatory — Two-Layer)
-
-Every Section must use this exact two-layer structure:
-
-```tsx
-// Outer layer: background only, no content
-<section className="w-full bg-[token]">
-  // Inner layer: content container
-  <div className="container mx-auto px-8 py-20">
-    {/* content */}
-  </div>
-</section>
-```
-
-**Outer Layer rules**:
-
-- `w-full` only
-- Carries: background color / gradient / texture / image
-- Forbidden: `rounded-`*, `border`, `shadow`, `ring`, `p-`*, `m-*`
-
-**Inner Container rules**:
-
-- Default: `container mx-auto px-8 py-20`
-- Hero / strong visual sections: `py-24`
-- `**max-w-`* is absolutely forbidden** — including `max-w-sm/md/lg/xl/2xl/3xl/4xl/5xl/6xl/7xl`
-- No additional width-constraining wrappers inside
-
-Forbidden patterns (delete on sight):
-
-```
-max-w-3xl, max-w-xl mx-auto, max-w-4xl, max-w-screen-lg
-```
-
-### 4.2 Grid & Spacing
+### 4.1 Grid & Spacing
 
 - **Grid**: [desktop columns / tablet columns / mobile columns]
 - **Base spacing unit**: [e.g., 4px — describe how multiples are used]
@@ -325,5 +292,5 @@ These choices are mandatory. Each must be verifiable in the output code.
 - `clip-path / polygon()`: forbidden everywhere — no chamfered or custom clipping shapes
 - Output: Markdown document only, no explanation text
 - `H1` text size must never exceed `56px`.
-- **Section 布局**：必须采用双层结构（Outer Layer + Inner Container）；禁止 `max-w-`*。
+
 

@@ -23,45 +23,42 @@ export interface DescribePageSectionsParams {
 
 // ── Fallback ────────────────────────────────────────────────────────────
 
-function buildFallbackSectionBrief(section: PlannedSectionSpec): string {
-  return `围绕"${section.intent}"组织视觉路径。使用纯色背景，与相邻 Section 形成对比。标题区先行，核心内容紧随其后，保持清晰的信息层级。`;
+function buildFallbackBrief(section: PlannedSectionSpec, index: number): string {
+  // Alternate light/dark as a simple fallback
+  return index % 2 === 0
+    ? `背景色：使用设计系统中的浅色背景。明亮开阔。`
+    : `背景色：使用设计系统中的深一档背景。沉稳收敛。`;
 }
 
 // ── Markdown parsing ────────────────────────────────────────────────────
 
-function parseDesignMarkdown(
+function parseSectionBriefs(
   raw: string,
   sections: PlannedSectionSpec[]
 ): { pageStructure: string; briefs: Map<string, string> } {
   const briefs = new Map<string, string>();
   let pageStructure = "";
 
-  // Split by ## headings
-  const blocks = raw.split(/^##\s+/m).filter(Boolean);
+  const blocks = raw.split(/^#{2,3}\s+/m).filter(Boolean);
 
   for (const block of blocks) {
-    const lines = block.split("\n");
-    const heading = lines[0].trim();
-    const body = lines.slice(1).join("\n").trim();
+    const firstNewline = block.indexOf("\n");
+    if (firstNewline === -1) continue;
 
+    const heading = block.slice(0, firstNewline).trim();
+    const body = block.slice(firstNewline + 1).trim();
     if (!body) continue;
 
-    // Check if this heading matches page structure
     if (/页面整体|整体结构|page\s*structure/i.test(heading)) {
       pageStructure = body;
       continue;
     }
 
-    // Try to match heading to a section fileName
-    const matchedSection = sections.find(
-      (s) =>
-        heading === s.fileName ||
-        heading.startsWith(s.fileName) ||
-        heading.includes(s.fileName)
+    const matched = sections.find(
+      (s) => heading.includes(s.fileName) || heading.toLowerCase().includes(s.fileName.toLowerCase())
     );
-
-    if (matchedSection) {
-      briefs.set(matchedSection.fileName, body);
+    if (matched && !briefs.has(matched.fileName)) {
+      briefs.set(matched.fileName, body);
     }
   }
 
@@ -73,29 +70,22 @@ function parseDesignMarkdown(
 export async function stepDescribePageSections(
   params: DescribePageSectionsParams
 ): Promise<DescribePageSectionsResult> {
-  const { designSystem, language, page, sections } = params;
+  const { language, page, sections, designSystem } = params;
 
   const systemPrompt = loadStepPrompt("describePageSections");
 
   const sectionList = sections
-    .map(
-      (section, index) =>
-        `${index + 1}. ${section.fileName} (type=${section.type})\n   intent: ${section.intent}\n   contentHints: ${section.contentHints}`
-    )
+    .map((s, i) => `${i + 1}. ${s.fileName}`)
     .join("\n");
 
   const userMessage = `# 语言偏好
 ${language}
-
-# 设计系统（必须遵守配色和风格）
+# task 
+根据 designSystem 确定背景色策略
+# 页面: ${page.title} (/${page.slug})
+# designSystem: 
 ${designSystem}
-
-# 页面信息
-- 标题: ${page.title}
-- 描述: ${page.description}
-- 路由: /${page.slug}
-
-# 待设计 Section 列表（按页面顺序）
+# Section 列表（按页面顺序）
 ${sectionList}`;
 
   try {
@@ -107,42 +97,26 @@ ${sectionList}`;
       getModelForStep("describe_page_sections")
     );
 
-    const { pageStructure: parsedStructure, briefs } = parseDesignMarkdown(raw, sections);
+    const { pageStructure: parsed, briefs } = parseSectionBriefs(raw, sections);
 
-    const sectionDesigns: PageSectionDesignBrief[] = sections.map((section) => ({
+    const sectionDesigns: PageSectionDesignBrief[] = sections.map((section, i) => ({
       fileName: section.fileName,
       sectionType: section.type,
-      sectionDesignBrief: briefs.get(section.fileName) || buildFallbackSectionBrief(section),
+      sectionDesignBrief: briefs.get(section.fileName) || buildFallbackBrief(section, i),
     }));
 
-    const pageStructure =
-      parsedStructure.trim().length > 0
-        ? parsedStructure.trim()
-        : `${page.title} 页面采用清晰的信息分层与分段编排，按内容目标组织各 Section。`;
+    const pageStructure = parsed.trim() || `交替背景色，形成明暗节奏。`;
 
-    // Save to project directory for debugging
-    const outputDoc = [
-      `# Page Design: ${page.title} (/${page.slug})`,
-      "",
-      "## 页面整体结构",
-      pageStructure,
-      "",
-      ...sectionDesigns.map((d) => [
-        `## ${d.fileName} (${d.sectionType})`,
-        d.sectionDesignBrief,
-        "",
-      ]).flat(),
-    ].join("\n");
-    await writeSiteFile(`page-design-${page.slug}.md`, outputDoc);
+    await writeSiteFile(`page-design-${page.slug}.md`, raw);
 
     return { pageStructure, sectionDesigns };
   } catch {
     return {
-      pageStructure: `${page.title} 页面采用清晰的信息分层与分段编排，按内容目标组织各 Section。`,
-      sectionDesigns: sections.map((section) => ({
+      pageStructure: `交替背景色，形成明暗节奏。`,
+      sectionDesigns: sections.map((section, i) => ({
         fileName: section.fileName,
         sectionType: section.type,
-        sectionDesignBrief: buildFallbackSectionBrief(section),
+        sectionDesignBrief: buildFallbackBrief(section, i),
       })),
     };
   }

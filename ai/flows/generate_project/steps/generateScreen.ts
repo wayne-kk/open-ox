@@ -10,13 +10,12 @@ import {
 } from "../shared/files";
 import { callLLM, extractContent } from "../shared/llm";
 import { getModelForStep } from "@/lib/config/models";
-import type { AppScreenPlan, PlannedPageBlueprint, ProductScope } from "../types";
+import type { AppScreenPlan, PlannedPageBlueprint } from "../types";
 
 type ScreenProjectContext = {
   projectTitle: string;
   projectDescription: string;
   language: string;
-  productScope: ProductScope;
   designKeywords: string[];
   pages: Array<{
     slug: string;
@@ -72,11 +71,11 @@ function buildScreenPrompt(plan: AppScreenPlan | undefined): string {
 - Narrative: ${plan.narrative}
 - Regions:
 ${plan.regions
-  .map(
-    (region) =>
-      `  - ${region.id} [${region.priority}]: ${region.intent} | ${region.contentHints}`
-  )
-  .join("\n")}
+      .map(
+        (region) =>
+          `  - ${region.id} [${region.priority}]: ${region.intent} | ${region.contentHints}`
+      )
+      .join("\n")}
 - Interaction Model:
   - navigationStyle: ${plan.interactionModel.navigationStyle}
   - primaryActionModel: ${plan.interactionModel.primaryActionModel}
@@ -97,7 +96,6 @@ export async function stepGenerateScreen({
 }: GenerateScreenParams): Promise<{ filePath: string; skillIds: string[] }> {
   const skillIds = chooseScreenSkillIds(page.appScreenPlan, [
     ...projectContext.designKeywords,
-    projectContext.productScope.productType,
   ]);
   const skillBlock = skillIds.map((id) => loadSkillPrompt(id)).join("\n\n");
   const systemPrompt = composePromptBlocks([
@@ -115,9 +113,6 @@ export async function stepGenerateScreen({
 - Project: ${projectContext.projectTitle}
 - Description: ${projectContext.projectDescription}
 - Language: ${projectContext.language}
-- Product Type: ${projectContext.productScope.productType}
-- Core Outcome: ${projectContext.productScope.coreOutcome}
-- Business Goal: ${projectContext.productScope.businessGoal}
 
 ## Known Routes
 ${buildKnownRoutesBlock(projectContext.pages)}
