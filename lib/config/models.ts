@@ -109,6 +109,7 @@ export function isSectionSkillsEnabled(): boolean {
 /** Available generation steps that can have model overrides */
 export const GENERATION_STEPS = [
     { id: "analyze_project_requirement", label: "需求分析" },
+    { id: "infer_design_intent", label: "设计意图推断" },
     { id: "plan_project", label: "项目规划" },
     { id: "generate_project_design_system", label: "设计系统" },
     { id: "apply_project_design_tokens", label: "设计 Token" },

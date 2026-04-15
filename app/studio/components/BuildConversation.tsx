@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { AlertTriangle, CircleCheckBig, Play, Send, Wand2, RefreshCw } from "lucide-react";
 import { ChatBubble } from "./ui/ChatBubble";
@@ -12,6 +13,9 @@ import { MemoryDebugPanel } from "./MemoryDebugPanel";
 import { SlashMenu } from "@/app/components/ui/SlashMenu";
 import { useSlashMenu } from "@/app/hooks/useSlashMenu";
 import type { BuildStudioState, ModifyRecord, ModifyDiff } from "../hooks/useBuildStudio";
+import { inferMonacoLanguage } from "../lib/inferMonacoLanguage";
+
+const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
 function formatMs(ms: number): string {
     if (ms < 1000) return `${ms}ms`;
@@ -29,6 +33,157 @@ function buildFileTree(files: string[]): string {
 
 function buildIndentedList(values: string[]): string {
     return values.map((value) => `  - ${value}`).join("\n");
+}
+
+function GeneratedFilesPreview({
+    projectId,
+    files,
+}: {
+    projectId: string | null;
+    files: string[];
+}) {
+    const [selectedFile, setSelectedFile] = useState<string | null>(files[0] ?? null);
+    const [content, setContent] = useState<string>("");
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [copied, setCopied] = useState(false);
+    const editorRef = useRef<{ getAction: (id: string) => { run: () => Promise<void> } | null } | null>(null);
+
+    useEffect(() => {
+        if (!files.length) {
+            setSelectedFile(null);
+            return;
+        }
+        if (!selectedFile || !files.includes(selectedFile)) {
+            setSelectedFile(files[0]);
+        }
+    }, [files, selectedFile]);
+
+    useEffect(() => {
+        if (!projectId || !selectedFile) {
+            setContent("");
+            setError(null);
+            return;
+        }
+
+        const controller = new AbortController();
+        const loadFile = async () => {
+            setLoading(true);
+            setError(null);
+            try {
+                const res = await fetch(
+                    `/api/projects/${projectId}/files?path=${encodeURIComponent(selectedFile)}`,
+                    { signal: controller.signal }
+                );
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    throw new Error(data.error ?? `HTTP ${res.status}`);
+                }
+                setContent(typeof data.content === "string" ? data.content : "");
+            } catch (err) {
+                if ((err as Error).name === "AbortError") return;
+                setContent("");
+                setError(err instanceof Error ? err.message : "Failed to load file");
+            } finally {
+                setLoading(false);
+            }
+        };
+        void loadFile();
+
+        return () => controller.abort();
+    }, [projectId, selectedFile]);
+
+    const handleCopy = async () => {
+        if (!content) return;
+        try {
+            await navigator.clipboard.writeText(content);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+        } catch {
+            // Ignore clipboard failures (permission denied, insecure context).
+        }
+    };
+
+    return (
+        <div className="rounded-xl border border-white/8 bg-black/20">
+            <div className="grid max-h-[360px] min-h-[260px] grid-cols-[minmax(180px,34%)_1fr]">
+                <div className="border-r border-white/8 overflow-y-auto scrollbar-unified">
+                    {files.map((file) => (
+                        <button
+                            key={file}
+                            type="button"
+                            onClick={() => setSelectedFile(file)}
+                            className={`flex w-full items-center gap-2 px-3 py-2 text-left font-mono text-[11px] transition-colors ${selectedFile === file
+                                ? "bg-primary/12 text-primary"
+                                : "text-muted-foreground/80 hover:bg-white/5 hover:text-foreground"
+                                }`}
+                        >
+                            <span className="text-[10px] opacity-60">›</span>
+                            <span className="truncate">{file}</span>
+                        </button>
+                    ))}
+                </div>
+
+                <div className="min-w-0">
+                    <div className="flex items-center justify-between border-b border-white/8 px-3 py-2">
+                        <span className="truncate font-mono text-[10px] uppercase tracking-wider text-muted-foreground/70">
+                            {selectedFile ?? "No file selected"}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                            <button
+                                type="button"
+                                onClick={() => void editorRef.current?.getAction("actions.find")?.run()}
+                                disabled={!content}
+                                className="rounded border border-white/10 px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70 transition-colors hover:border-white/20 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                                Search
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleCopy}
+                                disabled={!content}
+                                className="rounded border border-white/10 px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70 transition-colors hover:border-white/20 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                                {copied ? "Copied" : "Copy"}
+                            </button>
+                        </div>
+                    </div>
+                    <div className="h-[320px] overflow-hidden bg-[#080a0d]">
+                        {loading ? (
+                            <div className="p-3 font-mono text-[11px] text-muted-foreground/70">Loading file...</div>
+                        ) : error ? (
+                            <div className="p-3 font-mono text-[11px] text-red-300/80">{error}</div>
+                        ) : (
+                            <MonacoEditor
+                                height="100%"
+                                language={inferMonacoLanguage(selectedFile)}
+                                value={content || "// Empty file"}
+                                theme="vs-dark"
+                                onMount={(editor) => {
+                                    editorRef.current = editor as unknown as { getAction: (id: string) => { run: () => Promise<void> } | null };
+                                }}
+                                options={{
+                                    readOnly: true,
+                                    minimap: { enabled: false },
+                                    fontSize: 12,
+                                    lineNumbers: "on",
+                                    glyphMargin: false,
+                                    folding: true,
+                                    scrollBeyondLastLine: false,
+                                    renderLineHighlight: "line",
+                                    wordWrap: "off",
+                                    automaticLayout: true,
+                                    find: {
+                                        addExtraSpaceOnTop: false,
+                                    },
+                                }}
+                            />
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 }
 
 function DiffBlock({ diff }: { diff: ModifyDiff }) {
@@ -409,9 +564,7 @@ export function BuildConversation({
 
                                 {response?.generatedFiles && response.generatedFiles.length > 0 ? (
                                     <LogSection title="Generated Files">
-                                        <pre className="overflow-x-hidden break-all text-[12px] leading-6 text-muted-foreground">
-                                            {buildFileTree(response.generatedFiles)}
-                                        </pre>
+                                        <GeneratedFilesPreview projectId={projectId} files={response.generatedFiles} />
                                     </LogSection>
                                 ) : null}
 

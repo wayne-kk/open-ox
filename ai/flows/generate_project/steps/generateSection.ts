@@ -139,7 +139,13 @@ ${journeyLine}
 ${skillList}`;
 
   try {
-    const raw = await callLLM(systemPrompt, userMessage, 0, 1024);
+    const raw = await callLLM(
+      systemPrompt,
+      userMessage,
+      0,
+      1024,
+      getModelForStep("preselect_skills")
+    );
     const parsed = JSON.parse(extractJSON(raw)) as { skillId?: string | null };
     if (parsed.skillId === null || parsed.skillId === undefined) {
       return null;

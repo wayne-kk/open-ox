@@ -1,6 +1,7 @@
 import { composePromptBlocks, loadStepPrompt } from "../shared/files";
 import { callLLM } from "../shared/llm";
 import { writeSiteFile } from "../shared/files";
+import { getModelForStep } from "@/lib/config/models";
 
 /**
  * Infer design intent from user input.
@@ -19,7 +20,13 @@ export async function stepInferDesignIntent(
 ${userInput}`;
 
   try {
-    const raw = await callLLM(systemPrompt, userMessage, 0.4);
+    const raw = await callLLM(
+      systemPrompt,
+      userMessage,
+      0.4,
+      undefined,
+      getModelForStep("infer_design_intent")
+    );
     const result = raw.trim();
     if (result) {
       await writeSiteFile("design-intent.md", result);

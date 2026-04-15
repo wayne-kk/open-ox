@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { runBuildSite } from "../lib/build-studio-api";
 import type { AiResponse, BuildStep } from "../types/build-studio";
 
-export type RightPanel = "topology" | "preview";
+export type RightPanel = "topology" | "preview" | "code";
 
 export interface ModifyStep {
   name: string;

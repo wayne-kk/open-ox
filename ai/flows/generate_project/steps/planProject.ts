@@ -15,6 +15,7 @@ import type {
 } from "../types";
 import { isLayoutSection } from "../registry/layoutSections";
 import { getPromptProfile } from "@/ai/prompts/core/profile";
+import { getModelForStep } from "@/lib/config/models";
 
 function isPageDesignPlan(value: unknown): value is PageDesignPlan {
   if (!value || typeof value !== "object") {
@@ -162,7 +163,13 @@ ${getAllowedProjectGuardrailIds().map((id) => `- ${id}`).join("\n")}
 - Do not include designPlan on sections — guardrails and skills are resolved at generation time.${appScreenInstruction}`;
 
   try {
-    const raw = await callLLM(systemPrompt, userMessage, 0.2);
+    const raw = await callLLM(
+      systemPrompt,
+      userMessage,
+      0.2,
+      undefined,
+      getModelForStep("plan_project")
+    );
     const parsed = JSON.parse(extractJSON(raw)) as Partial<PlannedProjectBlueprint>;
 
     if (!isStringArray(parsed.projectGuardrailIds)) {

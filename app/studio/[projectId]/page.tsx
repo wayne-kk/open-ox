@@ -3,7 +3,7 @@
 import { use, useEffect, useRef, useState } from "react";
 import { Suspense } from "react";
 import Link from "next/link";
-import { ArrowLeft, GitBranch, Monitor, RefreshCw, ExternalLink, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { ArrowLeft, GitBranch, Monitor, RefreshCw, ExternalLink, PanelLeftClose, PanelLeftOpen, FileCode2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HamsterLoader } from "@/components/ui/hamster-loader";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { useBuildStudio } from "@/app/studio/hooks/useBuildStudio";
 import { BuildConversation } from "@/app/studio/components/BuildConversation";
 import { GenerationAtlas } from "@/app/studio/components/GenerationAtlas";
+import { ProjectCodePanel } from "@/app/studio/components/ProjectCodePanel";
 
 function formatMs(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
@@ -27,6 +28,7 @@ function StudioInner({ projectId }: { projectId: string }) {
     useDatabasePrompts, setUseDatabasePrompts } = studio;
   const buildSteps = response?.buildSteps ?? [];
   const canPreview = !!projectId && !loading;
+  const canCode = !!projectId && !projectLoading;
   const [conversationCollapsed, setConversationCollapsed] = useState(false);
   const appPreviewViewportRef = useRef<HTMLDivElement | null>(null);
   const [appPreviewScale, setAppPreviewScale] = useState(1);
@@ -201,6 +203,17 @@ function StudioInner({ projectId }: { projectId: string }) {
                   )}
                 </button>
                 <button
+                  onClick={() => setRightPanel("code")}
+                  disabled={!canCode}
+                  className={`flex items-center gap-1.5 px-3 h-7 font-mono text-[10px] uppercase tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed ${rightPanel === "code"
+                    ? "bg-white/8 text-foreground"
+                    : "text-muted-foreground/50 hover:text-muted-foreground"
+                    }`}
+                >
+                  <FileCode2 className="h-3 w-3" />
+                  Code
+                </button>
+                <button
                   onClick={() => setRightPanel("preview")}
                   disabled={!canPreview}
                   className={`flex items-center gap-1.5 px-3 h-7 font-mono text-[10px] uppercase tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed ${rightPanel === "preview"
@@ -247,7 +260,7 @@ function StudioInner({ projectId }: { projectId: string }) {
               <div className="flex-1" />
 
               {/* Action buttons — right */}
-              {previewState === "ready" && previewUrl && (
+              {rightPanel === "preview" && previewState === "ready" && previewUrl && (
                 <>
                   <button
                     onClick={studio.rebuildPreview}
@@ -282,6 +295,10 @@ function StudioInner({ projectId }: { projectId: string }) {
                     totalDuration={response?.buildTotalDuration}
                     showEventStream={false}
                   />
+                </div>
+              ) : rightPanel === "code" ? (
+                <div className="h-full min-h-0 overflow-hidden">
+                  <ProjectCodePanel projectId={projectId} />
                 </div>
               ) : (
                 <div className="flex h-full flex-col">

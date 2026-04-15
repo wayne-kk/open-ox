@@ -4,6 +4,7 @@ import { webSearchTool, executeWebSearch } from "../../../tools/system/webSearch
 import type { ProjectBlueprint } from "../types";
 import { asProjectBlueprint } from "../schema/normalizeBlueprint";
 import { detectBlueprintInputShape, warnOnBlueprintFallback } from "../schema/projectBlueprint.schema";
+import { getModelForStep } from "@/lib/config/models";
 
 export async function stepAnalyzeProjectRequirement(
   userInput: string,
@@ -26,6 +27,7 @@ After gathering any needed context, produce a structured ProjectBlueprint JSON.`
     tools: [webSearchTool],
     temperature: 0.5,
     maxIterations: 4,
+    model: getModelForStep("analyze_project_requirement"),
     executeToolOverrides: { web_search: executeWebSearch },
   });
 
