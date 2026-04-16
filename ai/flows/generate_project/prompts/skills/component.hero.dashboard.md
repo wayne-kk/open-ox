@@ -1,4 +1,5 @@
 ---
+
 id: component.hero.dashboard
 kind: component-skill
 sectionTypes: ["hero"]
@@ -20,8 +21,8 @@ when:
 notes: |
   Use for product-led, metrics-focused heroes where the main proof is UI previews,
   live stats, or analytics surfaces. The goal is to make the product feel powerful,
-  legible, and immediately graspable.
----
+
+##   legible, and immediately graspable.
 
 # Component Skill: Hero — Product Dashboard
 
@@ -67,4 +68,3 @@ Use this skill when generating a hero section that should showcase a digital pro
 - Default to Server Component unless client-only behavior is clearly needed.
 - Use realistic, domain-appropriate sample data and labels. Avoid “Chart title” or “123k users” without context.
 - Design mobile-first: product previews must remain legible and not degrade into tiny, unreadable thumbnails.
-

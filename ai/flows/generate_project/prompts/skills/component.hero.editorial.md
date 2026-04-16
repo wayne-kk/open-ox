@@ -1,4 +1,5 @@
 ---
+
 id: component.hero.editorial
 kind: component-skill
 sectionTypes: ["hero"]
@@ -20,8 +21,10 @@ when:
 notes: |
   Use for story-forward, premium editorial heroes that feel like a magazine cover
   or manifesto opener. Prioritize typography, narrative hierarchy, and negative space
-  over loud motion or heavy UI chrome.
+  
 ---
+
+##   over loud motion or heavy UI chrome.
 
 # Component Skill: Hero — Editorial Narrative
 
@@ -69,4 +72,3 @@ Use this skill when generating a hero section that should feel like a premium ed
 - Default to Server Component unless hooks, `framer-motion`, or browser APIs are clearly required.
 - Use realistic, editorially plausible copy. No lorem ipsum, no generic “Hero headline”.
 - Design mobile-first, ensuring headlines wrap gracefully and CTAs remain legible.
-

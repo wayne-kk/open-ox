@@ -921,6 +921,7 @@ export async function runGenerateProject(
           return bp;
         }),
         stepMatchDesignSystemSkill({
+          userInput,
           designIntentText: designIntentForSystem,
           designKeywords: normalizedBlueprint.experience.designIntent.keywords,
           productType: normalizedBlueprint.brief.productScope.productType,

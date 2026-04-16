@@ -1,6 +1,5 @@
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
-import matter from "gray-matter";
 import { composePromptBlocks, loadStepPrompt, writeSiteFile, loadGuardrail } from "../shared/files";
 import { callLLMWithMeta, extractJSON } from "../shared/llm";
 import { getModelForStep } from "@/lib/config/models";
@@ -14,13 +13,6 @@ export interface DesignSystemMatchResult {
   designSystem?: string;
   reason: string;
   trace: StepTrace;
-}
-
-interface SkillYamlEntry {
-  name: string;
-  keywords: string[];
-  users_type: string[];
-  emotional: string;
 }
 
 interface MatchLLMResponse {
@@ -38,33 +30,38 @@ function getDesignSystemSkillDir(): string {
   return join(root, "ai", "flows", "generate_project", "prompts", "skills", DESIGN_SYSTEM_SKILL_DIR);
 }
 
-/**
- * Parse skills.yaml and return the skill metadata entries.
- * The file uses gray-matter frontmatter wrapping the YAML content body.
- */
-function loadSkillsYaml(): SkillYamlEntry[] {
+function stripOptionalFrontmatter(raw: string): string {
+  if (!raw.startsWith("---")) {
+    return raw;
+  }
+
+  const normalized = raw.replace(/\r\n/g, "\n");
+  const closingIndex = normalized.indexOf("\n---\n", 4);
+  if (closingIndex !== -1) {
+    return normalized.slice(closingIndex + 5);
+  }
+
+  // Some files accidentally start with a lone --- without valid closing frontmatter.
+  return normalized.slice(3).replace(/^\n+/, "");
+}
+
+function loadSkillsYamlRaw(): string {
   const filePath = join(getDesignSystemSkillDir(), SKILLS_YAML_FILENAME);
   if (!existsSync(filePath)) {
-    return [];
+    return "";
   }
 
   const raw = readFileSync(filePath, "utf-8");
-  const parsed = matter(raw);
+  return stripOptionalFrontmatter(raw).trim();
+}
 
-  // The actual skills data is in the markdown body as YAML.
-  let bodyData: { skills?: SkillYamlEntry[] };
-  try {
-    const yaml = require("js-yaml");
-    bodyData = yaml.load(parsed.content) as { skills?: SkillYamlEntry[] };
-  } catch {
-    bodyData = parsed.data as { skills?: SkillYamlEntry[] };
-  }
-
-  if (!Array.isArray(bodyData?.skills)) {
-    return [];
-  }
-
-  return bodyData.skills;
+function extractSkillNamesFromYaml(rawYaml: string): string[] {
+  return rawYaml
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("- name:"))
+    .map((line) => line.slice("- name:".length).trim())
+    .filter(Boolean);
 }
 
 /**
@@ -78,8 +75,7 @@ function loadSkillDesignSystemContent(skillId: string): string | null {
   }
 
   const raw = readFileSync(filePath, "utf-8");
-  const parsed = matter(raw);
-  const content = parsed.content;
+  const content = stripOptionalFrontmatter(raw);
 
   // Extract content between <design-system> and </design-system> tags
   const openTag = "<design-system>";
@@ -88,8 +84,10 @@ function loadSkillDesignSystemContent(skillId: string): string | null {
   const endIdx = content.indexOf(closeTag);
 
   if (startIdx === -1) {
-    // No explicit tags — use the full markdown content (after frontmatter)
-    return content.trim() || null;
+    const firstHeadingIndex = content.search(/^#\s+/m);
+    const fallbackContent =
+      firstHeadingIndex >= 0 ? content.slice(firstHeadingIndex).trim() : content.trim();
+    return fallbackContent || null;
   }
 
   const inner = content.slice(
@@ -99,53 +97,52 @@ function loadSkillDesignSystemContent(skillId: string): string | null {
   return inner.trim() || null;
 }
 
-/**
- * Build the skills metadata block for the LLM prompt.
- */
-function buildSkillsMetadataBlock(skills: SkillYamlEntry[]): string {
-  return skills
-    .map(
-      (skill) =>
-        `### ${skill.name}
-- **关键词**: ${skill.keywords.join(", ")}
-- **典型用户/场景**: ${skill.users_type.join(", ")}
-- **情绪基调**: ${skill.emotional}`
-    )
-    .join("\n\n");
-}
-
 // ── Main Step ────────────────────────────────────────────────────────────
 
 export async function stepMatchDesignSystemSkill(params: {
+  userInput: string;
   designIntentText: string;
   designKeywords: string[];
   productType: string;
   projectDescription: string;
   styleGuide?: string;
 }): Promise<DesignSystemMatchResult> {
-  const { designIntentText, designKeywords, productType, projectDescription, styleGuide } = params;
+  const {
+    userInput,
+    designIntentText,
+    designKeywords,
+    productType,
+    projectDescription,
+    styleGuide,
+  } = params;
 
   const emptyTrace: StepTrace = {};
 
   // 1. Load skill metadata from skills.yaml
-  const skills = loadSkillsYaml();
-  if (skills.length === 0) {
+  const skillsYaml = loadSkillsYamlRaw();
+  const skillNames = extractSkillNamesFromYaml(skillsYaml);
+  if (!skillsYaml || skillNames.length === 0) {
     return { matched: false, skillId: null, reason: "No design-system skills found in skills.yaml", trace: emptyTrace };
   }
 
   // 2. Build prompts
-  const skillsMetadata = buildSkillsMetadataBlock(skills);
   const systemPromptTemplate = loadStepPrompt("matchDesignSystemSkill");
   const systemPrompt = composePromptBlocks([
-    systemPromptTemplate.replace("{{skills_metadata}}", skillsMetadata),
+    systemPromptTemplate.replace("{{skills_metadata}}", `\`\`\`yaml\n${skillsYaml}\n\`\`\``),
     loadGuardrail("outputJson"),
   ]);
 
   const userMessageParts = [
     `## 项目信息`,
+    `- 用户原始需求: ${userInput}`,
     `- 项目描述: ${projectDescription}`,
     `- 产品类型: ${productType}`,
     `- 设计关键词: ${designKeywords.join(", ")}`,
+    ``,
+    `## 匹配优先级`,
+    `1. 优先依据“用户原始需求”判断风格与适配场景`,
+    `2. 将“设计意图分析”作为补充参考，而不是唯一依据`,
+    `3. 如果用户原始需求与设计意图分析存在偏差，以用户原始需求为准`,
     ``,
     `## 设计意图分析`,
     designIntentText,
@@ -179,16 +176,17 @@ export async function stepMatchDesignSystemSkill(params: {
         outputTokens: llmResult.outputTokens,
       },
       input: {
+        userInput,
         designKeywords,
         productType,
         projectDescription,
         hasStyleGuide: !!styleGuide,
-        availableSkills: skills.map((s) => s.name),
+        availableSkills: skillNames,
       },
     };
 
     response = JSON.parse(extractJSON(llmResult.content)) as MatchLLMResponse;
-  } catch (err) {
+  } catch {
     return {
       matched: false,
       skillId: null,
@@ -206,7 +204,7 @@ export async function stepMatchDesignSystemSkill(params: {
   }
 
   // Verify the skillId is one of the known skills
-  const knownNames = new Set(skills.map((s) => s.name));
+  const knownNames = new Set(skillNames);
   if (!knownNames.has(skillId)) {
     const fallbackReason = `LLM returned unknown skillId "${skillId}", falling back to generation`;
     trace.output = { matched: false, skillId, reason: fallbackReason };
