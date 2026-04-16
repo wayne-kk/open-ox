@@ -22,7 +22,6 @@ import type {
   StepTrace,
 } from "../types";
 import { inferSectionGuardrailDefaults } from "../planners/guardrailPolicy";
-import { stepDescribeSectionDesign } from "./describeSectionDesign";
 
 export interface GenerateSectionParams {
   designSystem: string;
@@ -31,7 +30,7 @@ export interface GenerateSectionParams {
   section: PlannedSectionSpec;
   outputFileRelative: string;
   pageContext?: GenerateSectionPageContext;
-  sectionDesignBriefOverride?: string;
+  sectionDesignBrief: string;
   /** Optional: callback to collect conversation messages for trajectory logging */
   onMessage?: (msg: import("@/ai/shared/llm/types").ChatMessage) => void;
 }
@@ -59,98 +58,11 @@ type GenerateSectionPageContext = {
 
 // ── Skill Discovery (runtime, per-section) ──────────────────────────────
 
-/** Component skills in prompts/skills/ are hero-only; support common hero aliases from planners. */
-function isHeroComponentSkillSectionType(section: PlannedSectionSpec): boolean {
-  const sectionType = section.type.trim().toLowerCase();
-  if (sectionType === "hero") return true;
-  // Planner aliases seen in real outputs
-  if (sectionType === "opening-shot" || sectionType === "opening_shot") return true;
-  // Fallback guards: if name/intent clearly indicates hero, allow skill selection path.
-  if (/^hero(section)?$/i.test(section.fileName.trim())) return true;
-  if (/hero|opening shot|首屏|头图/i.test(section.intent)) return true;
-  return false;
-}
-
-type SkillSelectionContext = {
-  intent: string;
-  contentHints: string;
-  designKeywords: string[];
-  productType: string;
-  journeyStage?: string;
-  rawUserInput?: string;
-};
-
-function scoreMatches(source: string, terms: string[] | undefined): number {
-  if (!terms || terms.length === 0) return 0;
-  let score = 0;
-  for (const term of terms) {
-    const t = term.trim().toLowerCase();
-    if (!t) continue;
-    if (source.includes(t)) {
-      score += 1;
-    }
-  }
-  return score;
-}
-
-function chooseSkillDeterministically(
-  candidates: ReturnType<typeof discoverSkillsBySectionType>,
-  context: SkillSelectionContext
-): { skillId: string | null; strong: boolean } {
-  const source = [
-    context.rawUserInput ?? "",
-    context.intent,
-    context.contentHints,
-    context.productType,
-    context.journeyStage ?? "",
-    context.designKeywords.join(" "),
-  ]
-    .join(" ")
-    .toLowerCase();
-
-  let bestId = "";
-  let bestScore = Number.NEGATIVE_INFINITY;
-  let secondBest = Number.NEGATIVE_INFINITY;
-
-  for (const candidate of candidates) {
-    let score = candidate.priority;
-    const when = candidate.when;
-
-    score += scoreMatches(source, when?.designKeywords?.any) * 6;
-    score += scoreMatches(source, when?.traits?.any) * 4;
-    score += scoreMatches(source, when?.journeyStages?.any) * 3;
-    score += scoreMatches(source, when?.productTypes?.any) * 3;
-
-    score -= scoreMatches(source, when?.designKeywords?.none) * 8;
-    score -= scoreMatches(source, when?.traits?.none) * 6;
-    score -= scoreMatches(source, when?.journeyStages?.none) * 5;
-
-    // Skill-specific boost for explicit visual effect signals.
-    if (candidate.id.includes(".particle")) {
-      score += scoreMatches(source, ["particle", "particles", "粒子", "粒子化", "point cloud", "canvas text"]) * 12;
-    } else if (candidate.id.includes(".lighting")) {
-      score += scoreMatches(source, ["lighting", "glow", "neon", "light beam", "光效", "霓虹", "辉光"]) * 8;
-    } else if (candidate.id.includes(".dashboard")) {
-      score += scoreMatches(source, ["dashboard", "analytics", "metrics", "数据看板", "仪表盘"]) * 8;
-    }
-
-    if (score > bestScore) {
-      secondBest = bestScore;
-      bestScore = score;
-      bestId = candidate.id;
-    } else if (score > secondBest) {
-      secondBest = score;
-    }
-  }
-
-  // Only auto-pick when signal is clear enough and winner margin is obvious.
-  const strong = bestScore >= 10 && bestScore - secondBest >= 4;
-  return { skillId: bestId || null, strong };
-}
-
 async function llmSelectSkill(
   candidates: ReturnType<typeof discoverSkillsBySectionType>,
-  context: SkillSelectionContext
+  section: PlannedSectionSpec,
+  designKeywords: string[],
+  rawUserInput?: string,
 ): Promise<string | null> {
   const skillList = candidates
     .map((c) => {
@@ -159,43 +71,30 @@ async function llmSelectSkill(
       if (c.notes) parts.push(`description: ${c.notes}`);
       if (w?.designKeywords?.any?.length) parts.push(`matches keywords: [${w.designKeywords.any.join(", ")}]`);
       if (w?.designKeywords?.none?.length) parts.push(`excludes keywords: [${w.designKeywords.none.join(", ")}]`);
-      if (w?.traits?.any?.length) parts.push(`traits match: [${w.traits.any.join(", ")}]`);
-      if (w?.traits?.none?.length) parts.push(`traits exclude: [${w.traits.none.join(", ")}]`);
-      if (w?.journeyStages?.any?.length) parts.push(`journey stages match: [${w.journeyStages.any.join(", ")}]`);
-      if (w?.journeyStages?.none?.length) parts.push(`journey stages exclude: [${w.journeyStages.none.join(", ")}]`);
-      if (w?.productTypes?.any?.length) parts.push(`for product types: [${w.productTypes.any.join(", ")}]`);
       return `- ${parts.join(" | ")}`;
     })
     .join("\n");
 
-  const systemPrompt = `Select at most ONE component skill for this hero section.
+  const systemPrompt = `Select at most ONE component skill for this section.
 
 Rules:
-1. If user intent clearly asks for a concrete visual effect (e.g. particle text, glow lighting, dashboard hero), choose the matching skill.
-2. If there is no clear effect intent, return {"skillId": null}.
-3. Do not use fallback thinking. Pick only when there is explicit or strongly implied alignment.
-4. Prefer precision over novelty.
+1. If user intent clearly asks for a concrete visual effect, choose the matching skill.
+2. If there is no clear match, return {"skillId": null}.
+3. Prefer precision over novelty.
 
 Return JSON only: {"skillId":"<id>"|null}`;
 
-  const userMessage = `Section intent: ${context.intent}
-Section content hints: ${context.contentHints}
-Design keywords: ${context.designKeywords.join(", ")}
-Product type: ${context.productType}
-Journey stage: ${context.journeyStage ?? ""}
-Original user request: ${context.rawUserInput ?? ""}
+  const userMessage = `Section type: ${section.type}
+Section intent: ${section.intent}
+Section content hints: ${section.contentHints}
+Design keywords: ${designKeywords.join(", ")}
+Original user request: ${rawUserInput ?? ""}
 
 Candidate skills:
 ${skillList}`;
 
   try {
-    const raw = await callLLM(
-      systemPrompt,
-      userMessage,
-      0,
-      128,
-      getModelForStep("preselect_skills")
-    );
+    const raw = await callLLM(systemPrompt, userMessage, 0, 128, getModelForStep("preselect_skills"));
     const parsed = JSON.parse(extractJSON(raw)) as { skillId?: string | null };
     const id = typeof parsed.skillId === "string" ? parsed.skillId.trim() : "";
     if (!id) return null;
@@ -206,19 +105,12 @@ ${skillList}`;
 }
 
 async function discoverAndSelectSkill(
-  sectionType: string,
-  context: SkillSelectionContext,
-  section: PlannedSectionSpec
+  section: PlannedSectionSpec,
+  designKeywords: string[],
+  rawUserInput?: string,
 ): Promise<{ skillId: string | null; skillPrompt: string; skillMetadataBlock: string }> {
-  if (!isHeroComponentSkillSectionType(section)) {
-    return { skillId: null, skillPrompt: "", skillMetadataBlock: "" };
-  }
-
-  const root = getSkillPromptsRoot();
-  const normalizedType = sectionType.trim().toLowerCase();
-  const skillSectionType =
-    normalizedType === "opening-shot" || normalizedType === "opening_shot" ? "hero" : normalizedType;
-  const candidates = discoverSkillsBySectionType(root, skillSectionType);
+  const sectionType = section.type.trim().toLowerCase();
+  const candidates = discoverSkillsBySectionType(getSkillPromptsRoot(), sectionType);
 
   if (candidates.length === 0) {
     return { skillId: null, skillPrompt: "", skillMetadataBlock: "" };
@@ -228,17 +120,7 @@ async function discoverAndSelectSkill(
     .map((c) => `- **${c.id}** (priority: ${c.priority}${c.fallback ? ", fallback" : ""}): ${c.notes || "no description"}`)
     .join("\n");
 
-  const deterministic = chooseSkillDeterministically(candidates, context);
-  if (deterministic.skillId && deterministic.strong) {
-    console.log(`[skill-select] deterministic strong match "${deterministic.skillId}" for ${sectionType}`);
-    return {
-      skillId: deterministic.skillId,
-      skillPrompt: loadSkillPrompt(deterministic.skillId),
-      skillMetadataBlock: metadataBlock,
-    };
-  }
-
-  const llmChoice = await llmSelectSkill(candidates, context);
+  const llmChoice = await llmSelectSkill(candidates, section, designKeywords, rawUserInput);
   if (llmChoice) {
     console.log(`[skill-select] llm choice "${llmChoice}" for ${sectionType}`);
     return {
@@ -274,15 +156,42 @@ function buildSectionPromptBlocks(sectionType: string) {
 
 // ── System Prompt ───────────────────────────────────────────────────────
 
+const TAILWIND_MAPPING_GUIDE = `## Design System → Tailwind CSS v4 Mapping Guide
+
+The design system is the single source of truth. A separate build step converts it into \`globals.css\` with Tailwind v4 tokens. When writing component classes, follow these mapping rules:
+
+**Colors** — Design system color names map directly to Tailwind utilities:
+- A color named "accent" / "primary" / "background" etc. → use \`bg-accent\`, \`text-primary\`, \`border-background\` etc.
+- Pattern: \`--color-{name}\` in @theme → \`bg-{name}\`, \`text-{name}\`, \`border-{name}\`
+
+**Fonts** — Font names map to \`font-{name}\`:
+- "display" font → \`font-display\`, "body" font → \`font-body\`, "header" font → \`font-header\`
+
+**Shadows** — Named shadows map to \`shadow-{name}\`:
+- "glow" shadow → \`shadow-glow\`, "soft" shadow → \`shadow-soft\`
+
+**Animations** — Named animations map to \`animate-{name}\`:
+- "float" animation → \`animate-float\`, "pulse" animation → \`animate-pulse\`
+
+**Custom effects** — Use Tailwind utilities/arbitrary values (no prefixed helper classes):
+- Glass/blur effects → \`backdrop-blur-*\`, translucent backgrounds, border/opacity utilities
+- Clip-path shapes → \`[clip-path:polygon(...)]\`
+- Texture overlays → gradients/noise via Tailwind utilities and arbitrary values
+
+**Do NOT** define inline CSS variables, @keyframes, or custom classes that duplicate design system tokens. Trust that the Tailwind utilities exist.`;
+
 function buildSystemPrompt(params: {
   section: PlannedSectionSpec;
   projectGuardrailIds: GuardrailId[];
   skillPrompt: string;
+  designSystem: string;
 }): string {
-  const { section, projectGuardrailIds, skillPrompt } = params;
+  const { section, projectGuardrailIds, skillPrompt, designSystem } = params;
 
   return [
     loadSystem("frontend"),
+    `## Design System\n${designSystem}`,
+    TAILWIND_MAPPING_GUIDE,
     buildSectionPromptBlocks(section.type),
     skillPrompt,
     buildGuardrailBlocks(projectGuardrailIds, section),
@@ -313,42 +222,15 @@ function buildPageContextBlock(pageContext?: GenerateSectionPageContext) {
 // ── User Message ────────────────────────────────────────────────────────
 
 function buildUserMessage(params: {
-  designSystem: string;
   projectContext: GenerateSectionProjectContext;
   pageContext?: GenerateSectionPageContext;
   section: PlannedSectionSpec;
   skillMetadataBlock: string;
   sectionDesignBrief: string;
 }) {
-  const { designSystem, projectContext, pageContext, section, skillMetadataBlock, sectionDesignBrief } = params;
+  const { projectContext, pageContext, section, skillMetadataBlock, sectionDesignBrief } = params;
 
-  return `## Design System
-${designSystem}
-
-## Design System → Tailwind CSS v4 Mapping Guide
-The design system above is the single source of truth. A separate build step converts it into \`globals.css\` with Tailwind v4 tokens. When writing component classes, follow these mapping rules:
-
-**Colors** — Design system color names map directly to Tailwind utilities:
-- A color named "accent" / "primary" / "background" etc. → use \`bg-accent\`, \`text-primary\`, \`border-background\` etc.
-- Pattern: \`--color-{name}\` in @theme → \`bg-{name}\`, \`text-{name}\`, \`border-{name}\`
-
-**Fonts** — Font names map to \`font-{name}\`:
-- "display" font → \`font-display\`, "body" font → \`font-body\`, "header" font → \`font-header\`
-
-**Shadows** — Named shadows map to \`shadow-{name}\`:
-- "glow" shadow → \`shadow-glow\`, "soft" shadow → \`shadow-soft\`
-
-**Animations** — Named animations map to \`animate-{name}\`:
-- "float" animation → \`animate-float\`, "pulse" animation → \`animate-pulse\`
-
-**Custom effects** — Use Tailwind utilities/arbitrary values (no prefixed helper classes):
-- Glass/blur effects → \`backdrop-blur-*\`, translucent backgrounds, border/opacity utilities
-- Clip-path shapes → \`[clip-path:polygon(...)]\`
-- Texture overlays → gradients/noise via Tailwind utilities and arbitrary values
-
-**Do NOT** define inline CSS variables, @keyframes, or custom classes that duplicate design system tokens. Trust that the Tailwind utilities exist.
-
-## Project Context
+  return `## Project Context
 - **Project**: ${projectContext.projectTitle}
 - **Description**: ${projectContext.projectDescription}
 - **Language**: ${projectContext.language} — ⚠️ CRITICAL: ALL user-facing text (headlines, buttons, copy, labels, alt text) MUST be written in this language. Do NOT mix with other languages. Skill examples showing English text are structural only — replace with real ${projectContext.language} content.
@@ -371,8 +253,8 @@ ${sectionDesignBrief}
 ${skillMetadataBlock ? `## Available Component Skills\nThe following skills are available for this section type. The selected skill's full guidance is already in the system prompt.\n${skillMetadataBlock}` : ""}
 
 Generate the complete ${section.fileName}.tsx component.
-Use the design system and project context to make all design decisions (layout, visual style, motion, interaction). Apply the Tailwind CSS mapping rules above to translate design tokens into utility classes.
-The Section Design Brief above is your primary visual guidance — follow its background, and atmosphere direction closely.`;
+Use the design system and project context to make all design decisions (layout, visual style, motion, interaction).
+The Section Design Brief above is your primary visual guidance — follow its background and atmosphere direction closely.`;
 }
 
 // ── Validation ──────────────────────────────────────────────────────────
@@ -405,34 +287,24 @@ export async function stepGenerateSection(params: GenerateSectionParams): Promis
     section,
     outputFileRelative,
     pageContext,
-    sectionDesignBriefOverride,
+    sectionDesignBrief,
   } = params;
   const { skillId, skillPrompt, skillMetadataBlock } = isSectionSkillsEnabled()
-    ? await discoverAndSelectSkill(section.type, {
-      intent: section.intent,
-      contentHints: section.contentHints,
-      designKeywords: projectContext.designKeywords,
-      productType: "",
-      journeyStage: pageContext?.journeyStage,
-      rawUserInput: projectContext.rawUserInput,
-    }, section)
+    ? await discoverAndSelectSkill(
+      section,
+      projectContext.designKeywords,
+      projectContext.rawUserInput,
+    )
     : { skillId: null, skillPrompt: "", skillMetadataBlock: "" };
 
   const systemPrompt = buildSystemPrompt({
     section,
     projectGuardrailIds,
     skillPrompt,
+    designSystem,
   });
 
-  const sectionDesignBrief = sectionDesignBriefOverride?.trim()
-    ? sectionDesignBriefOverride
-    : await stepDescribeSectionDesign({
-      section,
-      designSystem,
-    });
-
   const userMessage = buildUserMessage({
-    designSystem,
     projectContext,
     pageContext,
     section,

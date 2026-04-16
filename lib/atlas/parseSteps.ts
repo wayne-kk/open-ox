@@ -10,6 +10,7 @@ const STAGE_MAP: Record<string, StageId> = {
   infer_design_intent: "understand",
   plan_project: "plan",
   generate_project_design_system: "design",
+  match_design_system_skill: "design",
   apply_project_design_tokens: "design",
   compose_layout: "compose",
   compose_page: "compose",
@@ -45,6 +46,7 @@ function inferStage(stepName: string): StageId {
 
 function inferKind(stepName: string, stage: StageId): GraphNode["kind"] {
   if (stage === "repair") return "repair";
+  if (stepName === "match_design_system_skill") return "decision";
   if (stepName.startsWith("run_build") || stepName.startsWith("install_dependencies")) return "verification";
   if (stepName.startsWith("generate_section") || stepName.startsWith("compose_page")) return "generation";
   if (stepName.startsWith("describe_page_sections")) return "transform";

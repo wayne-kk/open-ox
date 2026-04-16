@@ -54,7 +54,7 @@ function buildDefaultPageDesignPlan(
   };
 }
 
-function buildDefaultAppScreenPlan(
+export function buildDefaultAppScreenPlan(
   page: {
     description: string;
     sections: SectionSpec[];
@@ -89,15 +89,7 @@ export function buildDefaultProjectPlan(
   const appProfile = getPromptProfile() === "app";
   const layoutSections = blueprint.site.layoutSections;
 
-  const buildMinimalPageSections = (page: {
-    primaryRoleIds: string[];
-    supportingCapabilityIds: string[];
-  }): SectionSpec[] => {
-    const base = {
-      primaryRoleIds: page.primaryRoleIds,
-      supportingCapabilityIds: page.supportingCapabilityIds,
-      sourceTaskLoopIds: [] as string[],
-    };
+  const buildMinimalPageSections = (): SectionSpec[] => {
     if (appProfile) {
       return [
         {
@@ -105,66 +97,58 @@ export function buildDefaultProjectPlan(
           intent: "Deliver the primary in-app feed/workspace immediately.",
           contentHints: "Card-based content stream with scan-first information hierarchy.",
           fileName: "ContentSection",
-          ...base,
         },
         {
           type: "interactive",
           intent: "Provide direct actions that keep users in the core loop.",
           contentHints: "Action chips, quick filters, composer/entry affordances, and feedback states.",
           fileName: "InteractiveSection",
-          ...base,
         },
         {
           type: "stats",
           intent: "Reinforce activity and confidence using compact social/progress signals.",
           contentHints: "Small stats row with concise labels, counts, and contextual relevance.",
           fileName: "StatsSection",
-          ...base,
         },
       ];
     }
 
     return [
       {
-        type: "opening-shot",
+        type: "hero",
         intent: "Full-viewport brand impression — the visitor's first emotional reaction.",
         contentHints: "Bold headline, hero visual, one clear invitation to explore.",
         fileName: "HeroSection",
-        ...base,
       },
       {
-        type: "brand-story",
+        type: "storyblock",
         intent: "Reveal who this brand is and why it exists — visual narrative with imagery.",
         contentHints: "Brand story told through images and short copy, not a wall of text.",
         fileName: "StorySection",
-        ...base,
       },
       {
-        type: "product-spotlight",
+        type: "showcase",
         intent: "Showcase the core offering with visual richness and detail.",
         contentHints: "Product/service visuals in a curated layout, let the images speak.",
         fileName: "SpotlightSection",
-        ...base,
       },
       {
-        type: "social-proof",
+        type: "testimonial",
         intent: "Build trust through real voices and credibility signals.",
         contentHints: "Customer quotes, metrics, or partner logos — presented with visual weight.",
         fileName: "ProofSection",
-        ...base,
       },
       {
-        type: "closing-invitation",
+        type: "cta",
         intent: "Create a sense of closure and a warm invitation to take the next step.",
         contentHints: "A compelling visual moment with a single clear action.",
         fileName: "ClosingSection",
-        ...base,
       },
     ];
   };
 
   const pages: PlannedPageBlueprint[] = blueprint.site.pages.map((page) => {
-    const sections = page.sections.length > 0 ? page.sections : buildMinimalPageSections(page);
+    const sections = page.sections.length > 0 ? page.sections : buildMinimalPageSections();
     return {
       ...page,
       pageDesignPlan: buildDefaultPageDesignPlan({ ...page, sections }),

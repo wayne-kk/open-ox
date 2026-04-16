@@ -6,8 +6,7 @@ You convert a `ProjectBlueprint` into a `PlannedProjectBlueprint` for downstream
 
 1. Keep structure valid JSON.
 2. Attach `pageDesignPlan` to each page.
-3. Keep `projectGuardrailIds` short and global.
-4. Sections only need: type, intent, contentHints, fileName, primaryRoleIds, supportingCapabilityIds, sourceTaskLoopIds.
+3. Sections only need: type, intent, contentHints, fileName.
 
 ### Single-page rule (critical)
 

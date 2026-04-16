@@ -65,7 +65,7 @@ Output a complete Markdown document following this exact structure.
 All values must be hex. Include a one-line usage rule for each token.
 
 ```text
---color-background:          #______  /* page root background; never pure white */
+--color-background:          #______  /* page root background;  */
 --color-foreground:          #______  /* primary text on background */
 --color-primary:             #______  /* main CTA, active states, key highlights */
 --color-primary-foreground:  #______  /* text/icon on primary color */
@@ -196,8 +196,6 @@ Shared base: [list shared Tailwind classes all buttons inherit]
 ---
 
 ## 4. Layout System
-
-### 4.1 Grid & Spacing
 
 - **Grid**: [desktop columns / tablet columns / mobile columns]
 - **Base spacing unit**: [e.g., 4px — describe how multiples are used]

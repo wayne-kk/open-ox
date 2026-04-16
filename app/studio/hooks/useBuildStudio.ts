@@ -677,11 +677,63 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     []
   );
 
-  useEffect(() => {
-    if (rightPanel === "preview" && projectId && previewState === "idle") {
-      startPreview();
+  /**
+   * Health-check: when the user switches back to the Preview tab while
+   * previewState is already "ready", verify the sandbox serve is still alive.
+   * If it crashed, auto-recover (restart serve or fall back to full start).
+   * This prevents the "sandbox is running but no service on port 3000" error.
+   */
+  const ensurePreviewAlive = useCallback(async () => {
+    if (!projectId || !previewUrl) return;
+    try {
+      const res = await fetch(`/api/projects/${projectId}/preview`);
+      if (!res.ok) {
+        // API error — fall back to full restart
+        console.warn("[ensurePreviewAlive] Health check API error, restarting preview");
+        setPreviewState("idle");
+        return;
+      }
+      const data = await res.json();
+      if (data.status === "ok" && data.url) {
+        // Serve is alive — update URL in case it changed (sandbox reconnect)
+        if (data.url !== previewUrl) {
+          setPreviewUrl(data.url);
+          setPreviewVersion((v) => v + 1);
+        }
+        return; // all good
+      }
+      // Serve is down — trigger a full restart
+      console.warn("[ensurePreviewAlive] Serve is down, restarting preview");
+      setPreviewUrl(null);
+      setPreviewState("idle"); // will trigger startPreview via the effect below
+    } catch (e) {
+      console.warn("[ensurePreviewAlive] Network error:", e);
+      setPreviewUrl(null);
+      setPreviewState("idle");
     }
-  }, [rightPanel, projectId, previewState, startPreview]);
+  }, [projectId, previewUrl]);
+
+  // Track the previous rightPanel value to detect tab switches
+  const prevRightPanelRef = useRef<RightPanel>(rightPanel);
+
+  useEffect(() => {
+    const prevPanel = prevRightPanelRef.current;
+    prevRightPanelRef.current = rightPanel;
+
+    if (rightPanel === "preview" && projectId) {
+      if (previewState === "idle") {
+        // Normal case: no preview yet, start one
+        startPreview();
+      } else if (
+        previewState === "ready" &&
+        previewUrl &&
+        prevPanel !== "preview"
+      ) {
+        // Switching BACK to preview tab — verify serve is still alive
+        ensurePreviewAlive();
+      }
+    }
+  }, [rightPanel, projectId, previewState, previewUrl, startPreview, ensurePreviewAlive]);
 
   // ── Modify ───────────────────────────────────────────────────────────
   const handleModify = useCallback(async () => {

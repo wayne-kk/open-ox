@@ -73,8 +73,14 @@ Examples (all under 160 chars):
 Each section must have a distinct visual identity to create contrast and rhythm as the user scrolls:
 
 - **Alternate background treatments** — Follow the `Section Design Brief` provided below. It describes the background treatment for this section, designed to contrast with adjacent sections. Apply the background as described, using design system color tokens.
-- **Text color must match background** — When using `bg-card`, use `text-card-foreground`. When using `bg-muted`, use `text-muted-foreground`. When using `bg-background`, use `text-foreground`. Never assume text color independently of background.
-- **Background textures and SVG overlays — avoid by default** — Do NOT add grain, noise, film grain, dot grids, feTurbulence SVG, or any texture overlay divs. Use solid color backgrounds only. Even if the design system mentions textures, do not implement them in section code.
+- **Section backgrounds use opacity variants** — Use `bg-background`, `bg-muted/10`, `bg-muted/20`, `bg-muted/50` for section backgrounds. Do NOT use `bg-card` as a section-level background (it is only for card components within sections). For the final dark section (if specified), use `bg-foreground` or `bg-[#000]`.
+- **Text color must match background** — When using `bg-muted/*` variants, use `text-foreground` (the opacity is low enough that foreground text remains readable). When using `bg-background`, use `text-foreground`. When using dark backgrounds (`bg-foreground` / `bg-[#000]`), use `text-background` for inverted text. Never assume text color independently of background.
+- **Background decorations (when specified in the design brief)** — You MAY add structural background decorations as described in the Section Design Brief:
+  - **Grid patterns**: CSS-based grid/dot patterns using `background-image` with `linear-gradient` or `radial-gradient`, using `border` color token at very low opacity (e.g., 5-10%).
+  - **Radial glow**: Large `radial-gradient` using `primary` or `accent` color at very low opacity (5-15%), positioned to draw focus to the visual center.
+  - **Linear gradient transitions**: Soft gradients at section top/bottom edges for smooth visual transitions between sections.
+  - These must be implemented as CSS `background-image` or pseudo-elements with `absolute` positioning — NOT as extra DOM elements or SVG overlays.
+  - ❌ Do NOT add grain, noise, film grain, feTurbulence SVG, or texture overlay divs.
 - **Vary spacing and density** — some sections should feel spacious (large padding, generous whitespace), others more compact and content-dense.
 - **Mix layout patterns** — alternate between full-width, contained, grid, and asymmetric layouts. Don't repeat the same grid structure in consecutive sections.
 - **Create visual anchors** — use accent colors, borders, subtle gradients, or background shapes to give each section a unique feel while staying within the design system.

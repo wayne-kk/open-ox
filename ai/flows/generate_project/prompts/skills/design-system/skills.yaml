@@ -1,0 +1,77 @@
+---
+title: 'skills:'
+created: '2026-04-16T07:46:14.128Z'
+modified: '2026-04-16T08:20:25.400Z'
+---
+
+skills:
+
+  - name: newsprint
+    keywords:
+      - Editorial
+      - Editorial typography
+      - Serif fonts
+      - Multi-column layout
+      - Paper texture
+      - Zero border-radius
+      - Drop cap
+      - High information density
+    users_type:
+      - Long-form content creators
+      - History / literature websites
+      - Tech hardware reviews
+      - Photography portfolios
+      - News media outlets
+    emotional: Authoritative, intellectual, urgent, timeless, trustworthy
+
+  - name: monochrome
+    keywords:
+      - Pure black & white
+      - Serif fonts
+      - Oversized typography
+      - Zero shadows
+      - Zero border-radius
+      - Line-based visual system
+      - Dramatic negative space
+    users_type:
+      - High-end fashion brands
+      - Architecture / art galleries
+      - Luxury brand websites
+      - Photographer portfolios
+      - Minimalist personal sites
+    emotional: Austere, restrained, commanding, elegant, uncompromising
+
+  - name: bauhaus
+    keywords:
+      - Geometric shapes
+      - Red / yellow / blue primaries
+      - Thick borders
+      - Hard offset shadows
+      - Color blocking
+      - Asymmetric composition
+      - Geometric sans-serif
+    users_type:
+      - Creative agencies / design studios
+      - SaaS product landing pages
+      - Art education platforms
+      - Avant-garde brand showcases
+      - Graphic designer portfolios
+    emotional: Bold, avant-garde, constructivist, retro-modern, energetic
+
+  - name: modern
+    keywords:
+      - Linear
+      - Dark mode
+      - Glassmorphism
+      - Gradient glow
+      - Multi-layer shadows
+      - Mouse-tracking spotlight
+      - Animated ambient blobs
+      - Precision micro-interactions
+    users_type:
+      - Developer tools
+      - AI / LLM products
+      - SaaS dashboards
+      - Web3 projects
+      - Geek-oriented tech products
+    emotional: Precise, premium, cinematic, immersive, futuristic

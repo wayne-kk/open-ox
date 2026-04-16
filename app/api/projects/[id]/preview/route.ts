@@ -5,11 +5,42 @@ import {
   rebuildDevServer,
   hotRefreshDevServer,
   classifyModificationScope,
+  ensureDevServerAlive,
 } from "@/lib/devServerManager";
 import { getSessionUser } from "@/lib/auth/session";
 import { getProject } from "@/lib/projectManager";
 
 type Params = { params: Promise<{ id: string }> };
+
+/**
+ * GET /api/projects/[id]/preview — health check + auto-recover
+ *
+ * Returns { status: "ok", url } if the sandbox serve is alive.
+ * If the sandbox is running but serve crashed, restarts serve and returns ok.
+ * Returns { status: "down" } if the sandbox is gone entirely.
+ */
+export async function GET(_req: NextRequest, { params }: Params) {
+  const session = await getSessionUser();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
+  }
+  const { supabase: db } = session;
+  const { id } = await params;
+  const project = await getProject(db, id);
+  if (!project) {
+    return NextResponse.json(
+      { error: "Project not found", code: "PROJECT_NOT_FOUND" },
+      { status: 404 }
+    );
+  }
+  try {
+    const result = await ensureDevServerAlive(db, id);
+    return NextResponse.json(result);
+  } catch (err) {
+    console.error("[GET /api/projects/[id]/preview]", err);
+    return NextResponse.json({ status: "down" });
+  }
+}
 
 export async function POST(_req: NextRequest, { params }: Params) {
   const session = await getSessionUser();

@@ -7,6 +7,14 @@ import { existsSync, readdirSync, rmSync } from "fs";
 import { join } from "path";
 import { getSiteRoot } from "@/ai/tools/system/common";
 
+/**
+ * Opaque path join that prevents Turbopack / webpack from statically analysing
+ * the resulting path and pulling thousands of files into the bundle graph.
+ */
+function runtimeJoin(...segments: string[]): string {
+  return join(...segments);
+}
+
 export interface ClearTemplateResult {
   removed: string[];
   error?: string;
@@ -17,11 +25,11 @@ export function clearTemplate(): ClearTemplateResult {
 
   try {
     // 1. Section components
-    const sectionsDir = join(getSiteRoot(), "components", "sections");
+    const sectionsDir = runtimeJoin(getSiteRoot(), "components", "sections");
     if (existsSync(sectionsDir)) {
       for (const f of readdirSync(sectionsDir)) {
         if (f.endsWith(".tsx") || f.endsWith(".ts")) {
-          rmSync(join(sectionsDir, f));
+          rmSync(runtimeJoin(sectionsDir, f));
           removed.push(`components/sections/${f}`);
         }
       }
@@ -29,7 +37,7 @@ export function clearTemplate(): ClearTemplateResult {
 
     // 2. Single files
     for (const rel of ["app/page.tsx", "app/layout.tsx", "app/globals.css", "design-system.md"]) {
-      const abs = join(getSiteRoot(), rel);
+      const abs = runtimeJoin(getSiteRoot(), rel);
       if (existsSync(abs)) {
         rmSync(abs);
         removed.push(rel);
@@ -37,27 +45,27 @@ export function clearTemplate(): ClearTemplateResult {
     }
 
     // 3. Generated images
-    const imagesDir = join(getSiteRoot(), "public", "images");
+    const imagesDir = runtimeJoin(getSiteRoot(), "public", "images");
     if (existsSync(imagesDir)) {
       for (const f of readdirSync(imagesDir)) {
         if (f.endsWith(".png") || f.endsWith(".jpg") || f.endsWith(".webp")) {
-          rmSync(join(imagesDir, f));
+          rmSync(runtimeJoin(imagesDir, f));
           removed.push(`public/images/${f}`);
         }
       }
     }
 
     // 3. app/[slug]/page.tsx (non-home pages)
-    const appDir = join(getSiteRoot(), "app");
+    const appDir = runtimeJoin(getSiteRoot(), "app");
     if (existsSync(appDir)) {
       for (const e of readdirSync(appDir, { withFileTypes: true })) {
         if (e.isDirectory() && e.name !== "api") {
-          const pagePath = join(appDir, e.name, "page.tsx");
+          const pagePath = runtimeJoin(appDir, e.name, "page.tsx");
           if (existsSync(pagePath)) {
             rmSync(pagePath);
             removed.push(`app/${e.name}/page.tsx`);
           }
-          const dir = join(appDir, e.name);
+          const dir = runtimeJoin(appDir, e.name);
           if (readdirSync(dir).length === 0) {
             rmSync(dir, { recursive: true });
           }

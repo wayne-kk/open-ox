@@ -65,3 +65,4 @@ sdk/src/engine/prompts/
 sdk/src/engine/prompt-files/
 sdk/src/engine/shims/
 sdk-real-test/
+/sdk/

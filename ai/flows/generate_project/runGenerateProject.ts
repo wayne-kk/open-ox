@@ -4,7 +4,6 @@ import { setSiteRoot, getSiteRoot } from "@/ai/tools/system/common";
 import { setSectionSkillsEnabled, getModelId } from "@/lib/config/models";
 import { validateSkillFrontmatter } from "@/ai/shared/skillDiscovery";
 import { execSync } from "child_process";
-import { isLayoutSection } from "./registry/layoutSections";
 import { formatSiteFile, syncSiteValidationMarkers, readSiteFile, writeSiteFile, getSkillPromptsRoot } from "./shared/files";
 import { createArtifactLogger, createStepLogger } from "./shared/logging";
 import { buildScreenFilePath, buildSectionFilePath } from "./shared/paths";
@@ -14,6 +13,7 @@ import { stepComposeLayout } from "./steps/composeLayout";
 import { stepComposePage } from "./steps/composePage";
 import { stepGenerateScreen } from "./steps/generateScreen";
 import { stepGenerateProjectDesignSystem } from "./steps/generateProjectDesignSystem";
+import { stepMatchDesignSystemSkill } from "./steps/matchDesignSystemSkill";
 import { stepGenerateSection } from "./steps/generateSection";
 import { stepInstallDependencies } from "./steps/installDependencies";
 import { stepInferDesignIntent } from "./steps/inferDesignIntent";
@@ -98,7 +98,7 @@ interface SectionBatchItem {
   section: PlannedSectionSpec;
   outputFileRelative: string;
   pageContext?: GenerateSectionParams["pageContext"];
-  sectionDesignBriefOverride?: string;
+  sectionDesignBrief?: string;
 }
 
 const SECTION_PARALLELISM = Math.max(
@@ -334,7 +334,7 @@ async function runSectionBatch(params: {
       section: item.section,
       outputFileRelative: item.outputFileRelative,
       pageContext: item.pageContext,
-      sectionDesignBriefOverride: item.sectionDesignBriefOverride,
+      sectionDesignBrief: item.sectionDesignBrief ?? "",
       onMessage,
     });
   }
@@ -623,7 +623,7 @@ async function generatePages(params: {
             scopeKey: page.slug,
             section,
             outputFileRelative: buildSectionFilePath(page.slug, section.fileName),
-            sectionDesignBriefOverride: sectionBriefByFile.get(section.fileName),
+            sectionDesignBrief: sectionBriefByFile.get(section.fileName) ?? "",
             pageContext: {
               title: page.title,
               slug: page.slug,
@@ -894,7 +894,7 @@ export async function runGenerateProject(
 
     const normalizedBlueprint = normalizeBlueprint(rawBlueprint);
 
-    // ── Steps: plan_project + generate_project_design_system (parallel) ──
+    // ── Steps: plan_project + match/generate design system ──
     let blueprint: PlannedProjectBlueprint;
     let designSystem: string;
 
@@ -905,7 +905,7 @@ export async function runGenerateProject(
       logger.logStep("generate_project_design_system", "ok", "resumed from checkpoint");
     } else {
       logger.startStep("plan_project");
-      logger.startStep("generate_project_design_system");
+      logger.startStep("match_design_system_skill");
 
       // Build a fallback markdown text from blueprint's designIntent if inferDesignIntent returned empty
       const designIntentForSystem = inferredDesignIntentText || (() => {
@@ -914,16 +914,60 @@ export async function runGenerateProject(
         return `## Design Intent\n- Mood: ${di.mood.join(", ")}\n- Color Direction: ${di.colorDirection}\n- Style: ${di.style}\n- Keywords: ${di.keywords.join(", ")}`;
       })();
 
-      [blueprint, designSystem] = await Promise.all([
+      // Phase 1: plan_project + skill matching run in parallel
+      const [plannedBlueprint, matchResult] = await Promise.all([
         stepPlanProject(normalizedBlueprint).then((bp) => {
           logger.logStep("plan_project", "ok", "section generation plans prepared");
           return bp;
         }),
-        stepGenerateProjectDesignSystem(designIntentForSystem, options?.styleGuide).then((ds) => {
-          logger.logStep("generate_project_design_system", "ok", "design-system.md written");
-          return ds;
+        stepMatchDesignSystemSkill({
+          designIntentText: designIntentForSystem,
+          designKeywords: normalizedBlueprint.experience.designIntent.keywords,
+          productType: normalizedBlueprint.brief.productScope.productType,
+          projectDescription: normalizedBlueprint.brief.projectDescription,
+          styleGuide: options?.styleGuide,
+        }).then((result) => {
+          logger.logStep(
+            "match_design_system_skill",
+            "ok",
+            result.matched
+              ? `matched built-in skill: ${result.skillId} — ${result.reason}`
+              : `no match — ${result.reason}`,
+            result.matched ? result.skillId : undefined
+          );
+          // Attach trace so the topology detail drawer shows LLM call, input/output
+          if (result.trace && Object.keys(result.trace).length > 0) {
+            logger.attachTrace("match_design_system_skill", result.trace);
+          }
+          return result;
         }),
       ]);
+
+      blueprint = plannedBlueprint;
+
+      await persistJsonArtifact(artifactLogger, "match_design_system_skill", "output", {
+        matched: matchResult.matched,
+        skillId: matchResult.skillId,
+        reason: matchResult.reason,
+      });
+
+      // Phase 2: use matched skill or fall back to LLM generation
+      if (matchResult.matched && matchResult.designSystem) {
+        designSystem = matchResult.designSystem;
+        logger.logStep(
+          "generate_project_design_system",
+          "ok",
+          `using built-in skill: ${matchResult.skillId}`
+        );
+      } else {
+        logger.startStep("generate_project_design_system");
+        designSystem = await stepGenerateProjectDesignSystem(
+          designIntentForSystem,
+          options?.styleGuide
+        );
+        logger.logStep("generate_project_design_system", "ok", "design-system.md written");
+      }
+
       // Keep plan_project artifact focused on fields that are actually produced by
       // this step and consumed downstream. Full blueprint is still persisted in
       // final run/result artifacts.
@@ -943,9 +987,6 @@ export async function runGenerateProject(
               fileName: section.fileName,
               intent: section.intent,
               contentHints: section.contentHints,
-              primaryRoleIds: section.primaryRoleIds,
-              supportingCapabilityIds: section.supportingCapabilityIds,
-              sourceTaskLoopIds: section.sourceTaskLoopIds,
             })),
           })),
         },
@@ -959,30 +1000,10 @@ export async function runGenerateProject(
       );
     }
 
-    // Safety: move any non-layout sections that planProject mistakenly put in layoutSections
-    const trueLayoutSections = blueprint.site.layoutSections.filter((s) => isLayoutSection(s.type));
-    const misplacedSections = blueprint.site.layoutSections.filter((s) => !isLayoutSection(s.type));
-    if (misplacedSections.length > 0) {
-      console.warn(`[plan_project] ${misplacedSections.length} non-layout sections found in layoutSections, moving to home page`);
-      blueprint.site.layoutSections = trueLayoutSections;
-      const homePage = blueprint.site.pages.find((p) => p.slug === "home") ?? blueprint.site.pages[0];
-      if (homePage) {
-        // Deduplicate: only add misplaced sections whose fileName doesn't already exist in the page
-        const existingFileNames = new Set(homePage.sections.map((s) => s.fileName));
-        const newSections = misplacedSections.filter((s) => !existingFileNames.has(s.fileName));
-        if (newSections.length < misplacedSections.length) {
-          console.warn(
-            `[plan_project] ${misplacedSections.length - newSections.length} misplaced section(s) already existed in page, skipped duplicates`
-          );
-        }
-        homePage.sections = [...newSections, ...homePage.sections];
-      }
-    }
-
     result.blueprint = blueprint;
     const runtimeContext = buildProjectRuntimeContext(blueprint);
     runtimeContext.rawUserInput = userInput;
-    appendGeneratedFiles(result, ["design-system.md"]);
+    appendGeneratedFiles(result, ["design-system.md", "project-plan.json"]);
 
     // ── Step: apply_project_design_tokens + UI generation (parallel) ──
     const designTokensPromise = (async () => {

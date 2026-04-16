@@ -707,6 +707,71 @@ export async function rebuildDevServer(
   }
 }
 
+/**
+ * Ensure the dev server is alive. If the sandbox is running but serve crashed,
+ * restart serve from the existing /out directory. This is a lightweight health
+ * check designed to be called when the user switches back to the Preview tab.
+ *
+ * Returns:
+ *   - { status: "ok", url } — serve is responding (or was just restarted)
+ *   - { status: "down" } — sandbox is gone or unrecoverable
+ */
+export async function ensureDevServerAlive(
+  db: SupabaseClient,
+  projectId: string
+): Promise<{ status: "ok" | "down"; url?: string }> {
+  const sandboxId = await getSandboxId(db, projectId);
+  if (!sandboxId) return { status: "down" };
+
+  let sandbox: Sandbox;
+  try {
+    sandbox = await Sandbox.connect(sandboxId, e2bOpts());
+    if (!(await sandbox.isRunning())) {
+      await clearSandboxId(db, projectId);
+      return { status: "down" };
+    }
+  } catch {
+    await clearSandboxId(db, projectId);
+    return { status: "down" };
+  }
+
+  const previewUrl = `https://${sandbox.getHost(SERVE_PORT)}`;
+
+  // Fast path: serve is still responding
+  if (await isServerUp(sandbox)) {
+    await sandbox.setTimeout(SANDBOX_TIMEOUT_MS);
+    return { status: "ok", url: previewUrl };
+  }
+
+  // Serve crashed but sandbox is alive — try restarting from existing /out
+  console.log("[e2b ensureAlive] Serve is down, attempting restart...");
+  const hasOut = await sandbox.commands.run(
+    "test -d /home/user/app/out && echo YES || echo NO"
+  );
+  if (hasOut.stdout.trim() !== "YES") {
+    // No /out directory — can't restart without a full rebuild
+    console.log("[e2b ensureAlive] No /out directory, marking as down");
+    return { status: "down" };
+  }
+
+  // Kill any zombie serve processes and restart
+  await sandbox.commands.run("pkill -f 'serve out' || true");
+  await sandbox.commands.run("sleep 1");
+
+  try {
+    await startServeAndWait(sandbox);
+    if (await isServerUp(sandbox)) {
+      console.log("[e2b ensureAlive] Serve restarted successfully");
+      await sandbox.setTimeout(SANDBOX_TIMEOUT_MS);
+      return { status: "ok", url: previewUrl };
+    }
+  } catch (err) {
+    console.error("[e2b ensureAlive] Serve restart failed:", err);
+  }
+
+  return { status: "down" };
+}
+
 export async function getDevServerStatus(
   db: SupabaseClient,
   projectId: string
