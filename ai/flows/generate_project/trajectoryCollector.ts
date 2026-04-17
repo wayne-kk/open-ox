@@ -114,6 +114,7 @@ export class GenerateTrajectoryCollector {
                     content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
                     tool_calls: m.tool_calls as Array<{ id: string; function: { name: string; arguments: string } }> | undefined,
                     tool_call_id: m.tool_call_id,
+                    reasoning: typeof m.reasoning === "string" ? m.reasoning : undefined,
                 })),
             });
         } catch (err) {

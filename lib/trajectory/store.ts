@@ -131,6 +131,44 @@ export async function listTrajectoryRunEvents(runId: string): Promise<Trajectory
   return rows.map((row) => row.event);
 }
 
+/**
+ * Find an existing running trajectory run for the given task_id, or create a new one.
+ * This allows multiple modify executions on the same project to accumulate events
+ * into a single run, producing a richer trajectory that satisfies quality thresholds.
+ */
+export async function findOrCreateTrajectoryRun(input: RunStartInput): Promise<{ runId: string; taskId: string; reused: boolean }> {
+  // Look for an existing running run with the same task_id
+  const existing = await supabase
+    .from("trajectory_runs")
+    .select("run_id,task_id,status,last_seq")
+    .eq("task_id", input.task_id)
+    .eq("status", "running")
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  if (!existing.error && existing.data && existing.data.length > 0) {
+    const row = existing.data[0] as { run_id: string; task_id: string };
+    // Append a checkpoint event to mark the new modify round
+    await appendTrajectoryEvent(row.run_id, {
+      task_id: row.task_id,
+      phase: "setup",
+      event_type: "checkpoint",
+      actor: "system",
+      payload: {
+        type: "new_modify_round",
+        goal: input.goal,
+        environment: input.environment,
+      },
+      meta: input.meta,
+    });
+    return { runId: row.run_id, taskId: row.task_id, reused: true };
+  }
+
+  // No existing running run — create a new one
+  const { runId } = await createTrajectoryRun(input);
+  return { runId, taskId: input.task_id, reused: false };
+}
+
 export async function createRunEndEvent(
   runId: string,
   taskId: string,

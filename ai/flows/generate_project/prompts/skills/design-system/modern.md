@@ -1,11 +1,36 @@
 ---
-
-## title: modern
+title: modern
 created: '2026-04-16T07:23:53.433Z'
-modified: '2026-04-16T08:33:23.920Z'
+modified: '2026-04-17T07:03:11.383Z'
+---
 
 # modern
 
+<implementation-rules>
+# Strict Implementation Rules
+
+## 1. No Invention Policy
+Only implement UI elements, components, sections, and content explicitly described in this specification. 
+If something is not mentioned, it does not exist. Do not add:
+- Images, photos, illustrations, or screenshots unless explicitly specified
+- Decorative assets, mockups, browser frames, or device frames
+
+## 2. Section Completeness
+Each section description is an **exhaustive list** of its contents.
+- "Contains X, Y, Z" means it contains X, Y, Z and **nothing else**
+- Visual richness must come from the design system's own tools (typography, color, spacing, gradients, shadows, motion) — not from invented assets
+
+## 3. Ambiguity Protocol
+If the spec is unclear or incomplete about a section's contents:
+- Implement the minimum interpretation
+- Do NOT fill gaps with assumed content
+
+## 4. Image Rule
+- No `<img>`, `<picture>`, `<video>`, `<svg>` illustrations, or CSS `background-image` (except patterns/noise/gradients defined in the design system) unless the spec explicitly says "include an image/illustration/photo here"
+- Icons (Lucide, Heroicons, etc.) are allowed where the spec mentions icons
+</implementation-rules>
+
+<design-system>
 # modern
 
 ## Design Philosophy
@@ -33,35 +58,31 @@ modified: '2026-04-16T08:33:23.920Z'
 
 The palette is built on near-black bases with a single saturated indigo accent. Depth comes from layered translucency and soft light sources, not harsh shadows.
 
-
-| Token                 | Value                    | Usage                                             |
-| --------------------- | ------------------------ | ------------------------------------------------- |
-| `background-deep`     | `#020203`                | Absolute darkest — footer, deepest layers         |
-| `background-base`     | `#050506`                | Primary page canvas                               |
-| `background-elevated` | `#0a0a0c`                | Elevated surfaces, mock interfaces                |
-| `surface`             | `rgba(255,255,255,0.05)` | Card backgrounds, containers                      |
-| `surface-hover`       | `rgba(255,255,255,0.08)` | Hovered card state                                |
-| `foreground`          | `#EDEDEF`                | Primary text — bright but not pure white          |
-| `foreground-muted`    | `#8A8F98`                | Body text, descriptions, metadata                 |
-| `foreground-subtle`   | `rgba(255,255,255,0.60)` | Tertiary text, placeholders                       |
-| `accent`              | `#5E6AD2`                | Primary interactive color — buttons, links, glows |
-| `accent-bright`       | `#6872D9`                | Hover state for accent                            |
-| `accent-glow`         | `rgba(94,106,210,0.3)`   | Glow effects, ambient lighting                    |
-| `border-default`      | `rgba(255,255,255,0.06)` | Subtle hairline borders                           |
-| `border-hover`        | `rgba(255,255,255,0.10)` | Border on hover                                   |
-| `border-accent`       | `rgba(94,106,210,0.30)`  | Accent-tinted borders for emphasis                |
-
+| Token | Value | Usage |
+|:------|:------|:------|
+| `background-deep` | `#020203` | Absolute darkest — footer, deepest layers |
+| `background-base` | `#050506` | Primary page canvas |
+| `background-elevated` | `#0a0a0c` | Elevated surfaces, mock interfaces |
+| `surface` | `rgba(255,255,255,0.05)` | Card backgrounds, containers |
+| `surface-hover` | `rgba(255,255,255,0.08)` | Hovered card state |
+| `foreground` | `#EDEDEF` | Primary text — bright but not pure white |
+| `foreground-muted` | `#8A8F98` | Body text, descriptions, metadata |
+| `foreground-subtle` | `rgba(255,255,255,0.60)` | Tertiary text, placeholders |
+| `accent` | `#5E6AD2` | Primary interactive color — buttons, links, glows |
+| `accent-bright` | `#6872D9` | Hover state for accent |
+| `accent-glow` | `rgba(94,106,210,0.3)` | Glow effects, ambient lighting |
+| `border-default` | `rgba(255,255,255,0.06)` | Subtle hairline borders |
+| `border-hover` | `rgba(255,255,255,0.10)` | Border on hover |
+| `border-accent` | `rgba(94,106,210,0.30)` | Accent-tinted borders for emphasis |
 
 ### Background System: Layered Ambient Lighting
 
 The background is never flat. It's a composition of multiple layers:
 
 **Layer 1 — Base Gradient:**
-
 ```
 bg-[radial-gradient(ellipse_at_top,#0a0a0f_0%,#050506_50%,#020203_100%)]
 ```
-
 A radial gradient emanating from top-center creates vertical depth.
 
 **Layer 2 — Noise Texture:**
@@ -69,14 +90,12 @@ A subtle SVG noise pattern at `opacity: 0.015` adds tactile quality and prevents
 
 **Layer 3 — Animated Gradient Blobs:**
 Multiple large, heavily blurred shapes create ambient "light pools":
-
 - Primary blob: Top-center, `blur-[150px]`, 900×1400px, accent color at 25% opacity
 - Secondary blob: Left side, `blur-[120px]`, 600×800px, purple/pink mix at 15% opacity
 - Tertiary blob: Right side, `blur-[100px]`, 500×700px, indigo/blue mix at 12% opacity
 - Bottom accent: Lower area, pulsing animation, accent at 10% opacity
 
 **Blob Animation:** Blobs float slowly using keyframe animations:
-
 ```css
 @keyframes float {
   0%, 100% { transform: translateY(0) rotate(0deg); }
@@ -96,34 +115,29 @@ A subtle 64px grid pattern at `opacity: 0.02` adds technical precision.
 
 **Type Scale & Weights:**
 
-
-| Level      | Size                     | Weight          | Tracking             | Usage                  |
-| ---------- | ------------------------ | --------------- | -------------------- | ---------------------- |
-| Display    | `text-7xl` to `text-8xl` | `font-semibold` | `tracking-[-0.03em]` | Hero headlines         |
-| H1         | `text-5xl` to `text-6xl` | `font-semibold` | `tracking-tight`     | Section headers        |
-| H2         | `text-3xl` to `text-4xl` | `font-semibold` | `tracking-tight`     | Subsection headers     |
-| H3         | `text-xl` to `text-2xl`  | `font-semibold` | `tracking-tight`     | Card titles            |
-| Body Large | `text-lg` to `text-xl`   | `font-normal`   | default              | Lead paragraphs        |
-| Body       | `text-sm` to `text-base` | `font-normal`   | default              | Standard content       |
-| Label      | `text-xs`                | `font-mono`     | `tracking-widest`    | Section tags, metadata |
-
+| Level | Size | Weight | Tracking | Usage |
+|:------|:-----|:-------|:---------|:------|
+| Display | `text-7xl` to `text-8xl` | `font-semibold` | `tracking-[-0.03em]` | Hero headlines |
+| H1 | `text-5xl` to `text-6xl` | `font-semibold` | `tracking-tight` | Section headers |
+| H2 | `text-3xl` to `text-4xl` | `font-semibold` | `tracking-tight` | Subsection headers |
+| H3 | `text-xl` to `text-2xl` | `font-semibold` | `tracking-tight` | Card titles |
+| Body Large | `text-lg` to `text-xl` | `font-normal` | default | Lead paragraphs |
+| Body | `text-sm` to `text-base` | `font-normal` | default | Standard content |
+| Label | `text-xs` | `font-mono` | `tracking-widest` | Section tags, metadata |
 
 **Gradient Text Treatment:**
 Headlines use gradient fills for dimensionality:
-
 ```
 bg-gradient-to-b from-white via-white/95 to-white/70 bg-clip-text text-transparent
 ```
 
 For accent emphasis, use animated gradient:
-
 ```
 bg-gradient-to-r from-[#5E6AD2] via-indigo-400 to-[#5E6AD2] bg-clip-text text-transparent
 /* With background-size: 200% and animation for shimmer effect */
 ```
 
 **Line Heights:**
-
 - Headlines: `leading-tight` or `leading-none`
 - Body text: `leading-relaxed`
 
@@ -131,20 +145,17 @@ bg-gradient-to-r from-[#5E6AD2] via-indigo-400 to-[#5E6AD2] bg-clip-text text-tr
 
 ### Radius & Border System
 
-
-| Element          | Radius               | Border                         |
-| ---------------- | -------------------- | ------------------------------ |
-| Large containers | `rounded-2xl` (16px) | `border border-white/[0.06]`   |
-| Cards            | `rounded-2xl` (16px) | `border border-white/[0.06]`   |
-| Buttons          | `rounded-lg` (8px)   | Inset shadow instead of border |
-| Inputs           | `rounded-lg` (8px)   | `border border-white/10`       |
-| Badges/Pills     | `rounded-full`       | `border border-accent/30`      |
-| Icons containers | `rounded-xl` (12px)  | `border border-white/10`       |
-
+| Element | Radius | Border |
+|:--------|:-------|:-------|
+| Large containers | `rounded-2xl` (16px) | `border border-white/[0.06]` |
+| Cards | `rounded-2xl` (16px) | `border border-white/[0.06]` |
+| Buttons | `rounded-lg` (8px) | Inset shadow instead of border |
+| Inputs | `rounded-lg` (8px) | `border border-white/10` |
+| Badges/Pills | `rounded-full` | `border border-accent/30` |
+| Icons containers | `rounded-xl` (12px) | `border border-white/10` |
 
 **Border Gradients on Hover:**
 Cards can have animated gradient borders that fade in on hover:
-
 ```css
 background: linear-gradient(to bottom, rgba(94,106,210,0.3), transparent);
 mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
@@ -168,14 +179,12 @@ shadow-[0_0_0_1px_rgba(255,255,255,0.1),0_8px_40px_rgba(0,0,0,0.5),0_0_80px_rgba
 ```
 
 **Accent Glow for CTAs:**
-
 ```
 shadow-[0_0_0_1px_rgba(94,106,210,0.5),0_4px_12px_rgba(94,106,210,0.3),inset_0_1px_0_0_rgba(255,255,255,0.2)]
 ```
 
 **Inner Highlight:**
 Buttons and elevated surfaces get a subtle top edge highlight:
-
 ```
 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)]
 ```
@@ -187,7 +196,6 @@ shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)]
 ### Buttons
 
 **Primary Button:**
-
 - Background: Solid accent color (`bg-[#5E6AD2]`)
 - Text: White
 - Shadow: Multi-layer with accent glow
@@ -196,14 +204,12 @@ shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)]
 - Shine effect: Pseudo-element gradient sweep on hover
 
 **Secondary Button:**
-
 - Background: `bg-white/[0.05]`
 - Text: `text-[#EDEDEF]`
 - Border: Inset shadow only
 - Hover: `bg-white/[0.08]`, subtle outer glow
 
 **Ghost Button:**
-
 - Background: Transparent
 - Text: Muted foreground
 - Hover: `bg-white/[0.05]`, text brightens
@@ -211,7 +217,6 @@ shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)]
 ### Cards & Containers
 
 **Base Card:**
-
 - Background: `bg-gradient-to-b from-white/[0.08] to-white/[0.02]`
 - Border: 1px at 6% white opacity
 - Radius: `rounded-2xl`
@@ -220,7 +225,6 @@ shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)]
 
 **Spotlight Effect:**
 Cards track mouse position and render a radial gradient that follows the cursor:
-
 ```jsx
 // Radial gradient, 300px diameter, accent color at 15% opacity
 // Positioned at mouse coordinates relative to card
@@ -228,7 +232,6 @@ Cards track mouse position and render a radial gradient that follows the cursor:
 ```
 
 **Card Variants:**
-
 - `default`: Standard glass effect
 - `glass`: More translucent with backdrop blur
 - `gradient`: Subtle accent gradient overlay
@@ -244,23 +247,19 @@ Cards track mouse position and render a radial gradient that follows the cursor:
 ### Interactive States
 
 **Hover Principles:**
-
 - Movement is minimal: `y: -4px` to `y: -8px` maximum
 - Duration: `200-300ms`
 - Easing: `[0.16, 1, 0.3, 1]` (expo out)
 - Changes: Border brightens, glow increases, subtle scale
 
 **Focus States:**
-
 - Ring: `ring-2 ring-[#5E6AD2]/50 ring-offset-2 ring-offset-[#050506]`
 
 **Active States:**
-
 - Scale: `scale-[0.98]`
 - Shadow: Reduced depth
 
 **Mobile Menu:**
-
 - Toggle button appears on screens < 768px
 - Animated dropdown with `opacity` and `y` transform (0.2s duration)
 - Semi-transparent backdrop: `bg-[#050506]/95` with `backdrop-blur-xl`
@@ -273,37 +272,31 @@ Cards track mouse position and render a radial gradient that follows the cursor:
 ## Layout Principles
 
 ### Spacing Scale
-
 Base unit: 4px. Use Tailwind's default scale consistently.
 
-
-| Context             | Spacing                             |
-| ------------------- | ----------------------------------- |
-| Section padding     | `py-24` to `py-32`                  |
+| Context | Spacing |
+|:--------|:--------|
+| Section padding | `py-24` to `py-32` |
 | Container max-width | `container` with responsive padding |
-| Card padding        | `p-6` to `p-8`                      |
-| Element gaps        | `gap-4` to `gap-8`                  |
-| Between sections    | `py-32` (128px)                     |
-
+| Card padding | `p-6` to `p-8` |
+| Element gaps | `gap-4` to `gap-8` |
+| Between sections | `py-32` (128px) |
 
 ### Grid Philosophy
 
 **Asymmetric Bento Grids:**
 Feature grids should NOT be uniform. Use varying spans:
-
 - 6-column base grid on desktop
 - Mix of `col-span-2`, `col-span-3`, `col-span-4`
 - Variable row heights with `auto-rows-[180px]` as baseline
 - One "hero" card spanning 4 columns and 2 rows
 
 **Responsive Breakpoints:**
-
 - Mobile (`< 768px`): Single column, stacked layout with reduced padding
 - Tablet (`md: 768px`): 2-3 columns, intermediate grid layouts
 - Desktop (`lg: 1024px+`): Full grid expression with asymmetric layouts
 
 **Mobile-Specific Adjustments:**
-
 - Section padding scales: `py-16` (mobile) → `py-24` (tablet) → `py-32` (desktop)
 - Hero typography: `text-4xl` (mobile) → `text-5xl` (tablet) → `text-7xl`/`text-8xl` (desktop)
 - Body text: `text-base` (mobile) → `text-lg` (tablet) → `text-xl` (desktop)
@@ -324,10 +317,15 @@ Feature grids should NOT be uniform. Use varying spans:
 These elements MUST be present for authenticity:
 
 1. **Animated Ambient Blobs:** Multiple layered, floating gradient shapes create cinematic lighting. Without these, the design becomes flat and generic.
+
 2. **Mouse-Tracking Spotlights:** Interactive surfaces respond to cursor position with soft radial glow effects. This creates the "magical" interaction feel.
+
 3. **Gradient Typography:** Headlines use vertical gradients (white to semi-transparent) and accent gradients with animation for key phrases.
+
 4. **Multi-Layer Shadows:** Never single shadows. Always combine: border highlight + soft diffuse shadow + optional accent glow.
+
 5. **Parallax/Scroll Effects:** Hero content fades and scales on scroll. Elements reveal with staggered animations. This adds cinematic depth.
+
 6. **Precision Micro-Interactions:** All animations are quick (200-300ms), use expo-out easing, and movements are tiny (4-8px). Never bouncy or exaggerated.
 
 ---
@@ -335,13 +333,21 @@ These elements MUST be present for authenticity:
 ## Anti-Patterns (What to Avoid)
 
 1. **Flat backgrounds:** Never use a single solid color. Always layer gradients, noise, and ambient light.
+
 2. **Pure black (`#000000`):** Use near-blacks like `#050506` or `#020203` for softer appearance.
+
 3. **Pure white text:** Use `#EDEDEF` or similar off-white to reduce harshness.
+
 4. **Large hover movements:** Keep transforms under 8px. This isn't playful—it's precise.
+
 5. **Uniform grids:** Bento layouts should have variety in card sizes. Avoid same-size-everything.
+
 6. **Harsh borders:** Borders should be nearly invisible (`6-10%` white opacity), not prominent.
+
 7. **Colorful accent overuse:** The accent color is for highlights and interaction, not decoration. Most of the UI is monochromatic.
+
 8. **Bouncy animations:** Use expo-out easing, not spring physics. Movements should be swift and decisive.
+
 9. **Missing glow effects:** Accent buttons without glow look incomplete. The soft light emission is part of the language.
 
 ---
@@ -349,30 +355,25 @@ These elements MUST be present for authenticity:
 ## Animation & Motion
 
 **Timing:**
-
 - Quick interactions: `200ms`
 - Standard transitions: `300ms`
 - Entrance animations: `600ms`
 - Background blob float: `8000-10000ms`
 
 **Easing:**
-
 - Primary: `[0.16, 1, 0.3, 1]` (expo-out)
 - Hover: `ease-out`
 
 **Entrance Patterns:**
-
 - Fade up: `opacity: 0 → 1`, `y: 24px → 0`
 - Scale in: `opacity: 0 → 1`, `scale: 0.95 → 1`
 - Stagger children: `0.08s` delay between items
 
 **Scroll-Triggered:**
-
 - Viewport threshold: `15-20%` visibility
 - Once: true (don't re-animate on scroll back)
 
 **Parallax (Hero):**
-
 - Opacity: Fades from `1 → 0` over first 50% of scroll
 - Scale: Shrinks from `1 → 0.95`
 - Y position: Moves down `0 → 100px`
@@ -382,24 +383,20 @@ These elements MUST be present for authenticity:
 ## Accessibility Considerations
 
 **Contrast:**
-
 - Primary text (`#EDEDEF` on `#050506`): ~15:1 ratio ✓
 - Muted text (`#8A8F98` on `#050506`): ~6:1 ratio ✓
 - Accent on dark: Ensure 4.5:1 minimum for interactive elements
 
 **Focus States:**
-
 - Always visible focus rings using accent color
 - `ring-offset` matches background color
 
 **Motion:**
-
 - Respect `prefers-reduced-motion`
 - Provide fallbacks for parallax and floating animations
 - Essential interactions should work without animation
 
 **Color Independence:**
-
 - Don't rely solely on accent color for meaning
 - Use icons, labels, and position to reinforce state
-
+</design-system>

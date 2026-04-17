@@ -10,7 +10,7 @@ import { buildFileTree, buildHistoryContext, buildInitialMessages, tryReadFile }
 import { FileSnapshotTracker, type DiffStats } from "./tracking/fileSnapshotTracker";
 import { runAgentLoop } from "./engine/loopEngine";
 import { SYSTEM_PROMPT } from "./prompt/systemPrompt";
-import { appendTrajectoryEvent, createRunEndEvent, createTrajectoryRun } from "@/lib/trajectory/store";
+import { appendTrajectoryEvent, findOrCreateTrajectoryRun } from "@/lib/trajectory/store";
 import type { TrajectoryData } from "./trajectory";
 
 type TrajectoryToolCall = NonNullable<TrajectoryData["messages"][number]["tool_calls"]>[number];
@@ -71,7 +71,7 @@ export async function runModifyProject(
 
   try {
     try {
-      const run = await createTrajectoryRun({
+      const run = await findOrCreateTrajectoryRun({
         task_id: taskId,
         goal: userInstruction,
         task_spec_ref: "open-ox.modify-project",
@@ -385,6 +385,7 @@ export async function runModifyProject(
           iterations,
           buildPassed: loopState.buildPassed,
           touchedFiles,
+          diffs: diffs.map(d => ({ file: d.file, stats: d.stats })),
           timestamp: new Date().toISOString(),
         },
         messages: messages.map(m => ({
@@ -392,6 +393,7 @@ export async function runModifyProject(
           content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
           tool_calls: m.tool_calls as TrajectoryToolCall[] | undefined,
           tool_call_id: m.tool_call_id,
+          reasoning: typeof m.reasoning === "string" ? m.reasoning : undefined,
         })),
       });
     } catch (trajErr) {
@@ -400,14 +402,24 @@ export async function runModifyProject(
 
     if (trajectory) {
       await trajectoryQueue;
-      await createRunEndEvent(trajectory.runId, trajectory.taskId, "system", {
-        success: true,
-        verificationStatus: loopState.buildPassed ? "passed" : "failed",
-        projectId,
-        touchedFiles: touchedFiles.length,
-        iterations,
+      // Don't end the run — keep it open for future modify rounds on the same project.
+      // Record a checkpoint instead so the run accumulates all modify rounds.
+      await appendTrajectoryEvent(trajectory.runId, {
+        task_id: trajectory.taskId,
+        phase: "finalize",
+        event_type: "checkpoint",
+        actor: "system",
+        payload: {
+          type: "modify_round_complete",
+          success: true,
+          verificationStatus: loopState.buildPassed ? "passed" : "failed",
+          projectId,
+          touchedFiles: touchedFiles.length,
+          iterations,
+        },
+        meta: { source: "modify_round_end" },
       }).catch((err) => {
-        console.warn("[modify] trajectory run_end failed:", err);
+        console.warn("[modify] trajectory round checkpoint failed:", err);
       });
     }
   } catch (err) {
@@ -441,11 +453,19 @@ export async function runModifyProject(
         payload: { message: errMsg, projectId },
         meta: { source: "modify_error" },
       }).catch(() => null);
-      await createRunEndEvent(trajectory.runId, trajectory.taskId, "system", {
-        success: false,
-        verificationStatus: "failed",
-        error: errMsg,
-        projectId,
+      // Don't end the run on error — keep it open for retry/future modify rounds.
+      await appendTrajectoryEvent(trajectory.runId, {
+        task_id: trajectory.taskId,
+        phase: "finalize",
+        event_type: "checkpoint",
+        actor: "system",
+        payload: {
+          type: "modify_round_complete",
+          success: false,
+          error: errMsg,
+          projectId,
+        },
+        meta: { source: "modify_round_end" },
       }).catch(() => null);
     }
   } finally {
