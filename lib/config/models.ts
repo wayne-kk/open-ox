@@ -96,7 +96,7 @@ export function clearStepConfig(stepName: string): void {
 
 // ── Section Skills toggle ───────────────────────────────────────────────
 
-let _sectionSkillsEnabled = false;
+let _sectionSkillsEnabled = true;
 
 export function setSectionSkillsEnabled(enabled: boolean): void {
     _sectionSkillsEnabled = enabled;

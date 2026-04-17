@@ -1,28 +1,3 @@
----
-id: component.hero.lighting
-kind: component-skill
-sectionTypes: ["hero"]
-priority: 75
-fallback: false
-when:
-  designKeywords:
-    any: ["lightning", "shader", "webgl", "plasma", "particle-field", "generative-art"]
-    none: ["editorial", "magazine", "luxury", "minimal", "clean", "nature", "organic", "warm", "festive", "celebration"]
-  traits:
-    any: ["ambient", "energetic"]
-    none: []
-  journeyStages:
-    any: ["activation", "launch"]
-    none: []
-  productTypes:
-    any: ["developer-tool", "saas-app"]
-    none: ["campaign-site", "marketing-site", "brand-site", "portfolio", "publication"]
-notes: |
-  Use ONLY for heroes where WebGL lightning/shader is the explicit design intent.
-  Requires framer-motion and client-side rendering. Do NOT use for general tech,
-  neon, or cyber aesthetics — use impactful instead.
----
-
 # Component Skill: Hero — Lighting / Shader
 
 Use this skill when generating a hero section that features a WebGL-based lightning, shimmer, or ambient glow effect as the primary visual. The hero should feel immersive, tech-forward, and customizable.

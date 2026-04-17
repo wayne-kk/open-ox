@@ -1,28 +1,3 @@
----
-
-id: component.hero.particle
-kind: component-skill
-sectionTypes: ["hero"]
-priority: 80
-fallback: false
-when:
-  designKeywords:
-    any: ["particle", "generative", "interactive", "canvas", "text-effect", "kinetic", "dissolve", "scatter", "粒子", "粒子效果"]
-    none: ["editorial", "magazine", "luxury", "minimal", "dashboard", "shader", "webgl", "lightning"]
-  traits:
-    any: ["ambient", "energetic"]
-    none: []
-  journeyStages:
-    any: ["acquisition", "launch", "activation", "campaign"]
-    none: []
-  productTypes:
-    any: ["marketing-site", "campaign-site", "brand-site", "developer-tool"]
-    none: []
-notes: |
-  Use for heroes with a canvas-based particle text effect. Particles form words
-  and animate between them. Interactive: right-click destroys nearby particles.
----
-
 # Component Skill: Hero — Particle Text
 
 Use this skill when generating a hero section where the headline is rendered as an animated particle system on a `<canvas>`. Particles swarm to form words, cycle through them automatically, and respond to mouse interaction.
@@ -209,4 +184,3 @@ Right-click + drag: destroy particles within radius 60 of cursor. Optional, keep
 - Font size for text rasterization: `Math.floor(canvas.height * 0.28)` — scales with canvas.
 - Pixel sampling step: 5–6 for performance.
 - **TypeScript strict mode**: Never use non-null assertions (`!`). Always null-check `canvasRef.current` and `canvas.getContext("2d")` with early returns. Every function that accesses `canvas` or `ctx` must guard against null. The code must compile with `strict: true` in tsconfig.
-

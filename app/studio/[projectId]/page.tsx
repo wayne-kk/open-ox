@@ -9,6 +9,7 @@ import { HamsterLoader } from "@/components/ui/hamster-loader";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { useBuildStudio } from "@/app/studio/hooks/useBuildStudio";
+import { useFaviconSync } from "@/app/hooks/useFaviconSync";
 import { BuildConversation } from "@/app/studio/components/BuildConversation";
 import { GenerationAtlas } from "@/app/studio/components/GenerationAtlas";
 import { ProjectCodePanel } from "@/app/studio/components/ProjectCodePanel";
@@ -26,6 +27,13 @@ function StudioInner({ projectId }: { projectId: string }) {
     previewUrl, previewState, previewError, previewVersion, startPreview, iframeRef, projectLoading,
     autoPreviewAfterBuild, setAutoPreviewAfterBuild, generationMode,
     useDatabasePrompts, setUseDatabasePrompts } = studio;
+
+  // Sync AI processing state → dynamic favicon
+  useFaviconSync({
+    loading: studio.loading,
+    modifying: studio.modifying,
+    error: studio.response?.error ?? studio.modifyError,
+  });
   const buildSteps = response?.buildSteps ?? [];
   const canPreview = !!projectId && !loading;
   const canCode = !!projectId && !projectLoading;

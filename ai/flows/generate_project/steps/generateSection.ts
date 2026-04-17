@@ -78,17 +78,20 @@ async function llmSelectSkill(
   const systemPrompt = `Select at most ONE component skill for this section.
 
 Rules:
-1. If user intent clearly asks for a concrete visual effect, choose the matching skill.
-2. If there is no clear match, return {"skillId": null}.
-3. Prefer precision over novelty.
+1. The original user request is the highest-priority signal. If the user explicitly mentions a visual effect (e.g. "闪电效果", "粒子效果", "shader", "lightning"), you MUST select the matching skill even if the design keywords seem generic.
+2. If user intent clearly asks for a concrete visual effect, choose the matching skill.
+3. If there is no clear match, return {"skillId": null}.
+4. Prefer precision over novelty.
+5. Match Chinese visual terms to English skill keywords: 闪电/雷电/电光→lightning, 粒子→particle, 着色器→shader, etc.
 
 Return JSON only: {"skillId":"<id>"|null}`;
 
-  const userMessage = `Section type: ${section.type}
+  const userMessage = `Original user request (HIGHEST PRIORITY): ${rawUserInput ?? "N/A"}
+
+Section type: ${section.type}
 Section intent: ${section.intent}
 Section content hints: ${section.contentHints}
 Design keywords: ${designKeywords.join(", ")}
-Original user request: ${rawUserInput ?? ""}
 
 Candidate skills:
 ${skillList}`;
@@ -110,7 +113,10 @@ async function discoverAndSelectSkill(
   rawUserInput?: string,
 ): Promise<{ skillId: string | null; skillPrompt: string; skillMetadataBlock: string }> {
   const sectionType = section.type.trim().toLowerCase();
-  const candidates = discoverSkillsBySectionType(getSkillPromptsRoot(), sectionType);
+  const root = getSkillPromptsRoot();
+  const candidates = discoverSkillsBySectionType(root, sectionType);
+
+  console.log(`[skill-select] sectionType="${sectionType}" root="${root}" candidates=${candidates.length} ids=[${candidates.map(c => c.id).join(",")}]`);
 
   if (candidates.length === 0) {
     return { skillId: null, skillPrompt: "", skillMetadataBlock: "" };

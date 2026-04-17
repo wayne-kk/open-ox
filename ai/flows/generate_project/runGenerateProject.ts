@@ -16,7 +16,7 @@ import { stepGenerateProjectDesignSystem } from "./steps/generateProjectDesignSy
 import { stepMatchDesignSystemSkill } from "./steps/matchDesignSystemSkill";
 import { stepGenerateSection } from "./steps/generateSection";
 import { stepInstallDependencies } from "./steps/installDependencies";
-import { stepInferDesignIntent } from "./steps/inferDesignIntent";
+import { stepInferDesignIntent, type DesignIntentResult } from "./steps/inferDesignIntent";
 import { stepPlanProject } from "./steps/planProject";
 import { stepRepairBuild } from "./steps/repairBuild";
 import { stepRunBuild } from "./steps/runBuild";
@@ -790,7 +790,8 @@ export async function runGenerateProject(
   );
 
   // Set section skills toggle — default off, user can enable from UI
-  setSectionSkillsEnabled(options?.enableSkills ?? false);
+  // Section skills are always enabled
+  setSectionSkillsEnabled(true);
 
   // When a projectId is provided, point SITE_ROOT at the project directory and
   // skip clearing the template (the project dir was already initialised by the
@@ -804,14 +805,15 @@ export async function runGenerateProject(
   const appScreenFirstEnabled = getPromptProfile() === "app";
 
   try {
-    if (options?.enableSkills) {
+    // Always validate skill files (skills are enabled by default)
+    {
       const skillFrontmatterErrors = validateSkillFrontmatter(getSkillPromptsRoot());
       if (skillFrontmatterErrors.length > 0) {
         const detail = skillFrontmatterErrors.map((e) => `${e.fileName}: ${e.message}`).join(" | ");
         logger.logStep("validate_skill_prompts", "error", detail);
         throw new Error(`Invalid skill prompt frontmatter: ${detail}`);
       }
-      logger.logStep("validate_skill_prompts", "ok", "all skill frontmatter parsed");
+      logger.logStep("validate_skill_prompts", "ok", "all skill files validated");
     }
 
     await persistJsonArtifact(artifactLogger, "run", "input", {
@@ -840,7 +842,7 @@ export async function runGenerateProject(
 
     // ── Step: analyze_project_requirement ─────────────────────────────────
     let rawBlueprint: ProjectBlueprint;
-    let inferredDesignIntentText: string | null = null;
+    let inferredDesignIntent: DesignIntentResult | null = null;
 
     if (cp?.skipAnalyze && cp.cachedBlueprint) {
       rawBlueprint = cp.cachedBlueprint;
@@ -849,12 +851,12 @@ export async function runGenerateProject(
       if (rawBlueprint.experience?.designIntent?.keywords?.length) {
         logger.logStep("infer_design_intent", "ok", "resumed from checkpoint");
       } else {
-        inferredDesignIntentText = await logger.timed(
+        inferredDesignIntent = await logger.timed(
           "infer_design_intent",
           () => stepInferDesignIntent(userInput),
-          (text) => text.slice(0, 80)
+          (r) => r.text.slice(0, 80)
         );
-        await persistTextArtifact(artifactLogger, "infer_design_intent", "output", inferredDesignIntentText, "md");
+        await persistTextArtifact(artifactLogger, "infer_design_intent", "output", inferredDesignIntent.text, "md");
       }
     } else {
       const analyzePromise = logger.timed(
@@ -873,12 +875,12 @@ export async function runGenerateProject(
       const inferPromise = logger.timed(
         "infer_design_intent",
         () => stepInferDesignIntent(userInput),
-        (text) => text.slice(0, 80)
+        (r) => r.text.slice(0, 80)
       );
 
-      [rawBlueprint, inferredDesignIntentText] = await Promise.all([analyzePromise, inferPromise]);
+      [rawBlueprint, inferredDesignIntent] = await Promise.all([analyzePromise, inferPromise]);
       await persistJsonArtifact(artifactLogger, "analyze_project_requirement", "output", rawBlueprint);
-      await persistTextArtifact(artifactLogger, "infer_design_intent", "output", inferredDesignIntentText, "md");
+      await persistTextArtifact(artifactLogger, "infer_design_intent", "output", inferredDesignIntent.text, "md");
     }
 
     if (!rawBlueprint.experience) {
@@ -890,6 +892,14 @@ export async function runGenerateProject(
           keywords: ["clean", "professional", "focused", "confident", "modern"],
         },
       };
+    }
+
+    // Merge technical keywords from infer_design_intent into designKeywords
+    // so downstream skill matching can use them
+    if (inferredDesignIntent?.technicalKeywords?.length) {
+      const existing = rawBlueprint.experience.designIntent.keywords;
+      const merged = [...new Set([...existing, ...inferredDesignIntent.technicalKeywords])];
+      rawBlueprint.experience.designIntent.keywords = merged;
     }
 
     const normalizedBlueprint = normalizeBlueprint(rawBlueprint);
@@ -908,7 +918,7 @@ export async function runGenerateProject(
       logger.startStep("match_design_system_skill");
 
       // Build a fallback markdown text from blueprint's designIntent if inferDesignIntent returned empty
-      const designIntentForSystem = inferredDesignIntentText || (() => {
+      const designIntentForSystem = inferredDesignIntent?.text || (() => {
         const di = rawBlueprint.experience?.designIntent;
         if (!di) return "";
         return `## Design Intent\n- Mood: ${di.mood.join(", ")}\n- Color Direction: ${di.colorDirection}\n- Style: ${di.style}\n- Keywords: ${di.keywords.join(", ")}`;
