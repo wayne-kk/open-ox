@@ -20,7 +20,7 @@ import {
   renameProject,
   type GenerationMode,
 } from "@/lib/projectManager";
-import { uploadGeneratedFiles } from "@/lib/storage";
+import { scheduleUploadFullProject } from "@/lib/storage";
 import { setRuntimeModelId, type ModelId } from "@/lib/config/models";
 import { loadStepModelsFromDB } from "@/lib/config/models";
 import {
@@ -363,12 +363,7 @@ export async function POST(req: Request) {
           );
 
           if (result.success) {
-            // Step 4: Upload generated files to Supabase Storage (non-blocking)
-            uploadGeneratedFiles(projectId, result.generatedFiles ?? []).catch((err) =>
-              console.error("[AI API] Storage upload failed:", err)
-            );
-
-            // Step 5: Mark project as ready
+            // Step 4: Mark project as ready (local disk already has files; E2B preview uses that).
             await updateProjectStatus(db, projectId, "ready", {
               completedAt: new Date().toISOString(),
               verificationStatus: result.verificationStatus,
@@ -379,11 +374,14 @@ export async function POST(req: Request) {
               totalDuration: result.totalDuration,
             });
 
-            // Step 6: Update project name from blueprint's projectTitle
+            // Step 5: Update project name from blueprint's projectTitle
             const projectTitle = (result.blueprint as { brief?: { projectTitle?: string } })?.brief?.projectTitle;
             if (projectTitle && projectTitle.trim()) {
               await renameProject(db, projectId, projectTitle.trim());
             }
+
+            // Step 6: Persist to Storage asynchronously (does not block preview / SSE done).
+            scheduleUploadFullProject(projectId);
           } else {
             // Generation completed but reported failure — still persist steps for debugging
             await updateProjectStatus(db, projectId, "failed", {

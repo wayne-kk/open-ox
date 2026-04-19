@@ -21,6 +21,7 @@ import { SSE_RESPONSE_HEADERS } from "@/lib/sse-headers";
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
+import { scheduleUploadFullProject } from "@/lib/storage";
 
 function validateApiKey(req: Request): boolean {
   const expected = process.env.OPEN_OX_API_KEY;
@@ -73,6 +74,10 @@ export async function POST(req: Request) {
           },
           { projectId, styleGuide }
         );
+
+        if (result.success) {
+          scheduleUploadFullProject(projectId);
+        }
 
         send({
           type: "done",

@@ -40,17 +40,10 @@ function StudioInner({ projectId }: { projectId: string }) {
   const [conversationCollapsed, setConversationCollapsed] = useState(false);
   const appPreviewViewportRef = useRef<HTMLDivElement | null>(null);
   const [appPreviewScale, setAppPreviewScale] = useState(1);
-  const [previewMountNonce, setPreviewMountNonce] = useState(0);
   const previewIframeSrc =
     previewUrl
-      ? `${previewUrl}${previewUrl.includes("?") ? "&" : "?"}v=${previewVersion}&m=${previewMountNonce}`
+      ? `${previewUrl}${previewUrl.includes("?") ? "&" : "?"}v=${previewVersion}`
       : null;
-
-  useEffect(() => {
-    if (rightPanel === "preview" && previewState === "ready" && previewUrl) {
-      setPreviewMountNonce((n) => n + 1);
-    }
-  }, [rightPanel, previewState, previewUrl]);
 
   useEffect(() => {
     if (generationMode !== "app" || rightPanel !== "preview" || previewState !== "ready") return;

@@ -154,15 +154,6 @@ export function getCoreStepPromptOverride(params: {
   return runtime.dbPromptByStepId.get(stepId) ?? null;
 }
 
-export function isCoreStepPromptId(promptId: string): boolean {
-  return (
-    promptKeyToStepId.has(`web:step:${promptId}`) ||
-    promptKeyToStepId.has(`web:section:${promptId}`) ||
-    promptKeyToStepId.has(`app:step:${promptId}`) ||
-    promptKeyToStepId.has(`app:section:${promptId}`)
-  );
-}
-
 export function resolvePromptIdByStepId(profile: PromptProfile, stepId: string): string | null {
   return stepIdToPromptId.get(`${profile}:${stepId}`) ?? null;
 }

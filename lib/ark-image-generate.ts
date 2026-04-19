@@ -46,12 +46,6 @@ export function normalizeArkImageSize(size: string): string {
   return "1k";
 }
 
-export function defaultArkSize(needLargeImage: boolean): string {
-  const fixed = process.env.ARK_IMAGE_SIZE?.trim();
-  if (fixed) return normalizeArkImageSize(fixed);
-  return needLargeImage ? "2k" : "1k";
-}
-
 function normalizeArkPrompt(prompt: string): string {
   const normalized = prompt.replace(/\s+/g, " ").trim();
   // Ark side is stricter when prompts get too long; keep within tool contract.
