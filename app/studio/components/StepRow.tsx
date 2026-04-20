@@ -35,6 +35,23 @@ export function StepRow({ step, flowStart }: { step: BuildStep; flowStart: numbe
     try { toolDetail = JSON.parse(step.detail); } catch { /* ignore */ }
   }
 
+  const stepSkillHints = (() => {
+    const hints = new Set<string>();
+    if (typeof step.skillId === "string" && step.skillId.trim().length > 0) {
+      hints.add(step.skillId.trim());
+    }
+    const traceInput = step.trace?.input as Record<string, unknown> | undefined;
+    const technical = traceInput?.technicalSkillIds;
+    if (Array.isArray(technical)) {
+      for (const id of technical) {
+        if (typeof id === "string" && id.trim().length > 0) {
+          hints.add(id.trim());
+        }
+      }
+    }
+    return Array.from(hints);
+  })();
+
   return (
     <div className={`rounded-xl hover:bg-white/3 ${isToolCall ? "border border-blue-400/10 bg-blue-400/3" : ""}`}>
       <div
@@ -52,8 +69,8 @@ export function StepRow({ step, flowStart }: { step: BuildStep; flowStart: numbe
         <div className="min-w-0 flex-1 overflow-hidden">
           <div className={`break-all font-mono text-[11px] ${isSection ? "text-accent-tertiary" : isToolCall ? "text-blue-300" : "text-foreground"}`}>
             {stepLabel}
-            {step.skillId ? (
-              <span className="ml-1.5 text-[10px] text-accent-tertiary/80">[{step.skillId}]</span>
+            {stepSkillHints.length > 0 ? (
+              <span className="ml-1.5 text-[10px] text-accent-tertiary/80">[{stepSkillHints.join(", ")}]</span>
             ) : null}
           </div>
           {isToolCall && toolDetail && (

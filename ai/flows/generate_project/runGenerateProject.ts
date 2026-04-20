@@ -350,7 +350,7 @@ async function runSectionBatch(params: {
     const stepName = getSectionStepName(item.scopeKey, item.section.fileName);
 
     if (result.status === "fulfilled") {
-      const { filePath, skillId, trace, pendingImages } = result.value;
+      const { filePath, skillId, technicalSkillIds, componentSkillScores, trace, pendingImages } = result.value;
       generatedFiles.push(filePath);
       allPendingImages.push(...pendingImages);
       logger.logStep(stepName, "ok", filePath, skillId);
@@ -359,6 +359,8 @@ async function runSectionBatch(params: {
         outputFileRelative: item.outputFileRelative,
         generatedFile: result.value.filePath,
         skillId: result.value.skillId,
+        technicalSkillIds,
+        componentSkillScores,
         section: item.section,
         pageContext: item.pageContext ?? null,
       });
@@ -592,8 +594,8 @@ async function generatePages(params: {
         artifactLogger,
         describeStepName,
         "output",
-        "md",
-        pageDesignDoc
+        pageDesignDoc,
+        "md"
       );
 
       // Log skipped sections

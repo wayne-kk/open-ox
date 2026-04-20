@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "fs";
 import matter from "gray-matter";
-import { resolvePromptPath } from "./catalog";
+import { resolvePromptPath, resolvePromptPathForProfile } from "./catalog";
 import { getPromptProfile } from "./profile";
 import type { PromptKind } from "./types";
 
@@ -14,15 +14,20 @@ function withFrontmatterStripped(kind: PromptKind, raw: string): string {
 }
 
 export function loadPrompt(kind: PromptKind, id: string): string {
-  const key = `${getPromptProfile()}:${kind}:${id}`;
+  const profile = getPromptProfile();
+  const key = `${profile}:${kind}:${id}`;
   const hit = cache.get(key);
   if (hit) return hit;
 
   const fullPath = resolvePromptPath(kind, id);
-  if (!existsSync(fullPath)) {
-    throw new Error(`Prompt not found: ${fullPath}`);
+  const fallbackPath =
+    profile === "app" ? resolvePromptPathForProfile("web", kind, id) : null;
+  const resolvedPath =
+    existsSync(fullPath) ? fullPath : fallbackPath && existsSync(fallbackPath) ? fallbackPath : fullPath;
+  if (!existsSync(resolvedPath)) {
+    throw new Error(`Prompt not found: ${resolvedPath}`);
   }
-  const raw = readFileSync(fullPath, "utf-8");
+  const raw = readFileSync(resolvedPath, "utf-8");
   const content = withFrontmatterStripped(kind, raw);
   cache.set(key, content);
   return content;

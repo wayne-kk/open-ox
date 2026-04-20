@@ -7,15 +7,6 @@ when:
   designKeywords:
     any: ["lightning", "shader", "webgl", "plasma", "particle-field", "generative-art"]
     none: ["editorial", "magazine", "luxury", "minimal", "clean", "nature", "organic", "warm", "festive", "celebration"]
-  traits:
-    any: ["ambient", "energetic"]
-    none: []
-  journeyStages:
-    any: ["activation", "launch"]
-    none: []
-  productTypes:
-    any: ["developer-tool", "saas-app"]
-    none: ["campaign-site", "marketing-site", "brand-site", "portfolio", "publication"]
 notes: >
   Use ONLY for heroes where WebGL lightning/shader is the explicit design intent.
   Requires framer-motion and client-side rendering. Do NOT use for general tech,

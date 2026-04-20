@@ -326,12 +326,16 @@ export function DetailDrawer({
           )}
 
           {/* Skill */}
-          {node.skillHint && (
+          {(node.skillHints?.length || node.skillHint) && (
             <div>
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Skill</div>
               <div className="mt-1.5 flex flex-wrap items-center gap-2 rounded-lg border border-accent-tertiary/30 bg-accent-tertiary/10 px-3 py-2 text-sm text-accent-tertiary">
                 <span className="rounded bg-accent-tertiary/20 px-1.5 py-0.5 text-[10px] font-medium">AGENT</span>
-                <span className="font-mono text-xs">{node.skillHint}</span>
+                {(node.skillHints && node.skillHints.length > 0 ? node.skillHints : [node.skillHint]).filter(Boolean).map((skill) => (
+                  <span key={skill} className="font-mono text-xs">
+                    {skill}
+                  </span>
+                ))}
               </div>
             </div>
           )}

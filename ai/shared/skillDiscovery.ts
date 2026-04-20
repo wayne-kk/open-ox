@@ -20,9 +20,6 @@ const _skillDiscoveryCache = new Map<string, SkillMetadata[]>();
 
 export interface SkillWhenCondition {
   designKeywords?: { any: string[]; none: string[] };
-  traits?: { any: string[]; none: string[] };
-  journeyStages?: { any: string[]; none: string[] };
-  productTypes?: { any: string[]; none: string[] };
 }
 
 export interface SkillMetadata {

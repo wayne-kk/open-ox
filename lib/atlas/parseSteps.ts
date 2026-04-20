@@ -81,6 +81,23 @@ function formatStepLabel(step: string): string {
   return step.replace(/_/g, " ");
 }
 
+function extractSkillHints(step: BuildStep): string[] {
+  const hints = new Set<string>();
+  if (typeof step.skillId === "string" && step.skillId.trim().length > 0) {
+    hints.add(step.skillId.trim());
+  }
+  const traceInput = step.trace?.input as Record<string, unknown> | undefined;
+  const technical = traceInput?.technicalSkillIds;
+  if (Array.isArray(technical)) {
+    for (const id of technical) {
+      if (typeof id === "string" && id.trim().length > 0) {
+        hints.add(id.trim());
+      }
+    }
+  }
+  return Array.from(hints);
+}
+
 export function parseStepsToTopology(steps: BuildStep[], flowStart: number): TopologyGraph {
   // Deduplicate: for each step name, keep the last entry (active gets replaced by ok/error)
   const deduped = new Map<string, { step: BuildStep; index: number }>();
@@ -91,6 +108,7 @@ export function parseStepsToTopology(steps: BuildStep[], flowStart: number): Top
   const nodes: GraphNode[] = Array.from(deduped.values()).map(({ step: s, index }) => {
     const stage = inferStage(s.step);
     const stepWithExtra = s as { skillId?: string | null; trace?: GraphNode["trace"] };
+    const skillHints = extractSkillHints(s);
     const status: GraphNode["status"] =
       s.status === "ok" ? "ok" : s.status === "active" ? "active" : "error";
     return {
@@ -103,7 +121,8 @@ export function parseStepsToTopology(steps: BuildStep[], flowStart: number): Top
       duration: s.duration,
       timestamp: s.timestamp,
       index,
-      skillHint: stepWithExtra.skillId ?? undefined,
+      skillHint: skillHints[0] ?? (stepWithExtra.skillId ?? undefined),
+      skillHints,
       trace: stepWithExtra.trace,
     };
   });

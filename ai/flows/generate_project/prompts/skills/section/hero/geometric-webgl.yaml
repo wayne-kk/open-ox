@@ -1,0 +1,21 @@
+id: geometric-webgl
+kind: component-skill
+sectionTypes: ["hero"]
+priority: 60
+fallback: false
+when:
+  designKeywords:
+    any:
+      [
+        "webgl",
+        "three",
+        "threejs",
+        "geometry",
+        "shader",
+        "3D"
+      ]
+    none: ["editorial", "magazine", "luxury", "minimal", "warm", "organic", "nature"]
+notes: >
+  Use for hero sections with geometric frame language and Three.js faceted mesh
+  visuals. Emphasizes dark technical aesthetics, precise line-work, and staged
+  reveal animation.

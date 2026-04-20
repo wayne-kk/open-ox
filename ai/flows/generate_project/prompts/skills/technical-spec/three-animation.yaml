@@ -1,0 +1,27 @@
+id: three-animation
+kind: technical-spec-skill
+sectionTypes: ["*"]
+priority: 70
+fallback: false
+when:
+  designKeywords:
+    any:
+      [
+        "three",
+        "threejs",
+        "3d",
+        "webgl",
+        "shader",
+        "geometric",
+        "animation",
+        "procedural",
+        "三维",
+        "3D",
+        "webgl",
+        "动画",
+        "几何",
+      ]
+    none: ["minimal", "static", "editorial", "magazine"]
+notes: >
+  Technical guidance for Three.js motion architecture: scene lifecycle, mixer or
+  procedural animation patterns, timing control, performance, and cleanup.

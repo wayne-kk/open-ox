@@ -62,6 +62,19 @@ function extractRootVars(css: string): string {
   return rootMatch ? rootMatch[0] : "";
 }
 
+function truncateForPrompt(text: string, maxChars = 12_000): string {
+  if (text.length <= maxChars) return text;
+  const headChars = Math.floor(maxChars * 0.7);
+  const tailChars = maxChars - headChars;
+  return [
+    text.slice(0, headChars),
+    "",
+    `/* ... truncated ${text.length - maxChars} chars to reduce LLM latency ... */`,
+    "",
+    text.slice(-tailChars),
+  ].join("\n");
+}
+
 export async function stepApplyProjectDesignTokens(
   designSystem: string,
   onProgress?: (msg: string) => void
@@ -89,7 +102,7 @@ ${currentRoot || "/* empty */"}
 
 ## Current globals.css structure (for reference — preserve imports, base styles, scrollbar styles)
 \`\`\`css
-${currentGlobalsCss}
+${truncateForPrompt(currentGlobalsCss)}
 \`\`\`
 
 Generate the complete updated globals.css. Be concise — output only the CSS code block, no explanation.`;
@@ -109,7 +122,7 @@ Generate the complete updated globals.css. Be concise — output only the CSS co
       systemPrompt,
       userMessage,
       0.3,
-      undefined,
+      4_000,
       stepModel
     );
     raw = llmResult.content;

@@ -419,6 +419,35 @@ async function getMissingDeps(sandbox: Sandbox): Promise<string[] | null> {
       missing.push(`${name}@${version}`);
     }
   }
+
+  // Also verify dependencies that should already exist in node_modules.
+  // A reused sandbox may have stale node_modules from an older template image.
+  const expectedInTemplate = Object.keys(projectDeps).filter((name) => name in templateDeps);
+  const PRESENCE_BATCH = 30;
+  for (let i = 0; i < expectedInTemplate.length; i += PRESENCE_BATCH) {
+    const batch = expectedInTemplate.slice(i, i + PRESENCE_BATCH);
+    const checks = batch
+      .map((name) => {
+        const pkgPath = `/home/user/app/node_modules/${name}/package.json`;
+        return `if [ ! -f '${pkgPath}' ]; then echo '${name}'; fi`;
+      })
+      .join("; ");
+    const result = await safeRun(sandbox, checks);
+    if (result.exitCode !== 0) continue;
+    const actuallyMissing = result.stdout
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    for (const depName of actuallyMissing) {
+      const version = projectDeps[depName];
+      if (!version) continue;
+      const spec = `${depName}@${version}`;
+      if (!missing.includes(spec)) {
+        missing.push(spec);
+      }
+    }
+  }
+
   return missing;
 }
 
