@@ -1,0 +1,28 @@
+id: event-horizon-webgl
+kind: component-skill
+sectionTypes: ["hero"]
+priority: 78
+fallback: false
+when:
+  designKeywords:
+    any:
+      [
+        "webgl",
+        "three",
+        "threejs",
+        "black hole",
+        "event horizon",
+        "accretion",
+        "disk",
+        "particles",
+        "singularity",
+        "gsap",
+        "scrolltrigger",
+        "glass",
+        "futuristic",
+        "3D"
+      ]
+    none: ["editorial", "magazine", "botanical", "organic", "warm", "cute"]
+notes: >
+  Use for hero sections featuring a black-hole-like particle accretion disk in
+  WebGL, with framed sci-fi UI, masked text reveal, and restrained glassmorphism.

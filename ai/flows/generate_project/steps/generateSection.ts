@@ -191,6 +191,20 @@ async function llmSelectTechnicalSkills(
 ): Promise<string[]> {
   if (candidates.length === 0) return [];
 
+  const searchableText = [
+    rawUserInput ?? "",
+    section.intent,
+    section.contentHints,
+    ...designKeywords,
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  // Hard gate for 3D/WebGL technical stack to avoid accidental matches on generic "animation" requests.
+  const hasExplicit3DSignal =
+    /(three(\.js|\s*js)?|webgl|shader|3d|三维|着色器)/i.test(searchableText);
+  if (!hasExplicit3DSignal) return [];
+
   const skillList = candidates
     .map((c) => {
       const w = c.when;
@@ -209,7 +223,7 @@ Rules:
 2. Select only skills that are strongly justified by user intent or section visual intent.
 3. If no technical skill is clearly needed, return {"skillIds": []}.
 4. Prefer precision and keep selection minimal (0-2 skills).
-5. Match Chinese terms: 三维/3D/Three.js→three, WebGL→webgl, 着色器→shader, 动画系统→animation.
+5. Do NOT select three-animation unless there are explicit 3D/WebGL/Three.js/shader signals.
 
 Return JSON only: {"skillIds":["<id>", "..."]}`;
 

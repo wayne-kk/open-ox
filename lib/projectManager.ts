@@ -134,6 +134,17 @@ interface ProjectListRow {
 
 export type ProjectFolderFilter = "all" | "uncategorized" | string;
 
+interface ProjectOwnerRow {
+  user_id: string | null;
+  owner_username: string | null;
+  created_at: string;
+}
+
+export interface ProjectOwnerOption {
+  id: string;
+  label: string;
+}
+
 /**
  * Fast list query for dashboard/autocomplete.
  * Avoid selecting heavy JSON columns (blueprint/build_steps/generated_files/modification_history).
@@ -207,6 +218,71 @@ export async function listProjectsSummary(
     ownerUserId: row.user_id ?? undefined,
     ownerUsername: row.owner_username ?? undefined,
   }));
+}
+
+/**
+ * Returns distinct owners for global gallery member filter.
+ * Scans recent project rows in batches and deduplicates by `user_id`.
+ */
+export async function listProjectOwnerOptions(
+  db: SupabaseClient,
+  options?: {
+    maxOwners?: number;
+    scanBatchSize?: number;
+    maxScanRows?: number;
+  }
+): Promise<ProjectOwnerOption[]> {
+  const maxOwners =
+    typeof options?.maxOwners === "number" && Number.isFinite(options.maxOwners) && options.maxOwners > 0
+      ? Math.floor(options.maxOwners)
+      : 300;
+  const scanBatchSize =
+    typeof options?.scanBatchSize === "number" &&
+    Number.isFinite(options.scanBatchSize) &&
+    options.scanBatchSize > 0
+      ? Math.floor(options.scanBatchSize)
+      : 300;
+  const maxScanRows =
+    typeof options?.maxScanRows === "number" &&
+    Number.isFinite(options.maxScanRows) &&
+    options.maxScanRows > 0
+      ? Math.floor(options.maxScanRows)
+      : 6000;
+
+  const dedup = new Map<string, string>();
+  let offset = 0;
+
+  while (offset < maxScanRows && dedup.size < maxOwners) {
+    const { data, error } = await db
+      .from("projects")
+      .select("user_id,owner_username,created_at")
+      .not("user_id", "is", null)
+      .order("created_at", { ascending: false })
+      .range(offset, offset + scanBatchSize - 1);
+
+    if (error) {
+      console.error("[projectManager] listProjectOwnerOptions error:", error.message);
+      break;
+    }
+
+    const rows = (data ?? []) as ProjectOwnerRow[];
+    if (rows.length === 0) break;
+
+    for (const row of rows) {
+      const userId = row.user_id;
+      if (!userId || dedup.has(userId)) continue;
+      const label = row.owner_username?.trim() || `${userId.slice(0, 8)}…`;
+      dedup.set(userId, label);
+      if (dedup.size >= maxOwners) break;
+    }
+
+    if (rows.length < scanBatchSize) break;
+    offset += rows.length;
+  }
+
+  return [...dedup.entries()]
+    .map(([id, label]) => ({ id, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
 }
 
 export async function getProject(db: SupabaseClient, id: string): Promise<ProjectMetadata | null> {

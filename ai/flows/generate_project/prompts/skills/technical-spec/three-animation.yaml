@@ -12,14 +12,9 @@ when:
         "3d",
         "webgl",
         "shader",
-        "geometric",
-        "animation",
-        "procedural",
         "三维",
         "3D",
-        "webgl",
-        "动画",
-        "几何",
+        "着色器",
       ]
     none: ["minimal", "static", "editorial", "magazine"]
 notes: >
