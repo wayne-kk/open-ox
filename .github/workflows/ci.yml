@@ -120,6 +120,32 @@ jobs:
             .
           mv /tmp/deploy.tar.gz deploy.tar.gz
 
+      - name: Preflight SSH connectivity
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_PORT: ${{ secrets.SERVER_PORT }}
+        run: |
+          set -euo pipefail
+          HOST="$SERVER_HOST"
+          PORT="${SERVER_PORT:-22}"
+
+          echo "==> Checking TCP reachability to ${HOST}:${PORT}"
+          for i in 1 2 3; do
+            if timeout 5 bash -c "cat < /dev/null > /dev/tcp/${HOST}/${PORT}"; then
+              echo "TCP check passed on attempt ${i}"
+              break
+            fi
+            if [ "$i" -eq 3 ]; then
+              echo "ERROR: cannot reach ${HOST}:${PORT} from GitHub runner"
+              exit 1
+            fi
+            echo "Retrying in 3s..."
+            sleep 3
+          done
+
+          echo "==> Capturing SSH banner (best effort)"
+          timeout 5 bash -c "exec 3<>/dev/tcp/${HOST}/${PORT}; head -c 128 <&3" || true
+
       - name: Copy to server
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -127,6 +153,8 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT }}
+          timeout: 120s
+          command_timeout: 10m
           source: deploy.tar.gz
           target: /sharedata/wayne/open-ox
 
@@ -137,6 +165,8 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT }}
+          timeout: 120s
+          command_timeout: 10m
           script: |
             set -e
             export NVM_DIR="$HOME/.nvm"
