@@ -9,6 +9,7 @@ import {
 } from "../shared/files";
 import { selectSectionPromptId } from "../selectors/sectionPromptSelector";
 import { callLLM, callLLMWithTools, extractContent, extractJSON } from "../shared/llm";
+import { checkTsxFile, formatIssuesForHint, type TsxIssue } from "../shared/tsxDiagnostics";
 import { getModelForStep, getThinkingLevelForStep, isSectionSkillsEnabled } from "@/lib/config/models";
 import { getSystemToolDefinitions } from "../../../tools/systemToolCatalog";
 import { createImageExecutor } from "../../../tools/system/generateImageTool";
@@ -516,6 +517,108 @@ function validateSectionExports(tsx: string, componentName: string): NonNullable
   return { passed: checks.every((c) => c.passed), checks };
 }
 
+interface SectionValidationOutcome {
+  result: NonNullable<StepTrace["validationResult"]>;
+  tscIssues: TsxIssue[];
+}
+
+/**
+ * Controls how per-section tsc findings interact with retry.
+ *
+ * - "advisory" (default): tsc runs and its findings are attached to the trace
+ *   (so `stepRepairBuild` can consume them later), but tsc errors alone will
+ *   NOT fail `validationResult.passed` and therefore will NOT trigger a full
+ *   LLM retry of the section. This keeps the per-section wall-clock cost
+ *   essentially unchanged while still surfacing type issues for the build
+ *   repair phase.
+ * - "strict": tsc errors fail validation and trigger the section retry loop,
+ *   which burns an extra LLM call per affected section but attempts to fix
+ *   the issue before we ever hit `next build`.
+ */
+function getSectionTscMode(): "advisory" | "strict" {
+  return process.env.SECTION_TSC_MODE === "strict" ? "strict" : "advisory";
+}
+
+async function validateSection(
+  tsx: string,
+  componentName: string,
+  relativePath: string,
+): Promise<SectionValidationOutcome> {
+  const base = validateSectionExports(tsx, componentName);
+  const checks = [...base.checks];
+
+  // Only run the in-process type check when the cheap syntactic/export checks
+  // already pass — otherwise tsc will just echo the same structural failures.
+  let tscIssues: TsxIssue[] = [];
+  if (base.passed) {
+    const tsc = await checkTsxFile(relativePath);
+    if (tsc.skipped === "disabled") {
+      // Skip silently when opted-out to keep the trace shape stable.
+    } else if (tsc.skipped) {
+      checks.push({
+        name: "tsc_ok",
+        passed: true,
+        detail: `tsc check skipped (${tsc.skipped}${tsc.skippedDetail ? `: ${tsc.skippedDetail}` : ""})`,
+      });
+    } else {
+      tscIssues = tsc.issues;
+      if (tsc.errorCount === 0) {
+        const summary = tsc.warningCount > 0 ? `tsc passed with ${tsc.warningCount} warning(s)` : undefined;
+        checks.push({ name: "tsc_ok", passed: true, detail: summary });
+      } else if (getSectionTscMode() === "strict") {
+        checks.push({
+          name: "tsc_ok",
+          passed: false,
+          detail: `tsc found ${tsc.errorCount} error(s):\n${formatIssuesForHint(tsc.issues)}`,
+        });
+      } else {
+        // Advisory: record findings without failing validation. The build
+        // repair phase can pick these up from the trace for targeted fixes.
+        checks.push({
+          name: "tsc_advisory",
+          passed: true,
+          detail: `tsc found ${tsc.errorCount} error(s) (advisory; not retrying):\n${formatIssuesForHint(tsc.issues)}`,
+        });
+      }
+    }
+  }
+
+  return {
+    result: { passed: checks.every((c) => c.passed), checks },
+    tscIssues,
+  };
+}
+
+function buildRetryHint(
+  componentName: string,
+  previousIssues: TsxIssue[],
+  previousValidation: NonNullable<StepTrace["validationResult"]> | null,
+): string {
+  const structuralFailures = previousValidation?.checks.filter(
+    (c) => !c.passed && c.name !== "tsc_ok",
+  ) ?? [];
+  const tscHint = formatIssuesForHint(previousIssues);
+
+  const parts: string[] = [];
+  if (structuralFailures.length > 0) {
+    parts.push(
+      `Your previous response was truncated/incomplete — the component "${componentName}" was missing its export or JSX return. Output the COMPLETE component with \`export function ${componentName}\` and a JSX return.`,
+    );
+  }
+  if (tscHint) {
+    parts.push(
+      `Your previous output failed TypeScript checking. Fix these errors EXACTLY and regenerate the complete component:\n${tscHint}`,
+    );
+  }
+  if (parts.length === 0) {
+    parts.push(
+      `Your previous output failed validation. Regenerate a complete, type-safe \`${componentName}\` component.`,
+    );
+  }
+  parts.push("Keep it concise. Do not emit markdown fences, commentary, or partial code.");
+  return `\n\nIMPORTANT: ${parts.join("\n\n")}`;
+}
+
 // ── Main Entry ──────────────────────────────────────────────────────────
 
 export async function stepGenerateSection(params: GenerateSectionParams): Promise<GenerateSectionResult> {
@@ -576,13 +679,15 @@ export async function stepGenerateSection(params: GenerateSectionParams): Promis
   const sectionThinkingLevel = getThinkingLevelForStep("generate_section");
   const MAX_RETRIES = 1;
   let lastError = "";
+  let lastValidationResult: NonNullable<StepTrace["validationResult"]> | null = null;
+  let lastTscIssues: TsxIssue[] = [];
 
   const imageTools = getSystemToolDefinitions(["generate_image"]);
   const { executor: imageExecutor, pendingImages } = createImageExecutor(componentName);
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     const retryHint = attempt > 0
-      ? `\n\nIMPORTANT: Your previous response was truncated/incomplete — the component "${componentName}" was missing its export or JSX return. Output the COMPLETE component with \`export function ${componentName}\` and a JSX return. Keep it concise.`
+      ? buildRetryHint(componentName, lastTscIssues, lastValidationResult)
       : "";
 
     const llmResult = await callLLMWithTools({
@@ -604,7 +709,11 @@ export async function stepGenerateSection(params: GenerateSectionParams): Promis
     await writeSiteFile(filePath, tsx);
     await formatSiteFile(filePath);
 
-    const validationResult = validateSectionExports(tsx, componentName);
+    const { result: validationResult, tscIssues } = await validateSection(
+      tsx,
+      componentName,
+      filePath,
+    );
 
     const generatedImages = pendingImages.map((img) => ({
       filename: img.filename,
@@ -644,9 +753,17 @@ export async function stepGenerateSection(params: GenerateSectionParams): Promis
       return { filePath, skillId, technicalSkillIds, componentSkillScores, trace, pendingImages };
     }
 
-    lastError = validationResult.checks.filter((c) => !c.passed).map((c) => c.detail ?? c.name).join("; ");
+    lastValidationResult = validationResult;
+    lastTscIssues = tscIssues;
+    lastError = validationResult.checks
+      .filter((c) => !c.passed)
+      .map((c) => c.detail ?? c.name)
+      .join("; ");
     if (attempt < MAX_RETRIES) {
-      console.warn(`[generateSection] ${componentName} validation failed (attempt ${attempt + 1}), retrying: ${lastError}`);
+      const summary = lastTscIssues.length > 0
+        ? `${lastTscIssues.filter((i) => i.category === "error").length} tsc error(s)`
+        : lastError;
+      console.warn(`[generateSection] ${componentName} validation failed (attempt ${attempt + 1}), retrying: ${summary}`);
     }
   }
 

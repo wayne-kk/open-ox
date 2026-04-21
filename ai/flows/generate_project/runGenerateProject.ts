@@ -572,6 +572,7 @@ async function generatePages(params: {
           stepDescribePageSections({
             designSystem,
             language: runtimeContext.language,
+            layoutMode: blueprint.brief.productScope.layoutMode,
             page,
             sections: dedupedSections,
           }),

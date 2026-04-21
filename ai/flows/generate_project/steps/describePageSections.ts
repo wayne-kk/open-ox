@@ -2,7 +2,7 @@ import { getModelForStep } from "@/lib/config/models";
 import { callLLMWithMeta } from "../shared/llm";
 import { stepTraceFromLlmCompletion } from "../shared/llmTrace";
 import { loadStepPrompt, writeSiteFile } from "../shared/files";
-import type { PlannedPageBlueprint, PlannedSectionSpec, StepTrace } from "../types";
+import type { LayoutMode, PlannedPageBlueprint, PlannedSectionSpec, StepTrace } from "../types";
 
 export interface PageSectionDesignBrief {
   fileName: string;
@@ -19,6 +19,7 @@ export interface DescribePageSectionsResult {
 export interface DescribePageSectionsParams {
   designSystem: string;
   language: string;
+  layoutMode: LayoutMode;
   page: PlannedPageBlueprint;
   sections: PlannedSectionSpec[];
 }
@@ -92,20 +93,27 @@ function parseSectionBriefs(
 export async function stepDescribePageSections(
   params: DescribePageSectionsParams
 ): Promise<DescribePageSectionsResult> {
-  const { language, page, sections, designSystem } = params;
+  const { language, layoutMode, page, sections, designSystem } = params;
 
-  const systemPrompt = loadStepPrompt("describePageSections");
+  const promptId = layoutMode === "whole-page"
+    ? "describePageSections.wholePage"
+    : "describePageSections";
+  const systemPrompt = loadStepPrompt(promptId);
 
   const sectionList = sections
-    .map((s, i) => `${i + 1}. ${s.fileName}`)
+    .map(
+      (s, i) =>
+        `${i + 1}. ${s.fileName}\n   type: ${s.type}\n   intent: ${s.intent}\n   contentHints: ${s.contentHints}`
+    )
     .join("\n");
 
   const userMessage = `# 语言偏好
 ${language}
-# task 
-根据 designSystem 确定背景色策略
+# task
+根据 section 数量、类型、intent、contentHints 和 designSystem，为每个 section 产出布局 brief
 # 页面: ${page.title} (/${page.slug})
-# designSystem: 
+# Section 数量: ${sections.length}（${sections.length === 1 ? "整页组件模式——唯一 section 承载完整页面 UI" : "分段页面模式——多个 section 依次堆叠"}）
+# designSystem:
 ${designSystem}
 # Section 列表（按页面顺序）
 ${sectionList}`;
@@ -113,7 +121,7 @@ ${sectionList}`;
   const describeModel = getModelForStep("describe_page_sections");
 
   try {
-    const meta = await callLLMWithMeta(systemPrompt, userMessage, 0.3, undefined, describeModel);
+    const meta = await callLLMWithMeta(systemPrompt, userMessage, 0.4, undefined, describeModel);
     const raw = meta.content;
     const trace = stepTraceFromLlmCompletion(systemPrompt, userMessage, meta);
 
@@ -136,7 +144,7 @@ ${sectionList}`;
     const message = err instanceof Error ? err.message : String(err);
     return {
       pageStructure:
-        "整体节奏：表面阶梯含 background / secondary|muted 分层与至少一段深底反转；禁止仅 muted/20↔background 机械交替。logo/press 对比充足；纹理最多页面级一次。首屏 spacious，中段 standard/compact；标题最多两行，hover 默认 subtle。",
+        "整体节奏：表面阶梯含 background / secondary|muted ；禁止仅 muted/20↔background 机械交替。logo/press 对比充足；纹理最多页面级一次。首屏 spacious，中段 standard/compact；标题最多两行，hover 默认 subtle。",
       sectionDesigns: sections.map((section, i) => ({
         fileName: section.fileName,
         sectionType: section.type,

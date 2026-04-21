@@ -14,8 +14,11 @@ export type ShellPlacement = "beforePageContent" | "afterPageContent";
 export type RolePriority = "primary" | "secondary" | "supporting";
 export type CapabilityPriority = "must-have" | "should-have" | "nice-to-have";
 
+export type LayoutMode = "whole-page" | "split-sections";
+
 export interface ProductScope {
   productType: string;
+  layoutMode: LayoutMode;
   mvpDefinition: string;
   coreOutcome: string;
   businessGoal: string;

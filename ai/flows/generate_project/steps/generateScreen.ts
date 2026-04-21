@@ -140,7 +140,7 @@ ${designSystem}
 Generate a single self-contained screen component named AppScreen.
 The component should represent the whole page surface in one coherent structure, not stacked marketing sections.`;
   const model = getModelForStep("generate_screen");
-  const meta = await callLLMWithMeta(systemPrompt, userMessage, 0.4, undefined, model);
+  const meta = await callLLMWithMeta(systemPrompt, userMessage, 0.6, undefined, model);
   const trace = stepTraceFromLlmCompletion(systemPrompt, userMessage, meta);
   const tsx = extractContent(meta.content, "tsx");
 

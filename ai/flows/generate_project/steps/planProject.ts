@@ -15,7 +15,8 @@ import type {
 import { getPromptProfile } from "@/ai/prompts/core/profile";
 import { getModelForStep } from "@/lib/config/models";
 
-const MAX_PAGE_SECTIONS = 4;
+const MAX_PAGE_SECTIONS_SPLIT = 5;
+const MAX_PAGE_SECTIONS_WHOLE = 1;
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -52,7 +53,8 @@ function isAppScreenPlan(value: unknown): value is AppScreenPlan {
 }
 
 function clampPageSections<T extends { site: { pages: Array<{ sections: PlannedSectionSpec[] }> } }>(
-  blueprint: T
+  blueprint: T,
+  maxSections: number
 ): T {
   return {
     ...blueprint,
@@ -60,7 +62,7 @@ function clampPageSections<T extends { site: { pages: Array<{ sections: PlannedS
       ...blueprint.site,
       pages: blueprint.site.pages.map((page) => ({
         ...page,
-        sections: page.sections.slice(0, MAX_PAGE_SECTIONS),
+        sections: page.sections.slice(0, maxSections),
       })),
     },
   };
@@ -72,11 +74,14 @@ export async function stepPlanProject(
   blueprint: ProjectBlueprint,
 ): Promise<{ blueprint: PlannedProjectBlueprint; trace: StepTrace }> {
   const appProfile = getPromptProfile() === "app";
+  const wholePage = !appProfile && blueprint.brief.productScope.layoutMode === "whole-page";
+  const maxSections = wholePage ? MAX_PAGE_SECTIONS_WHOLE : MAX_PAGE_SECTIONS_SPLIT;
   const defaultPlan = buildDefaultProjectPlan(blueprint);
 
   // ── Build LLM prompt ───────────────────────────────────────────────────
 
-  const systemPrompt = composePromptBlocks([loadStepPrompt("planProject"), loadGuardrail("outputJson")]);
+  const planPromptId = wholePage ? "planProject.wholePage" : "planProject";
+  const systemPrompt = composePromptBlocks([loadStepPrompt(planPromptId), loadGuardrail("outputJson")]);
 
   const appScreenInstruction = appProfile
     ? `\n## App Screen Plan (required for app profile)
@@ -89,6 +94,16 @@ export async function stepPlanProject(
 - Keep \`sections\` as compatibility fallback, but prioritize coherent screen-first regions over section stacks.`
     : "";
 
+  const layoutModeInstruction = wholePage
+    ? `\n## Layout Mode: WHOLE-PAGE COMPONENT (critical)
+This product type ("${blueprint.brief.productScope.productType}") requires a persistent application shell.
+- Output EXACTLY 1 section in pages[0].sections.
+- Do NOT output Hero / Feature / Testimonial / CTA marketing sections.
+- The single section carries the full application UI (sidebar, main content, panels).
+- Name type and fileName after the product domain (e.g. "SocialFeed", "AnalyticsDashboard", "CommunityForum").`
+    : `\n## Layout Mode: SPLIT SECTIONS
+Output 3–5 sections using appropriate archetypes from the palette in the system prompt.`;
+
   const userMessage = `## Project: ${blueprint.brief.projectTitle}
 ${blueprint.brief.projectDescription}
 
@@ -97,6 +112,7 @@ ${blueprint.brief.projectDescription}
 - MVP: ${blueprint.brief.productScope.mvpDefinition}
 - Core Outcome: ${blueprint.brief.productScope.coreOutcome}
 - Design Keywords: ${blueprint.experience.designIntent.keywords.join(", ")}
+${layoutModeInstruction}
 
 ## Pages to plan sections for
 ${blueprint.site.pages
@@ -108,12 +124,10 @@ ${blueprint.site.pages
       )
     .join("\n\n")}
 
-## Layout Sections (shared shells)
+## Layout Sections (shared shells — do not change these)
 ${blueprint.site.layoutSections.map((s) => `- ${s.type}: ${s.intent}`).join("\n")}
 
 ## Keep it simple
-- Prefer the smallest section set that satisfies page goals.
-- Avoid repeated sections with overlapping intent.
 - Sections only need type, intent, contentHints, fileName.
 - Do not include designPlan on sections — guardrails and skills are resolved at generation time.${appScreenInstruction}`;
 
@@ -122,7 +136,7 @@ ${blueprint.site.layoutSections.map((s) => `- ${s.type}: ${s.intent}`).join("\n"
   const model = getModelForStep("plan_project");
 
   try {
-    const meta = await callLLMWithMeta(systemPrompt, userMessage, 0.2, undefined, model);
+    const meta = await callLLMWithMeta(systemPrompt, userMessage, 0.4, undefined, model);
     const raw = meta.content;
     const trace = stepTraceFromLlmCompletion(systemPrompt, userMessage, meta);
     const parsed = JSON.parse(extractJSON(raw)) as unknown;
@@ -143,7 +157,7 @@ ${blueprint.site.layoutSections.map((s) => `- ${s.type}: ${s.intent}`).join("\n"
         const rawSections = Array.isArray(page.sections) ? page.sections : [];
         const sections: PlannedSectionSpec[] = rawSections
           .filter((section): section is Record<string, unknown> => isObjectRecord(section))
-          .slice(0, MAX_PAGE_SECTIONS)
+          .slice(0, maxSections)
           .map((s, index) => {
             const fallbackSection = fallbackPage.sections[index] ?? fallbackPage.sections[0];
             return {
@@ -193,13 +207,13 @@ ${blueprint.site.layoutSections.map((s) => `- ${s.type}: ${s.intent}`).join("\n"
     };
 
     return {
-      blueprint: clampPageSections(mergedBlueprint),
+      blueprint: clampPageSections(mergedBlueprint, maxSections),
       trace,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return {
-      blueprint: clampPageSections(defaultPlan),
+      blueprint: clampPageSections(defaultPlan, maxSections),
       trace: {
         llmCall: {
           model,

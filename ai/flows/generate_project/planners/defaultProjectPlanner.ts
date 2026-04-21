@@ -9,46 +9,50 @@ import type {
 import { inferProjectGuardrailDefaults } from "./guardrailPolicy";
 import { getPromptProfile } from "@/ai/prompts/core/profile";
 
+
 function buildDefaultPageDesignPlan(
   page: {
     description: string;
     journeyStage: string;
     sections: SectionSpec[];
   },
+  wholePage = false,
 ): PageDesignPlan {
   const appProfile = getPromptProfile() === "app";
   const sectionTypes = page.sections.map((section) => section.type);
-  const narrativeArc =
-    appProfile
-      ? sectionTypes.length <= 3
-        ? "Lead with the core in-app loop, then deepen engagement through interactive content."
-        : "Guide users from immediate orientation into continuous feed/task interaction with clear action affordances."
-      : sectionTypes.length <= 3
-        ? "Keep the page tightly focused: establish value, support it, then convert."
-        : "Move from orientation to persuasion, then social proof, and finish with a decisive conversion close.";
+
+  const narrativeArc = appProfile || wholePage
+    ? "Expose the primary workflow immediately. The interface should feel like a product, not a marketing page."
+    : sectionTypes.length <= 3
+      ? "Keep the page tightly focused: establish value, support it, then convert."
+      : "Move from orientation to persuasion, then social proof, and finish with a decisive conversion close.";
+
+  const layoutStrategy = appProfile || wholePage
+    ? "Full-viewport persistent shell. Layout regions (sidebar, main content, panels) defined by product function, not marketing narrative."
+    : `Use section rhythm, spacing, and contrast to support the ${page.journeyStage} stage of the user journey.`;
+
+  const hierarchy = appProfile || wholePage
+    ? [
+        "The interface must be immediately usable — expose the core workflow in the first viewport.",
+        "Navigation and structural regions should be persistent and predictable.",
+        "Content density should match the product type: feeds are dense, workspaces are focused.",
+      ]
+    : [
+        "The first viewport should establish context and value quickly.",
+        "Mid-page sections should deepen trust or explain the offer.",
+        "Lower-page sections should reduce friction and reinforce action.",
+      ];
 
   return {
     pageGoal: page.description,
     narrativeArc,
-    layoutStrategy: appProfile
-      ? `Use mobile-first density, card rhythm, and interaction cues to support the ${page.journeyStage} stage without turning the page into a marketing narrative.`
-      : `Use section rhythm, spacing, and contrast to support the ${page.journeyStage} stage of the user journey rather than making every block equally loud.`,
-    hierarchy: appProfile
-      ? [
-          "The first viewport should expose immediate utility, not long-form positioning copy.",
-          "Mid-page sections should maintain feed/task continuity and enable quick scanning.",
-          "Lower-page sections should reinforce return loops and lightweight actions.",
-        ]
-      : [
-          "The first viewport should establish context and value quickly.",
-          "Mid-page sections should deepen trust or explain the offer.",
-          "Lower-page sections should reduce friction and reinforce action.",
-        ],
+    layoutStrategy,
+    hierarchy,
     constraints: [
       "Preserve the given section order unless a wrapper or grouping is required for coherence.",
       "Avoid repetitive section pacing; vary density and emphasis across the page.",
-      ...(appProfile
-        ? ["Avoid landing-page patterns such as stacked persuasion blocks, pricing matrices, or FAQ-heavy layouts."]
+      ...((appProfile || wholePage)
+        ? ["Avoid landing-page patterns: no hero manifestos, testimonial bands, or FAQ-heavy layouts."]
         : []),
     ],
   };
@@ -88,6 +92,7 @@ export function buildDefaultProjectPlan(
 ): PlannedProjectBlueprint {
   const appProfile = getPromptProfile() === "app";
   const layoutSections = blueprint.site.layoutSections;
+  const wholePage = !appProfile && blueprint.brief.productScope.layoutMode === "whole-page";
 
   const buildMinimalPageSections = (): SectionSpec[] => {
     if (appProfile) {
@@ -109,6 +114,20 @@ export function buildDefaultProjectPlan(
           intent: "Reinforce activity and confidence using compact social/progress signals.",
           contentHints: "Small stats row with concise labels, counts, and contextual relevance.",
           fileName: "StatsSection",
+        },
+      ];
+    }
+
+    // Whole-page web app: single section carries the entire application UI
+    if (wholePage) {
+      return [
+        {
+          type: "MainContent",
+          intent: `Primary application interface for: ${blueprint.brief.projectDescription}`,
+          contentHints:
+            "Full-viewport persistent shell. Derive layout regions (sidebar, main area, panels) " +
+            "from the product type and description. Include realistic mock content.",
+          fileName: "MainContentSection",
         },
       ];
     }
@@ -151,7 +170,7 @@ export function buildDefaultProjectPlan(
     const sections = page.sections.length > 0 ? page.sections : buildMinimalPageSections();
     return {
       ...page,
-      pageDesignPlan: buildDefaultPageDesignPlan({ ...page, sections }),
+      pageDesignPlan: buildDefaultPageDesignPlan({ ...page, sections }, wholePage),
       sections,
       appScreenPlan: appProfile ? buildDefaultAppScreenPlan({ ...page, sections }) : undefined,
     };

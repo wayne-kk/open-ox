@@ -17,7 +17,8 @@ Output a single valid JSON object. No markdown, no code fences, no explanations.
     "projectDescription": "One sentence: goal, audience, scope",
     "language": "BCP 47 tag for WEBSITE CONTENT language (zh-CN, en, ja, ko, fr, etc.)",
     "productScope": {
-      "productType": "e.g. marketing website / community forum web app / dashboard web app",
+      "productType": "e.g. marketing website / community forum web app / analytics dashboard",
+      "layoutMode": "whole-page | split-sections",
       "mvpDefinition": "Smallest shippable scope",
       "coreOutcome": "Primary user outcome"
     }
@@ -64,5 +65,10 @@ Output a single valid JSON object. No markdown, no code fences, no explanations.
   1. If the request includes community/forum/social signals (e.g. “社区”, “论坛”, “帖子”, “发帖”, “评论”, “圈子”, “feed”), set `brief.productScope.productType` to **`community forum web app`**.
   2. For app-like products, do **not** reframe as “brand official website” narrative.
   3. For community/forum products, the home page description must emphasize core interaction loops (browse threads/feed, post, reply, moderation/trust cues), not brand marketing storytelling.
+- `layoutMode` decision rule (critical):
+  - Set `layoutMode` to **`"whole-page"`** when the product has a **persistent UI shell** — users navigate *within* a fixed frame (sidebar, top bar, tabs) rather than scrolling *through* stacked content blocks. Ask: does the user stay inside one interface and switch views, or scroll down a page? If the former → `"whole-page"`.
+    Typical signals: social platform, community forum, dashboard, analytics tool, SaaS app, project management, messaging, admin panel, workspace, creator tool, marketplace with browse/filter UI.
+  - Set `layoutMode` to **`"split-sections"`** when the product is consumed by scrolling top-to-bottom through sequential content.
+    Typical signals: marketing site, landing page, brand site, portfolio, blog, documentation, event page, e-commerce storefront.
 - Output only the JSON object.
 
