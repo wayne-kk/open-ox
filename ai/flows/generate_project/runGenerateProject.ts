@@ -914,14 +914,6 @@ export async function runGenerateProject(
       };
     }
 
-    // Merge technical keywords from infer_design_intent into designKeywords
-    // so downstream skill matching can use them
-    if (inferredDesignIntent?.technicalKeywords?.length) {
-      const existing = rawBlueprint.experience.designIntent.keywords;
-      const merged = [...new Set([...existing, ...inferredDesignIntent.technicalKeywords])];
-      rawBlueprint.experience.designIntent.keywords = merged;
-    }
-
     const normalizedBlueprint = normalizeBlueprint(rawBlueprint);
 
     // ── Steps: plan_project + match/generate design system ──
@@ -952,11 +944,6 @@ export async function runGenerateProject(
         }),
         stepMatchDesignSystemSkill({
           userInput,
-          designIntentText: designIntentForSystem,
-          designKeywords: normalizedBlueprint.experience.designIntent.keywords,
-          productType: normalizedBlueprint.brief.productScope.productType,
-          projectDescription: normalizedBlueprint.brief.projectDescription,
-          styleGuide: options?.styleGuide,
         }).then((result) => {
           logger.logStep(
             "match_design_system_skill",
@@ -1004,6 +991,14 @@ export async function runGenerateProject(
           undefined,
           dsOutcome.trace
         );
+      }
+
+      // Merge infer_design_intent technical keywords only after style matching,
+      // so section/technical skill selection can still benefit from them.
+      if (inferredDesignIntent?.technicalKeywords?.length) {
+        const existing = blueprint.experience.designIntent.keywords;
+        const merged = [...new Set([...existing, ...inferredDesignIntent.technicalKeywords])];
+        blueprint.experience.designIntent.keywords = merged;
       }
 
       // Keep plan_project artifact focused on fields that are actually produced by

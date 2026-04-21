@@ -101,20 +101,8 @@ function loadSkillDesignSystemContent(skillId: string): string | null {
 
 export async function stepMatchDesignSystemSkill(params: {
   userInput: string;
-  designIntentText: string;
-  designKeywords: string[];
-  productType: string;
-  projectDescription: string;
-  styleGuide?: string;
 }): Promise<DesignSystemMatchResult> {
-  const {
-    userInput,
-    designIntentText,
-    designKeywords,
-    productType,
-    projectDescription,
-    styleGuide,
-  } = params;
+  const { userInput } = params;
 
   const emptyTrace: StepTrace = {};
 
@@ -133,24 +121,9 @@ export async function stepMatchDesignSystemSkill(params: {
   ]);
 
   const userMessageParts = [
-    `## 项目信息`,
-    `- 用户原始需求: ${userInput}`,
-    `- 项目描述: ${projectDescription}`,
-    `- 产品类型: ${productType}`,
-    `- 设计关键词: ${designKeywords.join(", ")}`,
-    ``,
-    `## 匹配优先级`,
-    `1. 优先依据“用户原始需求”判断风格与适配场景`,
-    `2. 将“设计意图分析”作为补充参考，而不是唯一依据`,
-    `3. 如果用户原始需求与设计意图分析存在偏差，以用户原始需求为准`,
-    ``,
-    `## 设计意图分析`,
-    designIntentText,
+    `## 用户原始需求（唯一依据）`,
+    userInput,
   ];
-
-  if (styleGuide) {
-    userMessageParts.push(``, `## 用户自定义 Style Guide`, styleGuide);
-  }
 
   const userMessage = userMessageParts.join("\n");
 
@@ -177,10 +150,6 @@ export async function stepMatchDesignSystemSkill(params: {
       },
       input: {
         userInput,
-        designKeywords,
-        productType,
-        projectDescription,
-        hasStyleGuide: !!styleGuide,
         availableSkills: skillNames,
       },
     };
