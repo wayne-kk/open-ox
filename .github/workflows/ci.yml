@@ -105,20 +105,10 @@ jobs:
             echo "ARK_IMAGE_SIZE=${{ secrets.ARK_IMAGE_SIZE }}"
           } > .env.production
 
-      # Pack: source + build output (no node_modules, no .git)
-      - name: Package artifacts
-        run: |
-          tar -czf /tmp/deploy.tar.gz \
-            --exclude='.git' \
-            --exclude='node_modules' \
-            --exclude='sites/*/node_modules' \
-            --exclude='sites/*/.next' \
-            --exclude='.next/cache' \
-            --exclude='.planning' \
-            --exclude='.cursor' \
-            --exclude='.kiro' \
-            .
-          mv /tmp/deploy.tar.gz deploy.tar.gz
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SERVER_SSH_KEY }}
 
       - name: Preflight SSH connectivity
         env:
@@ -146,17 +136,38 @@ jobs:
           echo "==> Capturing SSH banner (best effort)"
           timeout 5 bash -c "exec 3<>/dev/tcp/${HOST}/${PORT}; head -c 128 <&3" || true
 
-      - name: Copy to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          port: ${{ secrets.SERVER_PORT }}
-          timeout: 120s
-          command_timeout: 10m
-          source: deploy.tar.gz
-          target: /sharedata/wayne/open-ox
+      - name: Add server to known_hosts
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_PORT: ${{ secrets.SERVER_PORT }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -p "${SERVER_PORT:-22}" -H "$SERVER_HOST" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Sync artifacts to server (rsync incremental)
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_PORT: ${{ secrets.SERVER_PORT }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          set -euo pipefail
+          APP=/sharedata/wayne/open-ox
+          RSYNC_SSH="ssh -p ${SERVER_PORT:-22}"
+
+          rsync -az --delete \
+            -e "$RSYNC_SSH" \
+            --exclude '.git' \
+            --exclude 'node_modules' \
+            --exclude '.next/cache' \
+            --exclude '.planning' \
+            --exclude '.cursor' \
+            --exclude '.kiro' \
+            --exclude 'coverage' \
+            --exclude '*.log' \
+            ./ "$SERVER_USER@$SERVER_HOST:$APP/"
 
       - name: Deploy on server
         uses: appleboy/ssh-action@v1.2.0
@@ -175,10 +186,8 @@ jobs:
             APP=/sharedata/wayne/open-ox
             mkdir -p $APP/sites $APP/logs
 
-            echo "==> Extracting..."
+            echo "==> Preparing app dir..."
             cd $APP
-            tar -xzf deploy.tar.gz
-            rm deploy.tar.gz
 
             echo "==> Installing deps..."
             pnpm install --frozen-lockfile
