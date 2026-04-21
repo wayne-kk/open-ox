@@ -17,7 +17,7 @@ When the task requires React or Next.js component code, output TSX only.
 
 - **NEVER use `<style jsx>` or `<style jsx global>`.** This is strictly forbidden — it causes build errors in Next.js App Router and is redundant because all styles are already defined in `globals.css`.
 - **NEVER redefine CSS classes or keyframes that already exist in `globals.css`.** Use Tailwind utility classes generated from `@theme` tokens and built-in Tailwind utilities directly.
-- Prefer token-backed Tailwind utilities (`bg-*`, `text-*`, `border-*`, `font-*`, `shadow-*`, `animate-*`) and Tailwind arbitrary values for one-off visual needs (`[clip-path:*]`, `bg-[radial-gradient(...)]`, etc.).
+- Prefer token-backed Tailwind utilities (`bg-*`, `text-*`, `border-*`, `font-*`, `shadow-*`, `animate-*`) and Tailwind arbitrary values for one-off visual needs (`bg-[radial-gradient(...)]`, layered gradients, blend/opacity tuning, etc.).
 - For keyframe animations not in globals.css, use Tailwind's `animate-[name_duration_easing]` arbitrary value syntax instead of defining new keyframes.
 - Prefer Tailwind utility classes for all layout, spacing, color, and typography.
 - If the component uses any browser API, event handlers, or hooks (`useState`, `useEffect`, etc.), it **MUST** have `"use client";` as the very first line.

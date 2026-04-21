@@ -1,5 +1,26 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+function errorMessageFromUnknown(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
+async function safeSignInWithPassword(
+  sessionClient: SupabaseClient,
+  email: string,
+  password: string
+): Promise<{ ok: true } | { ok: false; message: string; transient: boolean }> {
+  try {
+    const result = await sessionClient.auth.signInWithPassword({ email, password });
+    if (!result.error) return { ok: true };
+    return { ok: false, message: result.error.message, transient: false };
+  } catch (error) {
+    const message = errorMessageFromUnknown(error);
+    const transient = /timeout|fetch failed|network|connect/i.test(message);
+    return { ok: false, message, transient };
+  }
+}
+
 async function findUserIdByEmail(admin: SupabaseClient, email: string): Promise<string | null> {
   let page = 1;
   const perPage = 1000;
@@ -28,8 +49,11 @@ export async function provisionFeishuUserAndSignIn(
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   const { email, password, userMetadata } = args;
 
-  const first = await sessionClient.auth.signInWithPassword({ email, password });
-  if (!first.error) return { ok: true };
+  const first = await safeSignInWithPassword(sessionClient, email, password);
+  if (first.ok) return { ok: true };
+  if (first.transient) {
+    return { ok: false, message: `Supabase auth temporary unavailable: ${first.message}` };
+  }
 
   const created = await admin.auth.admin.createUser({
     email,
@@ -39,8 +63,8 @@ export async function provisionFeishuUserAndSignIn(
   });
 
   if (!created.error) {
-    const second = await sessionClient.auth.signInWithPassword({ email, password });
-    if (second.error) return { ok: false, message: second.error.message };
+    const second = await safeSignInWithPassword(sessionClient, email, password);
+    if (!second.ok) return { ok: false, message: second.message };
     return { ok: true };
   }
 
@@ -65,7 +89,7 @@ export async function provisionFeishuUserAndSignIn(
     return { ok: false, message: updated.error.message };
   }
 
-  const third = await sessionClient.auth.signInWithPassword({ email, password });
-  if (third.error) return { ok: false, message: third.error.message };
+  const third = await safeSignInWithPassword(sessionClient, email, password);
+  if (!third.ok) return { ok: false, message: third.message };
   return { ok: true };
 }

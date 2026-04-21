@@ -21,6 +21,11 @@ In TSX, use Tailwind font utilities generated from `@theme` tokens in `app/globa
 - Do not swap roles (e.g. do not use `font-display` for body copy).
 - Do not define local `@font-face` or override font families in the component.
 - Use the font utility classes defined in this project’s `app/globals.css`; do not invent parallel class names.
+- Do not insert manual line breaks in headings/body (`<br />`, forced `\n`) just to shape layout.
+- Avoid premature wrapping on desktop: do not constrain headline containers with overly narrow widths (e.g. `max-w-md`/`max-w-lg`) when the grid column still has free space.
+- In split/two-column heroes, headline wrapper should generally use the available text column width (or a soft measure like ~`20-28ch`), not an artificially tight cap.
+- Body copy measure should stay readable: target roughly `45-75` characters per line on desktop; avoid both ultra-short and overly long lines.
+- Prefer balanced wrapping for large headlines (e.g. `text-wrap: balance`) when supported, but never rely on forced hard breaks.
 - Keep heading length readable:
   - Hero H1: target <= 24 Chinese chars (or <= 12 English words), max 2 lines.
   - Section H2: target <= 18 Chinese chars (or <= 10 English words), max 2 lines.

@@ -29,7 +29,10 @@ Use these defaults unless user request overrides them:
 - `VISUAL_DENSITY = 6`
 
 Rules:
-- **Maximum 6 scenes** (including the opening). Fewer is better if each one hits harder.
+- **Maximum 4 sections total** in `pages[0].sections` (including opening and closing). Never output 5+ sections.
+- **Maximum 4 scenes** (including the opening). Fewer is better if each one hits harder.
+- Coverage balance (critical): when there are 4 sections, at least 3 sections must include non-pure-text evidence units in `contentHints` (e.g. media block, card cluster, stats row, quote+attribution, logo/proof band).
+- Tail anti-degradation (critical): section #3 and #4 must not collapse to "headline + paragraph + single CTA" only; they must each include at least one scannable structure block.
 - `type` should use familiar section archetypes (e.g. `Hero`, `Feature`, `StoryBlock`, `Showcase`, `Testimonial`, `FAQ`, `CTA`, `Footer`) so downstream generation can align faster.
 - `intent` should describe the **visual and emotional impact** — what the visitor feels when they reach this scene.
 - `contentHints` should describe what the visitor **sees and experiences** — the visual composition, not a list of data fields.
@@ -45,6 +48,7 @@ Rules:
 - In `contentHints`, include spacing density (`compact` / `standard` / `spacious`) and avoid excessive spacing plans that imply `py-32` or above.
 - Prohibit implementation cues that conflict with downstream guardrails (e.g., `style jsx`, `clip-path`, repeated global grain overlays).
 - Enforce minimum section payload: each non-hero section should carry at least 2 meaningful content units (e.g., title+description, metric+label, quote+attribution, feature+benefit).
+- In `contentHints`, explicitly name the planned evidence/scannable units (not generic prose), e.g. "3 stats chips", "2-column feature cards", "quote + attribution + source band".
 - If a candidate section has too little unique content, merge it into an adjacent section instead of keeping a weak standalone block.
 - Avoid "thin sections" that only contain one short sentence + one button unless it is the final closing CTA.
 - Prioritize fewer, stronger sections over many sparse sections.
@@ -58,3 +62,4 @@ Rules:
 
 - Return JSON only (no markdown).
 - Preserve existing ids/names unless required for validity.
+- Hard check before output: each page's `sections.length` must be `<= 4`.

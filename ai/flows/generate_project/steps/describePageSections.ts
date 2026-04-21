@@ -37,23 +37,18 @@ function pickFallbackBackground(index: number, total: number): string {
 function buildFallbackBrief(_section: PlannedSectionSpec, index: number, total: number): string {
   const background = pickFallbackBackground(index, total);
   const density = index % 3 === 0 ? "spacious" : "standard";
-  const inverted =
+  const focus =
     background === "bg-foreground"
-      ? "主文案与标识使用 text-background / text-background/85；次级说明使用 text-background/70；分隔线用 border-background/20。"
-      : "前景与背景保持足够对比；避免浅底上再叠低透明度灰字。";
+      ? "高对比主标题与主行动区"
+      : "标题层级与核心信息卡片";
+  const structure =
+    index >= 2 ? "引用署名或指标条 + 一个辅助信息块" : "主标题区 + 结构化信息块（卡片或指标）";
   return [
     `背景色：${background}`,
-    "背景装饰：无（若需层次，优先用极淡径向光晕或细网格，禁止 section 内重复 grain）",
     "构图方式：稳定的中心或双栏布局，避免无意义偏移",
-    "视觉氛围：清晰克制，视觉焦点集中在主标题与主行动点",
-    `对比策略：${inverted}`,
-    "文字长度控制：主标题建议 <=24 中文字符（<=12 英文词）且最多 2 行；正文单段建议 1-3 句",
-    `间距密度：${density}`,
-    "Hover 策略：subtle（仅对按钮/卡片交互元素使用轻微颜色或阴影变化）",
-    "布局去重说明：与相邻段使用不同表面家族（背景/次级色/弱主色/深底之一），避免连续同明度奶油色",
-    "是否需要图片：不需要图片",
-    "内容密度判断：medium",
-    "密度补强策略：至少两个内容单元（标题+支撑句、或数据+标签、或引用+署名）",
+    `视觉焦点：${focus}`,
+    `节奏密度：${density}`,
+    `结构要点：${structure}`,
   ].join("\n");
 }
 

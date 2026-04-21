@@ -21,7 +21,7 @@ The project uses Tailwind CSS v4. All design tokens are defined in `globals.css`
 
 Use these native Tailwind utilities directly. Do NOT use custom prefixed helper classes.
 
-For composite effects (glass, scanlines, clip-paths, etc.), prefer Tailwind utilities and arbitrary values (`bg-*`, `backdrop-blur-*`, `[clip-path:*]`, gradients, opacity, blend modes) instead of custom prefixed class names.
+For composite effects (glass, scanlines, radial glows, layered gradients, etc.), prefer Tailwind utilities and arbitrary values (`bg-*`, `backdrop-blur-*`, gradients, opacity, blend modes) instead of custom prefixed class names.
 
 ### Required
 
