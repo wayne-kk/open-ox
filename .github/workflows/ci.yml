@@ -157,7 +157,7 @@ jobs:
           APP=/sharedata/wayne/open-ox
           RSYNC_SSH="ssh -p ${SERVER_PORT:-22}"
 
-          rsync -az --delete \
+          rsync -az \
             -e "$RSYNC_SSH" \
             --exclude '.git' \
             --exclude 'node_modules' \
