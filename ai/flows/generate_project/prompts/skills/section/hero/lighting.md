@@ -25,13 +25,13 @@ When this skill is selected, the generated section MUST satisfy all items below:
 - **CTA block**: Primary and optional secondary CTA. Use `font-body` with label-style utilities (size/weight/tracking).
 - **Interactive control**: Hue slider or similar to adjust the lightning color. Use `ElasticHueSlider` pattern (see Implementation Reference).
 - **Feature badges**: Optional floating labels (e.g. "React", "Tailwind", "Shaders") positioned around the hero. Use `FeatureItem` pattern.
-- **Visual layer**: WebGL `Lightning` canvas as full-bleed background; optional gradient orbs and planet/sphere shapes for depth.
+- **Visual layer**: WebGL `Lightning` canvas as a section-local background layer; optional gradient orbs and geometric accents for depth.
 
 ## Layout Patterns
 
-- **Centered with overlay**: Full-screen shader background; content centered, layered above. Mobile: stack vertically, ensure text contrast.
+- **Section-local overlay**: Shader background must stay inside the section wrapper and follow the section brief's rhythm/spacing.
 - **Feature badges**: Position 2–4 feature labels (name + value) at corners or sides with staggered animation. Use `position` classes like `left-0 top-40`, `right-1/4 top-24`.
-- **Navigation**: Optional nav bar with logo, links, and CTA. Mobile: hamburger menu with full-screen overlay.
+- **No shell takeover**: Do not introduce standalone navigation/app-shell structures inside the section.
 
 ## Typography Hierarchy
 
@@ -60,6 +60,8 @@ When this skill is selected, the generated section MUST satisfy all items below:
 - Must be a Client Component (`"use client"`).
 - Use realistic copy. Fix typos (e.g. "feel free" not "fill free").
 - Mobile-first: readable text, touch-friendly slider, collapsible nav.
+- Must preserve the target section's layout contract: `w-full` section wrapper, inner container, and brief-defined spacing density.
+- Do not default to `min-h-screen` unless explicitly required by the section brief.
 
 ## Implementation Reference
 
@@ -84,7 +86,7 @@ When implementing, use or adapt the following patterns. Output path: `components
 ### HeroSection
 
 - State: `mobileMenuOpen`, `lightningHue`.
-- Layout: nav → feature badges → main content (slider, eyebrow CTA, headline, subhead, CTA) → background (overlay, orbs, Lightning, planet).
+- Layout: feature badges (optional) → main content (slider, eyebrow CTA, headline, subhead, CTA) → background (overlay, orbs, Lightning, geometry).
 - Wire `lightningHue` to `Lightning` component and `ElasticHueSlider`.
 
 ### Dependencies

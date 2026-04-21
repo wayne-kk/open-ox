@@ -201,63 +201,89 @@ jobs:
       - name: Notify Feishu (success)
         if: success()
         run: |
+          payload=$(jq -n \
+            --arg repo "open-ox" \
+            --arg branch "${{ github.ref_name }}" \
+            --arg actor "${{ github.actor }}" \
+            --arg msg "${{ github.event.head_commit.message }}" \
+            --arg run_url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            '{
+              msg_type: "interactive",
+              card: {
+                header: {
+                  title: { tag: "plain_text", content: "✅ 部署成功" },
+                  template: "green"
+                },
+                elements: [
+                  {
+                    tag: "div",
+                    fields: [
+                      { is_short: true, text: { tag: "lark_md", content: ("**项目**\n" + $repo) } },
+                      { is_short: true, text: { tag: "lark_md", content: ("**分支**\n" + $branch) } },
+                      { is_short: true, text: { tag: "lark_md", content: ("**提交者**\n" + $actor) } },
+                      { is_short: false, text: { tag: "lark_md", content: ("**提交信息**\n" + $msg) } }
+                    ]
+                  },
+                  {
+                    tag: "action",
+                    actions: [
+                      {
+                        tag: "button",
+                        text: { tag: "plain_text", content: "查看详情" },
+                        url: $run_url,
+                        type: "default"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }')
+
           curl -X POST "${{ secrets.FEISHU_WEBHOOK }}" \
             -H "Content-Type: application/json" \
-            -d '{
-              "msg_type": "interactive",
-              "card": {
-                "header": {
-                  "title": { "tag": "plain_text", "content": "✅ 部署成功" },
-                  "template": "green"
-                },
-                "elements": [{
-                  "tag": "div",
-                  "fields": [
-                    { "is_short": true, "text": { "tag": "lark_md", "content": "**项目**\nopen-ox" }},
-                    { "is_short": true, "text": { "tag": "lark_md", "content": "**分支**\n${{ github.ref_name }}" }},
-                    { "is_short": true, "text": { "tag": "lark_md", "content": "**提交者**\n${{ github.actor }}" }},
-                    { "is_short": false, "text": { "tag": "lark_md", "content": "**提交信息**\n${{ github.event.head_commit.message }}" }}
-                  ]
-                }, {
-                  "tag": "action",
-                  "actions": [{
-                    "tag": "button",
-                    "text": { "tag": "plain_text", "content": "查看详情" },
-                    "url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-                    "type": "default"
-                  }]
-                }]
-              }
-            }'
+            -d "$payload"
 
       - name: Notify Feishu (failure)
         if: failure()
         run: |
+          payload=$(jq -n \
+            --arg repo "open-ox" \
+            --arg branch "${{ github.ref_name }}" \
+            --arg actor "${{ github.actor }}" \
+            --arg msg "${{ github.event.head_commit.message }}" \
+            --arg run_url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            '{
+              msg_type: "interactive",
+              card: {
+                header: {
+                  title: { tag: "plain_text", content: "❌ 部署失败" },
+                  template: "red"
+                },
+                elements: [
+                  {
+                    tag: "div",
+                    fields: [
+                      { is_short: true, text: { tag: "lark_md", content: ("**项目**\n" + $repo) } },
+                      { is_short: true, text: { tag: "lark_md", content: ("**分支**\n" + $branch) } },
+                      { is_short: true, text: { tag: "lark_md", content: ("**提交者**\n" + $actor) } },
+                      { is_short: false, text: { tag: "lark_md", content: ("**提交信息**\n" + $msg) } }
+                    ]
+                  },
+                  {
+                    tag: "action",
+                    actions: [
+                      {
+                        tag: "button",
+                        text: { tag: "plain_text", content: "查看日志" },
+                        url: $run_url,
+                        type: "danger"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }')
+
           curl -X POST "${{ secrets.FEISHU_WEBHOOK }}" \
             -H "Content-Type: application/json" \
-            -d '{
-              "msg_type": "interactive",
-              "card": {
-                "header": {
-                  "title": { "tag": "plain_text", "content": "❌ 部署失败" },
-                  "template": "red"
-                },
-                "elements": [{
-                  "tag": "div",
-                  "fields": [
-                    { "is_short": true, "text": { "tag": "lark_md", "content": "**项目**\nopen-ox" }},
-                    { "is_short": true, "text": { "tag": "lark_md", "content": "**分支**\n${{ github.ref_name }}" }},
-                    { "is_short": true, "text": { "tag": "lark_md", "content": "**提交者**\n${{ github.actor }}" }},
-                    { "is_short": false, "text": { "tag": "lark_md", "content": "**提交信息**\n${{ github.event.head_commit.message }}" }}
-                  ]
-                }, {
-                  "tag": "action",
-                  "actions": [{
-                    "tag": "button",
-                    "text": { "tag": "plain_text", "content": "查看日志" },
-                    "url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-                    "type": "danger"
-                  }]
-                }]
-              }
-            }'
+            -d "$payload"

@@ -1,5 +1,13 @@
 # Three.js Animation
 
+Use this as implementation guidance only. Do NOT treat this document as a page/section layout template.
+
+Layout safety:
+
+- Keep section wrapper, container, and spacing rhythm from the section brief.
+- Avoid full-screen scene takeover (`min-h-screen`, fixed shell) unless explicitly requested.
+- Do not inject standalone nav/app-shell structure into a section.
+
 ## Quick Start
 
 ```javascript
