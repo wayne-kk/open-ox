@@ -7,13 +7,15 @@ All shared styling belongs in global CSS. Components consume only; they do not d
 - `<style jsx>`, `<style jsx global>`, CSS-in-JS, or any component-scoped style tag — causes build errors in Next.js App Router
 - `@font-face`, `@keyframes`, global selectors, or reusable effect classes
 - Local redefinition of fonts, animations, textures, or glow effects that already exist in `globals.css`
+- `clip-path`, `polygon()`, or path-based shape clipping for section content
+- Repeated grain/noise overlays in multiple sections — **at most one** of: (a) page/layout wrapper, or (b) a single section, never both; default to **no grain** if the design already has photography or strong surface bands
 
 ### Tailwind v4 Usage
 
 The project uses Tailwind CSS v4. All design tokens are defined in `globals.css` via `@theme` and **automatically** become Tailwind utility classes:
 
 - Colors: `bg-primary`, `text-primary`, `border-accent`, `bg-background`, `text-foreground`, etc.
-- Fonts: `font-display`, `font-header`, `font-body`, `font-label`
+- Fonts: `font-display`, `font-header`, `font-body`
 - Shadows: `shadow-glow`, `shadow-soft`, `shadow-neon`, etc.
 - Animations: `animate-float`, `animate-pulse-neon`, etc.
 

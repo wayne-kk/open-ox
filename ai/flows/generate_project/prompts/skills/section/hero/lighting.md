@@ -7,13 +7,22 @@ Use this skill when generating a hero section that features a WebGL-based lightn
 1. **Code-generated visuals** — The main visual is 100% code (WebGL shaders), not images. Emphasize that it can be customized.
 2. **Interactive control** — Provide at least one interactive control (e.g. hue slider) so users can adjust the effect.
 3. **Layered depth** — Combine shader layer, gradient orbs, and content in clear z-order. Content must remain readable.
-4. **Dark-first** — Lightning effects read best on dark backgrounds. Default to black or near-black.
+4. **Dark-first** — Lighting effects read best on dark backgrounds. Default to black or near-black.
+
+## Non-Negotiable Acceptance Checklist
+
+When this skill is selected, the generated section MUST satisfy all items below:
+
+1. Must be a client component with `"use client"`.
+2. Must include real WebGL shader/runtime logic (`canvas.getContext("webgl" | "webgl2")` + shader setup), not only Canvas2D imitation.
+3. Must expose at least one interactive control that changes lighting color (e.g., hue slider).
+4. Must wire the control to rendering state/uniforms (e.g., `uHue` or equivalent).
 
 ## Structure Requirements
 
 - **Headline**: 6–12 words. Use `font-display`. Strong, memorable wordmark or tagline.
 - **Subheading**: 1–2 sentences. Use `font-body`. Clarify the value and that the effect is customizable.
-- **CTA block**: Primary and optional secondary CTA. Use `font-label`.
+- **CTA block**: Primary and optional secondary CTA. Use `font-body` with label-style utilities (size/weight/tracking).
 - **Interactive control**: Hue slider or similar to adjust the lightning color. Use `ElasticHueSlider` pattern (see Implementation Reference).
 - **Feature badges**: Optional floating labels (e.g. "React", "Tailwind", "Shaders") positioned around the hero. Use `FeatureItem` pattern.
 - **Visual layer**: WebGL `Lightning` canvas as full-bleed background; optional gradient orbs and planet/sphere shapes for depth.
@@ -29,7 +38,7 @@ Use this skill when generating a hero section that features a WebGL-based lightn
 - `font-display` → Hero headline.
 - `font-header` → Subheadline, gradient text.
 - `font-body` → Supporting copy, descriptions.
-- `font-label` → Slider label, CTA text, feature badges.
+- `font-body` with label-style utilities (`text-xs`/`text-sm`, `font-medium`, `tracking-`*) → Slider label, CTA text, feature badges.
 
 ## Technical Requirements
 
@@ -130,3 +139,4 @@ void main() {
   gl_FragColor = vec4(col, 1.0);
 }
 ```
+

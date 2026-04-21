@@ -1,6 +1,8 @@
 import { composePromptBlocks, loadStepPrompt } from "../shared/files";
-import { callLLM } from "../shared/llm";
+import { callLLMWithMeta } from "../shared/llm";
+import { stepTraceFromLlmCompletion } from "../shared/llmTrace";
 import { writeSiteFile } from "../shared/files";
+import type { StepTrace } from "../types";
 import { getModelForStep } from "@/lib/config/models";
 
 export interface DesignIntentResult {
@@ -12,6 +14,8 @@ export interface DesignIntentResult {
    * Empty array if extraction fails — never blocks the pipeline.
    */
   technicalKeywords: string[];
+  /** LLM I/O for Studio step detail (omitted when step is skipped or fails before LLM) */
+  trace?: StepTrace;
 }
 
 /**
@@ -106,21 +110,30 @@ export async function stepInferDesignIntent(
   const userMessage = `## User Requirement
 ${userInput}`;
 
+  const model = getModelForStep("infer_design_intent");
+
   try {
-    const raw = await callLLM(
-      systemPrompt,
-      userMessage,
-      0.4,
-      undefined,
-      getModelForStep("infer_design_intent")
-    );
-    const text = raw.trim();
+    const meta = await callLLMWithMeta(systemPrompt, userMessage, 0.4, undefined, model);
+    const text = meta.content.trim();
+    const trace = stepTraceFromLlmCompletion(systemPrompt, userMessage, meta);
     if (text) {
       await writeSiteFile("design-intent.md", text);
     }
     const technicalKeywords = extractTechnicalKeywords(text);
-    return { text, technicalKeywords };
-  } catch {
-    return { text: "", technicalKeywords: [] };
+    return { text, technicalKeywords, trace };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      text: "",
+      technicalKeywords: [],
+      trace: {
+        llmCall: {
+          model,
+          systemPrompt,
+          userMessage,
+          rawResponse: `[infer_design_intent failed]\n${message}`,
+        },
+      },
+    };
   }
 }

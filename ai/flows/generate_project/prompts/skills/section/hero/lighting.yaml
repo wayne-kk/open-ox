@@ -5,7 +5,7 @@ priority: 75
 fallback: false
 when:
   designKeywords:
-    any: ["lightning", "shader", "webgl", "plasma", "particle-field", "generative-art"]
+    any: ["lightning",  "webgl", "plasma", "particle-field", "generative-art"]
     none: ["editorial", "magazine", "luxury", "minimal", "clean", "nature", "organic", "warm", "festive", "celebration"]
 notes: >
   Use ONLY for heroes where WebGL lightning/shader is the explicit design intent.

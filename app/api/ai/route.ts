@@ -51,7 +51,9 @@ export async function POST(req: Request) {
     const preCreatedProjectId: string | undefined = body.projectId;
     const styleGuide: string | undefined = body.styleGuide;
     const enableSkills: boolean = body.enableSkills === true;
-    const useDatabasePrompts: boolean = body.useDatabasePrompts !== false;
+    // Temporarily force local prompt files only.
+    // Ignore remote/database prompt toggle from client requests.
+    const useDatabasePrompts = false;
     const folderId: string | null | undefined =
       typeof body.folderId === "string" ? body.folderId : body.folderId === null ? null : undefined;
     const requestGenerationMode: GenerationMode | undefined = body.generationMode;

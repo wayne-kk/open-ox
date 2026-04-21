@@ -6,17 +6,23 @@ import type { BuildStep, StepTrace } from "../types";
 export interface StepLogger {
   resultSteps: BuildStep[];
   startStep: (step: string) => void;
-  logStep: (step: string, status: "ok" | "error", detail?: string, skillId?: string | null) => BuildStep;
+  logStep: (
+    step: string,
+    status: "ok" | "error",
+    detail?: string,
+    skillId?: string | null,
+    trace?: StepTrace
+  ) => BuildStep;
   attachTrace: (step: string, trace: StepTrace) => void;
   timed: <T>(
     stepName: string,
     fn: () => Promise<T>,
-    onOk?: (value: T) => string | undefined
+    onOk?: (value: T) => string | undefined | { detail?: string; trace?: StepTrace }
   ) => Promise<T>;
   timedWithTrace: <T>(
     stepName: string,
     fn: (addTrace: (trace: StepTrace) => void) => Promise<T>,
-    onOk?: (value: T) => string | undefined
+    onOk?: (value: T) => string | undefined | { detail?: string; trace?: StepTrace }
   ) => Promise<T>;
 }
 
@@ -128,10 +134,19 @@ export function createStepLogger(options?: {
     options?.onStep?.(activeEntry);
   };
 
-  const logStep = (step: string, status: "ok" | "error", detail?: string, skillId?: string | null): BuildStep => {
+  const logStep = (
+    step: string,
+    status: "ok" | "error",
+    detail?: string,
+    skillId?: string | null,
+    trace?: StepTrace
+  ): BuildStep => {
     const now = Date.now();
     const duration = now - (stepStarts.get(step) ?? now);
     const entry: BuildStep = { step, status, detail, timestamp: now, duration, skillId };
+    if (trace && Object.keys(trace).length > 0) {
+      entry.trace = trace;
+    }
 
     resultSteps.push(entry);
     options?.onStep?.(entry);
@@ -154,12 +169,21 @@ export function createStepLogger(options?: {
   const timed = async <T>(
     stepName: string,
     fn: () => Promise<T>,
-    onOk?: (value: T) => string | undefined
+    onOk?: (value: T) => string | undefined | { detail?: string; trace?: StepTrace }
   ): Promise<T> => {
     startStep(stepName);
     try {
       const value = await fn();
-      logStep(stepName, "ok", onOk?.(value));
+      const maybe = onOk?.(value);
+      let detail: string | undefined;
+      let trace: StepTrace | undefined;
+      if (maybe != null && typeof maybe === "object" && ("trace" in maybe || "detail" in maybe)) {
+        detail = (maybe as { detail?: string }).detail;
+        trace = (maybe as { trace?: StepTrace }).trace;
+      } else {
+        detail = maybe as string | undefined;
+      }
+      logStep(stepName, "ok", detail, undefined, trace);
       return value;
     } catch (error) {
       logStep(stepName, "error", error instanceof Error ? error.message : String(error));
@@ -170,7 +194,7 @@ export function createStepLogger(options?: {
   const timedWithTrace = async <T>(
     stepName: string,
     fn: (addTrace: (trace: StepTrace) => void) => Promise<T>,
-    onOk?: (value: T) => string | undefined
+    onOk?: (value: T) => string | undefined | { detail?: string; trace?: StepTrace }
   ): Promise<T> => {
     startStep(stepName);
     let pendingTrace: StepTrace = {};
@@ -179,16 +203,28 @@ export function createStepLogger(options?: {
     };
     try {
       const value = await fn(addTrace);
-      const entry = logStep(stepName, "ok", onOk?.(value));
-      if (Object.keys(pendingTrace).length > 0) {
-        entry.trace = pendingTrace;
+      const maybe = onOk?.(value);
+      let detail: string | undefined;
+      let traceFromOk: StepTrace | undefined;
+      if (maybe != null && typeof maybe === "object" && ("trace" in maybe || "detail" in maybe)) {
+        detail = (maybe as { detail?: string }).detail;
+        traceFromOk = (maybe as { trace?: StepTrace }).trace;
+      } else {
+        detail = maybe as string | undefined;
+      }
+      const mergedTrace =
+        Object.keys(pendingTrace).length > 0 || (traceFromOk && Object.keys(traceFromOk).length > 0)
+          ? { ...pendingTrace, ...traceFromOk }
+          : undefined;
+      const entry = logStep(stepName, "ok", detail, undefined, mergedTrace);
+      if (mergedTrace && Object.keys(mergedTrace).length > 0) {
         options?.onStep?.(entry);
       }
       return value;
     } catch (error) {
       const entry = logStep(stepName, "error", error instanceof Error ? error.message : String(error));
       if (Object.keys(pendingTrace).length > 0) {
-        entry.trace = pendingTrace;
+        entry.trace = { ...entry.trace, ...pendingTrace };
         options?.onStep?.(entry);
       }
       throw error;

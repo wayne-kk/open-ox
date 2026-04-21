@@ -8,9 +8,10 @@ import {
   loadSystem,
   writeSiteFile,
 } from "../shared/files";
-import { callLLM, extractContent } from "../shared/llm";
+import { callLLMWithMeta, extractContent } from "../shared/llm";
+import { stepTraceFromLlmCompletion } from "../shared/llmTrace";
 import { getModelForStep } from "@/lib/config/models";
-import type { AppScreenPlan, PlannedPageBlueprint } from "../types";
+import type { AppScreenPlan, PlannedPageBlueprint, StepTrace } from "../types";
 
 type ScreenProjectContext = {
   projectTitle: string;
@@ -93,7 +94,7 @@ export async function stepGenerateScreen({
   designSystem,
   projectContext,
   outputFileRelative,
-}: GenerateScreenParams): Promise<{ filePath: string; skillIds: string[] }> {
+}: GenerateScreenParams): Promise<{ filePath: string; skillIds: string[]; trace: StepTrace }> {
   const skillIds = chooseScreenSkillIds(page.appScreenPlan, [
     ...projectContext.designKeywords,
   ]);
@@ -139,8 +140,9 @@ ${designSystem}
 Generate a single self-contained screen component named AppScreen.
 The component should represent the whole page surface in one coherent structure, not stacked marketing sections.`;
   const model = getModelForStep("generate_screen");
-  const raw = await callLLM(systemPrompt, userMessage, 0.4, undefined, model);
-  const tsx = extractContent(raw, "tsx");
+  const meta = await callLLMWithMeta(systemPrompt, userMessage, 0.4, undefined, model);
+  const trace = stepTraceFromLlmCompletion(systemPrompt, userMessage, meta);
+  const tsx = extractContent(meta.content, "tsx");
 
   await writeSiteFile(outputFileRelative, tsx);
   await formatSiteFile(outputFileRelative);
@@ -149,5 +151,5 @@ The component should represent the whole page surface in one coherent structure,
     throw new Error("generate_screen: AppScreen export is missing");
   }
 
-  return { filePath: outputFileRelative, skillIds };
+  return { filePath: outputFileRelative, skillIds, trace };
 }

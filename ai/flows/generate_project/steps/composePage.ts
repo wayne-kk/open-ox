@@ -6,17 +6,24 @@ import {
   loadSystem,
   writeSiteFile,
 } from "../shared/files";
-import { callLLM, extractContent } from "../shared/llm";
+import { callLLMWithMeta, extractContent } from "../shared/llm";
+import { stepTraceFromLlmCompletion } from "../shared/llmTrace";
 import { getModelForStep } from "@/lib/config/models";
 import {
   buildSectionImportPath,
   buildScreenImportPath,
   slugToPagePath,
 } from "../shared/paths";
-import type { PlannedPageBlueprint, PlannedSectionSpec } from "../types";
+import type { PlannedPageBlueprint, PlannedSectionSpec, StepTrace } from "../types";
 
 export interface ComposePageOptions {
   appScreenComponentName?: string;
+}
+
+export interface ComposePageResult {
+  pagePath: string;
+  /** Present when the page body was produced by an LLM call */
+  trace?: StepTrace;
 }
 
 export async function stepComposePage(
@@ -24,7 +31,7 @@ export async function stepComposePage(
   designSystem: string,
   pageSections: PlannedSectionSpec[],
   options?: ComposePageOptions
-): Promise<string> {
+): Promise<ComposePageResult> {
   const targetPagePath = slugToPagePath(blueprint.slug);
   if (options?.appScreenComponentName) {
     const appScreenImportPath = buildScreenImportPath(blueprint.slug);
@@ -46,7 +53,7 @@ export default function Page() {
 `;
     await writeSiteFile(targetPagePath, tsx);
     await formatSiteFile(targetPagePath);
-    return targetPagePath;
+    return { pagePath: targetPagePath };
   }
 
   const systemPrompt = composePromptBlocks([
@@ -87,8 +94,10 @@ Generate the page component source for this page route.
 Treat the page design plan as the composition strategy, not just a list of imports.
 Do not add scanlines, grain, dot grids, or other decorative full-viewport layers unless a **Page Constraint** or **Layout Strategy** line above explicitly requests that effect.`;
 
-  const raw = await callLLM(systemPrompt, userMessage, 0.3, undefined, getModelForStep("compose_page"));
-  let tsx = extractContent(raw, "tsx");
+  const composeModel = getModelForStep("compose_page");
+  const meta = await callLLMWithMeta(systemPrompt, userMessage, 0.3, undefined, composeModel);
+  const trace = stepTraceFromLlmCompletion(systemPrompt, userMessage, meta);
+  let tsx = extractContent(meta.content, "tsx");
 
   // Post-process: ensure import paths match the actual generated files.
   // LLM sometimes ignores the provided import statements and invents its own paths.
@@ -153,5 +162,5 @@ ${renders}
   await writeSiteFile(targetPagePath, tsx);
   await formatSiteFile(targetPagePath);
 
-  return targetPagePath;
+  return { pagePath: targetPagePath, trace };
 }

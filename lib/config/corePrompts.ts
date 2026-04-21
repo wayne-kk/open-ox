@@ -126,7 +126,7 @@ export async function withCorePromptRuntime<T>(
 function getCorePromptRuntime(): CorePromptRuntimeConfig {
   return (
     corePromptRuntimeStorage.getStore() ?? {
-      useDatabasePrompts: true,
+      useDatabasePrompts: false,
       promptProfile: "web",
       dbPromptByStepId: new Map<string, string>(),
     }

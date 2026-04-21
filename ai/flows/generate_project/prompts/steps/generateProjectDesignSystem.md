@@ -21,7 +21,7 @@ The design system must also fit the product logic:
 - No default blue as primary color unless explicitly justified by brand
 - No generic sans-serif + rounded card + soft shadow combination without a differentiating signature
 - No vague descriptions: every style decision must map to at least one concrete CSS property or Tailwind class
-- No `max-w-*` anywhere in layout definitions
+- No unnecessary `max-w-*` over-nesting in section internals (keep hierarchy simple and consistent)
 - No font role substitution: `font-display` ≠ `font-header`, never interchange them
 - No `clip-path` or `polygon()` — all shape boundaries must use `border-radius` only; chamfered / custom clipping shapes are forbidden
 - No organic shapes, petal masks, blob shapes, or any non-rectangular image containers — images must always be rectangular or rounded-rectangular (`border-radius`)
@@ -86,6 +86,8 @@ All values must be hex. Include a one-line usage rule for each token.
 --color-ring:                #______  /* focus ring */
 ```
 
+**Section surfaces (readability)**: `--color-muted` and `--color-secondary` must be **visually distinguishable** from `--color-background` when used as full-section fills (e.g. `bg-secondary/30` vs `bg-background`). If they are too close, downstream pages read as a single cream sheet — darken or warm/cool one of them.
+
 ### Typography
 
 **Font Stack** (Google Fonts only):
@@ -143,6 +145,7 @@ radius.full:   9999px — [usage: e.g., pills, avatars]
 
 ---```css
 [CSS code]
+
 ```
 
 ---
@@ -199,7 +202,7 @@ Shared base: [list shared Tailwind classes all buttons inherit]
 
 - **Grid**: [desktop columns / tablet columns / mobile columns]
 - **Base spacing unit**: [e.g., 4px — describe how multiples are used]
-- **Section vertical rhythm**: `py-20` standard / `py-24` hero — no exceptions
+- **Section vertical rhythm**: define a range and usage rules (e.g., compact sections `py-12~py-16`, standard sections `py-14~py-20`, hero `py-20~py-24`)
 - **Density**: [`compact` definition] / [`comfortable` definition] — specify which sections use which
 - **Hero Rule**: Hero must include a Key Visual (image / illustration / product shot / 3D / graphic system). Text-only Hero is forbidden.
 
@@ -228,6 +231,14 @@ These choices are mandatory. Each must be verifiable in the output code.
 --transition-slow:  [duration] [easing];
 --transition-fast:  [duration] [easing];
 ```
+
+**Hover/Interaction restraint**:
+
+- Default interactive hover should be subtle and functional.
+- Limit hover to one or two dimensions (e.g., color + shadow or color + slight translate).
+- Avoid strong transform stacks on standard cards/list items.
+- Recommend standard hover duration in `150ms-250ms` for most UI controls.
+- Do not mandate site-wide fixed noise/grain overlays by default.
 
 **Keyframe Animations** (define all used animations):
 
@@ -285,10 +296,9 @@ These choices are mandatory. Each must be verifiable in the output code.
 - Font roles: exactly 3 — `font-display`, `font-header`, `font-body`. No `font-label`.
 - H1 max size: `text-5xl` (48px). Never `text-6xl` or above.
 - Animations: global implementation only, no `styled-jsx`
-- `max-w-*`: forbidden everywhere in layout
+- Keep layout width strategy consistent across sections; avoid conflicting width rules between adjacent sections.
 - Do NOT output any Textures & Patterns section. No grain, noise, scanlines, film grain, or SVG noise overlays. Use solid color backgrounds only.
 - `clip-path / polygon()`: forbidden everywhere — no chamfered or custom clipping shapes
 - Output: Markdown document only, no explanation text
-- `H1` text size must never exceed `56px`.
-
+- Keep copy concise by design: hero title max 2 lines; section title max 2 lines; body blocks should avoid long-wall paragraphs.
 

@@ -4,6 +4,8 @@ import {
   writeSiteFile,
 } from "../shared/files";
 import { callLLMWithMeta, extractContent, extractJSON } from "../shared/llm";
+import { stepTraceFromLlmCompletion } from "../shared/llmTrace";
+import type { StepTrace } from "../types";
 import { getModelForStep } from "@/lib/config/models";
 
 function looksLikeGlobalsCss(text: string): boolean {
@@ -78,7 +80,7 @@ function truncateForPrompt(text: string, maxChars = 12_000): string {
 export async function stepApplyProjectDesignTokens(
   designSystem: string,
   onProgress?: (msg: string) => void
-): Promise<string[]> {
+): Promise<{ files: string[]; trace: StepTrace }> {
   const currentGlobalsCss = readSiteFile("app/globals.css");
   const currentTheme = extractThemeBlock(currentGlobalsCss);
   const currentRoot = extractRootVars(currentGlobalsCss);
@@ -116,6 +118,7 @@ Generate the complete updated globals.css. Be concise — output only the CSS co
   }, 10_000);
 
   let raw: string;
+  let llmResultForTrace: Awaited<ReturnType<typeof callLLMWithMeta>> | null = null;
   let tokenUsage: { input?: number; output?: number } = {};
   try {
     const llmResult = await callLLMWithMeta(
@@ -125,6 +128,7 @@ Generate the complete updated globals.css. Be concise — output only the CSS co
       4_000,
       stepModel
     );
+    llmResultForTrace = llmResult;
     raw = llmResult.content;
     tokenUsage = {
       input: llmResult.inputTokens,
@@ -147,5 +151,17 @@ Generate the complete updated globals.css. Be concise — output only the CSS co
   onProgress?.(`writing globals.css (${globalsCss.length} chars)...`);
   await writeSiteFile("app/globals.css", globalsCss);
 
-  return ["app/globals.css"];
+  const trace =
+    llmResultForTrace != null
+      ? stepTraceFromLlmCompletion(systemPrompt, userMessage, llmResultForTrace)
+      : ({
+          llmCall: {
+            model: stepModel,
+            systemPrompt,
+            userMessage,
+            rawResponse: "[apply_project_design_tokens: no LLM result captured]",
+          },
+        } satisfies StepTrace);
+
+  return { files: ["app/globals.css"], trace };
 }

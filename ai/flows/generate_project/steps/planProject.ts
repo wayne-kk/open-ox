@@ -1,12 +1,14 @@
 import { buildDefaultProjectPlan, buildDefaultAppScreenPlan } from "../planners/defaultProjectPlanner";
 import { inferProjectGuardrailDefaults } from "../planners/guardrailPolicy";
 import { composePromptBlocks, loadGuardrail, loadStepPrompt, writeSiteFile } from "../shared/files";
-import { callLLM, extractJSON } from "../shared/llm";
+import { callLLMWithMeta, extractJSON } from "../shared/llm";
+import { stepTraceFromLlmCompletion } from "../shared/llmTrace";
 import type {
   PlannedProjectBlueprint,
   PlannedPageBlueprint,
   PlannedSectionSpec,
   ProjectBlueprint,
+  StepTrace,
 } from "../types";
 import { getPromptProfile } from "@/ai/prompts/core/profile";
 import { getModelForStep } from "@/lib/config/models";
@@ -15,7 +17,7 @@ import { getModelForStep } from "@/lib/config/models";
 
 export async function stepPlanProject(
   blueprint: ProjectBlueprint,
-): Promise<PlannedProjectBlueprint> {
+): Promise<{ blueprint: PlannedProjectBlueprint; trace: StepTrace }> {
   const appProfile = getPromptProfile() === "app";
   const defaultPlan = buildDefaultProjectPlan(blueprint);
 
@@ -64,8 +66,12 @@ ${blueprint.site.layoutSections.map((s) => `- ${s.type}: ${s.intent}`).join("\n"
 
   // ── Call LLM ───────────────────────────────────────────────────────────
 
+  const model = getModelForStep("plan_project");
+
   try {
-    const raw = await callLLM(systemPrompt, userMessage, 0.2, undefined, getModelForStep("plan_project"));
+    const meta = await callLLMWithMeta(systemPrompt, userMessage, 0.2, undefined, model);
+    const raw = meta.content;
+    const trace = stepTraceFromLlmCompletion(systemPrompt, userMessage, meta);
     const parsed = JSON.parse(extractJSON(raw)) as PlannedProjectBlueprint;
 
     // Persist the raw LLM output into the generated project.
@@ -93,16 +99,31 @@ ${blueprint.site.layoutSections.map((s) => `- ${s.type}: ${s.intent}`).join("\n"
     });
 
     return {
-      ...defaultPlan,
-      // Guardrails are deterministic — always use defaults, don't ask the LLM.
-      projectGuardrailIds: inferProjectGuardrailDefaults(),
-      site: {
-        ...defaultPlan.site,
-        layoutSections: parsed.site.layoutSections ?? defaultPlan.site.layoutSections,
-        pages,
+      blueprint: {
+        ...defaultPlan,
+        // Guardrails are deterministic — always use defaults, don't ask the LLM.
+        projectGuardrailIds: inferProjectGuardrailDefaults(),
+        site: {
+          ...defaultPlan.site,
+          layoutSections: parsed.site.layoutSections ?? defaultPlan.site.layoutSections,
+          pages,
+        },
+      },
+      trace,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      blueprint: defaultPlan,
+      trace: {
+        llmCall: {
+          model,
+          systemPrompt,
+          userMessage,
+          rawResponse: `[plan_project failed — using default plan]\n${message}`,
+        },
+        output: { fallbackToDefaultPlan: true },
       },
     };
-  } catch {
-    return defaultPlan;
   }
 }

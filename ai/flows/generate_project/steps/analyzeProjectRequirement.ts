@@ -1,7 +1,7 @@
 import { composePromptBlocks, loadGuardrail, loadStepPrompt } from "../shared/files";
 import { callLLMWithTools, extractJSON } from "../shared/llm";
 import { webSearchTool, executeWebSearch } from "../../../tools/system/webSearchTool";
-import type { ProjectBlueprint } from "../types";
+import type { ProjectBlueprint, StepTrace } from "../types";
 import { asProjectBlueprint } from "../schema/normalizeBlueprint";
 import { detectBlueprintInputShape, warnOnBlueprintFallback } from "../schema/projectBlueprint.schema";
 import { getModelForStep } from "@/lib/config/models";
@@ -9,7 +9,8 @@ import { getModelForStep } from "@/lib/config/models";
 export async function stepAnalyzeProjectRequirement(
   userInput: string,
   onToolCall?: (name: string, args: Record<string, unknown>, result: string) => void
-): Promise<ProjectBlueprint> {
+): Promise<{ blueprint: ProjectBlueprint; trace: StepTrace }> {
+  const model = getModelForStep("analyze_project_requirement");
   const systemPrompt = composePromptBlocks([
     `You are a senior product strategist and MVP architect.
 
@@ -27,7 +28,7 @@ After gathering any needed context, produce a structured ProjectBlueprint JSON.`
     tools: [webSearchTool],
     temperature: 0.5,
     maxIterations: 4,
-    model: getModelForStep("analyze_project_requirement"),
+    model,
     executeToolOverrides: { web_search: executeWebSearch },
   });
 
@@ -47,7 +48,23 @@ After gathering any needed context, produce a structured ProjectBlueprint JSON.`
       typeof blueprint.brief.language === "string" && blueprint.brief.language.trim()
         ? blueprint.brief.language.trim()
         : "en";
-    return blueprint;
+    const trace: StepTrace = {
+      llmCall: {
+        model,
+        systemPrompt,
+        userMessage: userInput,
+        rawResponse: raw,
+      },
+      output: {
+        toolCalls: toolCalls.map((tc) => ({
+          name: tc.name,
+          args: tc.args,
+          resultPreview: typeof tc.result === "string" ? tc.result.slice(0, 4000) : JSON.stringify(tc.result).slice(0, 4000),
+        })),
+      },
+    };
+
+    return { blueprint, trace };
   } catch (error) {
     if (error instanceof Error && error.message.startsWith("analyze_project_requirement:")) {
       throw new Error(`${error.message}\nRaw output:\n${raw}`);

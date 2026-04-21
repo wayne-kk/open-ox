@@ -444,11 +444,12 @@ async function generateSharedLayoutSections(params: {
     collectedPendingImages.push(...batchResult.pendingImages);
   }
 
-  const layoutPath = await logger.timed(
+  const layoutOutcome = await logger.timed(
     "compose_layout",
     () => stepComposeLayout(blueprint.site.layoutSections, blueprint),
-    (path) => path ?? "layout unchanged"
+    (r) => ({ detail: r.layoutPath ?? "layout unchanged", trace: r.trace })
   );
+  const layoutPath = layoutOutcome.layoutPath;
   if (layoutPath) {
     collectedFiles.push(layoutPath);
     await persistJsonArtifact(artifactLogger, "compose_layout", "output", {
@@ -502,7 +503,9 @@ async function generatePages(params: {
         logger.logStep(
           screenStepName,
           "ok",
-          `${screenResult.filePath}${screenResult.skillIds.length ? ` | ${screenResult.skillIds.join(", ")}` : ""}`
+          `${screenResult.filePath}${screenResult.skillIds.length ? ` | ${screenResult.skillIds.join(", ")}` : ""}`,
+          undefined,
+          screenResult.trace
         );
         await persistJsonArtifact(artifactLogger, screenStepName, "output", {
           slug: page.slug,
@@ -523,14 +526,15 @@ async function generatePages(params: {
           return { files: [screenResult.filePath, pagePath], pendingImages: [] };
         }
 
-        const pagePath = await logger.timed(
+        const pageCompose = await logger.timed(
           getComposePageStepName(page.slug),
           () =>
             stepComposePage(page, designSystem, [], {
               appScreenComponentName: "AppScreen",
             }),
-          (path) => path
+          (r) => ({ detail: r.pagePath, trace: r.trace })
         );
+        const pagePath = pageCompose.pagePath;
         await persistJsonArtifact(artifactLogger, getComposePageStepName(page.slug), "output", {
           pagePath,
           slug: page.slug,
@@ -571,7 +575,10 @@ async function generatePages(params: {
             page,
             sections: dedupedSections,
           }),
-        () => `${dedupedSections.length} section brief(s)`
+        (r) => ({
+          detail: `${dedupedSections.length} section brief(s)`,
+          trace: r.trace,
+        })
       );
       const sectionBriefByFile = new Map(
         pageDesign.sectionDesigns.map((design) => [design.fileName, design.sectionDesignBrief])
@@ -651,11 +658,12 @@ async function generatePages(params: {
       }
 
       // Deduplicate sections by fileName before composing the page
-      const pagePath = await logger.timed(
+      const pageCompose = await logger.timed(
         getComposePageStepName(page.slug),
         () => stepComposePage(page, designSystem, dedupedSections),
-        (path) => path
+        (r) => ({ detail: r.pagePath, trace: r.trace })
       );
+      const pagePath = pageCompose.pagePath;
 
       await persistJsonArtifact(artifactLogger, getComposePageStepName(page.slug), "output", {
         pagePath,
@@ -856,14 +864,15 @@ export async function runGenerateProject(
         inferredDesignIntent = await logger.timed(
           "infer_design_intent",
           () => stepInferDesignIntent(userInput),
-          (r) => r.text.slice(0, 80)
+          (r) => ({ detail: r.text.slice(0, 80), trace: r.trace })
         );
         await persistTextArtifact(artifactLogger, "infer_design_intent", "output", inferredDesignIntent.text, "md");
       }
     } else {
-      const analyzePromise = logger.timed(
-        "analyze_project_requirement",
-        () => stepAnalyzeProjectRequirement(userInput, (name, args, result) => {
+      logger.startStep("analyze_project_requirement");
+      logger.startStep("infer_design_intent");
+      const [analyzeResult, inferResult] = await Promise.all([
+        stepAnalyzeProjectRequirement(userInput, (name, args, result) => {
           onStep?.({
             step: `tool_call:${name}`,
             status: "ok",
@@ -872,15 +881,24 @@ export async function runGenerateProject(
             duration: 0,
           });
         }),
-        (blueprint) => `${blueprint.brief.roles.length} roles, ${blueprint.site.pages.length} pages planned`
+        stepInferDesignIntent(userInput),
+      ]);
+      logger.logStep(
+        "analyze_project_requirement",
+        "ok",
+        `${analyzeResult.blueprint.brief.roles.length} roles, ${analyzeResult.blueprint.site.pages.length} pages planned`,
+        undefined,
+        analyzeResult.trace
       );
-      const inferPromise = logger.timed(
+      logger.logStep(
         "infer_design_intent",
-        () => stepInferDesignIntent(userInput),
-        (r) => r.text.slice(0, 80)
+        "ok",
+        inferResult.text.slice(0, 80),
+        undefined,
+        inferResult.trace
       );
-
-      [rawBlueprint, inferredDesignIntent] = await Promise.all([analyzePromise, inferPromise]);
+      rawBlueprint = analyzeResult.blueprint;
+      inferredDesignIntent = inferResult;
       await persistJsonArtifact(artifactLogger, "analyze_project_requirement", "output", rawBlueprint);
       await persistTextArtifact(artifactLogger, "infer_design_intent", "output", inferredDesignIntent.text, "md");
     }
@@ -927,10 +945,10 @@ export async function runGenerateProject(
       })();
 
       // Phase 1: plan_project + skill matching run in parallel
-      const [plannedBlueprint, matchResult] = await Promise.all([
-        stepPlanProject(normalizedBlueprint).then((bp) => {
-          logger.logStep("plan_project", "ok", "section generation plans prepared");
-          return bp;
+      const [planOutcome, matchResult] = await Promise.all([
+        stepPlanProject(normalizedBlueprint).then((out) => {
+          logger.logStep("plan_project", "ok", "section generation plans prepared", undefined, out.trace);
+          return out;
         }),
         stepMatchDesignSystemSkill({
           userInput,
@@ -956,7 +974,7 @@ export async function runGenerateProject(
         }),
       ]);
 
-      blueprint = plannedBlueprint;
+      blueprint = planOutcome.blueprint;
 
       await persistJsonArtifact(artifactLogger, "match_design_system_skill", "output", {
         matched: matchResult.matched,
@@ -974,11 +992,18 @@ export async function runGenerateProject(
         );
       } else {
         logger.startStep("generate_project_design_system");
-        designSystem = await stepGenerateProjectDesignSystem(
+        const dsOutcome = await stepGenerateProjectDesignSystem(
           designIntentForSystem,
           options?.styleGuide
         );
-        logger.logStep("generate_project_design_system", "ok", "design-system.md written");
+        designSystem = dsOutcome.designSystem;
+        logger.logStep(
+          "generate_project_design_system",
+          "ok",
+          "design-system.md written",
+          undefined,
+          dsOutcome.trace
+        );
       }
 
       // Keep plan_project artifact focused on fields that are actually produced by
@@ -1024,7 +1049,7 @@ export async function runGenerateProject(
         logger.logStep("apply_project_design_tokens", "ok", "resumed from checkpoint");
         return;
       }
-      const tokenFiles = await logger.timed(
+      const tokenResult = await logger.timed(
         "apply_project_design_tokens",
         () => stepApplyProjectDesignTokens(designSystem, (msg) => {
           onStep?.({
@@ -1035,8 +1060,9 @@ export async function runGenerateProject(
             duration: 0,
           });
         }),
-        (files) => files.join(", ")
+        (r) => ({ detail: r.files.join(", "), trace: r.trace })
       );
+      const tokenFiles = tokenResult.files;
       await persistJsonArtifact(artifactLogger, "apply_project_design_tokens", "output", {
         files: tokenFiles,
       });
