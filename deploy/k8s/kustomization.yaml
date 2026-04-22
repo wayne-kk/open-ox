@@ -1,0 +1,22 @@
+# kubectl apply -k deploy/k8s
+#
+# Before apply:
+# 1. Edit deployment patch image + namespace (or use overlays).
+# 2. Create Secret open-ox-env — see secret-env.example.yaml
+# 3. Edit ingress host + tls secret name for your cluster.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: open-ox-demo
+
+resources:
+  - namespace.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+
+images:
+  - name: open-ox
+    newName: YOUR_REGISTRY/open-ox
+    newTag: latest

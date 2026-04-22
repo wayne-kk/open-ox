@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: open-ox
+  labels:
+    app: open-ox
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: open-ox
+  template:
+    metadata:
+      labels:
+        app: open-ox
+    spec:
+      containers:
+        - name: open-ox
+          image: open-ox:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - secretRef:
+                name: open-ox-env
+                optional: true
+          env:
+            # Runtime overrides only affect server code; NEXT_PUBLIC_* are baked at image build.
+            - name: NODE_ENV
+              value: production
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+      # If your cluster enforces readOnlyRootFilesystem, uncomment and add an emptyDir for writes:
+      # volumes:
+      #   - name: sites-data
+      #     emptyDir: {}
+      # volumeMounts on container:
+      #   - name: sites-data
+      #     mountPath: /app/sites

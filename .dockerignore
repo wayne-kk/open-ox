@@ -1,0 +1,38 @@
+# dependencies & build output
+node_modules
+.next
+out
+dist
+
+# git & editor
+.git
+.gitignore
+.cursor
+.vscode
+.idea
+
+# env & secrets (inject via CI / K8s)
+.env
+.env.*
+!.env.production.example
+!.env.local.example
+
+# docs & tooling (not needed for runtime image)
+docs
+.planning
+.kiro
+.github
+
+# large / unrelated trees (keep sites/ — runtime needs sites/template and project dirs)
+e2b-template
+example
+.open-ox
+
+# test & misc
+coverage
+*.log
+.DS_Store
+tsconfig.tsbuildinfo
+vitest.config.ts
+_test_parse.mjs
+wayne.conf
