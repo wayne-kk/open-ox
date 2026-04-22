@@ -139,6 +139,24 @@ Tailwind v4 `@theme` tokens **automatically** generate utility classes. You MUST
 
 - All `@keyframes` not replaced by the design system
 - All custom utility classes not overridden
-- Scrollbar styles and other base styles
 - Google Fonts imports (update font families to match design system)
+
+## Required: Global Scrollbar Reset (app line — critical)
+
+You MUST include the following block inside `@layer base`. It globally hides all scrollbars across the entire app. Do NOT omit it, do NOT wrap it in a media query, and do NOT remove it if it already exists.
+
+```css
+@layer base {
+  /* Hide scrollbars globally — native app aesthetic requires no visible scrollbars */
+  * {
+    scrollbar-width: none;       /* Firefox */
+    -ms-overflow-style: none;    /* IE / Edge legacy */
+  }
+  *::-webkit-scrollbar {
+    display: none;               /* Chrome / Safari / WebKit */
+  }
+}
+```
+
+Merge this into the existing `@layer base` block if one already exists — do not create a duplicate `@layer base`.
 
