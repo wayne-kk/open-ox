@@ -113,7 +113,7 @@ export async function stepGenerateScreen({
   const userMessage = `## Project Context
 - Project: ${projectContext.projectTitle}
 - Description: ${projectContext.projectDescription}
-- Language: ${projectContext.language}
+- **Language**: ${projectContext.language} — ⚠️ CRITICAL: ALL user-facing text (labels, headings, buttons, placeholder text, status messages, tab titles, card copy, alt text) MUST be written in this language. Do NOT mix with other languages. Skill example text is structural only — replace it with real ${projectContext.language} content.
 
 ## Known Routes
 ${buildKnownRoutesBlock(projectContext.pages)}
