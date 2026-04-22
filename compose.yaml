@@ -1,0 +1,18 @@
+# Local image build: load variables from your machine’s .env.local (host-only; not copied into the image).
+#
+#   docker compose --env-file .env.local build
+#
+# Or: pnpm run docker:build
+#
+# CI / production: omit --env-file and set the same names in the CI environment, or pass build-args explicitly.
+
+services:
+  open-ox:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY:-}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-}
+    image: open-ox:local

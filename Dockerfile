@@ -2,13 +2,13 @@
 # (often blocked or slow without registry mirror).
 
 # Next.js standalone production image (pnpm).
-# Build: docker build -t open-ox:latest .
-# With public env baked at build time:
-#   docker build \
-#     --build-arg NEXT_PUBLIC_SUPABASE_URL=... \
-#     --build-arg NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=... \
-#     --build-arg NEXT_PUBLIC_SITE_URL=https://demo.example.com \
-#     -t open-ox:latest .
+#
+# Local (uses host .env.local via Compose — file stays out of the image; see .dockerignore):
+#   pnpm run docker:build
+#   # or: docker compose --env-file .env.local build
+#
+# Plain docker (CI): pass build-args or set env vars in the job, then:
+#   docker build -t open-ox:latest .
 
 FROM node:20-bookworm-slim AS base
 RUN corepack enable
@@ -22,6 +22,10 @@ RUN pnpm install --frozen-lockfile
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+
+# Next.js loads `.env.local` during `next build` if the file exists — do not bake dev secrets.
+RUN rm -f .env .env.local .env.development .env.development.local \
+  .env.production .env.production.local .env.test .env.test.local 2>/dev/null || true
 
 # Client-inlined at build time; override per environment when building the image.
 ARG NEXT_PUBLIC_SUPABASE_URL=

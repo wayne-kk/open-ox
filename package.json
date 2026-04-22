@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "clear:template": "bash scripts/clear-template.sh"
+    "clear:template": "bash scripts/clear-template.sh",
+    "docker:build": "bash scripts/docker-build-local.sh"
   },
   "dependencies": {
     "@base-ui/react": "^1.3.0",

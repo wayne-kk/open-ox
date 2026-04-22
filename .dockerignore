@@ -11,8 +11,15 @@ dist
 .vscode
 .idea
 
-# env & secrets (inject via CI / K8s)
+# env & secrets (inject via CI / K8s — Next loads .env.local during build if present)
 .env
+.env.local
+.env.development
+.env.development.local
+.env.production
+.env.production.local
+.env.test
+.env.test.local
 .env.*
 !.env.production.example
 !.env.local.example
