@@ -34,6 +34,7 @@ import type { GenerateSectionParams } from "./steps/generateSection";
 import type { PendingImage } from "../../tools/system/generateImageTool";
 import { awaitPendingImages } from "../../tools/system/generateImageTool";
 import type { CheckpointResult } from "./shared/checkpoint";
+import { resetSectionTscCache } from "./shared/tsxDiagnostics";
 import { getPromptProfile } from "@/ai/prompts/core/profile";
 
 
@@ -208,6 +209,35 @@ export default function RootLayout({
 `;
 }
 
+function buildWholePageMinimalLayout(blueprint: PlannedProjectBlueprint): string {
+  const lang = (blueprint.brief.language?.trim() || "en");
+  const title = JSON.stringify(blueprint.brief.projectTitle);
+  const description = JSON.stringify(blueprint.brief.projectDescription);
+  return `import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import "./globals.css";
+
+const inter = Inter({ subsets: ["latin"] });
+
+export const metadata: Metadata = {
+  title: ${title},
+  description: ${description},
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="${lang}">
+      <body className={inter.className}>{children}</body>
+    </html>
+  );
+}
+`;
+}
+
 async function ensureAppScreenFirstLayout(params: {
   language: string;
   artifactLogger: ArtifactLogger;
@@ -221,6 +251,24 @@ async function ensureAppScreenFirstLayout(params: {
     layoutPath,
     mode: "app-screen-first",
     language,
+  });
+  await persistSiteFileArtifact(artifactLogger, "compose_layout", layoutPath, "layout");
+  return layoutPath;
+}
+
+async function ensureWholePageMinimalLayout(params: {
+  blueprint: PlannedProjectBlueprint;
+  artifactLogger: ArtifactLogger;
+}): Promise<string> {
+  const { blueprint, artifactLogger } = params;
+  const layoutPath = "app/layout.tsx";
+  const content = buildWholePageMinimalLayout(blueprint);
+  await writeSiteFile(layoutPath, content);
+  await formatSiteFile(layoutPath);
+  await persistJsonArtifact(artifactLogger, "compose_layout", "output", {
+    layoutPath,
+    mode: "whole-page-minimal",
+    language: blueprint.brief.language,
   });
   await persistSiteFileArtifact(artifactLogger, "compose_layout", layoutPath, "layout");
   return layoutPath;
@@ -402,6 +450,12 @@ async function generateSharedLayoutSections(params: {
   const collectedPendingImages: PendingImage[] = [];
 
   if (blueprint.site.layoutSections.length === 0) {
+    const layoutPath = await logger.timed(
+      "compose_layout",
+      () => ensureWholePageMinimalLayout({ blueprint, artifactLogger }),
+      (p) => p
+    );
+    collectedFiles.push(layoutPath);
     return { files: collectedFiles, pendingImages: collectedPendingImages };
   }
 
@@ -657,7 +711,12 @@ async function generatePages(params: {
       // Deduplicate sections by fileName before composing the page
       const pageCompose = await logger.timed(
         getComposePageStepName(page.slug),
-        () => stepComposePage(page, designSystem, dedupedSections),
+        () =>
+            stepComposePage(page, designSystem, dedupedSections, {
+              wholePage:
+                getPromptProfile() !== "app" &&
+                blueprint.brief.productScope.layoutMode === "whole-page",
+            }),
         (r) => ({ detail: r.pagePath, trace: r.trace })
       );
       const pagePath = pageCompose.pagePath;
@@ -1255,6 +1314,10 @@ export async function runGenerateProject(
   }
 
   result.totalDuration = Date.now() - flowStart;
-  await persistJsonArtifact(artifactLogger, "run", "result", result);
+  try {
+    await persistJsonArtifact(artifactLogger, "run", "result", result);
+  } finally {
+    resetSectionTscCache();
+  }
   return result;
 }

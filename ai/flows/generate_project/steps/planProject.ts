@@ -98,10 +98,15 @@ export async function stepPlanProject(
 This product type ("${blueprint.brief.productScope.productType}") requires a persistent application shell.
 - Output EXACTLY 1 section in pages[0].sections.
 - Do NOT output Hero / Feature / Testimonial / CTA marketing sections.
-- The single section carries the full application UI (sidebar, main content, panels).
+- The single section carries the full application UI (in-page nav, footer bar, sidebar, main content, panels) — not separate \`layoutSections\` nav/footer.
+- Set \`site.layoutSections\` to \`[]\` (no global Navigation/Footer components).
 - Name type and fileName after the product domain (e.g. "SocialFeed", "AnalyticsDashboard", "CommunityForum").`
     : `\n## Layout Mode: SPLIT SECTIONS
 Output 3–4 sections using appropriate archetypes from the palette in the system prompt.`;
+
+  const layoutSectionsForPrompt = wholePage
+    ? "None — whole-page uses an empty `layoutSections` array; the shell is inside the single page section."
+    : blueprint.site.layoutSections.map((s) => `- ${s.type}: ${s.intent}`).join("\n");
 
   const userMessage = `## Project: ${blueprint.brief.projectTitle}
 ${blueprint.brief.projectDescription}
@@ -123,8 +128,8 @@ ${blueprint.site.pages
       )
     .join("\n\n")}
 
-## Layout Sections (shared shells — do not change these)
-${blueprint.site.layoutSections.map((s) => `- ${s.type}: ${s.intent}`).join("\n")}
+## Layout Sections (shared shells)
+${layoutSectionsForPrompt}
 
 ## Keep it simple
 - Sections only need type, intent, contentHints, fileName.
@@ -198,7 +203,7 @@ ${blueprint.site.layoutSections.map((s) => `- ${s.type}: ${s.intent}`).join("\n"
       ...defaultPlan,
       site: {
         ...defaultPlan.site,
-        layoutSections: parsedLayoutSections ?? defaultPlan.site.layoutSections,
+        layoutSections: wholePage ? [] : (parsedLayoutSections ?? defaultPlan.site.layoutSections),
         pages: normalizedPages,
       },
     };

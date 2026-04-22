@@ -18,6 +18,8 @@ import type { PlannedPageBlueprint, PlannedSectionSpec, StepTrace } from "../typ
 
 export interface ComposePageOptions {
   appScreenComponentName?: string;
+  /** Web whole-page: root layout has no global nav/footer; one section contains the full shell. */
+  wholePage?: boolean;
 }
 
 export interface ComposePageResult {
@@ -58,7 +60,7 @@ export default function Page() {
 
   const systemPrompt = composePromptBlocks([
     loadSystem("frontend"),
-    loadStepPrompt("composePage"),
+    loadStepPrompt(options?.wholePage ? "composePage.wholePage" : "composePage"),
     loadGuardrail("outputTsx"),
     loadGuardrail("framerMotionVariants"),
   ]);
@@ -85,7 +87,12 @@ ${blueprint.description}
 ## Import Statements
 ${importStatements}
 
-## Content Sections to Compose (in order, navigation and footer are in layout.tsx — do NOT include them)
+## Content Sections to Compose (in order)
+${
+  options?.wholePage
+    ? "Whole-page: the listed section(s) include the in-page shell; root layout has no global nav/footer components."
+    : "Navigation and footer are in `app/layout.tsx` — do NOT duplicate them in `page.tsx`."
+}
 ${pageSections.map((section, index) => `${index + 1}. ${section.fileName}`).join("\n")}
 
 ## Design System (tokens and tone — not a mandate for overlays)

@@ -7,6 +7,7 @@
  */
 
 import { runGenerateProject } from "@/ai/flows";
+import { redactBuildStepForTransport } from "@/ai/flows/generate_project/shared/buildStepPayload";
 import type { GenerateProjectOptions, BuildStep } from "@open-ox/sdk";
 import { SSE_RESPONSE_HEADERS } from "@/lib/sse-headers";
 import { setSiteRoot, clearSiteRoot } from "@/ai/tools/system/common";
@@ -46,7 +47,7 @@ export async function POST(req: Request) {
           projectId,
           mode: "web",
           onStep: (step: BuildStep) => {
-            const data = JSON.stringify({ type: "step", ...step });
+            const data = JSON.stringify({ type: "step", ...redactBuildStepForTransport(step) });
             controller.enqueue(encoder.encode(`data: ${data}\n\n`));
           },
         };

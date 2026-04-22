@@ -90,8 +90,10 @@ export function buildDefaultProjectPlan(
   blueprint: ProjectBlueprint
 ): PlannedProjectBlueprint {
   const appProfile = getPromptProfile() === "app";
-  const layoutSections = blueprint.site.layoutSections;
   const wholePage = !appProfile && blueprint.brief.productScope.layoutMode === "whole-page";
+  // Whole-page: a single home section implements the full shell (nav/footer inside it).
+  // Do not generate shared layout_NavigationSection / layout_FooterSection.
+  const layoutSections = wholePage ? [] : blueprint.site.layoutSections;
 
   const buildMinimalPageSections = (): SectionSpec[] => {
     if (appProfile) {

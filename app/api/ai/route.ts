@@ -29,6 +29,7 @@ import {
   withCorePromptRuntime,
 } from "@/lib/config/corePrompts";
 import type { BuildStep } from "@/ai/flows";
+import { redactBuildStepForTransport } from "@/ai/flows/generate_project/shared/buildStepPayload";
 import { SSE_RESPONSE_HEADERS } from "@/lib/sse-headers";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
@@ -221,7 +222,7 @@ export async function POST(req: Request) {
                 (step: BuildStep) => {
               // SSE is the sole real-time channel — no DB writes during generation.
               // Final buildSteps are persisted once via updateProjectStatus below.
-              send({ type: "step", ...step });
+              send({ type: "step", ...redactBuildStepForTransport(step) });
               const phase = mapPhase(step.step);
               const summarizeError = (detail?: string) => {
                 if (!detail) return "unknown_error";
@@ -370,7 +371,7 @@ export async function POST(req: Request) {
               completedAt: new Date().toISOString(),
               verificationStatus: result.verificationStatus,
               blueprint: result.blueprint,
-              buildSteps: result.steps,
+              buildSteps: result.steps.map(redactBuildStepForTransport),
               generatedFiles: result.generatedFiles,
               logDirectory: result.logDirectory,
               totalDuration: result.totalDuration,
@@ -388,7 +389,7 @@ export async function POST(req: Request) {
             // Generation completed but reported failure — still persist steps for debugging
             await updateProjectStatus(db, projectId, "failed", {
               error: result.error ?? "Generation failed",
-              buildSteps: result.steps,
+              buildSteps: result.steps.map(redactBuildStepForTransport),
             });
           }
 
@@ -439,7 +440,7 @@ export async function POST(req: Request) {
               unvalidatedFiles: result.unvalidatedFiles,
               installedDependencies: result.installedDependencies,
               dependencyInstallFailures: result.dependencyInstallFailures,
-              buildSteps: result.steps,
+              buildSteps: result.steps.map(redactBuildStepForTransport),
               logDirectory: result.logDirectory,
               buildTotalDuration: result.totalDuration,
             },

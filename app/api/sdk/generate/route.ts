@@ -17,6 +17,7 @@ import { runGenerateApp, runGenerateProject } from "@/ai/flows";
 import { initProjectDir } from "@/lib/projectManager";
 import { setRuntimeModelId, type ModelId } from "@/lib/config/models";
 import type { BuildStep } from "@/ai/flows";
+import { redactBuildStepForTransport } from "@/ai/flows/generate_project/shared/buildStepPayload";
 import { SSE_RESPONSE_HEADERS } from "@/lib/sse-headers";
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
@@ -70,7 +71,7 @@ export async function POST(req: Request) {
         const result = await runGeneration(
           prompt,
           (step: BuildStep) => {
-            send({ type: "step", ...step });
+            send({ type: "step", ...redactBuildStepForTransport(step) });
           },
           { projectId, styleGuide }
         );
@@ -89,7 +90,7 @@ export async function POST(req: Request) {
             blueprint: result.blueprint,
             installedDependencies: result.installedDependencies,
             dependencyInstallFailures: result.dependencyInstallFailures,
-            steps: result.steps,
+            steps: result.steps.map(redactBuildStepForTransport),
             totalDuration: result.totalDuration,
             error: result.error,
           },

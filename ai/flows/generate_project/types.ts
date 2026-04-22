@@ -25,7 +25,6 @@ export interface ProductScope {
   audienceSummary: string;
   inScope: string[];
   outOfScope: string[];
-  journeyStageHints?: string[];
 }
 
 export interface UserRole {

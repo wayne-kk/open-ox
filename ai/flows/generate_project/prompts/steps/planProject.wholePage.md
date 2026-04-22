@@ -16,8 +16,8 @@ The page is a single persistent UI shell — users navigate *within* a fixed fra
 
 ### layoutSections vs page sections (critical)
 
-- `layoutSections` = only shared shells (navigation/footer). Keep as-is from blueprint.
-- The single content section lives in `pages[0].sections`.
+- Set `site.layoutSections` to **`[]`**. Do **not** output separate global `NavigationSection` / `FooterSection` for the root layout — the single page section below implements the full shell (top bar, side nav, footer area, main surface) in one component.
+- The only content section lives in `pages[0].sections` (exactly one entry).
 
 ---
 
@@ -62,4 +62,5 @@ Name it what users of the product would recognise.
 ### Output constraints
 
 - Return JSON only (no markdown).
-- `sections.length` must be exactly `1`.
+- `pages[0].sections.length` must be exactly `1`.
+- `site.layoutSections` must be `[]` (empty array).
