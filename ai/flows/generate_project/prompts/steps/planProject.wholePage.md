@@ -1,7 +1,8 @@
-## Step Prompt: Plan Project — Whole Page
+## Step Prompt: Plan Project — Whole Page (Line B — single-surface product)
 
-You convert a `ProjectBlueprint` into a `PlannedProjectBlueprint` for a **whole-page** application.
-The page is a single persistent UI shell — users navigate *within* a fixed frame, not scroll through stacked blocks.
+You convert a `ProjectBlueprint` into a `PlannedProjectBlueprint` for **Line B** (`layoutMode: whole-page`): **one** section on `/` is the **entire** user-facing product for this pipeline — *whatever domain* the user described (feed, back office, game, instrument, etc.). It is **not** Line A (a stacked marketing/landing page).
+
+**Do not** pick the product from a small internal list of “allowed apps.” Derive `type` and `fileName` from **domain vocabulary in** `projectTitle`, `projectDescription`, `mvpDefinition`, and the page copy.
 
 ### What to produce
 
@@ -16,7 +17,7 @@ The page is a single persistent UI shell — users navigate *within* a fixed fra
 
 ### layoutSections vs page sections (critical)
 
-- Set `site.layoutSections` to **`[]`**. Do **not** output separate global `NavigationSection` / `FooterSection` for the root layout — the single page section below implements the full shell (top bar, side nav, footer area, main surface) in one component.
+- Set `site.layoutSections` to **`[]`**. Do **not** output separate global `NavigationSection` / `FooterSection` for the root layout — the **one** page section may implement *whatever* chrome the product needs (full-screen stage only, or shell + main area, or multi-pane) **inside** that component.
 - The only content section lives in `pages[0].sections` (exactly one entry).
 
 ---
@@ -25,39 +26,23 @@ The page is a single persistent UI shell — users navigate *within* a fixed fra
 
 Output exactly **1 section** in `pages[0].sections`. This section is the entire application interface.
 
-**Naming**: Use the product's actual domain vocabulary, not technical shell names.
+**Naming `type` and `fileName` (no fixed catalog)**
+- **`type`**: `PascalCase` identifier from the **user’s product** (e.g. words from the brief), describing what the thing *is* — not a generic label like `MainContent` or `App` unless the user truly gave no domain words.
+- **`fileName`**: `"{SameStem}Section"` and must match the exported component stem (e.g. `RacingGridSection` → component `RacingGridSection`).
 
-| Product | type | fileName |
-|---------|------|----------|
-| Social platform | `SocialFeed` | `SocialFeedSection` |
-| Community forum | `CommunityForum` | `CommunityForumSection` |
-| Analytics dashboard | `AnalyticsDashboard` | `AnalyticsDashboardSection` |
-| Project management | `ProjectWorkspace` | `ProjectWorkspaceSection` |
-| Messaging app | `MessagingInbox` | `MessagingInboxSection` |
-| E-commerce marketplace | `ShopBrowser` | `ShopBrowserSection` |
-| Admin panel | `AdminPanel` | `AdminPanelSection` |
-| Content creator tool | `CreatorStudio` | `CreatorStudioSection` |
+**`intent`**: In 1–2 sentences, the **primary loop or task** on this surface: what the user *does* repeatedly or first, and what “done” looks like. No marketing positioning language.
 
-Name it what users of the product would recognise.
-
-**`intent`**: Describe the primary user workflow in 1–2 sentences.
-- What can the user do here?
-- What is the main surface they interact with?
-- What is the first action they take?
-
-**`contentHints`**: Describe the layout regions and key UI components. Be specific:
-- Which regions exist: top bar / sidebar / main content area / right panel / bottom nav
-- What each region contains: nav items, feed cards, stat widgets, filters, etc.
-- Key interaction affordances: compose button, search bar, tab switcher, filter panel
-- Approximate density: how many nav items, feed items, widgets to render
+**`contentHints`**: Be specific and **morphology-agnostic** — describe the real UI, not a template:
+- **Layout morphology**: e.g. multi-pane app shell, **or** full-bleed **stage** (game/canvas/instrument) with controls/HUD, **or** table-first, **or** single scrolling feed — *whatever matches* the product.
+- **Major regions and what they hold** (only those that apply): chrome (nav/bars), **primary interactive surface**, side panels, drawers, footers, tool rails, etc.
+- **Interactions & density**: key affordances, realistic mock **counts** (rows, list items, entities) so downstream generation is not sparse; name input modalities if relevant (keyboard, drag, etc.).
 
 ---
 
 ### Planning style
 
-- Think like a product designer, not a marketing strategist.
-- No hero manifestos, no testimonial bands, no FAQ sections.
-- The goal is a usable, realistic-looking product interface.
+- Product / tool / play designer — not a **landing-page** copywriter. No default Hero → feature → testimonial **unless** the user is literally asking for a promo surface (they usually are not in `whole-page`).
+- The goal is a **credible, interactive** interface for the described domain, not a best-of Behance marketing mock.
 
 ### Output constraints
 

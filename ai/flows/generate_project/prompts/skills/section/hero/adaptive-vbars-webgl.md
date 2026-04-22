@@ -38,12 +38,12 @@ Keep the implementation self-contained in a single section component.
 Use two motion systems:
 
 1. GSAP masked reveal:
-   - animate `.reveal-word` from `translateY(110%)` to `0%`.
-   - slight stagger and `power4.out` easing.
+  - animate `.reveal-word` from `translateY(110%)` to `0%`.
+  - slight stagger and `power4.out` easing.
 2. Runtime ambient motion:
-   - V-bars vertical oscillation with phase offset.
-   - WebGL object slow rotation + floating.
-   - optional subtle mouse influence (lerped) to camera/object for responsiveness.
+  - V-bars vertical oscillation with phase offset.
+  - WebGL object slow rotation + floating.
+  - optional subtle mouse influence (lerped) to camera/object for responsiveness.
 
 ## Rendering Requirements
 
@@ -253,3 +253,4 @@ export default function HeroSection() {
 - keep decorative layers `pointer-events-none`.
 - cap pixel ratio with `Math.min(devicePixelRatio, 2)`.
 - tune particle/bar complexity for stable frame rate.
+

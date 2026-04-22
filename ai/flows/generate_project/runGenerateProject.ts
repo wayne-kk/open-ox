@@ -28,7 +28,14 @@ import {
   appendInstalledDependencies,
   createInitialResult,
 } from "./orchestration/resultAccumulator";
-import type { BuildStep, GenerateProjectResult, PlannedProjectBlueprint, PlannedSectionSpec, ProjectBlueprint } from "./types";
+import type {
+  BuildStep,
+  GenerateProjectResult,
+  LayoutMode,
+  PlannedProjectBlueprint,
+  PlannedSectionSpec,
+  ProjectBlueprint,
+} from "./types";
 import type { ArtifactLogger, StepLogger } from "./shared/logging";
 import type { GenerateSectionParams } from "./steps/generateSection";
 import type { PendingImage } from "../../tools/system/generateImageTool";
@@ -98,6 +105,8 @@ interface SectionBatchItem {
   outputFileRelative: string;
   pageContext?: GenerateSectionParams["pageContext"];
   sectionDesignBrief?: string;
+  /** Passed to `stepGenerateSection`; defaults to split-style base prompt when omitted. */
+  layoutMode?: LayoutMode;
 }
 
 const SECTION_PARALLELISM = Math.max(
@@ -379,6 +388,7 @@ async function runSectionBatch(params: {
       outputFileRelative: item.outputFileRelative,
       pageContext: item.pageContext,
       sectionDesignBrief: item.sectionDesignBrief ?? "",
+      layoutMode: item.layoutMode,
       onMessage,
     });
   }
@@ -483,6 +493,7 @@ async function generateSharedLayoutSections(params: {
         scopeKey: "layout",
         section,
         outputFileRelative: buildSectionFilePath("layout", section.fileName),
+        layoutMode: blueprint.brief.productScope.layoutMode,
       })),
       designSystem,
       runtimeContext,
@@ -690,6 +701,7 @@ async function generatePages(params: {
               description: page.description,
               journeyStage: page.journeyStage,
             },
+            layoutMode: blueprint.brief.productScope.layoutMode,
           })),
           designSystem,
           runtimeContext,

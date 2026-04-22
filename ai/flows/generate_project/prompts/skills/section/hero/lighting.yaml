@@ -1,7 +1,7 @@
 id: lighting
 kind: component-skill
 sectionTypes: ["hero"]
-priority: 75
+priority: 60
 fallback: false
 when:
   designKeywords:

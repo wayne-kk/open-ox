@@ -121,7 +121,7 @@ ${sectionList}`;
   const describeModel = getModelForStep("describe_page_sections");
 
   try {
-    const meta = await callLLMWithMeta(systemPrompt, userMessage, 0.4, undefined, describeModel);
+    const meta = await callLLMWithMeta(systemPrompt, userMessage, 0.7, undefined, describeModel);
     const raw = meta.content;
     const trace = stepTraceFromLlmCompletion(systemPrompt, userMessage, meta);
 

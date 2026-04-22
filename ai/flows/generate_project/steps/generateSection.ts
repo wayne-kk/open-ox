@@ -19,7 +19,7 @@ import {
   discoverSkills,
   discoverSkillsBySectionType,
 } from "../../../shared/skillDiscovery";
-import type { PlannedSectionSpec, StepTrace } from "../types";
+import type { LayoutMode, PlannedSectionSpec, StepTrace } from "../types";
 
 export interface GenerateSectionParams {
   designSystem: string;
@@ -28,6 +28,8 @@ export interface GenerateSectionParams {
   outputFileRelative: string;
   pageContext?: GenerateSectionPageContext;
   sectionDesignBrief: string;
+  /** When `"whole-page"`, use `section.wholePage` instead of `section.default` as the base prompt. */
+  layoutMode?: LayoutMode;
   /** Optional: callback to collect conversation messages for trajectory logging */
   onMessage?: (msg: import("@/ai/shared/llm/types").ChatMessage) => void;
 }
@@ -343,10 +345,11 @@ async function discoverAndSelectSkill(
 
 // ── Section Prompt ──────────────────────────────────────────────────────
 
-function buildSectionPromptBlocks(sectionType: string) {
+function buildSectionPromptBlocks(sectionType: string, layoutMode?: LayoutMode) {
   const sectionPromptId = selectSectionPromptId(sectionType);
+  const basePromptId = layoutMode === "whole-page" ? "section.wholePage" : "section.default";
   return [
-    loadSectionPrompt("section.default"),
+    loadSectionPrompt(basePromptId),
     sectionPromptId !== "section.default" ? loadSectionPrompt(sectionPromptId) : "",
   ]
     .filter(Boolean)
@@ -359,8 +362,9 @@ function buildSystemPrompt(params: {
   section: PlannedSectionSpec;
   skillPrompts: string[];
   designSystem: string;
+  layoutMode?: LayoutMode;
 }): string {
-  const { section, skillPrompts, designSystem } = params;
+  const { section, skillPrompts, designSystem, layoutMode } = params;
   const selectedSkillPromptBlock = skillPrompts.filter(Boolean).join("\n\n");
 
   return composePromptBlocks([
@@ -368,7 +372,7 @@ function buildSystemPrompt(params: {
     loadGuardrail("project.accessibility"),
     `## Design System\n${designSystem}`,
     loadGuardrail("tailwindMappingGuide"),
-    buildSectionPromptBlocks(section.type),
+    buildSectionPromptBlocks(section.type, layoutMode),
     loadGuardrail("skillIntegrationContract"),
     selectedSkillPromptBlock,
     loadGuardrail("framerMotionVariants"),
@@ -403,6 +407,7 @@ function buildUserMessage(params: {
   componentSkillMetadataBlock: string;
   technicalSkillMetadataBlock: string;
   sectionDesignBrief: string;
+  layoutMode?: LayoutMode;
 }) {
   const {
     projectContext,
@@ -411,9 +416,19 @@ function buildUserMessage(params: {
     componentSkillMetadataBlock,
     technicalSkillMetadataBlock,
     sectionDesignBrief,
+    layoutMode,
   } = params;
 
-  return `## Project Context
+  const wholePageModeBlock =
+    layoutMode === "whole-page"
+      ? `## Generation mode: whole-page (single-surface product)
+- This file is the **entire product surface** for the route — not one marketing block among many. Implement the full shell / game / tool / app described in the brief.
+- If **Section Design Brief** or product intent conflict with generic marketing rules in older instructions, this whole-page spec wins.
+
+`
+      : "";
+
+  return `${wholePageModeBlock}## Project Context
 - **Project**: ${projectContext.projectTitle}
 - **Description**: ${projectContext.projectDescription}
 - **Language**: ${projectContext.language} — ⚠️ CRITICAL: ALL user-facing text (headlines, buttons, copy, labels, alt text) MUST be written in this language. Do NOT mix with other languages. Skill examples showing English text are structural only — replace with real ${projectContext.language} content.
@@ -575,6 +590,7 @@ export async function stepGenerateSection(params: GenerateSectionParams): Promis
     outputFileRelative,
     pageContext,
     sectionDesignBrief,
+    layoutMode,
   } = params;
   const {
     componentSkillId,
@@ -606,6 +622,7 @@ export async function stepGenerateSection(params: GenerateSectionParams): Promis
     section,
     skillPrompts: [componentSkillPrompt, ...technicalSkillPrompts],
     designSystem,
+    layoutMode,
   });
 
   const userMessage = buildUserMessage({
@@ -615,6 +632,7 @@ export async function stepGenerateSection(params: GenerateSectionParams): Promis
     componentSkillMetadataBlock,
     technicalSkillMetadataBlock,
     sectionDesignBrief,
+    layoutMode,
   });
 
   const componentName = section.fileName.replace(/\.tsx$/, "");
@@ -676,6 +694,7 @@ export async function stepGenerateSection(params: GenerateSectionParams): Promis
         technicalSkillIds,
         componentSkillScores,
         pageContext: pageContext ? { slug: pageContext.slug, title: pageContext.title } : null,
+        layoutMode: layoutMode ?? "split-sections",
       },
       output: {
         filePath,

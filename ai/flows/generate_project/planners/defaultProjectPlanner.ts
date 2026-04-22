@@ -123,12 +123,13 @@ export function buildDefaultProjectPlan(
     if (wholePage) {
       return [
         {
-          type: "MainContent",
-          intent: `Primary application interface for: ${blueprint.brief.projectDescription}`,
+          type: "ProductSurface",
+          intent: `Deliver the full interactive surface described in the project: ${blueprint.brief.projectDescription}`,
           contentHints:
-            "Full-viewport persistent shell. Derive layout regions (sidebar, main area, panels) " +
-            "from the product type and description. Include realistic mock content.",
-          fileName: "MainContentSection",
+            "Single route implements the whole product. Derive structure (app chrome, full-bleed stage, table-first, " +
+            "feed, or other) from the product description and scope — do not assume a default three-column admin shell. " +
+            "Include rich, realistic mock data appropriate to that domain.",
+          fileName: "ProductSurfaceSection",
         },
       ];
     }

@@ -14,7 +14,7 @@ import type {
 import { getPromptProfile } from "@/ai/prompts/core/profile";
 import { getModelForStep } from "@/lib/config/models";
 
-const MAX_PAGE_SECTIONS_SPLIT = 5;
+const MAX_PAGE_SECTIONS_SPLIT = 4;
 const MAX_PAGE_SECTIONS_WHOLE = 1;
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
@@ -94,13 +94,13 @@ export async function stepPlanProject(
     : "";
 
   const layoutModeInstruction = wholePage
-    ? `\n## Layout Mode: WHOLE-PAGE COMPONENT (critical)
-This product type ("${blueprint.brief.productScope.productType}") requires a persistent application shell.
+    ? `\n## Layout Mode: WHOLE-PAGE / LINE B — single-surface product (critical)
+The user product ("${blueprint.brief.productScope.productType}") is implemented as **one** full route surface — *whatever* UI that implies (app shell, full-stage tool, game, etc.).
 - Output EXACTLY 1 section in pages[0].sections.
-- Do NOT output Hero / Feature / Testimonial / CTA marketing sections.
-- The single section carries the full application UI (in-page nav, footer bar, sidebar, main content, panels) — not separate \`layoutSections\` nav/footer.
+- Do NOT output Hero / Feature / Testimonial / CTA **marketing** stacks (that is Line A).
+- The single section carries the **entire** product UI as designed — in-page chrome, main interactive area, and panels **only if** the product needs them — not \`layoutSections\` nav/footer.
 - Set \`site.layoutSections\` to \`[]\` (no global Navigation/Footer components).
-- Name type and fileName after the product domain (e.g. "SocialFeed", "AnalyticsDashboard", "CommunityForum").`
+- Derive \`type\` and \`fileName\` from the **user’s domain words** in the title/description/MVP; do not pick from a small catalog of app names.`
     : `\n## Layout Mode: SPLIT SECTIONS
 Output 3–4 sections using appropriate archetypes from the palette in the system prompt.`;
 

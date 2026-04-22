@@ -24,9 +24,9 @@ The page is a long-scrolling composition of stacked content blocks that users sc
 
 ### Section count
 
-- **3–5 sections** total (including opening and closing). Fewer, stronger sections beat many sparse ones.
+- **3–4 sections** total (including opening and closing). Fewer, stronger sections beat many sparse ones.
 - 3 sections: tight, punchy — single-message campaigns, personal portfolios.
-- 4–5 sections: standard for multi-feature products, e-commerce, content-rich sites.
+- 4 sections: standard for multi-feature products, e-commerce, content-rich sites.
 
 Use these defaults unless user request overrides:
 - `DESIGN_VARIANCE = 8`
@@ -35,7 +35,9 @@ Use these defaults unless user request overrides:
 
 ---
 
-### Section Archetype Palette
+### Section Archetype Palette (Line A — not a closed product list)
+
+The names below are **reusable building blocks** for a scrolling page. They are **not** the only section types you may use — if the user’s need fits a different `type` string, prefer **faithful naming** from the project copy over forcing a default arc.
 
 Do **not** default to `Hero → Feature → Testimonial → CTA` for every product.
 Pick the combination that fits the actual content:

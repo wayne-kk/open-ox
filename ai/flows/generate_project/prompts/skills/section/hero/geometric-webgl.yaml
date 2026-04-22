@@ -1,7 +1,7 @@
 id: geometric-webgl
 kind: component-skill
 sectionTypes: ["hero"]
-priority: 60
+priority: 80
 fallback: false
 when:
   designKeywords:
