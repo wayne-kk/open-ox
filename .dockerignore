@@ -11,16 +11,11 @@ dist
 .vscode
 .idea
 
-# env & secrets (inject via CI / K8s — Next loads .env.local during build if present)
+# env files — keep out of image except .env.local (optional: repo/CI copy for `next build`).
+# WARNING: Do not commit real secrets to git; prefer CI variables + --build-arg or compose --env-file.
 .env
-.env.local
-.env.development
-.env.development.local
-.env.production
-.env.production.local
-.env.test
-.env.test.local
 .env.*
+!.env.local
 !.env.production.example
 !.env.local.example
 

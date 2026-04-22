@@ -3,12 +3,12 @@
 
 # Next.js standalone production image (pnpm).
 #
-# Local (uses host .env.local via Compose — file stays out of the image; see .dockerignore):
-#   pnpm run docker:build
-#   # or: docker compose --env-file .env.local build
+# Build-time NEXT_PUBLIC_* can come from either:
+#   (A) `.env.local` copied into the build context (.dockerignore allows it), or
+#   (B) `docker compose --env-file .env.local build`, or
+#   (C) `docker build --build-arg NEXT_PUBLIC_...=...` (overrides when non-empty).
 #
-# Plain docker (CI): pass build-args or set env vars in the job, then:
-#   docker build -t open-ox:latest .
+# Do not commit production secrets in `.env.local` to git — use CI secrets when possible.
 
 FROM node:20-bookworm-slim AS base
 RUN corepack enable
@@ -23,20 +23,21 @@ FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Next.js loads `.env.local` during `next build` if the file exists — do not bake dev secrets.
-RUN rm -f .env .env.local .env.development .env.development.local \
+# Strip other env files so `.env.local` (if present) drives `next build`; keep `.env.local`.
+RUN rm -f .env .env.development .env.development.local \
   .env.production .env.production.local .env.test .env.test.local 2>/dev/null || true
 
-# Client-inlined at build time; override per environment when building the image.
+# Optional build-args. Do not `ENV` empty values: Next.js will not overwrite existing process.env
+# from `.env.local`, so empty ENV would block file-based config.
 ARG NEXT_PUBLIC_SUPABASE_URL=
 ARG NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=
 ARG NEXT_PUBLIC_SITE_URL=
-ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
-ENV NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY
-ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
 
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN pnpm build
+RUN if [ -n "${NEXT_PUBLIC_SUPABASE_URL}" ]; then export NEXT_PUBLIC_SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL}"; fi && \
+    if [ -n "${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY}" ]; then export NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY="${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY}"; fi && \
+    if [ -n "${NEXT_PUBLIC_SITE_URL}" ]; then export NEXT_PUBLIC_SITE_URL="${NEXT_PUBLIC_SITE_URL}"; fi && \
+    pnpm build
 
 FROM base AS runner
 ENV NODE_ENV=production
