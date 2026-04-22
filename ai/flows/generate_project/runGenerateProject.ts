@@ -1,10 +1,10 @@
 import { clearTemplate } from "@/lib/clearTemplate";
 import { getSiteRoot as projectManagerGetSiteRoot } from "@/lib/projectManager";
 import { setSiteRoot, getSiteRoot } from "@/ai/tools/system/common";
-import { setSectionSkillsEnabled } from "@/lib/config/models";
+import { setSectionSkillsEnabled, getModelId } from "@/lib/config/models";
+import { validateSkillFrontmatter } from "@/ai/shared/skillDiscovery";
 import { execSync } from "child_process";
-import { isLayoutSection } from "./registry/layoutSections";
-import { formatSiteFile, syncSiteValidationMarkers, readSiteFile, writeSiteFile } from "./shared/files";
+import { formatSiteFile, syncSiteValidationMarkers, readSiteFile, writeSiteFile, getSkillPromptsRoot } from "./shared/files";
 import { createArtifactLogger, createStepLogger } from "./shared/logging";
 import { buildScreenFilePath, buildSectionFilePath } from "./shared/paths";
 import { stepAnalyzeProjectRequirement } from "./steps/analyzeProjectRequirement";
@@ -13,9 +13,10 @@ import { stepComposeLayout } from "./steps/composeLayout";
 import { stepComposePage } from "./steps/composePage";
 import { stepGenerateScreen } from "./steps/generateScreen";
 import { stepGenerateProjectDesignSystem } from "./steps/generateProjectDesignSystem";
+import { stepMatchDesignSystemSkill } from "./steps/matchDesignSystemSkill";
 import { stepGenerateSection } from "./steps/generateSection";
 import { stepInstallDependencies } from "./steps/installDependencies";
-import { stepInferDesignIntent } from "./steps/inferDesignIntent";
+import { stepInferDesignIntent, type DesignIntentResult } from "./steps/inferDesignIntent";
 import { stepPlanProject } from "./steps/planProject";
 import { stepRepairBuild } from "./steps/repairBuild";
 import { stepRunBuild } from "./steps/runBuild";
@@ -97,7 +98,43 @@ interface SectionBatchItem {
   section: PlannedSectionSpec;
   outputFileRelative: string;
   pageContext?: GenerateSectionParams["pageContext"];
-  sectionDesignBriefOverride?: string;
+  sectionDesignBrief?: string;
+}
+
+const SECTION_PARALLELISM = Math.max(
+  1,
+  Number(process.env.GENERATE_SECTION_PARALLELISM ?? 2)
+);
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>
+): Promise<Array<PromiseSettledResult<R>>> {
+  const results: Array<PromiseSettledResult<R>> = new Array(items.length);
+  let cursor = 0;
+
+  const runWorker = async () => {
+    while (true) {
+      const current = cursor;
+      cursor += 1;
+      if (current >= items.length) {
+        return;
+      }
+      try {
+        const value = await worker(items[current], current);
+        results[current] = { status: "fulfilled", value };
+      } catch (error) {
+        results[current] = { status: "rejected", reason: error };
+      }
+    }
+  };
+
+  const runners = Array.from({ length: Math.min(concurrency, items.length) }, () =>
+    runWorker()
+  );
+  await Promise.all(runners);
+  return results;
 }
 
 
@@ -106,10 +143,6 @@ function buildProjectRuntimeContext(blueprint: PlannedProjectBlueprint): Project
     projectTitle: blueprint.brief.projectTitle,
     projectDescription: blueprint.brief.projectDescription,
     language: blueprint.brief.language ?? "en",
-    productScope: blueprint.brief.productScope,
-    roles: blueprint.brief.roles,
-    taskLoops: blueprint.brief.taskLoops,
-    capabilities: blueprint.brief.capabilities,
     pages: blueprint.site.pages.map((page) => ({
       slug: page.slug,
       title: page.title,
@@ -118,6 +151,7 @@ function buildProjectRuntimeContext(blueprint: PlannedProjectBlueprint): Project
     })),
     projectGuardrailIds: blueprint.projectGuardrailIds,
     designKeywords: blueprint.experience.designIntent.keywords ?? [],
+    rawUserInput: "",
   };
 }
 
@@ -280,26 +314,30 @@ async function runSectionBatch(params: {
   runtimeContext: ProjectRuntimeContext;
   artifactLogger: ArtifactLogger;
   logger: StepLogger;
+  trajectoryCollector?: import("./trajectoryCollector").GenerateTrajectoryCollector;
 }): Promise<{ generatedFiles: string[]; pendingImages: PendingImage[] }> {
-  const { batchLabel, items, designSystem, runtimeContext, artifactLogger, logger } = params;
+  const { batchLabel, items, designSystem, runtimeContext, artifactLogger, logger, trajectoryCollector } = params;
   if (items.length === 0) {
     return { generatedFiles: [], pendingImages: [] };
   }
 
-  items.forEach((item) => logger.startStep(getSectionStepName(item.scopeKey, item.section.fileName)));
-
-  const results = await Promise.allSettled(
-    items.map((item) =>
-      stepGenerateSection({
-        designSystem,
-        projectGuardrailIds: runtimeContext.projectGuardrailIds,
-        projectContext: runtimeContext,
-        section: item.section,
-        outputFileRelative: item.outputFileRelative,
-        pageContext: item.pageContext,
-        sectionDesignBriefOverride: item.sectionDesignBriefOverride,
-      })
-    )
+  const results = await mapWithConcurrency(items, SECTION_PARALLELISM, (item) => {
+    const stepName = getSectionStepName(item.scopeKey, item.section.fileName);
+    logger.startStep(stepName);
+    const onMessage = trajectoryCollector
+      ? trajectoryCollector.createEpisodeCollector(`generate_section:${item.section.fileName}`)
+      : undefined;
+    return stepGenerateSection({
+      designSystem,
+      projectGuardrailIds: runtimeContext.projectGuardrailIds,
+      projectContext: runtimeContext,
+      section: item.section,
+      outputFileRelative: item.outputFileRelative,
+      pageContext: item.pageContext,
+      sectionDesignBrief: item.sectionDesignBrief ?? "",
+      onMessage,
+    });
+  }
   );
 
   const generatedFiles: string[] = [];
@@ -312,7 +350,7 @@ async function runSectionBatch(params: {
     const stepName = getSectionStepName(item.scopeKey, item.section.fileName);
 
     if (result.status === "fulfilled") {
-      const { filePath, skillId, trace, pendingImages } = result.value;
+      const { filePath, skillId, technicalSkillIds, componentSkillScores, trace, pendingImages } = result.value;
       generatedFiles.push(filePath);
       allPendingImages.push(...pendingImages);
       logger.logStep(stepName, "ok", filePath, skillId);
@@ -321,6 +359,8 @@ async function runSectionBatch(params: {
         outputFileRelative: item.outputFileRelative,
         generatedFile: result.value.filePath,
         skillId: result.value.skillId,
+        technicalSkillIds,
+        componentSkillScores,
         section: item.section,
         pageContext: item.pageContext ?? null,
       });
@@ -359,8 +399,9 @@ async function generateSharedLayoutSections(params: {
   artifactLogger: ArtifactLogger;
   logger: StepLogger;
   skipSections?: Set<string>;
+  trajectoryCollector?: import("./trajectoryCollector").GenerateTrajectoryCollector;
 }): Promise<{ files: string[]; pendingImages: PendingImage[] }> {
-  const { blueprint, designSystem, runtimeContext, artifactLogger, logger, skipSections } = params;
+  const { blueprint, designSystem, runtimeContext, artifactLogger, logger, skipSections, trajectoryCollector } = params;
   const collectedFiles: string[] = [];
   const collectedPendingImages: PendingImage[] = [];
 
@@ -397,16 +438,18 @@ async function generateSharedLayoutSections(params: {
       runtimeContext,
       artifactLogger,
       logger,
+      trajectoryCollector,
     });
     collectedFiles.push(...batchResult.generatedFiles);
     collectedPendingImages.push(...batchResult.pendingImages);
   }
 
-  const layoutPath = await logger.timed(
+  const layoutOutcome = await logger.timed(
     "compose_layout",
     () => stepComposeLayout(blueprint.site.layoutSections, blueprint),
-    (path) => path ?? "layout unchanged"
+    (r) => ({ detail: r.layoutPath ?? "layout unchanged", trace: r.trace })
   );
+  const layoutPath = layoutOutcome.layoutPath;
   if (layoutPath) {
     collectedFiles.push(layoutPath);
     await persistJsonArtifact(artifactLogger, "compose_layout", "output", {
@@ -428,6 +471,7 @@ async function generatePages(params: {
   appScreenFirstEnabled: boolean;
   skipSections?: Set<string>;
   skipPages?: Set<string>;
+  trajectoryCollector?: import("./trajectoryCollector").GenerateTrajectoryCollector;
 }): Promise<{ files: string[]; pendingImages: PendingImage[] }> {
   const {
     blueprint,
@@ -438,6 +482,7 @@ async function generatePages(params: {
     appScreenFirstEnabled,
     skipSections,
     skipPages,
+    trajectoryCollector,
   } = params;
   const collectedFiles: string[] = [];
   const collectedPendingImages: PendingImage[] = [];
@@ -458,7 +503,9 @@ async function generatePages(params: {
         logger.logStep(
           screenStepName,
           "ok",
-          `${screenResult.filePath}${screenResult.skillIds.length ? ` | ${screenResult.skillIds.join(", ")}` : ""}`
+          `${screenResult.filePath}${screenResult.skillIds.length ? ` | ${screenResult.skillIds.join(", ")}` : ""}`,
+          undefined,
+          screenResult.trace
         );
         await persistJsonArtifact(artifactLogger, screenStepName, "output", {
           slug: page.slug,
@@ -479,14 +526,15 @@ async function generatePages(params: {
           return { files: [screenResult.filePath, pagePath], pendingImages: [] };
         }
 
-        const pagePath = await logger.timed(
+        const pageCompose = await logger.timed(
           getComposePageStepName(page.slug),
           () =>
             stepComposePage(page, designSystem, [], {
               appScreenComponentName: "AppScreen",
             }),
-          (path) => path
+          (r) => ({ detail: r.pagePath, trace: r.trace })
         );
+        const pagePath = pageCompose.pagePath;
         await persistJsonArtifact(artifactLogger, getComposePageStepName(page.slug), "output", {
           pagePath,
           slug: page.slug,
@@ -527,7 +575,10 @@ async function generatePages(params: {
             page,
             sections: dedupedSections,
           }),
-        () => `${dedupedSections.length} section brief(s)`
+        (r) => ({
+          detail: `${dedupedSections.length} section brief(s)`,
+          trace: r.trace,
+        })
       );
       const sectionBriefByFile = new Map(
         pageDesign.sectionDesigns.map((design) => [design.fileName, design.sectionDesignBrief])
@@ -550,8 +601,8 @@ async function generatePages(params: {
         artifactLogger,
         describeStepName,
         "output",
-        "md",
-        pageDesignDoc
+        pageDesignDoc,
+        "md"
       );
 
       // Log skipped sections
@@ -581,21 +632,19 @@ async function generatePages(params: {
             scopeKey: page.slug,
             section,
             outputFileRelative: buildSectionFilePath(page.slug, section.fileName),
-            sectionDesignBriefOverride: sectionBriefByFile.get(section.fileName),
+            sectionDesignBrief: sectionBriefByFile.get(section.fileName) ?? "",
             pageContext: {
               title: page.title,
               slug: page.slug,
               description: page.description,
               journeyStage: page.journeyStage,
-              primaryRoleIds: page.primaryRoleIds,
-              supportingCapabilityIds: page.supportingCapabilityIds,
-              pageDesignPlan: page.pageDesignPlan,
             },
           })),
           designSystem,
           runtimeContext,
           artifactLogger,
           logger,
+          trajectoryCollector,
         });
         generatedFiles = batchResult.generatedFiles;
         pagePendingImages = batchResult.pendingImages;
@@ -609,11 +658,12 @@ async function generatePages(params: {
       }
 
       // Deduplicate sections by fileName before composing the page
-      const pagePath = await logger.timed(
+      const pageCompose = await logger.timed(
         getComposePageStepName(page.slug),
         () => stepComposePage(page, designSystem, dedupedSections),
-        (path) => path
+        (r) => ({ detail: r.pagePath, trace: r.trace })
       );
+      const pagePath = pageCompose.pagePath;
 
       await persistJsonArtifact(artifactLogger, getComposePageStepName(page.slug), "output", {
         pagePath,
@@ -741,8 +791,17 @@ export async function runGenerateProject(
   const result = createInitialResult(logger);
   result.logDirectory = artifactLogger.runDirRelative;
 
+  // Trajectory collector — records conversation history from agent steps
+  const { GenerateTrajectoryCollector } = await import("./trajectoryCollector");
+  const trajectoryCollector = new GenerateTrajectoryCollector(
+    options?.projectId ?? "unknown",
+    userInput,
+    getModelId()
+  );
+
   // Set section skills toggle — default off, user can enable from UI
-  setSectionSkillsEnabled(options?.enableSkills ?? false);
+  // Section skills are always enabled
+  setSectionSkillsEnabled(true);
 
   // When a projectId is provided, point SITE_ROOT at the project directory and
   // skip clearing the template (the project dir was already initialised by the
@@ -756,6 +815,17 @@ export async function runGenerateProject(
   const appScreenFirstEnabled = getPromptProfile() === "app";
 
   try {
+    // Always validate skill files (skills are enabled by default)
+    {
+      const skillFrontmatterErrors = validateSkillFrontmatter(getSkillPromptsRoot());
+      if (skillFrontmatterErrors.length > 0) {
+        const detail = skillFrontmatterErrors.map((e) => `${e.fileName}: ${e.message}`).join(" | ");
+        logger.logStep("validate_skill_prompts", "error", detail);
+        throw new Error(`Invalid skill prompt frontmatter: ${detail}`);
+      }
+      logger.logStep("validate_skill_prompts", "ok", "all skill files validated");
+    }
+
     await persistJsonArtifact(artifactLogger, "run", "input", {
       userInput,
       checkpoint: cp ? { hasCheckpoint: cp.hasCheckpoint, summary: cp.summary } : null,
@@ -782,7 +852,7 @@ export async function runGenerateProject(
 
     // ── Step: analyze_project_requirement ─────────────────────────────────
     let rawBlueprint: ProjectBlueprint;
-    let inferredDesignIntentText: string | null = null;
+    let inferredDesignIntent: DesignIntentResult | null = null;
 
     if (cp?.skipAnalyze && cp.cachedBlueprint) {
       rawBlueprint = cp.cachedBlueprint;
@@ -791,17 +861,18 @@ export async function runGenerateProject(
       if (rawBlueprint.experience?.designIntent?.keywords?.length) {
         logger.logStep("infer_design_intent", "ok", "resumed from checkpoint");
       } else {
-        inferredDesignIntentText = await logger.timed(
+        inferredDesignIntent = await logger.timed(
           "infer_design_intent",
           () => stepInferDesignIntent(userInput),
-          (text) => text.slice(0, 80)
+          (r) => ({ detail: r.text.slice(0, 80), trace: r.trace })
         );
-        await persistTextArtifact(artifactLogger, "infer_design_intent", "output", inferredDesignIntentText, "md");
+        await persistTextArtifact(artifactLogger, "infer_design_intent", "output", inferredDesignIntent.text, "md");
       }
     } else {
-      const analyzePromise = logger.timed(
-        "analyze_project_requirement",
-        () => stepAnalyzeProjectRequirement(userInput, (name, args, result) => {
+      logger.startStep("analyze_project_requirement");
+      logger.startStep("infer_design_intent");
+      const [analyzeResult, inferResult] = await Promise.all([
+        stepAnalyzeProjectRequirement(userInput, (name, args, result) => {
           onStep?.({
             step: `tool_call:${name}`,
             status: "ok",
@@ -810,17 +881,26 @@ export async function runGenerateProject(
             duration: 0,
           });
         }),
-        (blueprint) => `${blueprint.brief.roles.length} roles, ${blueprint.site.pages.length} pages planned`
+        stepInferDesignIntent(userInput),
+      ]);
+      logger.logStep(
+        "analyze_project_requirement",
+        "ok",
+        `${analyzeResult.blueprint.brief.roles.length} roles, ${analyzeResult.blueprint.site.pages.length} pages planned`,
+        undefined,
+        analyzeResult.trace
       );
-      const inferPromise = logger.timed(
+      logger.logStep(
         "infer_design_intent",
-        () => stepInferDesignIntent(userInput),
-        (text) => text.slice(0, 80)
+        "ok",
+        inferResult.text.slice(0, 80),
+        undefined,
+        inferResult.trace
       );
-
-      [rawBlueprint, inferredDesignIntentText] = await Promise.all([analyzePromise, inferPromise]);
+      rawBlueprint = analyzeResult.blueprint;
+      inferredDesignIntent = inferResult;
       await persistJsonArtifact(artifactLogger, "analyze_project_requirement", "output", rawBlueprint);
-      await persistTextArtifact(artifactLogger, "infer_design_intent", "output", inferredDesignIntentText, "md");
+      await persistTextArtifact(artifactLogger, "infer_design_intent", "output", inferredDesignIntent.text, "md");
     }
 
     if (!rawBlueprint.experience) {
@@ -836,7 +916,7 @@ export async function runGenerateProject(
 
     const normalizedBlueprint = normalizeBlueprint(rawBlueprint);
 
-    // ── Steps: plan_project + generate_project_design_system (parallel) ──
+    // ── Steps: plan_project + match/generate design system ──
     let blueprint: PlannedProjectBlueprint;
     let designSystem: string;
 
@@ -847,25 +927,80 @@ export async function runGenerateProject(
       logger.logStep("generate_project_design_system", "ok", "resumed from checkpoint");
     } else {
       logger.startStep("plan_project");
-      logger.startStep("generate_project_design_system");
+      logger.startStep("match_design_system_skill");
 
       // Build a fallback markdown text from blueprint's designIntent if inferDesignIntent returned empty
-      const designIntentForSystem = inferredDesignIntentText || (() => {
+      const designIntentForSystem = inferredDesignIntent?.text || (() => {
         const di = rawBlueprint.experience?.designIntent;
         if (!di) return "";
         return `## Design Intent\n- Mood: ${di.mood.join(", ")}\n- Color Direction: ${di.colorDirection}\n- Style: ${di.style}\n- Keywords: ${di.keywords.join(", ")}`;
       })();
 
-      [blueprint, designSystem] = await Promise.all([
-        stepPlanProject(normalizedBlueprint).then((bp) => {
-          logger.logStep("plan_project", "ok", "section generation plans prepared");
-          return bp;
+      // Phase 1: plan_project + skill matching run in parallel
+      const [planOutcome, matchResult] = await Promise.all([
+        stepPlanProject(normalizedBlueprint).then((out) => {
+          logger.logStep("plan_project", "ok", "section generation plans prepared", undefined, out.trace);
+          return out;
         }),
-        stepGenerateProjectDesignSystem(designIntentForSystem, options?.styleGuide).then((ds) => {
-          logger.logStep("generate_project_design_system", "ok", "design-system.md written");
-          return ds;
+        stepMatchDesignSystemSkill({
+          userInput,
+        }).then((result) => {
+          logger.logStep(
+            "match_design_system_skill",
+            "ok",
+            result.matched
+              ? `matched built-in skill: ${result.skillId} — ${result.reason}`
+              : `no match — ${result.reason}`,
+            result.matched ? result.skillId : undefined
+          );
+          // Attach trace so the topology detail drawer shows LLM call, input/output
+          if (result.trace && Object.keys(result.trace).length > 0) {
+            logger.attachTrace("match_design_system_skill", result.trace);
+          }
+          return result;
         }),
       ]);
+
+      blueprint = planOutcome.blueprint;
+
+      await persistJsonArtifact(artifactLogger, "match_design_system_skill", "output", {
+        matched: matchResult.matched,
+        skillId: matchResult.skillId,
+        reason: matchResult.reason,
+      });
+
+      // Phase 2: use matched skill or fall back to LLM generation
+      if (matchResult.matched && matchResult.designSystem) {
+        designSystem = matchResult.designSystem;
+        logger.logStep(
+          "generate_project_design_system",
+          "ok",
+          `using built-in skill: ${matchResult.skillId}`
+        );
+      } else {
+        logger.startStep("generate_project_design_system");
+        const dsOutcome = await stepGenerateProjectDesignSystem(
+          designIntentForSystem,
+          options?.styleGuide
+        );
+        designSystem = dsOutcome.designSystem;
+        logger.logStep(
+          "generate_project_design_system",
+          "ok",
+          "design-system.md written",
+          undefined,
+          dsOutcome.trace
+        );
+      }
+
+      // Merge infer_design_intent technical keywords only after style matching,
+      // so section/technical skill selection can still benefit from them.
+      if (inferredDesignIntent?.technicalKeywords?.length) {
+        const existing = blueprint.experience.designIntent.keywords;
+        const merged = [...new Set([...existing, ...inferredDesignIntent.technicalKeywords])];
+        blueprint.experience.designIntent.keywords = merged;
+      }
+
       // Keep plan_project artifact focused on fields that are actually produced by
       // this step and consumed downstream. Full blueprint is still persisted in
       // final run/result artifacts.
@@ -885,9 +1020,6 @@ export async function runGenerateProject(
               fileName: section.fileName,
               intent: section.intent,
               contentHints: section.contentHints,
-              primaryRoleIds: section.primaryRoleIds,
-              supportingCapabilityIds: section.supportingCapabilityIds,
-              sourceTaskLoopIds: section.sourceTaskLoopIds,
             })),
           })),
         },
@@ -901,29 +1033,10 @@ export async function runGenerateProject(
       );
     }
 
-    // Safety: move any non-layout sections that planProject mistakenly put in layoutSections
-    const trueLayoutSections = blueprint.site.layoutSections.filter((s) => isLayoutSection(s.type));
-    const misplacedSections = blueprint.site.layoutSections.filter((s) => !isLayoutSection(s.type));
-    if (misplacedSections.length > 0) {
-      console.warn(`[plan_project] ${misplacedSections.length} non-layout sections found in layoutSections, moving to home page`);
-      blueprint.site.layoutSections = trueLayoutSections;
-      const homePage = blueprint.site.pages.find((p) => p.slug === "home") ?? blueprint.site.pages[0];
-      if (homePage) {
-        // Deduplicate: only add misplaced sections whose fileName doesn't already exist in the page
-        const existingFileNames = new Set(homePage.sections.map((s) => s.fileName));
-        const newSections = misplacedSections.filter((s) => !existingFileNames.has(s.fileName));
-        if (newSections.length < misplacedSections.length) {
-          console.warn(
-            `[plan_project] ${misplacedSections.length - newSections.length} misplaced section(s) already existed in page, skipped duplicates`
-          );
-        }
-        homePage.sections = [...newSections, ...homePage.sections];
-      }
-    }
-
     result.blueprint = blueprint;
     const runtimeContext = buildProjectRuntimeContext(blueprint);
-    appendGeneratedFiles(result, ["design-system.md"]);
+    runtimeContext.rawUserInput = userInput;
+    appendGeneratedFiles(result, ["design-system.md", "project-plan.json"]);
 
     // ── Step: apply_project_design_tokens + UI generation (parallel) ──
     const designTokensPromise = (async () => {
@@ -931,7 +1044,7 @@ export async function runGenerateProject(
         logger.logStep("apply_project_design_tokens", "ok", "resumed from checkpoint");
         return;
       }
-      const tokenFiles = await logger.timed(
+      const tokenResult = await logger.timed(
         "apply_project_design_tokens",
         () => stepApplyProjectDesignTokens(designSystem, (msg) => {
           onStep?.({
@@ -942,8 +1055,9 @@ export async function runGenerateProject(
             duration: 0,
           });
         }),
-        (files) => files.join(", ")
+        (r) => ({ detail: r.files.join(", "), trace: r.trace })
       );
+      const tokenFiles = tokenResult.files;
       await persistJsonArtifact(artifactLogger, "apply_project_design_tokens", "output", {
         files: tokenFiles,
       });
@@ -979,6 +1093,7 @@ export async function runGenerateProject(
           logger,
           appScreenFirstEnabled: true,
           skipPages: cp?.composedPages,
+          trajectoryCollector,
         });
         appendGeneratedFiles(result, pageResult.files);
         return pageResult.pendingImages;
@@ -992,6 +1107,7 @@ export async function runGenerateProject(
           artifactLogger,
           logger,
           skipSections: cp?.generatedSections,
+          trajectoryCollector,
         }),
         generatePages({
           blueprint,
@@ -1002,6 +1118,7 @@ export async function runGenerateProject(
           appScreenFirstEnabled: false,
           skipSections: cp?.generatedSections,
           skipPages: cp?.composedPages,
+          trajectoryCollector,
         }),
       ]);
       appendGeneratedFiles(result, layoutResult.files);
@@ -1126,6 +1243,13 @@ export async function runGenerateProject(
       dependencyInstallFailures: result.dependencyInstallFailures,
     });
     result.success = true;
+
+    // Save trajectory
+    trajectoryCollector.save(
+      result.generatedFiles,
+      result.verificationStatus === "passed",
+      result.steps?.length ?? 0
+    ).catch(err => console.warn("[trajectory] Generate trajectory save failed:", err));
   } catch (error) {
     result.error = error instanceof Error ? error.message : String(error);
     result.success = false;

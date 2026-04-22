@@ -1,0 +1,70 @@
+{
+  "name": "@open-ox/sdk",
+  "version": "0.2.1",
+  "description": "Open OX project generation SDK - generate Next.js projects from natural language descriptions",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js",
+      "require": "./dist/server.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "sync": "node scripts/sync-engine.mjs",
+    "build": "node scripts/sync-engine.mjs && ../node_modules/.bin/tsc -p tsconfig.build.json && node scripts/post-build.mjs",
+    "dev": "../node_modules/.bin/tsc -p tsconfig.build.json --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "open-ox",
+    "ai",
+    "code-generation",
+    "nextjs",
+    "sdk",
+    "llm",
+    "project-generator"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/open-ox/open-ox",
+    "directory": "sdk"
+  },
+  "homepage": "https://github.com/open-ox/open-ox/tree/main/sdk#readme",
+  "bugs": {
+    "url": "https://github.com/open-ox/open-ox/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "peerDependencies": {
+    "openai": ">=4.0.0"
+  },
+  "dependencies": {
+    "gray-matter": "^4.0.3",
+    "undici": "^8.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "^5"
+  }
+}

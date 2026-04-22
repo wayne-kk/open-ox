@@ -14,20 +14,15 @@ import { getSystemToolDefinitions } from "../../../tools/systemToolCatalog";
 import { createImageExecutor } from "../../../tools/system/generateImageTool";
 import type { PendingImage } from "../../../tools/system/generateImageTool";
 import {
+  discoverSkills,
   discoverSkillsBySectionType,
 } from "../../../shared/skillDiscovery";
 import type {
-  CapabilitySpec,
   GuardrailId,
-  PageDesignPlan,
-  ProductScope,
-  TaskLoop,
-  UserRole,
   PlannedSectionSpec,
   StepTrace,
 } from "../types";
 import { inferSectionGuardrailDefaults } from "../planners/guardrailPolicy";
-import { stepDescribeSectionDesign } from "./describeSectionDesign";
 
 export interface GenerateSectionParams {
   designSystem: string;
@@ -36,17 +31,16 @@ export interface GenerateSectionParams {
   section: PlannedSectionSpec;
   outputFileRelative: string;
   pageContext?: GenerateSectionPageContext;
-  sectionDesignBriefOverride?: string;
+  sectionDesignBrief: string;
+  /** Optional: callback to collect conversation messages for trajectory logging */
+  onMessage?: (msg: import("@/ai/shared/llm/types").ChatMessage) => void;
 }
 
 type GenerateSectionProjectContext = {
   projectTitle: string;
   projectDescription: string;
   language: string;
-  productScope: ProductScope;
-  roles: UserRole[];
-  taskLoops: TaskLoop[];
-  capabilities: CapabilitySpec[];
+  rawUserInput?: string;
   pages: Array<{
     slug: string;
     title: string;
@@ -61,124 +55,294 @@ type GenerateSectionPageContext = {
   slug: string;
   description: string;
   journeyStage: string;
-  primaryRoleIds: string[];
-  supportingCapabilityIds: string[];
-  pageDesignPlan: PageDesignPlan;
 };
+
+interface ComponentSkillScore {
+  id: string;
+  priority: number;
+  score: number;
+  reasons: string[];
+  matchedKeywords: string[];
+  excludedKeywords: string[];
+}
+
+function scoreComponentCandidate(
+  candidate: ReturnType<typeof discoverSkillsBySectionType>[number],
+  section: PlannedSectionSpec,
+  designKeywords: string[],
+  rawUserInput?: string,
+): ComponentSkillScore {
+  const searchableText = [
+    rawUserInput ?? "",
+    section.intent,
+    section.contentHints,
+    ...designKeywords,
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  const anyKeywords = candidate.when?.designKeywords?.any ?? [];
+  const noneKeywords = candidate.when?.designKeywords?.none ?? [];
+  const matchedKeywords = anyKeywords.filter((kw) => searchableText.includes(kw.toLowerCase()));
+  const excludedKeywords = noneKeywords.filter((kw) => searchableText.includes(kw.toLowerCase()));
+
+  const reasons: string[] = [];
+  let score = 0;
+  const priority = Math.max(0, candidate.priority ?? 0);
+
+  if (anyKeywords.length > 0) {
+    const coverage = matchedKeywords.length / anyKeywords.length;
+    const coverageScore = Math.round(priority * 0.75 * coverage);
+    score += coverageScore;
+    reasons.push(`keyword coverage ${matchedKeywords.length}/${anyKeywords.length} (+${coverageScore})`);
+  } else {
+    const baseline = Math.round(priority * 0.35);
+    score += baseline;
+    reasons.push(`no positive keywords configured (+${baseline})`);
+  }
+
+  const sectionAffinity = Math.round(priority * 0.15);
+  score += sectionAffinity;
+  reasons.push(`section type affinity (${section.type}) (+${sectionAffinity})`);
+
+  if (matchedKeywords.length > 0) {
+    const confidenceBonus = Math.round(priority * 0.1);
+    score += confidenceBonus;
+    reasons.push(`explicit keyword hits: ${matchedKeywords.join(", ")} (+${confidenceBonus})`);
+  }
+
+  if (excludedKeywords.length > 0) {
+    const penalty = Math.round(priority * 0.4);
+    score -= penalty;
+    reasons.push(`excluded keywords hit: ${excludedKeywords.join(", ")} (-${penalty})`);
+  }
+
+  const maxScore = Math.max(0, priority - 1);
+  const boundedScore = Math.min(maxScore, Math.max(0, score));
+  reasons.push(`bounded score ${boundedScore}/${priority}`);
+
+  return {
+    id: candidate.id,
+    priority,
+    score: boundedScore,
+    reasons,
+    matchedKeywords,
+    excludedKeywords,
+  };
+}
 
 // ── Skill Discovery (runtime, per-section) ──────────────────────────────
 
-/** Component skills in prompts/skills/ are hero-only; other section types rely on design system + section prompts. */
-function isHeroComponentSkillSectionType(sectionType: string): boolean {
-  return sectionType === "hero";
-}
-
-type SkillSelectionContext = {
-  intent: string;
-  contentHints: string;
-  designKeywords: string[];
-  productType: string;
-  journeyStage?: string;
-};
-
-/**
- * Use LLM to optionally select one component skill. Default is abstain (no skill).
- * Returns the skill id or null when no skill is appropriate or the LLM abstains / fails.
- */
 async function llmSelectSkill(
   candidates: ReturnType<typeof discoverSkillsBySectionType>,
-  context: SkillSelectionContext
+  section: PlannedSectionSpec,
+  designKeywords: string[],
+  rawUserInput?: string,
 ): Promise<string | null> {
-  const skillList = candidates.map((c) => {
-    const w = c.when;
-    const parts = [`id: "${c.id}"`];
-    if (c.notes) parts.push(`description: ${c.notes}`);
-    if (w?.designKeywords?.any?.length) parts.push(`matches keywords: [${w.designKeywords.any.join(", ")}]`);
-    if (w?.designKeywords?.none?.length) parts.push(`excludes keywords: [${w.designKeywords.none.join(", ")}]`);
-    if (w?.traits?.any?.length) parts.push(`traits match: [${w.traits.any.join(", ")}]`);
-    if (w?.traits?.none?.length) parts.push(`traits exclude: [${w.traits.none.join(", ")}]`);
-    if (w?.journeyStages?.any?.length) parts.push(`journey stages match: [${w.journeyStages.any.join(", ")}]`);
-    if (w?.journeyStages?.none?.length) parts.push(`journey stages exclude: [${w.journeyStages.none.join(", ")}]`);
-    if (w?.productTypes?.any?.length) parts.push(`for product types: [${w.productTypes.any.join(", ")}]`);
-    return `- ${parts.join(" | ")}`;
-  }).join("\n");
+  const skillList = candidates
+    .map((c) => {
+      const w = c.when;
+      const parts = [`id: "${c.id}"`];
+      if (c.notes) parts.push(`description: ${c.notes}`);
+      if (w?.designKeywords?.any?.length) parts.push(`matches keywords: [${w.designKeywords.any.join(", ")}]`);
+      if (w?.designKeywords?.none?.length) parts.push(`excludes keywords: [${w.designKeywords.none.join(", ")}]`);
+      return `- ${parts.join(" | ")}`;
+    })
+    .join("\n");
 
-  const systemPrompt = `You may attach at most ONE optional "component skill" to a hero section. These skills prescribe heavy visual effects (canvas, lighting, etc.).
+  const systemPrompt = `Select at most ONE component skill for this section.
 
-Default behavior: **do not select any skill** — use {"skillId": null} unless the section clearly needs that specific effect recipe.
+Decision policy:
+1. Evaluate all candidate skills holistically using user request, section intent, content hints, and design keywords.
+2. Choose a skill only when there is clear evidence it is the best fit for this section.
+3. If confidence is low or multiple skills are similarly plausible, return {"skillId": null}.
+4. Do not infer or output any skill that is not in Candidate skills.
+5. Prefer precision over novelty.
 
-Only set skillId when ALL of the following hold:
-1. The section intent, content hints, and design keywords align **strongly** with that skill's description and its "matches keywords / traits / journey stages" triggers (semantic match counts).
-2. A generic hero from the design system alone would **not** satisfy the stated visual direction (e.g. particle text, spotlight, dashboard chrome).
-3. Exactly one skill is the best fit. If two or more are plausible, prefer {"skillId": null}.
+Return JSON only: {"skillId":"<id>"|null}`;
 
-Never pick a skill "just in case" or to fill the slot.
+  const userMessage = `Original user request (HIGHEST PRIORITY): ${rawUserInput ?? "N/A"}
 
-Respond with JSON only: {"skillId": "<id>" | null}`;
+Section type: ${section.type}
+Section intent: ${section.intent}
+Section content hints: ${section.contentHints}
+Design keywords: ${designKeywords.join(", ")}
 
-  const journeyLine = context.journeyStage?.trim()
-    ? `- Journey Stage (page): ${context.journeyStage}\n`
-    : "";
-
-  const userMessage = `## Section
-- Intent: ${context.intent}
-- Content Hints: ${context.contentHints}
-- Design Keywords: ${context.designKeywords.join(", ")}
-- Product Type: ${context.productType}
-${journeyLine}
-## Candidate Skills
+Candidate skills:
 ${skillList}`;
 
   try {
-    const raw = await callLLM(systemPrompt, userMessage, 0, 1024);
+    const raw = await callLLM(systemPrompt, userMessage, 0, 128, getModelForStep("preselect_skills"));
     const parsed = JSON.parse(extractJSON(raw)) as { skillId?: string | null };
-    if (parsed.skillId === null || parsed.skillId === undefined) {
-      return null;
-    }
     const id = typeof parsed.skillId === "string" ? parsed.skillId.trim() : "";
-    if (id === "") {
-      return null;
-    }
-    if (candidates.some((c) => c.id === id)) {
-      return id;
-    }
+    if (!id) return null;
+    return candidates.some((c) => c.id === id) ? id : null;
   } catch {
-    // LLM failed — abstain
+    return null;
   }
-  return null;
+}
+
+async function llmSelectTechnicalSkills(
+  candidates: ReturnType<typeof discoverSkillsBySectionType>,
+  section: PlannedSectionSpec,
+  designKeywords: string[],
+  rawUserInput?: string,
+  selectedComponentSkillId?: string | null,
+): Promise<string[]> {
+  if (candidates.length === 0) return [];
+
+  const searchableText = [
+    rawUserInput ?? "",
+    section.intent,
+    section.contentHints,
+    ...designKeywords,
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  // Hard gate for 3D/WebGL technical stack to avoid accidental matches on generic "animation" requests.
+  const hasExplicit3DSignal =
+    /(three(\.js|\s*js)?|webgl|shader|3d|三维|着色器)/i.test(searchableText);
+  if (!hasExplicit3DSignal) return [];
+
+  const skillList = candidates
+    .map((c) => {
+      const w = c.when;
+      const parts = [`id: "${c.id}"`];
+      if (c.notes) parts.push(`description: ${c.notes}`);
+      if (w?.designKeywords?.any?.length) parts.push(`matches keywords: [${w.designKeywords.any.join(", ")}]`);
+      if (w?.designKeywords?.none?.length) parts.push(`excludes keywords: [${w.designKeywords.none.join(", ")}]`);
+      return `- ${parts.join(" | ")}`;
+    })
+    .join("\n");
+
+  const systemPrompt = `Select technical guidance skills that can be layered ON TOP OF component skills.
+
+Rules:
+1. Technical skills are complementary implementation guidance; they can co-exist with a component skill.
+2. Select only skills that are strongly justified by user intent or section visual intent.
+3. If no technical skill is clearly needed, return {"skillIds": []}.
+4. Prefer precision and keep selection minimal (0-2 skills).
+5. Do NOT select three-animation unless there are explicit 3D/WebGL/Three.js/shader signals.
+
+Return JSON only: {"skillIds":["<id>", "..."]}`;
+
+  const userMessage = `Original user request (highest priority): ${rawUserInput ?? "N/A"}
+
+Section type: ${section.type}
+Section intent: ${section.intent}
+Section content hints: ${section.contentHints}
+Design keywords: ${designKeywords.join(", ")}
+Selected component skill: ${selectedComponentSkillId ?? "none"}
+
+Candidate technical skills:
+${skillList}`;
+
+  try {
+    const raw = await callLLM(systemPrompt, userMessage, 0, 256, getModelForStep("preselect_skills"));
+    const parsed = JSON.parse(extractJSON(raw)) as { skillIds?: unknown };
+    const skillIds = Array.isArray(parsed.skillIds) ? parsed.skillIds : [];
+    const candidateIds = new Set(candidates.map((c) => c.id));
+    return skillIds
+      .filter((id): id is string => typeof id === "string")
+      .map((id) => id.trim())
+      .filter((id) => id.length > 0 && candidateIds.has(id));
+  } catch {
+    return [];
+  }
 }
 
 async function discoverAndSelectSkill(
-  sectionType: string,
-  context: SkillSelectionContext
-): Promise<{ skillId: string | null; skillPrompt: string; skillMetadataBlock: string }> {
-  if (!isHeroComponentSkillSectionType(sectionType)) {
-    return { skillId: null, skillPrompt: "", skillMetadataBlock: "" };
-  }
-
+  section: PlannedSectionSpec,
+  designKeywords: string[],
+  rawUserInput?: string,
+): Promise<{
+  componentSkillId: string | null;
+  componentSkillPrompt: string;
+  componentSkillMetadataBlock: string;
+  technicalSkillIds: string[];
+  technicalSkillPrompts: string[];
+  technicalSkillMetadataBlock: string;
+  componentSkillScores: ComponentSkillScore[];
+}> {
+  const sectionType = section.type.trim().toLowerCase();
   const root = getSkillPromptsRoot();
-  const candidates = discoverSkillsBySectionType(root, sectionType);
+  const sectionCandidates = discoverSkillsBySectionType(root, sectionType);
+  const allSkills = discoverSkills(root);
+  const technicalCandidates = allSkills.filter((c) => c.kind === "technical-spec-skill");
 
-  if (candidates.length === 0) {
-    return { skillId: null, skillPrompt: "", skillMetadataBlock: "" };
-  }
+  console.log(
+    `[skill-select] sectionType="${sectionType}" root="${root}" sectionCandidates=${sectionCandidates.length} technicalCandidates=${technicalCandidates.length}`
+  );
 
-  const metadataBlock = candidates
-    .map((c) => `- **${c.id}** (priority: ${c.priority}${c.fallback ? ", fallback" : ""}): ${c.notes || "no description"}`)
-    .join("\n");
-
-  const llmChoice = await llmSelectSkill(candidates, context);
-  if (llmChoice) {
-    console.log(`[skill-select] LLM chose "${llmChoice}" for ${sectionType}`);
+  if (sectionCandidates.length === 0 && technicalCandidates.length === 0) {
     return {
-      skillId: llmChoice,
-      skillPrompt: loadSkillPrompt(llmChoice),
-      skillMetadataBlock: metadataBlock,
+      componentSkillId: null,
+      componentSkillPrompt: "",
+      componentSkillMetadataBlock: "",
+      technicalSkillIds: [],
+      technicalSkillPrompts: [],
+      technicalSkillMetadataBlock: "",
+      componentSkillScores: [],
     };
   }
 
-  console.log(`[skill-select] No component skill (abstain) for ${sectionType}`);
-  return { skillId: null, skillPrompt: "", skillMetadataBlock: "" };
+  const componentCandidates = sectionCandidates.filter((c) => !c.kind || c.kind === "component-skill");
+
+  const componentMetadataBlock = componentCandidates
+    .map((c) => `- **${c.id}** (priority: ${c.priority}${c.fallback ? ", fallback" : ""}): ${c.notes || "no description"}`)
+    .join("\n");
+
+  const componentSkillScores = componentCandidates
+    .filter((c) => (c.priority ?? 0) > 60)
+    .map((candidate) => scoreComponentCandidate(candidate, section, designKeywords, rawUserInput))
+    .sort((a, b) => b.score - a.score);
+
+  const technicalMetadataBlock = technicalCandidates
+    .map((c) => `- **${c.id}** (priority: ${c.priority}${c.fallback ? ", fallback" : ""}): ${c.notes || "no description"}`)
+    .join("\n");
+
+  const llmChoice = await llmSelectSkill(componentCandidates, section, designKeywords, rawUserInput);
+  const technicalChoices = await llmSelectTechnicalSkills(
+    technicalCandidates,
+    section,
+    designKeywords,
+    rawUserInput,
+    llmChoice
+  );
+
+  const technicalSkillPrompts = technicalChoices.map((id) => loadSkillPrompt(id));
+
+  if (llmChoice) {
+    console.log(`[skill-select] llm component choice "${llmChoice}" for ${sectionType}`);
+    if (technicalChoices.length > 0) {
+      console.log(`[skill-select] llm technical choices [${technicalChoices.join(",")}] for ${sectionType}`);
+    }
+    return {
+      componentSkillId: llmChoice,
+      componentSkillPrompt: loadSkillPrompt(llmChoice),
+      componentSkillMetadataBlock: componentMetadataBlock,
+      technicalSkillIds: technicalChoices,
+      technicalSkillPrompts,
+      technicalSkillMetadataBlock: technicalMetadataBlock,
+      componentSkillScores,
+    };
+  }
+
+  if (technicalChoices.length > 0) {
+    console.log(`[skill-select] no component skill; technical choices [${technicalChoices.join(",")}] for ${sectionType}`);
+  } else {
+    console.log(`[skill-select] No component/technical skill selected for ${sectionType}`);
+  }
+  return {
+    componentSkillId: null,
+    componentSkillPrompt: "",
+    componentSkillMetadataBlock: componentMetadataBlock,
+    technicalSkillIds: technicalChoices,
+    technicalSkillPrompts,
+    technicalSkillMetadataBlock: technicalMetadataBlock,
+    componentSkillScores,
+  };
 }
 
 // ── Guardrail Assembly ──────────────────────────────────────────────────
@@ -203,103 +367,9 @@ function buildSectionPromptBlocks(sectionType: string) {
 
 // ── System Prompt ───────────────────────────────────────────────────────
 
-function buildSystemPrompt(params: {
-  section: PlannedSectionSpec;
-  projectGuardrailIds: GuardrailId[];
-  skillPrompt: string;
-}): string {
-  const { section, projectGuardrailIds, skillPrompt } = params;
+const TAILWIND_MAPPING_GUIDE = `## Design System → Tailwind CSS v4 Mapping Guide
 
-  return [
-    loadSystem("frontend"),
-    buildSectionPromptBlocks(section.type),
-    skillPrompt,
-    buildGuardrailBlocks(projectGuardrailIds, section),
-    loadGuardrail("outputTsx"),
-  ]
-    .filter(Boolean)
-    .join("\n\n");
-}
-
-// ── Formatting Helpers ──────────────────────────────────────────────────
-
-function formatRolesBlock(roles: UserRole[]) {
-  return roles
-    .map((r) => `- ${r.roleName} (${r.roleId}): ${r.summary}\n  - Goals: ${r.goals.join(" | ")}\n  - Core Actions: ${r.coreActions.join(" | ")}`)
-    .join("\n");
-}
-
-function formatTaskLoopsBlock(taskLoops: TaskLoop[]) {
-  return taskLoops
-    .map((l) => `- ${l.name} (${l.loopId})\n  - Role: ${l.roleId}\n  - Trigger: ${l.entryTrigger}\n  - Steps: ${l.steps.join(" -> ")}\n  - Success: ${l.successState}`)
-    .join("\n");
-}
-
-function formatCapabilitiesBlock(capabilities: CapabilitySpec[]) {
-  return capabilities
-    .map((c) => `- ${c.name} (${c.capabilityId})\n  - Summary: ${c.summary}\n  - Roles: ${c.primaryRoleIds.join(", ") || "none"}`)
-    .join("\n");
-}
-
-function formatKnownRoutesBlock(pages: GenerateSectionProjectContext["pages"]) {
-  return pages
-    .map((p) => `- ${p.title} (${p.slug}): ${p.slug === "home" ? "/" : `/${p.slug}`} — ${p.description} [${p.journeyStage}]`)
-    .join("\n");
-}
-
-function filterRelevantRoles(section: PlannedSectionSpec, ctx: GenerateSectionProjectContext, page?: GenerateSectionPageContext) {
-  const ids = new Set([...section.primaryRoleIds, ...(page?.primaryRoleIds ?? [])]);
-  return ctx.roles.filter((r) => ids.has(r.roleId));
-}
-
-function filterRelevantTaskLoops(section: PlannedSectionSpec, ctx: GenerateSectionProjectContext) {
-  const ids = new Set(section.sourceTaskLoopIds);
-  return ctx.taskLoops.filter((l) => ids.has(l.loopId));
-}
-
-function filterRelevantCapabilities(section: PlannedSectionSpec, ctx: GenerateSectionProjectContext, page?: GenerateSectionPageContext) {
-  const ids = new Set([...section.supportingCapabilityIds, ...(page?.supportingCapabilityIds ?? [])]);
-  return ctx.capabilities.filter((c) => ids.has(c.capabilityId));
-}
-
-function buildPageContextBlock(pageContext?: GenerateSectionPageContext) {
-  if (!pageContext) {
-    return `## Page Context\nThis is a shared layout section. Design it to work coherently across the whole project.`;
-  }
-  const p = pageContext.pageDesignPlan;
-  return `## Page Context
-- **Title**: ${pageContext.title}
-- **Route**: ${pageContext.slug === "home" ? "/" : `/${pageContext.slug}`}
-- **Description**: ${pageContext.description}
-- **Journey Stage**: ${pageContext.journeyStage}
-
-## Page Design Plan
-- **Page Goal**: ${p.pageGoal}
-- **Narrative Arc**: ${p.narrativeArc}
-- **Layout Strategy**: ${p.layoutStrategy}
-- **Hierarchy**: ${p.hierarchy.join(" | ")}`;
-}
-
-// ── User Message ────────────────────────────────────────────────────────
-
-function buildUserMessage(params: {
-  designSystem: string;
-  projectContext: GenerateSectionProjectContext;
-  pageContext?: GenerateSectionPageContext;
-  section: PlannedSectionSpec;
-  skillMetadataBlock: string;
-  sectionDesignBrief: string;
-}) {
-  const { designSystem, projectContext, pageContext, section, skillMetadataBlock, sectionDesignBrief } = params;
-  const roles = filterRelevantRoles(section, projectContext, pageContext);
-  const loops = filterRelevantTaskLoops(section, projectContext);
-  const caps = filterRelevantCapabilities(section, projectContext, pageContext);
-
-  return `## Design System
-${designSystem}
-
-## Design System → Tailwind CSS v4 Mapping Guide
-The design system above is the single source of truth. A separate build step converts it into \`globals.css\` with Tailwind v4 tokens. When writing component classes, follow these mapping rules:
+The design system is the single source of truth. A separate build step converts it into \`globals.css\` with Tailwind v4 tokens. When writing component classes, follow these mapping rules:
 
 **Colors** — Design system color names map directly to Tailwind utilities:
 - A color named "accent" / "primary" / "background" etc. → use \`bg-accent\`, \`text-primary\`, \`border-background\` etc.
@@ -319,24 +389,87 @@ The design system above is the single source of truth. A separate build step con
 - Clip-path shapes → \`[clip-path:polygon(...)]\`
 - Texture overlays → gradients/noise via Tailwind utilities and arbitrary values
 
-**Do NOT** define inline CSS variables, @keyframes, or custom classes that duplicate design system tokens. Trust that the Tailwind utilities exist.
+**Do NOT** define inline CSS variables, @keyframes, or custom classes that duplicate design system tokens. Trust that the Tailwind utilities exist.`;
 
-## Project Context
+const SKILL_INTEGRATION_CONTRACT = `## Skill Integration Contract (critical)
+
+Skills are enhancement references, not page templates. Layout and rhythm always come from:
+1) Section Design Brief
+2) Section guardrails/rules
+3) Design system tokens
+
+When using any skill:
+- Keep the existing section outer wrapper model: \`<section className="w-full ... py-*"> + inner container\`.
+- Do NOT switch to full-screen takeover patterns (\`min-h-screen\`, fixed scene shells, standalone nav/hero app shell) unless the brief explicitly asks.
+- Do NOT rewrite section composition to a different archetype just to match a skill demo.
+- Preserve spacing guardrails (\`py\` ceiling, density target) and readability constraints.
+- Skills may influence visual treatment/effects/details, but must not override structure, route model, or global layout conventions.
+`;
+
+function buildSystemPrompt(params: {
+  section: PlannedSectionSpec;
+  projectGuardrailIds: GuardrailId[];
+  skillPrompts: string[];
+  designSystem: string;
+}): string {
+  const { section, projectGuardrailIds, skillPrompts, designSystem } = params;
+  const selectedSkillPromptBlock = skillPrompts.filter(Boolean).join("\n\n");
+
+  return [
+    loadSystem("frontend"),
+    `## Design System\n${designSystem}`,
+    TAILWIND_MAPPING_GUIDE,
+    buildSectionPromptBlocks(section.type),
+    SKILL_INTEGRATION_CONTRACT,
+    selectedSkillPromptBlock,
+    buildGuardrailBlocks(projectGuardrailIds, section),
+    loadGuardrail("outputTsx"),
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+// ── Formatting Helpers ──────────────────────────────────────────────────
+
+function formatKnownRoutesBlock(pages: GenerateSectionProjectContext["pages"]) {
+  return pages
+    .map((p) => `- ${p.title}: ${p.slug === "home" ? "/" : `/${p.slug}`}`)
+    .join("\n");
+}
+
+function buildPageContextBlock(pageContext?: GenerateSectionPageContext) {
+  if (!pageContext) {
+    return `## Page Context\nThis is a shared layout section. Design it to work coherently across the whole project.`;
+  }
+  return `## Page Context
+- **Title**: ${pageContext.title}
+- **Route**: ${pageContext.slug === "home" ? "/" : `/${pageContext.slug}`}
+- **Description**: ${pageContext.description}`;
+}
+
+// ── User Message ────────────────────────────────────────────────────────
+
+function buildUserMessage(params: {
+  projectContext: GenerateSectionProjectContext;
+  pageContext?: GenerateSectionPageContext;
+  section: PlannedSectionSpec;
+  componentSkillMetadataBlock: string;
+  technicalSkillMetadataBlock: string;
+  sectionDesignBrief: string;
+}) {
+  const {
+    projectContext,
+    pageContext,
+    section,
+    componentSkillMetadataBlock,
+    technicalSkillMetadataBlock,
+    sectionDesignBrief,
+  } = params;
+
+  return `## Project Context
 - **Project**: ${projectContext.projectTitle}
 - **Description**: ${projectContext.projectDescription}
 - **Language**: ${projectContext.language} — ⚠️ CRITICAL: ALL user-facing text (headlines, buttons, copy, labels, alt text) MUST be written in this language. Do NOT mix with other languages. Skill examples showing English text are structural only — replace with real ${projectContext.language} content.
-- **Product Type**: ${projectContext.productScope.productType}
-- **Core Outcome**: ${projectContext.productScope.coreOutcome}
-- **Business Goal**: ${projectContext.productScope.businessGoal}
-
-## Roles
-${formatRolesBlock(roles) || "- none"}
-
-## Task Loops
-${formatTaskLoopsBlock(loops) || "- none"}
-
-## Capabilities
-${formatCapabilitiesBlock(caps) || "- none"}
 
 ## Known Routes
 **These are the ONLY valid routes. Navigation must use exactly these routes.**
@@ -349,17 +482,16 @@ ${buildPageContextBlock(pageContext)}
 - **Component Name**: ${section.fileName}
 - **Intent**: ${section.intent}
 - **Content Hints**: ${section.contentHints}
-- **Primary Roles**: ${section.primaryRoleIds.join(", ") || "none"}
-- **Supporting Capabilities**: ${section.supportingCapabilityIds.join(", ") || "none"}
 
 ## Section Design Brief
 ${sectionDesignBrief}
 
-${skillMetadataBlock ? `## Available Component Skills\nThe following skills are available for this section type. The selected skill's full guidance is already in the system prompt.\n${skillMetadataBlock}` : ""}
+${componentSkillMetadataBlock ? `## Available Component Skills\nThe selected component skill (if any) is already included in the system prompt.\n${componentSkillMetadataBlock}` : ""}
+${technicalSkillMetadataBlock ? `## Available Technical Skills\nThese are implementation guidance skills that may be layered with component skills.\n${technicalSkillMetadataBlock}` : ""}
 
 Generate the complete ${section.fileName}.tsx component.
-Use the design system and project context to make all design decisions (layout, visual style, motion, interaction). Apply the Tailwind CSS mapping rules above to translate design tokens into utility classes.
-The Section Design Brief above is your primary visual guidance — follow its layout, background, and atmosphere direction closely.`;
+Use the design system and project context to make all design decisions (layout, visual style, motion, interaction).
+The Section Design Brief above is your primary visual guidance — follow its background and atmosphere direction closely.`;
 }
 
 // ── Validation ──────────────────────────────────────────────────────────
@@ -367,6 +499,8 @@ The Section Design Brief above is your primary visual guidance — follow its la
 export interface GenerateSectionResult {
   filePath: string;
   skillId: string | null;
+  technicalSkillIds: string[];
+  componentSkillScores: ComponentSkillScore[];
   trace: StepTrace;
   pendingImages: PendingImage[];
 }
@@ -384,44 +518,55 @@ function validateSectionExports(tsx: string, componentName: string): NonNullable
 
 // ── Main Entry ──────────────────────────────────────────────────────────
 
-export async function stepGenerateSection({
-  designSystem,
-  projectGuardrailIds,
-  projectContext,
-  section,
-  outputFileRelative,
-  pageContext,
-  sectionDesignBriefOverride,
-}: GenerateSectionParams): Promise<GenerateSectionResult> {
-  const { skillId, skillPrompt, skillMetadataBlock } = isSectionSkillsEnabled()
-    ? await discoverAndSelectSkill(section.type, {
-      intent: section.intent,
-      contentHints: section.contentHints,
-      designKeywords: projectContext.designKeywords,
-      productType: projectContext.productScope.productType,
-      journeyStage: pageContext?.journeyStage,
-    })
-    : { skillId: null, skillPrompt: "", skillMetadataBlock: "" };
+export async function stepGenerateSection(params: GenerateSectionParams): Promise<GenerateSectionResult> {
+  const {
+    designSystem,
+    projectGuardrailIds,
+    projectContext,
+    section,
+    outputFileRelative,
+    pageContext,
+    sectionDesignBrief,
+  } = params;
+  const {
+    componentSkillId,
+    componentSkillPrompt,
+    componentSkillMetadataBlock,
+    technicalSkillIds,
+    technicalSkillPrompts,
+    technicalSkillMetadataBlock,
+    componentSkillScores,
+  } = isSectionSkillsEnabled()
+    ? await discoverAndSelectSkill(
+      section,
+      projectContext.designKeywords,
+      projectContext.rawUserInput,
+    )
+    : {
+      componentSkillId: null,
+      componentSkillPrompt: "",
+      componentSkillMetadataBlock: "",
+      technicalSkillIds: [],
+      technicalSkillPrompts: [],
+      technicalSkillMetadataBlock: "",
+      componentSkillScores: [],
+    };
+
+  const skillId = componentSkillId ?? technicalSkillIds[0] ?? null;
 
   const systemPrompt = buildSystemPrompt({
     section,
     projectGuardrailIds,
-    skillPrompt,
+    skillPrompts: [componentSkillPrompt, ...technicalSkillPrompts],
+    designSystem,
   });
 
-  const sectionDesignBrief = sectionDesignBriefOverride?.trim()
-    ? sectionDesignBriefOverride
-    : await stepDescribeSectionDesign({
-      section,
-      designSystem,
-    });
-
   const userMessage = buildUserMessage({
-    designSystem,
     projectContext,
     pageContext,
     section,
-    skillMetadataBlock,
+    componentSkillMetadataBlock,
+    technicalSkillMetadataBlock,
     sectionDesignBrief,
   });
 
@@ -451,6 +596,7 @@ export async function stepGenerateSection({
       executeToolOverrides: {
         generate_image: imageExecutor,
       },
+      onMessage: params.onMessage,
     });
 
     const tsx = extractContent(llmResult.content, "tsx");
@@ -473,6 +619,9 @@ export async function stepGenerateSection({
         componentName,
         outputFile: outputFileRelative,
         skillId,
+        componentSkillId,
+        technicalSkillIds,
+        componentSkillScores,
         pageContext: pageContext ? { slug: pageContext.slug, title: pageContext.title } : null,
       },
       output: {
@@ -492,7 +641,7 @@ export async function stepGenerateSection({
     };
 
     if (validationResult.passed) {
-      return { filePath, skillId, trace, pendingImages };
+      return { filePath, skillId, technicalSkillIds, componentSkillScores, trace, pendingImages };
     }
 
     lastError = validationResult.checks.filter((c) => !c.passed).map((c) => c.detail ?? c.name).join("; ");

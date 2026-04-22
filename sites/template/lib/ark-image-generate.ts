@@ -5,7 +5,7 @@
 
 export interface ArkImageGenerateOptions {
   prompt: string;
-  /** e.g. "1K" | "2K" | "4K" or WxH per model docs */
+  /** e.g. "1k" | "2k" | "4k" or WxH per model docs */
   size?: string;
   signal?: AbortSignal;
 }
@@ -19,10 +19,24 @@ export function defaultArkModel(): string {
   return process.env.ARK_IMAGE_MODEL?.trim() || "doubao-seedream-4-0-250828";
 }
 
+export function normalizeArkImageSize(size: string): string {
+  const normalized = size.trim();
+  if (!normalized) return "1k";
+  const kMatch = normalized.match(/([124])\s*[kK]\b/);
+  if (kMatch) {
+    return `${kMatch[1]}k`;
+  }
+  const whMatch = normalized.match(/(\d+)\s*[xX]\s*(\d+)/);
+  if (whMatch) {
+    return `${whMatch[1]}x${whMatch[2]}`;
+  }
+  return "1k";
+}
+
 export function defaultArkSize(needLargeImage: boolean): string {
   const fixed = process.env.ARK_IMAGE_SIZE?.trim();
-  if (fixed) return fixed;
-  return needLargeImage ? "2K" : "1K";
+  if (fixed) return normalizeArkImageSize(fixed);
+  return needLargeImage ? "2k" : "1k";
 }
 
 export async function generateArkImageBase64(options: ArkImageGenerateOptions): Promise<string> {
@@ -31,7 +45,7 @@ export async function generateArkImageBase64(options: ArkImageGenerateOptions): 
     throw new Error("ARK_API_KEY is not set");
   }
 
-  const size = options.size ?? defaultArkSize(true);
+  const size = normalizeArkImageSize(options.size ?? defaultArkSize(true));
   const url = `${arkBaseUrl()}/images/generations`;
 
   const res = await fetch(url, {

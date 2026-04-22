@@ -6,17 +6,24 @@ import {
   loadSystem,
   writeSiteFile,
 } from "../shared/files";
-import { callLLM, extractContent } from "../shared/llm";
+import { callLLMWithMeta, extractContent } from "../shared/llm";
+import { stepTraceFromLlmCompletion } from "../shared/llmTrace";
 import { getModelForStep } from "@/lib/config/models";
 import {
   buildSectionImportPath,
   buildScreenImportPath,
   slugToPagePath,
 } from "../shared/paths";
-import type { PlannedPageBlueprint, PlannedSectionSpec } from "../types";
+import type { PlannedPageBlueprint, PlannedSectionSpec, StepTrace } from "../types";
 
 export interface ComposePageOptions {
   appScreenComponentName?: string;
+}
+
+export interface ComposePageResult {
+  pagePath: string;
+  /** Present when the page body was produced by an LLM call */
+  trace?: StepTrace;
 }
 
 export async function stepComposePage(
@@ -24,7 +31,7 @@ export async function stepComposePage(
   designSystem: string,
   pageSections: PlannedSectionSpec[],
   options?: ComposePageOptions
-): Promise<string> {
+): Promise<ComposePageResult> {
   const targetPagePath = slugToPagePath(blueprint.slug);
   if (options?.appScreenComponentName) {
     const appScreenImportPath = buildScreenImportPath(blueprint.slug);
@@ -46,7 +53,7 @@ export default function Page() {
 `;
     await writeSiteFile(targetPagePath, tsx);
     await formatSiteFile(targetPagePath);
-    return targetPagePath;
+    return { pagePath: targetPagePath };
   }
 
   const systemPrompt = composePromptBlocks([
@@ -73,34 +80,12 @@ ${blueprint.description}
 
 ## Product Mapping
 - **Journey Stage**: ${blueprint.journeyStage}
-- **Primary Roles**: ${blueprint.primaryRoleIds.join(", ") || "none"}
-- **Supporting Capabilities**: ${blueprint.supportingCapabilityIds.join(", ") || "none"}
-
-## Page Design Plan
-- **Page Goal**: ${blueprint.pageDesignPlan.pageGoal}
-- **Narrative Arc**: ${blueprint.pageDesignPlan.narrativeArc}
-- **Layout Strategy**: ${blueprint.pageDesignPlan.layoutStrategy}
-- **Hierarchy**: ${blueprint.pageDesignPlan.hierarchy.join(" | ")}
-- **Page Constraints**:
-${blueprint.pageDesignPlan.constraints.map((constraint) => `  - ${constraint}`).join("\n")}
 
 ## Import Statements
 ${importStatements}
 
 ## Content Sections to Compose (in order, navigation and footer are in layout.tsx — do NOT include them)
 ${pageSections.map((section, index) => `${index + 1}. ${section.fileName}`).join("\n")}
-
-## Section Design Briefs
-${pageSections
-  .map(
-    (section) => `### ${section.fileName}
-- Type: ${section.type}
-- Intent: ${section.intent}
-- Content Hints: ${section.contentHints}
-- Primary Roles: ${section.primaryRoleIds.join(", ") || "none"}
-- Supporting Capabilities: ${section.supportingCapabilityIds.join(", ") || "none"}`
-  )
-  .join("\n\n")}
 
 ## Design System (tokens and tone — not a mandate for overlays)
 ${designSystem}
@@ -109,8 +94,10 @@ Generate the page component source for this page route.
 Treat the page design plan as the composition strategy, not just a list of imports.
 Do not add scanlines, grain, dot grids, or other decorative full-viewport layers unless a **Page Constraint** or **Layout Strategy** line above explicitly requests that effect.`;
 
-  const raw = await callLLM(systemPrompt, userMessage, 0.3, undefined, getModelForStep("compose_page"));
-  let tsx = extractContent(raw, "tsx");
+  const composeModel = getModelForStep("compose_page");
+  const meta = await callLLMWithMeta(systemPrompt, userMessage, 0.3, undefined, composeModel);
+  const trace = stepTraceFromLlmCompletion(systemPrompt, userMessage, meta);
+  let tsx = extractContent(meta.content, "tsx");
 
   // Post-process: ensure import paths match the actual generated files.
   // LLM sometimes ignores the provided import statements and invents its own paths.
@@ -175,5 +162,5 @@ ${renders}
   await writeSiteFile(targetPagePath, tsx);
   await formatSiteFile(targetPagePath);
 
-  return targetPagePath;
+  return { pagePath: targetPagePath, trace };
 }

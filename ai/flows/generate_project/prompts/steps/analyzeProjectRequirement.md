@@ -15,7 +15,12 @@ Output a single valid JSON object. No markdown, no code fences, no explanations.
   "brief": {
     "projectTitle": "Human-readable title",
     "projectDescription": "One sentence: goal, audience, scope",
-    "language": "BCP 47 tag for WEBSITE CONTENT language (zh-CN, en, ja, ko, fr, etc.)"
+    "language": "BCP 47 tag for WEBSITE CONTENT language (zh-CN, en, ja, ko, fr, etc.)",
+    "productScope": {
+      "productType": "e.g. marketing website / community forum web app / dashboard web app",
+      "mvpDefinition": "Smallest shippable scope",
+      "coreOutcome": "Primary user outcome"
+    }
   },
   "site": {
     "navigation": {
@@ -55,5 +60,9 @@ Output a single valid JSON object. No markdown, no code fences, no explanations.
 - Language decision rule:
   1. If the user explicitly specifies site/content language, use exactly that language.
   2. If language is not explicitly specified, infer site language from the language of the user's input text.
+- Product type decision rule (critical):
+  1. If the request includes community/forum/social signals (e.g. “社区”, “论坛”, “帖子”, “发帖”, “评论”, “圈子”, “feed”), set `brief.productScope.productType` to **`community forum web app`**.
+  2. For app-like products, do **not** reframe as “brand official website” narrative.
+  3. For community/forum products, the home page description must emphasize core interaction loops (browse threads/feed, post, reply, moderation/trust cues), not brand marketing storytelling.
 - Output only the JSON object.
 

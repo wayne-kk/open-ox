@@ -7,20 +7,27 @@ import {
   readSiteFile,
   writeSiteFile,
 } from "../shared/files";
-import { extractContent, callLLM } from "../shared/llm";
+import { extractContent, callLLMWithMeta } from "../shared/llm";
+import { stepTraceFromLlmCompletion } from "../shared/llmTrace";
 import { buildSectionImportPath } from "../shared/paths";
-import type { PlannedProjectBlueprint, PlannedSectionSpec } from "../types";
+import type { PlannedProjectBlueprint, PlannedSectionSpec, StepTrace } from "../types";
+import { getModelForStep } from "@/lib/config/models";
 
 function isBeforePageContent(section: PlannedSectionSpec): boolean {
   return section.type === "navigation";
 }
 
+export interface ComposeLayoutResult {
+  layoutPath: string | null;
+  trace?: StepTrace;
+}
+
 export async function stepComposeLayout(
   layoutSections: PlannedSectionSpec[],
   blueprint: PlannedProjectBlueprint
-): Promise<string | null> {
+): Promise<ComposeLayoutResult> {
   if (layoutSections.length === 0) {
-    return null;
+    return { layoutPath: null };
   }
 
   const currentLayout = readSiteFile("app/layout.tsx");
@@ -73,11 +80,13 @@ ${layoutSections
     loadStepPrompt("composeLayout"),
     loadGuardrail("outputTsx"),
   ]);
-  const raw = await callLLM(systemPrompt, userMessage, 0.2);
-  const tsx = extractContent(raw, "tsx");
+  const layoutModel = getModelForStep("compose_page");
+  const meta = await callLLMWithMeta(systemPrompt, userMessage, 0.2, undefined, layoutModel);
+  const trace = stepTraceFromLlmCompletion(systemPrompt, userMessage, meta);
+  const tsx = extractContent(meta.content, "tsx");
 
   await writeSiteFile("app/layout.tsx", tsx);
   await formatSiteFile("app/layout.tsx");
 
-  return "app/layout.tsx";
+  return { layoutPath: "app/layout.tsx", trace };
 }

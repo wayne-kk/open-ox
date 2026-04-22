@@ -1,0 +1,29 @@
+id: adaptive-vbars-webgl
+kind: component-skill
+sectionTypes: ["hero"]
+priority: 81
+fallback: false
+when:
+  designKeywords:
+    any:
+      [
+        "webgl",
+        "three",
+        "threejs",
+        "icosahedron",
+        "faceted",
+        "v bars",
+        "gradient bars",
+        "cognition",
+        "adaptive",
+        "emerald",
+        "cyan",
+        "glass",
+        "gsap",
+        "scrolltrigger",
+        "3D"
+      ]
+    none: ["editorial", "magazine", "warm", "organic", "botanical", "retro"]
+notes: >
+  Use for hero sections with dynamic V-shaped gradient bar background, faceted
+  Three.js center object, and restrained glassmorphism framing.

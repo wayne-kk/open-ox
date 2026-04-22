@@ -56,64 +56,81 @@ export async function appendTrajectoryEvent(
   runId: string,
   eventInput: Omit<TrajectoryEvent, "seq" | "event_id" | "run_id" | "schema_version" | "ts">
 ): Promise<TrajectoryEvent> {
-  const runLookup = await supabase
-    .from("trajectory_runs")
-    .select("run_id,task_id,status,last_seq")
-    .eq("run_id", runId)
-    .single();
+  const MAX_RETRIES = 3;
 
-  if (runLookup.error || !runLookup.data) {
-    throw new Error(`Run ${runId} not found`);
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const runLookup = await supabase
+      .from("trajectory_runs")
+      .select("run_id,task_id,status,last_seq")
+      .eq("run_id", runId)
+      .single();
+
+    if (runLookup.error || !runLookup.data) {
+      throw new Error(`Run ${runId} not found`);
+    }
+
+    const run = runLookup.data as {
+      run_id: string;
+      task_id: string;
+      status: "running" | "finished";
+      last_seq: number;
+    };
+
+    if (run.status !== "running") {
+      throw new Error(`Run ${runId} is already finished`);
+    }
+
+    const seq = (run.last_seq ?? 0) + 1;
+    const event: TrajectoryEvent = {
+      ...eventInput,
+      schema_version: SCHEMA_VERSION,
+      run_id: runId,
+      seq,
+      event_id: `evt_${String(seq).padStart(6, "0")}`,
+      ts: new Date().toISOString(),
+    };
+
+    if (event.task_id !== run.task_id) {
+      throw new Error(`task_id mismatch for run ${runId}`);
+    }
+
+    // Atomically claim this seq by updating last_seq only if it hasn't changed
+    const runUpdate = await supabase
+      .from("trajectory_runs")
+      .update({
+        last_seq: seq,
+        status: event.event_type === "run_end" ? "finished" as const : "running" as const,
+        updated_at: event.ts,
+      })
+      .eq("run_id", runId)
+      .eq("last_seq", run.last_seq) // optimistic lock
+      .select("run_id");
+
+    if (runUpdate.error) {
+      throw new Error(`[trajectory] Failed to update run index: ${runUpdate.error.message}`);
+    }
+
+    // If no row was returned, another writer incremented last_seq first — retry
+    if (!runUpdate.data || runUpdate.data.length === 0) {
+      if (attempt < MAX_RETRIES - 1) continue;
+      throw new Error(`[trajectory] Failed to claim seq after ${MAX_RETRIES} retries (concurrent writes on run ${runId})`);
+    }
+
+    // seq is now exclusively ours — insert the event
+    const eventInsert = await supabase.from("trajectory_events").insert({
+      run_id: runId,
+      seq,
+      event,
+    });
+    if (eventInsert.error) {
+      throw new Error(`[trajectory] Failed to append event: ${eventInsert.error.message}`);
+    }
+
+    return event;
   }
 
-  const run = runLookup.data as {
-    run_id: string;
-    task_id: string;
-    status: "running" | "finished";
-    last_seq: number;
-  };
-
-  if (run.status !== "running") {
-    throw new Error(`Run ${runId} is already finished`);
-  }
-
-  const seq = (run.last_seq ?? 0) + 1;
-  const event: TrajectoryEvent = {
-    ...eventInput,
-    schema_version: SCHEMA_VERSION,
-    run_id: runId,
-    seq,
-    event_id: `evt_${String(seq).padStart(6, "0")}`,
-    ts: new Date().toISOString(),
-  };
-
-  if (event.task_id !== run.task_id) {
-    throw new Error(`task_id mismatch for run ${runId}`);
-  }
-
-  const eventInsert = await supabase.from("trajectory_events").insert({
-    run_id: runId,
-    seq,
-    event,
-  });
-  if (eventInsert.error) {
-    throw new Error(`[trajectory] Failed to append event: ${eventInsert.error.message}`);
-  }
-
-  const nextStatus: "running" | "finished" = event.event_type === "run_end" ? "finished" : "running";
-  const runUpdate = await supabase
-    .from("trajectory_runs")
-    .update({
-      last_seq: seq,
-      status: nextStatus,
-      updated_at: event.ts,
-    })
-    .eq("run_id", runId);
-  if (runUpdate.error) {
-    throw new Error(`[trajectory] Failed to update run index: ${runUpdate.error.message}`);
-  }
-
-  return event;
+  // Should not reach here, but satisfy TypeScript
+  throw new Error(`[trajectory] appendTrajectoryEvent exhausted retries`);
 }
 
 export async function listTrajectoryRunEvents(runId: string): Promise<TrajectoryEvent[]> {
@@ -129,6 +146,44 @@ export async function listTrajectoryRunEvents(runId: string): Promise<Trajectory
 
   const rows = (eventRows.data ?? []) as Array<{ event: TrajectoryEvent; seq: number }>;
   return rows.map((row) => row.event);
+}
+
+/**
+ * Find an existing running trajectory run for the given task_id, or create a new one.
+ * This allows multiple modify executions on the same project to accumulate events
+ * into a single run, producing a richer trajectory that satisfies quality thresholds.
+ */
+export async function findOrCreateTrajectoryRun(input: RunStartInput): Promise<{ runId: string; taskId: string; reused: boolean }> {
+  // Look for an existing running run with the same task_id
+  const existing = await supabase
+    .from("trajectory_runs")
+    .select("run_id,task_id,status,last_seq")
+    .eq("task_id", input.task_id)
+    .eq("status", "running")
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  if (!existing.error && existing.data && existing.data.length > 0) {
+    const row = existing.data[0] as { run_id: string; task_id: string };
+    // Append a checkpoint event to mark the new modify round
+    await appendTrajectoryEvent(row.run_id, {
+      task_id: row.task_id,
+      phase: "setup",
+      event_type: "checkpoint",
+      actor: "system",
+      payload: {
+        type: "new_modify_round",
+        goal: input.goal,
+        environment: input.environment,
+      },
+      meta: input.meta,
+    });
+    return { runId: row.run_id, taskId: row.task_id, reused: true };
+  }
+
+  // No existing running run — create a new one
+  const { runId } = await createTrajectoryRun(input);
+  return { runId, taskId: input.task_id, reused: false };
 }
 
 export async function createRunEndEvent(

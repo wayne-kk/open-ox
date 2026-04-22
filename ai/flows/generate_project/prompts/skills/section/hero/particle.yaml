@@ -1,0 +1,12 @@
+id: particle
+kind: component-skill
+sectionTypes: ["hero"]
+priority: 80
+fallback: false
+when:
+  designKeywords:
+    any: ["particle", "generative", "interactive", "canvas", "text-effect", "kinetic", "dissolve", "scatter", "粒子", "粒子效果"]
+    none: ["editorial", "magazine", "luxury", "minimal", "dashboard", "shader", "webgl", "lightning"]
+notes: >
+  Use for heroes with a canvas-based particle text effect. Particles form words
+  and animate between them. Interactive: right-click destroys nearby particles.

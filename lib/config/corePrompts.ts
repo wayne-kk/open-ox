@@ -1,5 +1,4 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 import type { PromptProfile } from "@/ai/prompts/core/profile";
 
 export type CorePromptKind = "step" | "section";
@@ -92,11 +91,6 @@ const CORE_STEP_PROMPTS_BY_PROFILE: Record<PromptProfile, CorePromptDefinition[]
   app: APP_CORE_STEP_PROMPTS,
 };
 
-const promptKeyToStepId = new Map(
-  Object.values(CORE_STEP_PROMPTS_BY_PROFILE)
-    .flat()
-    .map((item) => [`${item.profile}:${item.kind}:${item.promptId}`, item.stepId])
-);
 const stepIdToPromptId = new Map(
   Object.values(CORE_STEP_PROMPTS_BY_PROFILE)
     .flat()
@@ -123,16 +117,6 @@ export async function withCorePromptRuntime<T>(
   return corePromptRuntimeStorage.run(config, runner);
 }
 
-function getCorePromptRuntime(): CorePromptRuntimeConfig {
-  return (
-    corePromptRuntimeStorage.getStore() ?? {
-      useDatabasePrompts: true,
-      promptProfile: "web",
-      dbPromptByStepId: new Map<string, string>(),
-    }
-  );
-}
-
 export function normalizePromptProfile(profile: unknown): PromptProfile {
   return profile === "app" ? "app" : "web";
 }
@@ -146,21 +130,8 @@ export function getCoreStepPromptOverride(params: {
   kind: CorePromptKind;
   promptId: string;
 }): string | null {
-  const runtime = getCorePromptRuntime();
-  if (!runtime.useDatabasePrompts) return null;
-  const profile = params.profile ?? runtime.promptProfile;
-  const stepId = promptKeyToStepId.get(`${profile}:${params.kind}:${params.promptId}`);
-  if (!stepId) return null;
-  return runtime.dbPromptByStepId.get(stepId) ?? null;
-}
-
-export function isCoreStepPromptId(promptId: string): boolean {
-  return (
-    promptKeyToStepId.has(`web:step:${promptId}`) ||
-    promptKeyToStepId.has(`web:section:${promptId}`) ||
-    promptKeyToStepId.has(`app:step:${promptId}`) ||
-    promptKeyToStepId.has(`app:section:${promptId}`)
-  );
+  void params;
+  return null;
 }
 
 export function resolvePromptIdByStepId(profile: PromptProfile, stepId: string): string | null {
@@ -172,30 +143,8 @@ export function resolvePromptKindByStepId(profile: PromptProfile, stepId: string
 }
 
 export async function loadCoreStepPromptsFromDB(profile: PromptProfile = "web"): Promise<Map<string, string>> {
-  const overrides = new Map<string, string>();
-  try {
-    const service = createSupabaseServiceRoleClient();
-    const { data, error } = await service
-      .from("core_step_prompt_configs")
-      .select("step_id,prompt_content")
-      .eq("prompt_profile", profile);
-    if (error) throw error;
-
-    for (const row of data ?? []) {
-      const stepId = (row as { step_id: string }).step_id;
-      const promptContent = (row as { prompt_content: string }).prompt_content;
-      if (
-        stepIdToPromptId.has(`${profile}:${stepId}`) &&
-        typeof promptContent === "string" &&
-        promptContent.trim()
-      ) {
-        overrides.set(stepId, promptContent);
-      }
-    }
-  } catch (error) {
-    console.warn("[corePrompts] Failed to load DB prompt overrides:", error);
-  }
-  return overrides;
+  void profile;
+  return new Map<string, string>();
 }
 
 export function getPromptOverrideByStepId(

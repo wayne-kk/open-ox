@@ -1,0 +1,13 @@
+id: lighting
+kind: component-skill
+sectionTypes: ["hero"]
+priority: 75
+fallback: false
+when:
+  designKeywords:
+    any: ["lightning",  "webgl", "plasma", "particle-field", "generative-art"]
+    none: ["editorial", "magazine", "luxury", "minimal", "clean", "nature", "organic", "warm", "festive", "celebration"]
+notes: >
+  Use ONLY for heroes where WebGL lightning/shader is the explicit design intent.
+  Requires framer-motion and client-side rendering. Do NOT use for general tech,
+  neon, or cyber aesthetics — use impactful instead.

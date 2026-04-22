@@ -7,7 +7,7 @@ import { runStopHook, type LoopState } from "./stopHooks";
 import { compressContext } from "./contextCompression";
 
 const ALL_TOOLS = ["read_file", "search_code", "list_dir", "edit_file", "write_file", "run_build", "exec_shell", "think", "revert_file"];
-const MAX_ITERATIONS = 40;
+const MAX_ITERATIONS = 100;
 const MAX_STOP_HOOK_RETRIES = 5;
 
 type OnEvent = (event: {

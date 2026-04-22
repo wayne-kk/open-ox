@@ -3,9 +3,9 @@ export interface SectionSpec {
   intent: string;
   contentHints: string;
   fileName: string;
-  primaryRoleIds: string[];
-  supportingCapabilityIds: string[];
-  sourceTaskLoopIds: string[];
+  primaryRoleIds?: string[];
+  supportingCapabilityIds?: string[];
+  sourceTaskLoopIds?: string[];
 }
 
 export type GuardrailId = string;

@@ -1,0 +1,383 @@
+---
+title: 'styles:'
+created: '2026-04-16T07:46:14.128Z'
+modified: '2026-04-17T09:50:57.141Z'
+---
+
+# styles:
+  - name: bauhaus
+    keywords:
+      - Bauhaus
+      - Constructivist
+      - Primary colors
+      - Form follows function
+      - Asymmetric grid
+      - Color blocking
+      - Thick borders
+      - Sharp corners
+      - Circles squares triangles
+      - Rotated elements
+
+  - name: newsprint
+    keywords:
+      - Editorial
+      - Newspaper
+      - Serif fonts
+      - Multi-column layout
+      - Drop cap
+      - Masthead
+      - Justified text
+      - Grid dividers
+      - Inverted section
+      - Marquee ticker
+
+  - name: monochrome
+    keywords:
+      - Monochrome
+      - Black and white
+      - Serif typography
+      - Oversized headlines
+      - Dramatic contrast
+      - Negative space
+      - Heavy horizontal rules
+      - Line-based design
+      - Gallery
+      - Museum catalog
+
+  - name: modern
+    keywords:
+      - Dark mode
+      - Gradient blobs
+      - Glassmorphism
+      - Indigo accent
+      - Mouse tracking spotlight
+      - Near-black background
+      - Bento grid
+      - Grid overlay
+      - Linear Vercel Raycast
+      - Translucent surfaces
+
+  - name: luxury
+    keywords:
+      - Luxury
+      - Playfair Display
+      - Gold accent
+      - Asymmetric layout
+      - Cinematic motion
+      - Slow transitions
+      - Visible grid lines
+      - Drop cap
+      - Warm alabaster
+      - Fashion magazine
+
+  - name: saas
+    keywords:
+      - SaaS
+      - Electric blue gradient
+      - Dual font pairing
+      - Pulsing indicators
+      - Floating elements
+      - Gradient text
+      - Section label badges
+      - Asymmetric hero
+      - Animated hero graphic
+      - Product landing page
+
+  - name: terminal
+    keywords:
+      - Terminal
+      - CLI
+      - Monospace font
+      - Green on black
+      - Blinking cursor
+      - ASCII art
+      - Scanlines
+      - Typewriter effect
+      - Phosphor green
+      - Shell prompt
+
+  - name: swiss_minimalist
+    keywords:
+      - Swiss design
+      - International Typographic Style
+      - Grid system
+      - Helvetica
+      - Red accent
+      - Massive typography
+      - Mathematical precision
+      - Numbered sections
+      - Active negative space
+      - Color inversion hover
+
+  - name: kinetic
+    keywords:
+      - Kinetic typography
+      - Marquee scrolling
+      - Acid yellow
+      - Viewport-width text
+      - Massive numbers
+      - Hard color inversions
+      - Aggressive scale
+      - Scroll parallax
+      - Sticky cards
+      - Space Grotesk
+
+  - name: flat_design
+    keywords:
+      - Flat design
+      - No shadows
+      - Color blocking
+      - Vibrant palette
+      - Bold typography
+      - Rounded corners
+      - Solid shapes
+      - Zero artificial depth
+      - Decorative geometric shapes
+      - Snappy transitions
+
+  - name: art_deco
+    keywords:
+      - Art Deco
+      - Metallic gold
+      - Obsidian black
+      - Geometric ornament
+      - Symmetry
+      - Sunburst
+      - Chevron
+      - Stepped corners
+      - Double borders
+      - Architectural grandeur
+
+  - name: material_design
+    keywords:
+      - Material Design
+      - Material You
+      - Pill-shaped buttons
+      - Tonal surfaces
+      - Rounded corners
+      - Purple seed color
+      - Elevation system
+      - State layers
+      - FAB button
+      - Bottom border input
+
+  - name: neo_brutalism
+    keywords:
+      - Neo-brutalism
+      - Hard shadows
+      - Thick black borders
+      - Pop colors
+      - Sticker effect
+      - Cream background
+      - Offset shadows
+      - No blur
+      - Halftone dots
+      - Rotating elements
+
+  - name: bold_typography
+    keywords:
+      - Bold typography
+      - Type as hero
+      - Vermillion accent
+      - Extreme scale contrast
+      - Underline interactions
+      - Deliberate negative space
+      - Inter Tight
+      - Decorative numbers
+      - Staggered layout
+      - Text-driven
+
+  - name: academia
+    keywords:
+      - Academia
+      - Scholarly
+      - Cormorant Garamond
+      - Roman numerals
+      - Drop cap
+      - Arch-topped images
+      - Sepia filter
+      - Wax seal
+      - Corner flourishes
+      - Parchment
+
+  - name: cyberpunk
+    keywords:
+      - Cyberpunk
+      - Neon glow
+      - Glitch effect
+      - CRT scanlines
+      - Chromatic aberration
+      - Electric green
+      - Hot magenta
+      - Corner cuts
+      - Circuit patterns
+      - Skewed elements
+
+  - name: web3
+    keywords:
+      - Web3
+      - Bitcoin orange
+      - Digital gold
+      - Pill-shaped buttons
+      - Colored glow shadows
+      - Glass morphism
+      - Grid pattern
+      - Monospace data
+      - Space Grotesk
+      - Gradient text
+
+  - name: playful_geometric
+    keywords:
+      - Playful
+      - Memphis design
+      - Bouncy animations
+      - Confetti
+      - Vivid violet
+      - Hot pink
+      - Sticker card
+      - Pattern fills
+      - Squiggles
+      - Chunky borders
+
+  - name: minimal_dark
+    keywords:
+      - Minimal dark
+      - Amber accent
+      - Layered slate
+      - Glass-effect cards
+      - Ambient glow
+      - Space Grotesk
+      - Noise texture
+      - Warm-cool contrast
+      - Subtle borders
+      - Generous spacing
+
+  - name: claymorphism
+    keywords:
+      - Claymorphism
+      - Multi-layer shadows
+      - Super rounded
+      - Candy colors
+      - Vivid violet
+      - Glass-clay hybrid
+      - Gradient icons
+      - Floating blobs
+      - Squish animation
+      - Convex concave
+
+  - name: professional
+    keywords:
+      - Professional
+      - Playfair Display
+      - Burnished gold
+      - Warm ivory
+      - Small caps
+      - Rule lines
+      - Generous whitespace
+      - Monospace labels
+      - Asymmetric balance
+      - Paper texture
+
+  - name: botanical
+    keywords:
+      - Botanical
+      - Organic
+      - Playfair Display
+      - Arch images
+      - Sage green
+      - Terracotta
+      - Pill-shaped buttons
+      - Staggered grid
+      - Italic emphasis
+      - Paper grain texture
+
+  - name: vaporwave
+    keywords:
+      - Vaporwave
+      - Synthwave
+      - Neon magenta
+      - Electric cyan
+      - Perspective grid
+      - CRT scanlines
+      - Sunset gradient
+      - Orbitron font
+      - Gradient text
+      - VHS
+
+  - name: enterprise
+    keywords:
+      - Enterprise
+      - Indigo gradient
+      - Isometric
+      - 3D transforms
+      - Colored shadows
+      - Plus Jakarta Sans
+      - Gradient text
+      - Blur orbs
+      - Elevated cards
+      - Rounded corners
+
+  - name: sketch
+    keywords:
+      - Hand-drawn
+      - Wobbly borders
+      - Paper texture
+      - Kalam
+      - Hard offset shadows
+      - Tape decoration
+      - Thumbtack
+      - Doodle
+      - Sticky note
+      - Notebook
+
+  - name: industrial
+    keywords:
+      - Industrial
+      - Skeuomorphism
+      - Control panel
+      - Screw details
+      - LED indicators
+      - Safety orange
+      - Brushed aluminum
+      - Dieter Rams
+      - Carbon fiber
+      - Button press physics
+
+  - name: natural
+    keywords:
+      - Organic
+      - Wabi-sabi
+      - Blob shapes
+      - Moss green
+      - Terracotta
+      - Fraunces serif
+      - Asymmetric radii
+      - Floating blobs
+      - Curved connectors
+      - Forest palette
+
+  - name: neumorphism
+    keywords:
+      - Neumorphism
+      - Soft UI
+      - Dual shadows
+      - Monochromatic grey
+      - Inset pressed
+      - Hyper-rounded
+      - Violet accent
+      - Same-surface illusion
+      - Recessed inputs
+      - Plus Jakarta Sans
+
+  - name: maximalism
+    keywords:
+      - Maximalism
+      - Dopamine design
+      - Neon colors
+      - Stacked shadows
+      - Floating shapes
+      - Gradient text animation
+      - Five accent colors
+      - Broken grid
+      - Emoji decoration
+      - More is more

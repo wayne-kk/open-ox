@@ -10,6 +10,7 @@ const STAGE_MAP: Record<string, StageId> = {
   infer_design_intent: "understand",
   plan_project: "plan",
   generate_project_design_system: "design",
+  match_design_system_skill: "design",
   apply_project_design_tokens: "design",
   compose_layout: "compose",
   compose_page: "compose",
@@ -45,6 +46,7 @@ function inferStage(stepName: string): StageId {
 
 function inferKind(stepName: string, stage: StageId): GraphNode["kind"] {
   if (stage === "repair") return "repair";
+  if (stepName === "match_design_system_skill") return "decision";
   if (stepName.startsWith("run_build") || stepName.startsWith("install_dependencies")) return "verification";
   if (stepName.startsWith("generate_section") || stepName.startsWith("compose_page")) return "generation";
   if (stepName.startsWith("describe_page_sections")) return "transform";
@@ -79,6 +81,23 @@ function formatStepLabel(step: string): string {
   return step.replace(/_/g, " ");
 }
 
+function extractSkillHints(step: BuildStep): string[] {
+  const hints = new Set<string>();
+  if (typeof step.skillId === "string" && step.skillId.trim().length > 0) {
+    hints.add(step.skillId.trim());
+  }
+  const traceInput = step.trace?.input as Record<string, unknown> | undefined;
+  const technical = traceInput?.technicalSkillIds;
+  if (Array.isArray(technical)) {
+    for (const id of technical) {
+      if (typeof id === "string" && id.trim().length > 0) {
+        hints.add(id.trim());
+      }
+    }
+  }
+  return Array.from(hints);
+}
+
 export function parseStepsToTopology(steps: BuildStep[], flowStart: number): TopologyGraph {
   // Deduplicate: for each step name, keep the last entry (active gets replaced by ok/error)
   const deduped = new Map<string, { step: BuildStep; index: number }>();
@@ -89,6 +108,7 @@ export function parseStepsToTopology(steps: BuildStep[], flowStart: number): Top
   const nodes: GraphNode[] = Array.from(deduped.values()).map(({ step: s, index }) => {
     const stage = inferStage(s.step);
     const stepWithExtra = s as { skillId?: string | null; trace?: GraphNode["trace"] };
+    const skillHints = extractSkillHints(s);
     const status: GraphNode["status"] =
       s.status === "ok" ? "ok" : s.status === "active" ? "active" : "error";
     return {
@@ -101,7 +121,8 @@ export function parseStepsToTopology(steps: BuildStep[], flowStart: number): Top
       duration: s.duration,
       timestamp: s.timestamp,
       index,
-      skillHint: stepWithExtra.skillId ?? undefined,
+      skillHint: skillHints[0] ?? (stepWithExtra.skillId ?? undefined),
+      skillHints,
       trace: stepWithExtra.trace,
     };
   });

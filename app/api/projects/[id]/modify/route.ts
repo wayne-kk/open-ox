@@ -15,7 +15,7 @@ import { SSE_RESPONSE_HEADERS } from "@/lib/sse-headers";
 import { getProject } from "@/lib/projectManager";
 import { runModifyProject } from "@/ai/flows/modify_project/runModifyProject";
 import type { ModifySSEEvent } from "@/ai/flows/modify_project/runModifyProject";
-import { uploadGeneratedFiles } from "@/lib/storage";
+import { scheduleUploadFullProject } from "@/lib/storage";
 import { classifyModificationScope } from "@/lib/devServerManager";
 import { getSessionUser } from "@/lib/auth/session";
 
@@ -106,9 +106,7 @@ export async function POST(
 
         const touchedFiles = collectedDiffs.map((d) => d.file);
         if (touchedFiles.length > 0) {
-          uploadGeneratedFiles(id, touchedFiles).catch((err) =>
-            console.error("[modify] Storage upload failed:", err)
-          );
+          scheduleUploadFullProject(id);
         }
 
         const refreshMode = classifyModificationScope(collectedDiffs);

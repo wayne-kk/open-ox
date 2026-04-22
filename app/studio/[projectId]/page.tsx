@@ -3,14 +3,16 @@
 import { use, useEffect, useRef, useState } from "react";
 import { Suspense } from "react";
 import Link from "next/link";
-import { ArrowLeft, GitBranch, Monitor, RefreshCw, ExternalLink, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { ArrowLeft, GitBranch, Monitor, RefreshCw, ExternalLink, PanelLeftClose, PanelLeftOpen, FileCode2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HamsterLoader } from "@/components/ui/hamster-loader";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { useBuildStudio } from "@/app/studio/hooks/useBuildStudio";
+import { useFaviconSync } from "@/app/hooks/useFaviconSync";
 import { BuildConversation } from "@/app/studio/components/BuildConversation";
 import { GenerationAtlas } from "@/app/studio/components/GenerationAtlas";
+import { ProjectCodePanel } from "@/app/studio/components/ProjectCodePanel";
 
 function formatMs(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
@@ -25,11 +27,23 @@ function StudioInner({ projectId }: { projectId: string }) {
     previewUrl, previewState, previewError, previewVersion, startPreview, iframeRef, projectLoading,
     autoPreviewAfterBuild, setAutoPreviewAfterBuild, generationMode,
     useDatabasePrompts, setUseDatabasePrompts } = studio;
+
+  // Sync AI processing state → dynamic favicon
+  useFaviconSync({
+    loading: studio.loading,
+    modifying: studio.modifying,
+    error: studio.response?.error ?? studio.modifyError,
+  });
   const buildSteps = response?.buildSteps ?? [];
   const canPreview = !!projectId && !loading;
+  const canCode = !!projectId && !projectLoading;
   const [conversationCollapsed, setConversationCollapsed] = useState(false);
   const appPreviewViewportRef = useRef<HTMLDivElement | null>(null);
   const [appPreviewScale, setAppPreviewScale] = useState(1);
+  const previewIframeSrc =
+    previewUrl
+      ? `${previewUrl}${previewUrl.includes("?") ? "&" : "?"}v=${previewVersion}`
+      : null;
 
   useEffect(() => {
     if (generationMode !== "app" || rightPanel !== "preview" || previewState !== "ready") return;
@@ -201,6 +215,17 @@ function StudioInner({ projectId }: { projectId: string }) {
                   )}
                 </button>
                 <button
+                  onClick={() => setRightPanel("code")}
+                  disabled={!canCode}
+                  className={`flex items-center gap-1.5 px-3 h-7 font-mono text-[10px] uppercase tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed ${rightPanel === "code"
+                    ? "bg-white/8 text-foreground"
+                    : "text-muted-foreground/50 hover:text-muted-foreground"
+                    }`}
+                >
+                  <FileCode2 className="h-3 w-3" />
+                  Code
+                </button>
+                <button
                   onClick={() => setRightPanel("preview")}
                   disabled={!canPreview}
                   className={`flex items-center gap-1.5 px-3 h-7 font-mono text-[10px] uppercase tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed ${rightPanel === "preview"
@@ -247,7 +272,7 @@ function StudioInner({ projectId }: { projectId: string }) {
               <div className="flex-1" />
 
               {/* Action buttons — right */}
-              {previewState === "ready" && previewUrl && (
+              {rightPanel === "preview" && previewState === "ready" && previewUrl && (
                 <>
                   <button
                     onClick={studio.rebuildPreview}
@@ -258,7 +283,7 @@ function StudioInner({ projectId }: { projectId: string }) {
                     Rebuild
                   </button>
                   <a
-                    href={previewUrl}
+                    href={previewIframeSrc ?? previewUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-2.5 h-7 font-mono text-[10px] text-muted-foreground/70 transition-all hover:border-white/15 hover:text-foreground"
@@ -282,6 +307,10 @@ function StudioInner({ projectId }: { projectId: string }) {
                     totalDuration={response?.buildTotalDuration}
                     showEventStream={false}
                   />
+                </div>
+              ) : rightPanel === "code" ? (
+                <div className="h-full min-h-0 overflow-hidden">
+                  <ProjectCodePanel projectId={projectId} />
                 </div>
               ) : (
                 <div className="flex h-full flex-col">
@@ -329,9 +358,9 @@ function StudioInner({ projectId }: { projectId: string }) {
                               <div className="absolute inset-0 rounded-[3rem] border border-white/20 bg-neutral-900 p-[3px] shadow-[0_24px_90px_rgba(0,0,0,0.5)]">
                                 <div className="relative h-full w-full overflow-hidden overscroll-none rounded-[2.7rem] bg-black">
                                   <iframe
-                                    key={`${previewUrl}_${previewVersion}`}
+                                    key={previewIframeSrc ?? `${previewUrl}_${previewVersion}`}
                                     ref={iframeRef}
-                                    src={previewUrl}
+                                    src={previewIframeSrc ?? previewUrl}
                                     className="h-full w-full border-0"
                                     title="App Preview"
                                     style={{ overscrollBehavior: "none" }}
@@ -344,9 +373,9 @@ function StudioInner({ projectId }: { projectId: string }) {
                       </div>
                     ) : (
                       <iframe
-                        key={`${previewUrl}_${previewVersion}`}
+                        key={previewIframeSrc ?? `${previewUrl}_${previewVersion}`}
                         ref={iframeRef}
-                        src={previewUrl}
+                        src={previewIframeSrc ?? previewUrl}
                         className="flex-1 w-full border-0"
                         title="Project Preview"
                       />

@@ -40,6 +40,11 @@ interface ProjectFolder {
   createdAt: string;
 }
 
+interface ProjectOwnerOption {
+  id: string;
+  label: string;
+}
+
 const PAGE_SIZE = 10;
 
 const ownerFilterTriggerClass =
@@ -446,6 +451,7 @@ function ProjectsPageContent() {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [pendingDeleteFolderId, setPendingDeleteFolderId] = useState<string | null>(null);
   const [deletingFolder, setDeletingFolder] = useState(false);
+  const [ownerOptionsFromApi, setOwnerOptionsFromApi] = useState<ProjectOwnerOption[]>([]);
 
   const applyFolderFilter = useCallback(
     (next: string) => {
@@ -524,6 +530,16 @@ function ProjectsPageContent() {
     }
   }, []);
 
+  const loadProjectOwners = useCallback(async () => {
+    try {
+      const res = await fetch("/api/projects/owners");
+      if (!res.ok) return;
+      setOwnerOptionsFromApi((await res.json()) as ProjectOwnerOption[]);
+    } catch {
+      // Ignore: fallback to owners from currently loaded projects.
+    }
+  }, []);
+
   const loadInitialProjects = useCallback(async () => {
     setLoading(true);
     const data = await fetchProjectsPage(0, PAGE_SIZE);
@@ -560,12 +576,24 @@ function ProjectsPageContent() {
   }, [loadFolders]);
 
   useEffect(() => {
+    if (!isMineView) {
+      void loadProjectOwners();
+    }
+  }, [isMineView, loadProjectOwners]);
+
+  useEffect(() => {
     void loadInitialProjects();
   }, [folderFilter, globalOwnerParam, isMineView, loadInitialProjects]);
 
   /** 下拉中的成员选项（来自已加载列表；URL 中的 owner 若不在列表也会补一条） */
   const ownerSelectOptions = useMemo(() => {
     const m = new Map<string, string>();
+    for (const row of ownerOptionsFromApi) {
+      if (row.id) {
+        const label = row.label?.trim() || `${row.id.slice(0, 8)}…`;
+        m.set(row.id, label);
+      }
+    }
     for (const p of projects) {
       if (p.ownerUserId) {
         const label = p.ownerUsername?.trim() || `${p.ownerUserId.slice(0, 8)}…`;
@@ -580,7 +608,7 @@ function ProjectsPageContent() {
       rows.sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
     }
     return rows;
-  }, [projects, globalOwnerParam]);
+  }, [ownerOptionsFromApi, projects, globalOwnerParam]);
 
   /** 全员视图：在当前结果中按关键词筛选（名称、描述、成员） */
   const filteredGlobalProjects = useMemo(() => {

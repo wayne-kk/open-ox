@@ -27,6 +27,43 @@ const SERVE_PORT = 3000;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/**
+ * Run a command in the sandbox, returning the result even if the command exits
+ * with a non-zero code. E2B SDK v2.18+ throws `CommandExitError` on non-zero
+ * exit; this wrapper catches it and returns the embedded result so callers can
+ * inspect `exitCode` / `stdout` without try/catch at every call site.
+ */
+async function safeRun(
+  sandbox: Sandbox,
+  cmd: string,
+  opts?: Parameters<Sandbox["commands"]["run"]>[1]
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  try {
+    const result = await sandbox.commands.run(cmd, opts);
+    return {
+      exitCode: result.exitCode ?? 1,
+      stdout: result.stdout ?? "",
+      stderr: result.stderr ?? "",
+    };
+  } catch (err: unknown) {
+    // CommandExitError carries the full result on the error object
+    if (err && typeof err === "object" && "result" in err) {
+      const r = (err as { result: { exitCode: number; stdout: string; stderr: string } }).result;
+      return {
+        exitCode: r.exitCode ?? 1,
+        stdout: r.stdout ?? "",
+        stderr: r.stderr ?? "",
+      };
+    }
+    // Unknown error shape — rethrow
+    throw err;
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function getSandboxId(db: SupabaseClient, projectId: string): Promise<string | null> {
   const { data } = await db
     .from("projects")
@@ -58,6 +95,91 @@ function e2bOpts() {
 
 const UPLOAD_EXCLUDE = new Set(["node_modules", ".next", ".git"]);
 
+type FallbackFile = {
+  path: string;
+  content: string;
+};
+
+/**
+ * Some AI-generated projects keep the default app/layout imports but forget
+ * to generate these files. Add tiny runtime-safe stubs in sandbox only when
+ * those files are absent, so preview build can proceed.
+ */
+const PREVIEW_FALLBACK_FILES: FallbackFile[] = [
+  {
+    path: "app/components/ConditionalNav.tsx",
+    content: `export function ConditionalNav() {
+  return null;
+}
+`,
+  },
+  {
+    path: "app/components/ConditionalFooter.tsx",
+    content: `export function ConditionalFooter() {
+  return null;
+}
+`,
+  },
+  {
+    path: "app/components/DynamicFavicon.tsx",
+    content: `export function DynamicFavicon() {
+  return null;
+}
+`,
+  },
+  {
+    path: "app/contexts/FaviconContext.tsx",
+    content: `import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+
+export type FaviconState = "idle" | "thinking" | "notify" | "error";
+
+interface FaviconContextValue {
+  state: FaviconState;
+  setState: (s: FaviconState) => void;
+  startThinking: () => void;
+  flashNotify: (durationMs?: number) => void;
+  flashError: (durationMs?: number) => void;
+}
+
+const FaviconContext = createContext<FaviconContextValue | null>(null);
+
+export function FaviconProvider({ children }: { children: ReactNode }) {
+  const [state, setStateRaw] = useState<FaviconState>("idle");
+
+  const setState = useCallback((nextState: FaviconState) => {
+    setStateRaw(nextState);
+  }, []);
+
+  const startThinking = useCallback(() => {
+    setStateRaw("thinking");
+  }, []);
+
+  const flashNotify = useCallback(() => {
+    setStateRaw("notify");
+  }, []);
+
+  const flashError = useCallback(() => {
+    setStateRaw("error");
+  }, []);
+
+  return (
+    <FaviconContext.Provider value={{ state, setState, startThinking, flashNotify, flashError }}>
+      {children}
+    </FaviconContext.Provider>
+  );
+}
+
+export function useFavicon() {
+  const ctx = useContext(FaviconContext);
+  if (!ctx) {
+    throw new Error("useFavicon must be used within <FaviconProvider>");
+  }
+  return ctx;
+}
+`,
+  },
+];
+
 // ── Project fingerprint ───────────────────────────────────────────────────────
 // Lightweight hash of all project files (path + size + mtime).
 // Used to detect whether local files changed since the last sandbox upload,
@@ -71,8 +193,9 @@ async function computeProjectFingerprint(projectId: string): Promise<string> {
   const hash = createHash("sha256");
   for (const relPath of files) {
     const fullPath = path.join(projectDir, relPath);
-    const stat = await fs.stat(fullPath);
-    hash.update(`${relPath}:${stat.size}:${stat.mtimeMs}\n`);
+    const content = await fs.readFile(fullPath);
+    const fileHash = createHash("sha256").update(content).digest("hex");
+    hash.update(`${relPath}:${fileHash}\n`);
   }
   return hash.digest("hex").slice(0, 16); // 16 hex chars is plenty
 }
@@ -162,6 +285,16 @@ async function uploadProjectToSandbox(sandbox: Sandbox, projectId: string): Prom
       })
     );
   }
+
+  // Upload fallback files that are required by default app/layout imports.
+  const uploaded = new Set(files);
+  for (const fallback of PREVIEW_FALLBACK_FILES) {
+    if (uploaded.has(fallback.path)) continue;
+    const sandboxPath = `/home/user/app/${fallback.path}`;
+    const dir = sandboxPath.substring(0, sandboxPath.lastIndexOf("/"));
+    await sandbox.files.makeDir(dir);
+    await sandbox.files.write(sandboxPath, fallback.content);
+  }
 }
 
 /**
@@ -189,13 +322,71 @@ async function injectStaticExport(sandbox: Sandbox): Promise<void> {
 }
 
 /**
+ * Extract missing module names from Next.js / webpack build output.
+ * Matches patterns like:
+ *   Module not found: Can't resolve 'some-package'
+ *   Module not found: Can't resolve '@scope/package'
+ */
+function extractMissingModules(buildOutput: string): string[] {
+  const re = /Module not found.*?Can't resolve ['"]([^'"]+)['"]/gi;
+  const modules = new Set<string>();
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(buildOutput)) !== null) {
+    const raw = match[1];
+    if (!raw) continue;
+    // Skip relative imports — those are code bugs, not missing packages
+    if (raw.startsWith(".") || raw.startsWith("/")) continue;
+    // Normalize: @scope/pkg/sub → @scope/pkg, pkg/sub → pkg
+    const normalized = raw.startsWith("@")
+      ? raw.split("/").slice(0, 2).join("/")
+      : raw.split("/")[0];
+    if (normalized) modules.add(normalized);
+  }
+  return Array.from(modules);
+}
+
+/**
+ * Run `next build` with one automatic retry: if the first build fails with
+ * module-not-found errors, install the missing packages and rebuild.
+ */
+async function buildWithAutoInstall(
+  sandbox: Sandbox,
+  label: string
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  const buildCmd =
+    "cd /home/user/app && NODE_OPTIONS='--max-old-space-size=512' npx next build 2>&1";
+
+  const first = await safeRun(sandbox, buildCmd, { timeoutMs: 120_000 });
+  if (first.exitCode === 0) return first;
+
+  const missing = extractMissingModules(first.stdout + "\n" + first.stderr);
+  if (missing.length === 0) return first; // not a missing-module error
+
+  console.log(`[e2b ${label}] Build failed with missing modules: ${missing.join(", ")}. Auto-installing...`);
+  const installResult = await safeRun(
+    sandbox,
+    `cd /home/user/app && npm install --legacy-peer-deps ${missing.join(" ")} 2>&1`,
+    { timeoutMs: 120_000 }
+  );
+  if (installResult.exitCode !== 0) {
+    console.warn(`[e2b ${label}] Auto-install failed: ${installResult.stdout.slice(-200)}`);
+    return first; // return original build error
+  }
+
+  console.log(`[e2b ${label}] Retrying build after installing ${missing.join(", ")}...`);
+  // Clean .next cache before retry so webpack picks up new modules
+  await sandbox.commands.run("cd /home/user/app && rm -rf .next");
+  return safeRun(sandbox, buildCmd, { timeoutMs: 120_000 });
+}
+
+/**
  * Compare project package.json with template package.json.
  * Returns a list of "pkg@version" strings for deps that are NOT in the template.
  * If node_modules is completely missing, returns null → full install needed.
  */
 async function getMissingDeps(sandbox: Sandbox): Promise<string[] | null> {
   // If no node_modules at all, need full install
-  const check = await sandbox.commands.run(
+  const check = await safeRun(sandbox,
     "test -d /home/user/app/node_modules && echo EXISTS || echo MISSING"
   );
   if (check.stdout.trim() === "MISSING") return null;
@@ -228,6 +419,35 @@ async function getMissingDeps(sandbox: Sandbox): Promise<string[] | null> {
       missing.push(`${name}@${version}`);
     }
   }
+
+  // Also verify dependencies that should already exist in node_modules.
+  // A reused sandbox may have stale node_modules from an older template image.
+  const expectedInTemplate = Object.keys(projectDeps).filter((name) => name in templateDeps);
+  const PRESENCE_BATCH = 30;
+  for (let i = 0; i < expectedInTemplate.length; i += PRESENCE_BATCH) {
+    const batch = expectedInTemplate.slice(i, i + PRESENCE_BATCH);
+    const checks = batch
+      .map((name) => {
+        const pkgPath = `/home/user/app/node_modules/${name}/package.json`;
+        return `if [ ! -f '${pkgPath}' ]; then echo '${name}'; fi`;
+      })
+      .join("; ");
+    const result = await safeRun(sandbox, checks);
+    if (result.exitCode !== 0) continue;
+    const actuallyMissing = result.stdout
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    for (const depName of actuallyMissing) {
+      const version = projectDeps[depName];
+      if (!version) continue;
+      const spec = `${depName}@${version}`;
+      if (!missing.includes(spec)) {
+        missing.push(spec);
+      }
+    }
+  }
+
   return missing;
 }
 
@@ -265,13 +485,26 @@ async function startServeAndWait(sandbox: Sandbox, timeoutMs = 30_000): Promise<
  */
 async function isServerUp(sandbox: Sandbox): Promise<boolean> {
   const previewUrl = `https://${sandbox.getHost(SERVE_PORT)}`;
-  try {
-    const res = await fetch(previewUrl, { signal: AbortSignal.timeout(3000) });
-    const text = await res.text().catch(() => "");
-    return res.ok && !text.includes("Closed Port Error");
-  } catch {
-    return false;
+  const attempts = 3;
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      const res = await fetch(previewUrl, { signal: AbortSignal.timeout(5000) });
+      const text = await res.text().catch(() => "");
+      if (!res.ok) {
+        if (i < attempts - 1) await sleep(800);
+        continue;
+      }
+      const lowered = text.toLowerCase();
+      const closedPort =
+        lowered.includes("closed port error") ||
+        lowered.includes("there's no service running on port 3000");
+      if (!closedPort) return true;
+    } catch {
+      // ignore and retry
+    }
+    if (i < attempts - 1) await sleep(800);
   }
+  return false;
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -316,11 +549,14 @@ export async function startDevServer(
 
         // Files unchanged but server down — just restart serve if /out exists
         if (!filesChanged) {
-          const hasOut = await sandbox.commands.run("test -d /home/user/app/out && echo YES || echo NO");
+          const hasOut = await safeRun(sandbox, "test -d /home/user/app/out && echo YES || echo NO");
           if (hasOut.stdout.trim() === "YES") {
             console.log("[e2b] Files unchanged, restarting serve from existing /out");
             await sandbox.commands.run("pkill -f 'serve out' || true");
             await startServeAndWait(sandbox);
+            if (!(await isServerUp(sandbox))) {
+              throw new Error("serve restart reported ready but port 3000 is still unavailable");
+            }
             await sandbox.setTimeout(SANDBOX_TIMEOUT_MS);
             return { url: previewUrl, port: SERVE_PORT };
           }
@@ -336,22 +572,22 @@ export async function startDevServer(
 
         const missingDeps = await getMissingDeps(sandbox);
         if (missingDeps === null) {
-          const r = await sandbox.commands.run("cd /home/user/app && npm install --legacy-peer-deps 2>&1", { timeoutMs: 120_000 });
+          const r = await safeRun(sandbox, "cd /home/user/app && npm install --legacy-peer-deps 2>&1", { timeoutMs: 120_000 });
           if (r.exitCode !== 0) throw new Error(`npm install failed: ${r.stdout.slice(-300)}`);
         } else if (missingDeps.length > 0) {
-          const r = await sandbox.commands.run(`cd /home/user/app && npm install --legacy-peer-deps ${missingDeps.join(" ")} 2>&1`, { timeoutMs: 120_000 });
+          const r = await safeRun(sandbox, `cd /home/user/app && npm install --legacy-peer-deps ${missingDeps.join(" ")} 2>&1`, { timeoutMs: 120_000 });
           if (r.exitCode !== 0) throw new Error(`npm install extras failed: ${r.stdout.slice(-300)}`);
         }
 
-        const buildResult = await sandbox.commands.run(
-          "cd /home/user/app && NODE_OPTIONS='--max-old-space-size=512' npx next build 2>&1",
-          { timeoutMs: 120_000 }
-        );
+        const buildResult = await buildWithAutoInstall(sandbox, "reconnect");
         if (buildResult.exitCode !== 0) {
           throw new Error(`next build failed (exit ${buildResult.exitCode}): ${buildResult.stdout.slice(-500)}`);
         }
 
         await startServeAndWait(sandbox);
+        if (!(await isServerUp(sandbox))) {
+          throw new Error("serve restart reported ready but port 3000 is still unavailable");
+        }
         await saveSandboxId(db, projectId, sandbox.sandboxId);
         await saveFingerprint(db, projectId, currentHash);
         await sandbox.setTimeout(SANDBOX_TIMEOUT_MS);
@@ -383,7 +619,7 @@ export async function startDevServer(
     const missingDeps = await getMissingDeps(sandbox);
     if (missingDeps === null) {
       console.log("[e2b] No node_modules found, running full npm install...");
-      const installResult = await sandbox.commands.run(
+      const installResult = await safeRun(sandbox,
         "cd /home/user/app && npm install --legacy-peer-deps 2>&1",
         { timeoutMs: 120_000 }
       );
@@ -392,7 +628,7 @@ export async function startDevServer(
       }
     } else if (missingDeps.length > 0) {
       console.log(`[e2b] Installing ${missingDeps.length} extra deps:`, missingDeps.join(", "));
-      const installResult = await sandbox.commands.run(
+      const installResult = await safeRun(sandbox,
         `cd /home/user/app && npm install --legacy-peer-deps ${missingDeps.join(" ")} 2>&1`,
         { timeoutMs: 120_000 }
       );
@@ -405,10 +641,7 @@ export async function startDevServer(
 
     // 6. Static build
     console.log("[e2b] Building static site...");
-    const buildResult = await sandbox.commands.run(
-      "cd /home/user/app && NODE_OPTIONS='--max-old-space-size=512' npx next build 2>&1",
-      { timeoutMs: 120_000 }
-    );
+    const buildResult = await buildWithAutoInstall(sandbox, "fresh");
     console.log("[e2b] next build exit code:", buildResult.exitCode);
     if (buildResult.exitCode !== 0) {
       throw new Error(`next build failed (exit ${buildResult.exitCode}): ${buildResult.stdout.slice(-500)}`);
@@ -417,6 +650,9 @@ export async function startDevServer(
     // 7. Start static file server
     console.log("[e2b] Starting static server...");
     await startServeAndWait(sandbox);
+    if (!(await isServerUp(sandbox))) {
+      throw new Error("serve startup reported ready but port 3000 is still unavailable");
+    }
 
     const previewUrl = `https://${sandbox.getHost(SERVE_PORT)}`;
     await saveSandboxId(db, projectId, sandbox.sandboxId);
@@ -569,10 +805,7 @@ export async function hotRefreshDevServer(
   await sandbox.commands.run("cd /home/user/app && rm -rf .next out");
 
   // Rebuild
-  const buildResult = await sandbox.commands.run(
-    "cd /home/user/app && NODE_OPTIONS='--max-old-space-size=512' npx next build 2>&1",
-    { timeoutMs: 120_000 }
-  );
+  const buildResult = await buildWithAutoInstall(sandbox, "hot");
 
   if (buildResult.exitCode !== 0) {
     // Hot refresh failed — fall back to full rebuild
@@ -607,7 +840,7 @@ export async function rebuildDevServer(
       const candidate = await Sandbox.connect(sandboxId, e2bOpts());
       if (!(await candidate.isRunning())) throw new Error("not running");
       // Quick health check
-      const healthCheck = await candidate.commands.run("echo OK", { timeoutMs: 5_000 });
+      const healthCheck = await safeRun(candidate, "echo OK", { timeoutMs: 5_000 });
       if (healthCheck.exitCode !== 0 || !healthCheck.stdout.includes("OK")) {
         throw new Error("sandbox unhealthy");
       }
@@ -651,20 +884,17 @@ export async function rebuildDevServer(
     const missingDeps = await getMissingDeps(sandbox);
     if (missingDeps === null) {
       console.log("[e2b rebuild] Full npm install...");
-      const r = await sandbox.commands.run("cd /home/user/app && npm install --legacy-peer-deps 2>&1", { timeoutMs: 120_000 });
+      const r = await safeRun(sandbox, "cd /home/user/app && npm install --legacy-peer-deps 2>&1", { timeoutMs: 120_000 });
       if (r.exitCode !== 0) throw new Error(`npm install failed: ${r.stdout.slice(-300)}`);
     } else if (missingDeps.length > 0) {
       console.log(`[e2b rebuild] Installing ${missingDeps.length} extra deps`);
-      const r = await sandbox.commands.run(`cd /home/user/app && npm install --legacy-peer-deps ${missingDeps.join(" ")} 2>&1`, { timeoutMs: 120_000 });
+      const r = await safeRun(sandbox, `cd /home/user/app && npm install --legacy-peer-deps ${missingDeps.join(" ")} 2>&1`, { timeoutMs: 120_000 });
       if (r.exitCode !== 0) throw new Error(`npm install extras failed: ${r.stdout.slice(-300)}`);
     }
 
     // 6. Rebuild
     console.log("[e2b rebuild] Building...");
-    const buildResult = await sandbox.commands.run(
-      "cd /home/user/app && NODE_OPTIONS='--max-old-space-size=512' npx next build 2>&1",
-      { timeoutMs: 120_000 }
-    );
+    const buildResult = await buildWithAutoInstall(sandbox, "rebuild");
     if (buildResult.exitCode !== 0) {
       const tail = buildResult.stdout.slice(-500);
       const signal = (buildResult as { signal?: string }).signal;
@@ -695,6 +925,71 @@ export async function rebuildDevServer(
   }
 }
 
+/**
+ * Ensure the dev server is alive. If the sandbox is running but serve crashed,
+ * restart serve from the existing /out directory. This is a lightweight health
+ * check designed to be called when the user switches back to the Preview tab.
+ *
+ * Returns:
+ *   - { status: "ok", url } — serve is responding (or was just restarted)
+ *   - { status: "down" } — sandbox is gone or unrecoverable
+ */
+export async function ensureDevServerAlive(
+  db: SupabaseClient,
+  projectId: string
+): Promise<{ status: "ok" | "down"; url?: string }> {
+  const sandboxId = await getSandboxId(db, projectId);
+  if (!sandboxId) return { status: "down" };
+
+  let sandbox: Sandbox;
+  try {
+    sandbox = await Sandbox.connect(sandboxId, e2bOpts());
+    if (!(await sandbox.isRunning())) {
+      await clearSandboxId(db, projectId);
+      return { status: "down" };
+    }
+  } catch {
+    await clearSandboxId(db, projectId);
+    return { status: "down" };
+  }
+
+  const previewUrl = `https://${sandbox.getHost(SERVE_PORT)}`;
+
+  // Fast path: serve is still responding
+  if (await isServerUp(sandbox)) {
+    await sandbox.setTimeout(SANDBOX_TIMEOUT_MS);
+    return { status: "ok", url: previewUrl };
+  }
+
+  // Serve crashed but sandbox is alive — try restarting from existing /out
+  console.log("[e2b ensureAlive] Serve is down, attempting restart...");
+  const hasOut = await safeRun(sandbox,
+    "test -d /home/user/app/out && echo YES || echo NO"
+  );
+  if (hasOut.stdout.trim() !== "YES") {
+    // No /out directory — can't restart without a full rebuild
+    console.log("[e2b ensureAlive] No /out directory, marking as down");
+    return { status: "down" };
+  }
+
+  // Kill any zombie serve processes and restart
+  await safeRun(sandbox, "pkill -f 'serve out' || true", { timeoutMs: 5_000 });
+  await safeRun(sandbox, "sleep 1", { timeoutMs: 3_000 });
+
+  try {
+    await startServeAndWait(sandbox);
+    if (await isServerUp(sandbox)) {
+      console.log("[e2b ensureAlive] Serve restarted successfully");
+      await sandbox.setTimeout(SANDBOX_TIMEOUT_MS);
+      return { status: "ok", url: previewUrl };
+    }
+  } catch (err) {
+    console.error("[e2b ensureAlive] Serve restart failed:", err);
+  }
+
+  return { status: "down" };
+}
+
 export async function getDevServerStatus(
   db: SupabaseClient,
   projectId: string
@@ -705,7 +1000,10 @@ export async function getDevServerStatus(
     const sandbox = await Sandbox.connect(sandboxId, e2bOpts());
     if (await sandbox.isRunning()) {
       const url = `https://${sandbox.getHost(SERVE_PORT)}`;
-      return { status: "running", url };
+      if (await isServerUp(sandbox)) {
+        return { status: "running", url };
+      }
+      return { status: "stopped" };
     }
   } catch { /* unreachable */ }
   await clearSandboxId(db, projectId);

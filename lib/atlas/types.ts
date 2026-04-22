@@ -34,6 +34,7 @@ export interface GraphNode {
   timestamp: number;
   index: number;
   skillHint?: string;
+  skillHints?: string[];
   trace?: StepTrace;
 }
 

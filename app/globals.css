@@ -2,6 +2,25 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/*
+ * Tailwind v4 auto-scans from the project root.
+ * Exclude directories that contain AI-generated code, prompts,
+ * logs, docs, and other non-UI files to avoid stale/invalid
+ * class names polluting the build.
+ */
+@source not "../sites";
+@source not "../.open-ox";
+@source not "../.planning";
+@source not "../.cursor";
+@source not "../ai";
+@source not "../sdk";
+@source not "../e2b-template";
+@source not "../deploy";
+@source not "../scripts";
+@source not "../docs";
+@source not "../supabase";
+@source not "../patches";
+@source not "../example";
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

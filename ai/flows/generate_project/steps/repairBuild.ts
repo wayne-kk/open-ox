@@ -62,8 +62,8 @@ function selectRepairTargets(buildOutput: string, generatedFiles: string[]): str
   return unique(preferred.length > 0 ? preferred : generatedFiles).slice(-3);
 }
 
-/** Repair tools: read → edit → run_build. Minimal set for fast patching. */
-const REPAIR_TOOLS = ["read_file", "edit_file", "write_file", "run_build"];
+/** Repair tools: read → edit only; outer flow performs build verification. */
+const REPAIR_TOOLS = ["read_file", "edit_file", "write_file"];
 
 export async function stepRepairBuild({
   blueprint,

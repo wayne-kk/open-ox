@@ -96,7 +96,7 @@ export function clearStepConfig(stepName: string): void {
 
 // ── Section Skills toggle ───────────────────────────────────────────────
 
-let _sectionSkillsEnabled = false;
+let _sectionSkillsEnabled = true;
 
 export function setSectionSkillsEnabled(enabled: boolean): void {
     _sectionSkillsEnabled = enabled;
@@ -109,8 +109,10 @@ export function isSectionSkillsEnabled(): boolean {
 /** Available generation steps that can have model overrides */
 export const GENERATION_STEPS = [
     { id: "analyze_project_requirement", label: "需求分析" },
+    { id: "infer_design_intent", label: "设计意图推断" },
     { id: "plan_project", label: "项目规划" },
     { id: "generate_project_design_system", label: "设计系统" },
+    { id: "match_design_system_skill", label: "设计风格匹配" },
     { id: "apply_project_design_tokens", label: "设计 Token" },
     { id: "describe_page_sections", label: "页面分段设计" },
     { id: "preselect_skills", label: "技能匹配" },

@@ -43,8 +43,7 @@ Do not output JSON, do not output diffs, and do not provide any explanation outs
 /* 4. @layer base — global resets, :root vars for non-Tailwind values, body styles */
 @layer base {
   :root {
-    /* CSS vars NOT tied to Tailwind utilities (clip-paths, complex gradients, transitions, etc.) */
-    --tech-cut: polygon(10% 0, 100% 0, 100% 70%, 90% 100%, 0 100%, 0 30%);
+    /* CSS vars NOT tied to Tailwind utilities (complex gradients, transitions, composited effects, etc.) */
     --transition-pop: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
   html, body {
@@ -60,10 +59,9 @@ Do not output JSON, do not output diffs, and do not provide any explanation outs
 
 /* 6. @layer utilities — ONLY for effects Tailwind utilities cannot express cleanly */
 @layer utilities {
-  .clip-tech-cut { clip-path: var(--tech-cut); }
   .fx-glass { backdrop-filter: blur(12px); background: rgba(255,255,255,0.1); }
-  .fx-scanlines {
-    background-image: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+  .fx-radial-soft {
+    background-image: radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.18), transparent 55%);
   }
 }
 ```
@@ -73,23 +71,22 @@ Do not output JSON, do not output diffs, and do not provide any explanation outs
 Tailwind v4 `@theme` tokens **automatically** generate utility classes. You MUST NOT create manual mirrored classes for tokens that Tailwind already handles:
 
 
-| @theme token            | Auto-generated Tailwind utility                | DO NOT create                                |
-| ----------------------- | ---------------------------------------------- | -------------------------------------------- |
+| @theme token            | Auto-generated Tailwind utility                | DO NOT create                                              |
+| ----------------------- | ---------------------------------------------- | ---------------------------------------------------------- |
 | `--color-primary: #xxx` | `bg-primary`, `text-primary`, `border-primary` | custom mirrors like `.bg-primary-alt`, `.text-primary-alt` |
-| `--color-accent: #xxx`  | `bg-accent`, `text-accent`, `border-accent`    | custom mirrors for the same token meaning |
-| `--font-display: "..."` | `font-display`                                 | redundant font mirror classes |
-| `--font-header: "..."`  | `font-header`                                  | redundant font mirror classes |
-| `--font-body: "..."`    | `font-body`                                    | redundant font mirror classes |
-| `--shadow-glow: ...`    | `shadow-glow`                                  | redundant shadow mirror classes |
-| `--shadow-soft: ...`    | `shadow-soft`                                  | redundant shadow mirror classes |
-| `--animate-float: ...`  | `animate-float`                                | redundant animation mirror classes |
-| `--animate-pulse: ...`  | `animate-pulse`                                | redundant animation mirror classes |
+| `--color-accent: #xxx`  | `bg-accent`, `text-accent`, `border-accent`    | custom mirrors for the same token meaning                  |
+| `--font-display: "..."` | `font-display`                                 | redundant font mirror classes                              |
+| `--font-header: "..."`  | `font-header`                                  | redundant font mirror classes                              |
+| `--font-body: "..."`    | `font-body`                                    | redundant font mirror classes                              |
+| `--shadow-glow: ...`    | `shadow-glow`                                  | redundant shadow mirror classes                            |
+| `--shadow-soft: ...`    | `shadow-soft`                                  | redundant shadow mirror classes                            |
+| `--animate-float: ...`  | `animate-float`                                | redundant animation mirror classes                         |
+| `--animate-pulse: ...`  | `animate-pulse`                                | redundant animation mirror classes                         |
 
 
 *Only create minimal custom utility classes for effects that Tailwind CANNOT auto-generate:**
 
-- Composite effects combining multiple properties (glass, scanlines, grain overlays)
-- Clip-path shapes from `:root` CSS variables
+- Composite effects combining multiple properties (glass, radial-glow stacks, layered gradients)
 - Pseudo-element effects (::before/::after based textures)
 - Complex hover/focus states that compose multiple tokens
 - Transition shorthands stored in `:root` (not in `@theme`)
@@ -109,7 +106,7 @@ Tailwind v4 `@theme` tokens **automatically** generate utility classes. You MUST
 
 - Keep shadcn/ui CSS variables (`--background`, `--foreground`, `--card`, etc.) using the same variable names but with direct values, NOT `hsl(number number% number%)` format — use hex or oklch
 - Apply body/html background and text colors using `theme(--color-xxx)` or direct values
-- Keep `:root` for non-Tailwind CSS variables (clip-paths, complex values, transitions)
+- Keep `:root` for non-Tailwind CSS variables (complex values, transitions, composited effects)
 - **Do not** add `h1`–`h6` selectors with `color` (or any heading-level color rules). Heading color comes from components via utilities (`text-foreground`, etc.), not global base styles.
 
 **@keyframes:**
@@ -120,7 +117,7 @@ Tailwind v4 `@theme` tokens **automatically** generate utility classes. You MUST
 
 **@layer utilities — ONLY for non-Tailwind effects:**
 
-- Use neutral semantic names (for example `fx-*` / `clip-*`) only when truly necessary
+- Use neutral semantic names (for example `fx-`* / `clip-*`) only when truly necessary
 - Do NOT mirror `@theme` tokens — Tailwind already generates those utilities
 - Keep this section minimal — most design tokens need zero custom classes
 

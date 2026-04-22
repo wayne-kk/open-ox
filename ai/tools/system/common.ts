@@ -4,6 +4,15 @@ import { join } from "path";
 export const WORKSPACE_ROOT = process.cwd();
 
 /**
+ * Opaque path join that prevents Turbopack / webpack from statically analysing
+ * the resulting path and pulling thousands of files into the bundle graph.
+ * Only used for runtime-only filesystem paths that should never be traced.
+ */
+function runtimeJoin(...segments: string[]): string {
+  return join(...segments);
+}
+
+/**
  * 目标站点根目录（用于写入生成的网站代码）
  * - 通过环境变量 SITE_ROOT 指定相对 open-ox 的路径，例如：SITE_ROOT=sites/template
  * - 如果未配置，则默认等于 WORKSPACE_ROOT（向后兼容）
@@ -13,7 +22,7 @@ export const WORKSPACE_ROOT = process.cwd();
  * current value via a module-level getter (Object.defineProperty below).
  */
 let _siteRoot: string = process.env.SITE_ROOT
-  ? join(WORKSPACE_ROOT, process.env.SITE_ROOT)
+  ? runtimeJoin(WORKSPACE_ROOT, process.env.SITE_ROOT)
   : WORKSPACE_ROOT;
 
 /** Returns the current dynamic site root directory. */
@@ -44,7 +53,7 @@ export function setSiteRoot(path: string): void {
  */
 export function clearSiteRoot(): void {
   _siteRoot = process.env.SITE_ROOT
-    ? join(WORKSPACE_ROOT, process.env.SITE_ROOT)
+    ? runtimeJoin(WORKSPACE_ROOT, process.env.SITE_ROOT)
     : WORKSPACE_ROOT;
 }
 

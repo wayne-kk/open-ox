@@ -1,126 +1,83 @@
-import { buildDefaultProjectPlan } from "../planners/defaultProjectPlanner";
-import {
-  getAllowedProjectGuardrailIds,
-  mergeProjectGuardrailIds,
-} from "../planners/guardrailPolicy";
-import { composePromptBlocks, loadGuardrail, loadStepPrompt } from "../shared/files";
-import { callLLM, extractJSON } from "../shared/llm";
-import { isStringArray } from "../shared/typeGuards";
+import { buildDefaultProjectPlan, buildDefaultAppScreenPlan } from "../planners/defaultProjectPlanner";
+import { inferProjectGuardrailDefaults } from "../planners/guardrailPolicy";
+import { composePromptBlocks, loadGuardrail, loadStepPrompt, writeSiteFile } from "../shared/files";
+import { callLLMWithMeta, extractJSON } from "../shared/llm";
+import { stepTraceFromLlmCompletion } from "../shared/llmTrace";
 import type {
   AppScreenPlan,
   PageDesignPlan,
   PlannedProjectBlueprint,
+  PlannedPageBlueprint,
   PlannedSectionSpec,
   ProjectBlueprint,
+  StepTrace,
 } from "../types";
-import { isLayoutSection } from "../registry/layoutSections";
 import { getPromptProfile } from "@/ai/prompts/core/profile";
+import { getModelForStep } from "@/lib/config/models";
+
+const MAX_PAGE_SECTIONS = 4;
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
 
 function isPageDesignPlan(value: unknown): value is PageDesignPlan {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const candidate = value as Partial<PageDesignPlan>;
+  if (!isObjectRecord(value)) return false;
   return (
-    typeof candidate.pageGoal === "string" &&
-    typeof candidate.narrativeArc === "string" &&
-    typeof candidate.layoutStrategy === "string" &&
-    isStringArray(candidate.hierarchy) &&
-    isStringArray(candidate.constraints)
+    typeof value.pageGoal === "string" &&
+    typeof value.narrativeArc === "string" &&
+    typeof value.layoutStrategy === "string" &&
+    Array.isArray(value.hierarchy) &&
+    value.hierarchy.every((item) => typeof item === "string") &&
+    Array.isArray(value.constraints) &&
+    value.constraints.every((item) => typeof item === "string")
   );
 }
 
 function isAppScreenPlan(value: unknown): value is AppScreenPlan {
-  if (!value || typeof value !== "object") {
+  if (!isObjectRecord(value)) return false;
+  if (typeof value.screenType !== "string" || typeof value.shellStyle !== "string" || typeof value.narrative !== "string") {
     return false;
   }
-  const candidate = value as Partial<AppScreenPlan>;
+  if (!Array.isArray(value.regions) || !isObjectRecord(value.interactionModel)) return false;
   return (
-    typeof candidate.screenType === "string" &&
-    typeof candidate.shellStyle === "string" &&
-    typeof candidate.narrative === "string" &&
-    Array.isArray(candidate.regions) &&
-    candidate.regions.every((region) => {
-      if (!region || typeof region !== "object") return false;
-      const r = region as unknown as Record<string, unknown>;
-      return (
-        typeof r.id === "string" &&
-        typeof r.title === "string" &&
-        typeof r.intent === "string" &&
-        typeof r.contentHints === "string"
-      );
-    }) &&
-    !!candidate.interactionModel &&
-    typeof candidate.interactionModel === "object"
+    typeof value.interactionModel.navigationStyle === "string" &&
+    typeof value.interactionModel.primaryActionModel === "string" &&
+    typeof value.interactionModel.feedbackPattern === "string"
   );
 }
 
+function clampPageSections<T extends { site: { pages: Array<{ sections: PlannedSectionSpec[] }> } }>(
+  blueprint: T
+): T {
+  return {
+    ...blueprint,
+    site: {
+      ...blueprint.site,
+      pages: blueprint.site.pages.map((page) => ({
+        ...page,
+        sections: page.sections.slice(0, MAX_PAGE_SECTIONS),
+      })),
+    },
+  };
+}
+
+// ── Main Step ────────────────────────────────────────────────────────────
+
 export async function stepPlanProject(
-  blueprint: ProjectBlueprint
-): Promise<PlannedProjectBlueprint> {
+  blueprint: ProjectBlueprint,
+): Promise<{ blueprint: PlannedProjectBlueprint; trace: StepTrace }> {
   const appProfile = getPromptProfile() === "app";
   const defaultPlan = buildDefaultProjectPlan(blueprint);
-  const appDisallowedSectionTypes = new Set(["faq", "pricing", "testimonials"]);
 
-  const sanitizeSectionsForProfile = (
-    sections: PlannedSectionSpec[],
-    fallbackSections: PlannedSectionSpec[]
-  ): PlannedSectionSpec[] => {
-    if (!appProfile) {
-      return sections;
-    }
-    const sanitized = sections.filter(
-      (section) => !appDisallowedSectionTypes.has(section.type) && !isLayoutSection(section.type)
-    );
-    return sanitized.length > 0 ? sanitized : fallbackSections;
-  };
+  // ── Build LLM prompt ───────────────────────────────────────────────────
 
-  const deriveAppScreenPlanFromSections = (
-    sections: PlannedSectionSpec[],
-    description: string
-  ): AppScreenPlan => {
-    const feedLike = sections.some((section) => ["content", "feed"].includes(section.type));
-    return {
-      screenType: feedLike ? "feed-discovery" : "task-dashboard",
-      shellStyle: "mobile-app-shell-with-bottom-tab-navigation",
-      narrative: description,
-      regions: sections.map((section, index) => ({
-        id: `${section.type}-${index + 1}`,
-        title: section.fileName,
-        intent: section.intent,
-        contentHints: section.contentHints,
-        priority: index === 0 ? "primary" : index === 1 ? "secondary" : "supporting",
-      })),
-      interactionModel: {
-        navigationStyle: "bottom-tab-and-in-screen-jump-points",
-        primaryActionModel: "always-visible-primary-action",
-        feedbackPattern: "compact-status-cues-and-immediate-acknowledgement",
-      },
-      preferredSkillIds: feedLike ? ["screen.feed.discovery"] : ["screen.dashboard.utility"],
-    };
-  };
-
-  const profileFallbackPlan: PlannedProjectBlueprint = appProfile
-    ? {
-        ...defaultPlan,
-        site: {
-          ...defaultPlan.site,
-          layoutSections: defaultPlan.site.layoutSections.filter((section) => section.type === "navigation"),
-          pages: defaultPlan.site.pages.map((page) => ({
-            ...page,
-            sections: sanitizeSectionsForProfile(page.sections, page.sections),
-            appScreenPlan:
-              page.appScreenPlan ??
-              deriveAppScreenPlanFromSections(
-                sanitizeSectionsForProfile(page.sections, page.sections),
-                page.description
-              ),
-          })),
-        },
-      }
-    : defaultPlan;
   const systemPrompt = composePromptBlocks([loadStepPrompt("planProject"), loadGuardrail("outputJson")]);
+
   const appScreenInstruction = appProfile
     ? `\n## App Screen Plan (required for app profile)
 - For each page include \`appScreenPlan\` with:
@@ -131,6 +88,7 @@ export async function stepPlanProject(
   - interactionModel (navigationStyle, primaryActionModel, feedbackPattern)
 - Keep \`sections\` as compatibility fallback, but prioritize coherent screen-first regions over section stacks.`
     : "";
+
   const userMessage = `## Project: ${blueprint.brief.projectTitle}
 ${blueprint.brief.projectDescription}
 
@@ -141,178 +99,116 @@ ${blueprint.brief.projectDescription}
 - Design Keywords: ${blueprint.experience.designIntent.keywords.join(", ")}
 
 ## Pages to plan sections for
-${blueprint.site.pages.map((page) =>
-  `### ${page.title} (/${page.slug}) — ${page.journeyStage}
+${blueprint.site.pages
+      .map(
+        (page) =>
+          `### ${page.title} (/${page.slug}) — ${page.journeyStage}
 - Description: ${page.description}
-- Roles: ${page.primaryRoleIds.join(", ") || "none"}
-- Capabilities: ${page.supportingCapabilityIds.join(", ") || "none"}
-- Existing sections: ${page.sections.length > 0 ? page.sections.map((s) => s.type).join(", ") : "NONE — derive from page description and capabilities"}`
-).join("\n\n")}
+- Existing sections: ${page.sections.length > 0 ? page.sections.map((s) => s.type).join(", ") : "NONE — derive from page description"}`,
+      )
+    .join("\n\n")}
 
 ## Layout Sections (shared shells)
 ${blueprint.site.layoutSections.map((s) => `- ${s.type}: ${s.intent}`).join("\n")}
 
-## Allowed Project Guardrail IDs
-${getAllowedProjectGuardrailIds().map((id) => `- ${id}`).join("\n")}
-
 ## Keep it simple
 - Prefer the smallest section set that satisfies page goals.
 - Avoid repeated sections with overlapping intent.
-- Sections only need type, intent, contentHints, fileName, and role/capability/taskLoop IDs.
+- Sections only need type, intent, contentHints, fileName.
 - Do not include designPlan on sections — guardrails and skills are resolved at generation time.${appScreenInstruction}`;
 
-  try {
-    const raw = await callLLM(systemPrompt, userMessage, 0.2);
-    const parsed = JSON.parse(extractJSON(raw)) as Partial<PlannedProjectBlueprint>;
+  // ── Call LLM ───────────────────────────────────────────────────────────
 
-    if (!isStringArray(parsed.projectGuardrailIds)) {
-      return profileFallbackPlan;
+  const model = getModelForStep("plan_project");
+
+  try {
+    const meta = await callLLMWithMeta(systemPrompt, userMessage, 0.2, undefined, model);
+    const raw = meta.content;
+    const trace = stepTraceFromLlmCompletion(systemPrompt, userMessage, meta);
+    const parsed = JSON.parse(extractJSON(raw)) as unknown;
+
+    // Persist the raw LLM output into the generated project.
+    await writeSiteFile("project-plan.json", JSON.stringify(parsed, null, 2));
+
+    const parsedSite = isObjectRecord(parsed) && isObjectRecord(parsed.site) ? parsed.site : undefined;
+    const parsedPages = Array.isArray(parsedSite?.pages) ? parsedSite.pages : [];
+    const parsedLayoutSections = Array.isArray(parsedSite?.layoutSections) ? parsedSite.layoutSections : undefined;
+
+    // Trust the LLM output structure where valid. Fill only missing/invalid fields.
+    const pages: PlannedPageBlueprint[] = parsedPages
+      .filter((candidate): candidate is Record<string, unknown> => isObjectRecord(candidate))
+      .map((page) => {
+        const pageSlug = typeof page.slug === "string" ? page.slug : defaultPlan.site.pages[0]?.slug;
+        const fallbackPage = defaultPlan.site.pages.find((p) => p.slug === pageSlug) ?? defaultPlan.site.pages[0];
+        const rawSections = Array.isArray(page.sections) ? page.sections : [];
+        const sections: PlannedSectionSpec[] = rawSections
+          .filter((section): section is Record<string, unknown> => isObjectRecord(section))
+          .slice(0, MAX_PAGE_SECTIONS)
+          .map((s, index) => {
+            const fallbackSection = fallbackPage.sections[index] ?? fallbackPage.sections[0];
+            return {
+              type: typeof s.type === "string" ? s.type : fallbackSection?.type ?? "Feature",
+              intent: typeof s.intent === "string" ? s.intent : fallbackSection?.intent ?? "Support primary page narrative.",
+              contentHints: asString(s.contentHints) ?? fallbackSection?.contentHints ?? "",
+              fileName: typeof s.fileName === "string" ? s.fileName : fallbackSection?.fileName ?? `Section${index + 1}`,
+            };
+          });
+
+        return {
+          title: asString(page.title) ?? fallbackPage.title,
+          slug: asString(page.slug) ?? fallbackPage.slug,
+          description: asString(page.description) ?? fallbackPage.description,
+          journeyStage: asString(page.journeyStage) ?? fallbackPage.journeyStage,
+          primaryRoleIds: fallbackPage.primaryRoleIds,
+          supportingCapabilityIds: fallbackPage.supportingCapabilityIds,
+          sections,
+          pageDesignPlan: isPageDesignPlan(page.pageDesignPlan) ? page.pageDesignPlan : fallbackPage.pageDesignPlan,
+          appScreenPlan: appProfile
+            ? isAppScreenPlan(page.appScreenPlan)
+              ? page.appScreenPlan
+              : fallbackPage.appScreenPlan ??
+                buildDefaultAppScreenPlan({ description: String(page.description ?? ""), sections: fallbackPage.sections })
+            : undefined,
+        };
+      });
+
+    const normalizedPages = pages.length > 0 ? pages : defaultPlan.site.pages;
+
+    if (!parsedSite || parsedPages.length === 0) {
+      trace.output = {
+        ...trace.output,
+        warning: "Invalid plan_project JSON shape: missing site/pages, used default pages fallback.",
+      };
     }
 
-    const normalizeStringArray = (value: unknown): string[] =>
-      Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
-
-    const normalizePlannedSection = (
-      value: unknown,
-      fallback: PlannedSectionSpec,
-      index: number
-    ): PlannedSectionSpec => {
-      const candidate = (value && typeof value === "object"
-        ? value
-        : {}) as Partial<PlannedSectionSpec>;
-      const fallbackType = fallback.type || `section-${index + 1}`;
-      return {
-        type: typeof candidate.type === "string" && candidate.type.trim() ? candidate.type : fallbackType,
-        intent:
-          typeof candidate.intent === "string" && candidate.intent.trim()
-            ? candidate.intent
-            : fallback.intent,
-        contentHints:
-          typeof candidate.contentHints === "string" && candidate.contentHints.trim()
-            ? candidate.contentHints
-            : fallback.contentHints,
-        fileName:
-          typeof candidate.fileName === "string" && candidate.fileName.trim()
-            ? candidate.fileName
-            : fallback.fileName,
-        primaryRoleIds:
-          normalizeStringArray(candidate.primaryRoleIds).length > 0
-            ? normalizeStringArray(candidate.primaryRoleIds)
-            : fallback.primaryRoleIds,
-        supportingCapabilityIds:
-          normalizeStringArray(candidate.supportingCapabilityIds).length > 0
-            ? normalizeStringArray(candidate.supportingCapabilityIds)
-            : fallback.supportingCapabilityIds,
-        sourceTaskLoopIds:
-          normalizeStringArray(candidate.sourceTaskLoopIds).length > 0
-            ? normalizeStringArray(candidate.sourceTaskLoopIds)
-            : fallback.sourceTaskLoopIds,
-      };
-    };
-
-    const mergeSections = (
-      fallbackSections: PlannedSectionSpec[],
-      incomingSections: unknown
-    ): PlannedSectionSpec[] => {
-      if (!Array.isArray(incomingSections) || incomingSections.length === 0) {
-        return sanitizeSectionsForProfile(fallbackSections, fallbackSections);
-      }
-      const merged = incomingSections
-        .map((section, index) =>
-          normalizePlannedSection(section, fallbackSections[index] ?? fallbackSections[0], index)
-        )
-        .filter((section) => !isLayoutSection(section.type));
-      return sanitizeSectionsForProfile(merged, fallbackSections);
-    };
-
-    const mergeLayoutSections = (
-      fallbackSections: PlannedSectionSpec[],
-      incomingLayoutSections: unknown
-    ): PlannedSectionSpec[] => {
-      if (!Array.isArray(incomingLayoutSections) || incomingLayoutSections.length === 0) {
-        return fallbackSections;
-      }
-      const merged = incomingLayoutSections
-        .map((section, index) =>
-          normalizePlannedSection(section, fallbackSections[index] ?? fallbackSections[0], index)
-        )
-        .filter((section) => isLayoutSection(section.type));
-      return merged.length > 0 ? merged : fallbackSections;
-    };
-
-    const mergePageDesignPlan = (
-      target: PageDesignPlan,
-      incomingPage: unknown
-    ): PageDesignPlan => {
-      if (!incomingPage || typeof incomingPage !== "object") {
-        return target;
-      }
-
-      const maybePlan = (incomingPage as { pageDesignPlan?: unknown }).pageDesignPlan;
-      return isPageDesignPlan(maybePlan) ? maybePlan : target;
-    };
-
-    const mergeAppScreenPlan = (
-      fallbackPlan: AppScreenPlan | undefined,
-      incomingPage: unknown,
-      fallbackSections: PlannedSectionSpec[],
-      description: string
-    ): AppScreenPlan | undefined => {
-      if (!appProfile) {
-        return undefined;
-      }
-      if (!incomingPage || typeof incomingPage !== "object") {
-        return fallbackPlan ?? deriveAppScreenPlanFromSections(fallbackSections, description);
-      }
-      const maybePlan = (incomingPage as { appScreenPlan?: unknown }).appScreenPlan;
-      if (isAppScreenPlan(maybePlan)) {
-        return maybePlan;
-      }
-      return fallbackPlan ?? deriveAppScreenPlanFromSections(fallbackSections, description);
+    const mergedBlueprint: PlannedProjectBlueprint = {
+      ...defaultPlan,
+      // Guardrails are deterministic — always use defaults, don't ask the LLM.
+      projectGuardrailIds: inferProjectGuardrailDefaults(),
+      site: {
+        ...defaultPlan.site,
+        layoutSections: parsedLayoutSections ?? defaultPlan.site.layoutSections,
+        pages: normalizedPages,
+      },
     };
 
     return {
-      ...profileFallbackPlan,
-      projectGuardrailIds: mergeProjectGuardrailIds(
-        parsed.projectGuardrailIds,
-        profileFallbackPlan.projectGuardrailIds
-      ),
-      site: {
-        ...profileFallbackPlan.site,
-        layoutSections: mergeLayoutSections(profileFallbackPlan.site.layoutSections, parsed.site?.layoutSections),
-        pages: profileFallbackPlan.site.pages.map((page) => {
-          const incomingPage = Array.isArray(parsed.site?.pages)
-            ? parsed.site.pages.find(
-              (candidate) =>
-                candidate &&
-                typeof candidate === "object" &&
-                (candidate as { slug?: unknown }).slug === page.slug
-            )
-            : undefined;
-
-          const mergedSections = mergeSections(
-            page.sections,
-            (incomingPage as { sections?: unknown } | undefined)?.sections
-          );
-
-          return {
-            ...page,
-            pageDesignPlan: mergePageDesignPlan(page.pageDesignPlan, incomingPage),
-            sections: sanitizeSectionsForProfile(
-              mergedSections.length > 0 ? mergedSections : page.sections,
-              page.sections
-            ),
-            appScreenPlan: mergeAppScreenPlan(
-              page.appScreenPlan,
-              incomingPage,
-              mergedSections.length > 0 ? mergedSections : page.sections,
-              page.description
-            ),
-          };
-        }),
+      blueprint: clampPageSections(mergedBlueprint),
+      trace,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      blueprint: clampPageSections(defaultPlan),
+      trace: {
+        llmCall: {
+          model,
+          systemPrompt,
+          userMessage,
+          rawResponse: `[plan_project failed — using default plan]\n${message}`,
+        },
+        output: { fallbackToDefaultPlan: true },
       },
     };
-  } catch {
-    return profileFallbackPlan;
   }
 }

@@ -15,6 +15,8 @@ export async function callLLMWithTools(params: {
   model?: string;
   thinkingLevel?: string;
   executeToolOverrides?: Record<string, (args: Record<string, unknown>) => Promise<ToolResult | string>>;
+  /** Optional: called for every message added to the conversation history. Use to collect full trajectory. */
+  onMessage?: (msg: ChatMessage) => void;
 }): Promise<{ content: string; toolCalls: AgentToolCallRecord[] }> {
   const {
     systemPrompt,
@@ -31,6 +33,8 @@ export async function callLLMWithTools(params: {
     { role: "user", content: userMessage },
   ];
   const toolCalls: AgentToolCallRecord[] = [];
+  const emit = params.onMessage;
+  if (emit) { emit(messages[0]); emit(messages[1]); }
 
   for (let iteration = 0; iteration < maxIterations; iteration += 1) {
     let res;
@@ -72,6 +76,7 @@ export async function callLLMWithTools(params: {
     }
 
     messages.push(message as unknown as ChatMessage);
+    emit?.(message as unknown as ChatMessage);
 
     if (!message.tool_calls || message.tool_calls.length === 0) {
       return { content: message.content?.trim() ?? "", toolCalls };
@@ -92,11 +97,13 @@ export async function callLLMWithTools(params: {
         : await executeSystemTool(toolCall.function.name, parsedArgs);
 
       toolCalls.push({ name: toolCall.function.name, args: parsedArgs, result });
-      messages.push({
+      const toolMsg: ChatMessage = {
         role: "tool",
         tool_call_id: toolCall.id,
         content: typeof result === "string" ? result : JSON.stringify(result),
-      });
+      };
+      messages.push(toolMsg);
+      emit?.(toolMsg);
     }
   }
 
