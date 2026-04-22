@@ -89,9 +89,7 @@ async function persistSiteFileArtifact(
   );
 }
 
-type ProjectRuntimeContext = GenerateSectionParams["projectContext"] & {
-  projectGuardrailIds: GenerateSectionParams["projectGuardrailIds"];
-};
+type ProjectRuntimeContext = GenerateSectionParams["projectContext"];
 
 interface SectionBatchItem {
   scopeKey: string;
@@ -149,7 +147,6 @@ function buildProjectRuntimeContext(blueprint: PlannedProjectBlueprint): Project
       description: page.description,
       journeyStage: page.journeyStage,
     })),
-    projectGuardrailIds: blueprint.projectGuardrailIds,
     designKeywords: blueprint.experience.designIntent.keywords ?? [],
     rawUserInput: "",
   };
@@ -329,7 +326,6 @@ async function runSectionBatch(params: {
       : undefined;
     return stepGenerateSection({
       designSystem,
-      projectGuardrailIds: runtimeContext.projectGuardrailIds,
       projectContext: runtimeContext,
       section: item.section,
       outputFileRelative: item.outputFileRelative,
@@ -1006,7 +1002,6 @@ export async function runGenerateProject(
       // this step and consumed downstream. Full blueprint is still persisted in
       // final run/result artifacts.
       await persistJsonArtifact(artifactLogger, "plan_project", "output", {
-        projectGuardrailIds: blueprint.projectGuardrailIds,
         site: {
           layoutSections: blueprint.site.layoutSections.map((section) => ({
             type: section.type,

@@ -121,4 +121,4 @@ Pick the combination that fits the actual content:
 ### Output constraints
 
 - Return JSON only (no markdown).
-- `sections.length` must be between `3` and `5` inclusive.
+- `sections.length` must be between `3` and `4` inclusive.

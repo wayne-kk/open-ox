@@ -165,7 +165,6 @@ export interface PlannedProjectSiteBlueprint
 
 export interface PlannedProjectBlueprint
   extends Omit<ProjectBlueprint, "site"> {
-  projectGuardrailIds: GuardrailId[];
   site: PlannedProjectSiteBlueprint;
 }
 

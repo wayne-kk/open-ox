@@ -79,6 +79,7 @@ ${layoutSections
     loadSystem("frontend"),
     loadStepPrompt("composeLayout"),
     loadGuardrail("outputTsx"),
+    loadGuardrail("framerMotionVariants"),
   ]);
   const layoutModel = getModelForStep("compose_page");
   const meta = await callLLMWithMeta(systemPrompt, userMessage, 0.2, undefined, layoutModel);

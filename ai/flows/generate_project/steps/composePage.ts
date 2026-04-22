@@ -60,6 +60,7 @@ export default function Page() {
     loadSystem("frontend"),
     loadStepPrompt("composePage"),
     loadGuardrail("outputTsx"),
+    loadGuardrail("framerMotionVariants"),
   ]);
 
   const importStatements = pageSections

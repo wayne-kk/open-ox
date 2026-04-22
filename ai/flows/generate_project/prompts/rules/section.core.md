@@ -1,11 +1,11 @@
 ## Rule: Section Core
 
+Section-only constraints. **Output format and App Router-wide styling bans** (no `<style jsx>`, no duplicating `globals.css`, one-file TSX contract) are defined **only** in the **outputTsx** guardrail — this file does not restate them.
+
 ### Absolute Prohibitions
 
 - **Never include a navigation bar or footer** inside a section component. These are handled by the layout shell.
 - **Never add decorative vertical side labels** (rotated text like "TRENDING_2024" pinned to edges). These conflict with the global layout.
-- **Never use `<style jsx>` or `<style jsx global>`**. All styles come from `globals.css` and Tailwind utilities.
-- **Never redefine CSS classes or keyframes** that already exist in `globals.css`.
 
 ### Structure
 

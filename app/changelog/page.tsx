@@ -66,8 +66,6 @@ const CHANGELOG: ChangeEntry[] = [
     items: [
       "Traits 系统：SectionDesignPlan 中的 capabilityAssistIds 替换为结构化的 layout/motion/visual/interaction traits",
       "运行时 Skill 发现：移除全局 preselect_skills 步骤，每个 section 在生成时自行发现并选择 skill（score-based fallback）",
-      "Guardrail 自动发现：guardrailPolicy.ts 从 prompts/rules/ 目录扫描文件名，不再维护手写常量表",
-      "Guardrail 合并策略：plan_project 输出与 inferSectionGuardrailDefaults 取并集，模型写少了也不会丢默认 guardrail",
       "design_tokens ∥ section_generation：两者不再串行，Promise.all 并行执行",
       "repair_build 升级为 Agent 工具循环：使用 read_file / edit_file / write_file / run_build 工具，替代旧的 JSON 批量写入",
       "LLM 重试：chatCompletion 加入指数退避重试（500/502/503 + Thinking signature error），最多 2 次",

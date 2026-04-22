@@ -109,6 +109,7 @@ export async function stepGenerateScreen({
     loadGuardrail("screen.styles"),
     loadGuardrail("screen.typography"),
     loadGuardrail("outputTsx"),
+    loadGuardrail("framerMotionVariants"),
   ]);
   const userMessage = `## Project Context
 - Project: ${projectContext.projectTitle}

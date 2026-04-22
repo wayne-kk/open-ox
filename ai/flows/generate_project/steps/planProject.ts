@@ -1,5 +1,4 @@
 import { buildDefaultProjectPlan, buildDefaultAppScreenPlan } from "../planners/defaultProjectPlanner";
-import { inferProjectGuardrailDefaults } from "../planners/guardrailPolicy";
 import { composePromptBlocks, loadGuardrail, loadStepPrompt, writeSiteFile } from "../shared/files";
 import { callLLMWithMeta, extractJSON } from "../shared/llm";
 import { stepTraceFromLlmCompletion } from "../shared/llmTrace";
@@ -102,7 +101,7 @@ This product type ("${blueprint.brief.productScope.productType}") requires a per
 - The single section carries the full application UI (sidebar, main content, panels).
 - Name type and fileName after the product domain (e.g. "SocialFeed", "AnalyticsDashboard", "CommunityForum").`
     : `\n## Layout Mode: SPLIT SECTIONS
-Output 3–5 sections using appropriate archetypes from the palette in the system prompt.`;
+Output 3–4 sections using appropriate archetypes from the palette in the system prompt.`;
 
   const userMessage = `## Project: ${blueprint.brief.projectTitle}
 ${blueprint.brief.projectDescription}
@@ -197,8 +196,6 @@ ${blueprint.site.layoutSections.map((s) => `- ${s.type}: ${s.intent}`).join("\n"
 
     const mergedBlueprint: PlannedProjectBlueprint = {
       ...defaultPlan,
-      // Guardrails are deterministic — always use defaults, don't ask the LLM.
-      projectGuardrailIds: inferProjectGuardrailDefaults(),
       site: {
         ...defaultPlan.site,
         layoutSections: parsedLayoutSections ?? defaultPlan.site.layoutSections,

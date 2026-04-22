@@ -7,9 +7,8 @@ This app line uses **screen-first planning**. Do not plan with section-stacking 
 
 1. Keep structure valid JSON.
 2. Attach `pageDesignPlan` to each page.
-3. Keep `projectGuardrailIds` short and global.
-4. Include `appScreenPlan` on each page as the primary planning output.
-5. `sections` can be empty compatibility data and must not drive planning decisions.
+3. Include `appScreenPlan` on each page as the primary planning output.
+4. `sections` can be empty compatibility data and must not drive planning decisions.
 
 ### Single-page rule (critical)
 

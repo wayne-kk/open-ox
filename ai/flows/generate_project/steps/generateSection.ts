@@ -1,4 +1,5 @@
 import {
+  composePromptBlocks,
   formatSiteFile,
   getSkillPromptsRoot,
   loadGuardrail,
@@ -18,16 +19,10 @@ import {
   discoverSkills,
   discoverSkillsBySectionType,
 } from "../../../shared/skillDiscovery";
-import type {
-  GuardrailId,
-  PlannedSectionSpec,
-  StepTrace,
-} from "../types";
-import { inferSectionGuardrailDefaults } from "../planners/guardrailPolicy";
+import type { PlannedSectionSpec, StepTrace } from "../types";
 
 export interface GenerateSectionParams {
   designSystem: string;
-  projectGuardrailIds: GuardrailId[];
   projectContext: GenerateSectionProjectContext;
   section: PlannedSectionSpec;
   outputFileRelative: string;
@@ -346,14 +341,6 @@ async function discoverAndSelectSkill(
   };
 }
 
-// ── Guardrail Assembly ──────────────────────────────────────────────────
-
-function buildGuardrailBlocks(projectGuardrailIds: GuardrailId[], section: PlannedSectionSpec) {
-  const sectionDefaults = inferSectionGuardrailDefaults(section);
-  const allIds = Array.from(new Set([...projectGuardrailIds, ...sectionDefaults]));
-  return allIds.map((id) => loadGuardrail(id)).join("\n\n");
-}
-
 // ── Section Prompt ──────────────────────────────────────────────────────
 
 function buildSectionPromptBlocks(sectionType: string) {
@@ -367,67 +354,26 @@ function buildSectionPromptBlocks(sectionType: string) {
 }
 
 // ── System Prompt ───────────────────────────────────────────────────────
-
-const TAILWIND_MAPPING_GUIDE = `## Design System → Tailwind CSS v4 Mapping Guide
-
-The design system is the single source of truth. A separate build step converts it into \`globals.css\` with Tailwind v4 tokens. When writing component classes, follow these mapping rules:
-
-**Colors** — Design system color names map directly to Tailwind utilities:
-- A color named "accent" / "primary" / "background" etc. → use \`bg-accent\`, \`text-primary\`, \`border-background\` etc.
-- Pattern: \`--color-{name}\` in @theme → \`bg-{name}\`, \`text-{name}\`, \`border-{name}\`
-
-**Fonts** — Font names map to \`font-{name}\`:
-- "display" font → \`font-display\`, "body" font → \`font-body\`, "header" font → \`font-header\`
-
-**Shadows** — Named shadows map to \`shadow-{name}\`:
-- "glow" shadow → \`shadow-glow\`, "soft" shadow → \`shadow-soft\`
-
-**Animations** — Named animations map to \`animate-{name}\`:
-- "float" animation → \`animate-float\`, "pulse" animation → \`animate-pulse\`
-
-**Custom effects** — Use Tailwind utilities/arbitrary values (no prefixed helper classes):
-- Glass/blur effects → \`backdrop-blur-*\`, translucent backgrounds, border/opacity utilities
-- Clip-path shapes → \`[clip-path:polygon(...)]\`
-- Texture overlays → gradients/noise via Tailwind utilities and arbitrary values
-
-**Do NOT** define inline CSS variables, @keyframes, or custom classes that duplicate design system tokens. Trust that the Tailwind utilities exist.`;
-
-const SKILL_INTEGRATION_CONTRACT = `## Skill Integration Contract (critical)
-
-Skills are enhancement references, not page templates. Layout and rhythm always come from:
-1) Section Design Brief
-2) Section guardrails/rules
-3) Design system tokens
-
-When using any skill:
-- Keep the existing section outer wrapper model: \`<section className="w-full ... py-*"> + inner container\`.
-- Do NOT switch to full-screen takeover patterns (\`min-h-screen\`, fixed scene shells, standalone nav/hero app shell) unless the brief explicitly asks.
-- Do NOT rewrite section composition to a different archetype just to match a skill demo.
-- Preserve spacing guardrails (\`py\` ceiling, density target) and readability constraints.
-- Skills may influence visual treatment/effects/details, but must not override structure, route model, or global layout conventions.
-`;
-
+// Same as `generateScreen`: `composePromptBlocks` with explicit `loadGuardrail` calls (no runtime guardrail id discovery).
 function buildSystemPrompt(params: {
   section: PlannedSectionSpec;
-  projectGuardrailIds: GuardrailId[];
   skillPrompts: string[];
   designSystem: string;
 }): string {
-  const { section, projectGuardrailIds, skillPrompts, designSystem } = params;
+  const { section, skillPrompts, designSystem } = params;
   const selectedSkillPromptBlock = skillPrompts.filter(Boolean).join("\n\n");
 
-  return [
+  return composePromptBlocks([
     loadSystem("frontend"),
+    loadGuardrail("project.accessibility"),
     `## Design System\n${designSystem}`,
-    TAILWIND_MAPPING_GUIDE,
+    loadGuardrail("tailwindMappingGuide"),
     buildSectionPromptBlocks(section.type),
-    SKILL_INTEGRATION_CONTRACT,
+    loadGuardrail("skillIntegrationContract"),
     selectedSkillPromptBlock,
-    buildGuardrailBlocks(projectGuardrailIds, section),
+    loadGuardrail("framerMotionVariants"),
     loadGuardrail("outputTsx"),
-  ]
-    .filter(Boolean)
-    .join("\n\n");
+  ]);
 }
 
 // ── Formatting Helpers ──────────────────────────────────────────────────
@@ -624,7 +570,6 @@ function buildRetryHint(
 export async function stepGenerateSection(params: GenerateSectionParams): Promise<GenerateSectionResult> {
   const {
     designSystem,
-    projectGuardrailIds,
     projectContext,
     section,
     outputFileRelative,
@@ -659,7 +604,6 @@ export async function stepGenerateSection(params: GenerateSectionParams): Promis
 
   const systemPrompt = buildSystemPrompt({
     section,
-    projectGuardrailIds,
     skillPrompts: [componentSkillPrompt, ...technicalSkillPrompts],
     designSystem,
   });

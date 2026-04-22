@@ -6,7 +6,6 @@ import type {
   ProjectBlueprint,
   SectionSpec,
 } from "../types";
-import { inferProjectGuardrailDefaults } from "./guardrailPolicy";
 import { getPromptProfile } from "@/ai/prompts/core/profile";
 
 
@@ -179,7 +178,6 @@ export function buildDefaultProjectPlan(
   return {
     brief: blueprint.brief,
     experience: blueprint.experience,
-    projectGuardrailIds: inferProjectGuardrailDefaults(),
     site: {
       informationArchitecture: blueprint.site.informationArchitecture,
       layoutSections,

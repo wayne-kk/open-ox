@@ -1,10 +1,9 @@
 ## Rule: Section Styles
 
-All shared styling belongs in global CSS. Components consume only; they do not define.
+All shared styling belongs in global CSS. Components consume only; they do not define. Generic **TSX output** rules and the `<style jsx>` ban are **not** repeated here — they live in the **outputTsx** guardrail only.
 
 ### Forbidden in Components
 
-- `<style jsx>`, `<style jsx global>`, CSS-in-JS, or any component-scoped style tag — causes build errors in Next.js App Router
 - `@font-face`, `@keyframes`, global selectors, or reusable effect classes
 - Local redefinition of fonts, animations, textures, or glow effects that already exist in `globals.css`
 - `clip-path`, `polygon()`, or path-based shape clipping for section content

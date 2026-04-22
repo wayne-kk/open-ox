@@ -134,19 +134,21 @@ export default function GenerateProjectTracePage() {
             <li>
               <Code>loadSystem(&quot;frontend&quot;)</Code> → <Code>ai/prompts/systems/frontend.md</Code>
             </li>
+            <li>本次构建的设计系统正文（注入 Markdown）</li>
             <li>
-              <Code>section.default.md</Code> + 若有则 <Code>section.&#123;type&#125;.md</Code>
+              <Code>loadGuardrail(&quot;tailwindMappingGuide&quot;)</Code>、
+              <Code>section.default.md</Code> + 若有则 <Code>section.&#123;type&#125;.md</Code>、
+              <Code>loadGuardrail(&quot;skillIntegrationContract&quot;)</Code>
             </li>
-            <li>组件 skill 全文（若有）</li>
+            <li>组件 / 技术 skill 全文（若有）</li>
             <li>
-              <Code>projectGuardrailIds</Code> ∪ <Code>designPlan.guardrailIds</Code> → <Code>loadGuardrail</Code>（
-              <Code>prompts/rules/&#123;id&#125;.md</Code>）
+              <Code>loadGuardrail(&quot;project.consistency&quot;)</Code> 与 <Code>loadGuardrail(&quot;project.accessibility&quot;)</Code>（与 <Code>generateScreen</Code> 相同，显式固定）
             </li>
             <li>
-              <Code>designPlan.capabilityAssistIds</Code> → <Code>loadCapabilityAssist</Code>（capabilities / motions / layouts，解析见 §5）
+              <Code>loadGuardrail(&quot;outputTsx&quot;)</Code> 与 <Code>loadGuardrail(&quot;framerMotionVariants&quot;)</Code>
             </li>
             <li>
-              <Code>loadGuardrail(&quot;outputTsx&quot;)</Code>
+              （若流程启用）<Code>designPlan.capabilityAssistIds</Code> → <Code>loadCapabilityAssist</Code> — 与上表独立，解析见 §5
             </li>
           </ol>
           <P>重试时在整段 system 末尾追加 <Code>retryHint</Code>。</P>

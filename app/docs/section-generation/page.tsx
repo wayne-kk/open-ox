@@ -118,12 +118,11 @@ const results = await Promise.allSettled(
   items.map((item) =>
     stepGenerateSection({
       designSystem,
-      projectGuardrailIds: runtimeContext.projectGuardrailIds,
       projectContext: runtimeContext,
       section: item.section,
       outputFileRelative: item.outputFileRelative,
       pageContext: item.pageContext,
-      preselectedSkillId: item.preselectedSkillId,
+      sectionDesignBrief: item.sectionDesignBrief ?? "",
     })
   )
 );`}</Pre>
@@ -136,8 +135,9 @@ const results = await Promise.allSettled(
             <Code>buildSystemPrompt</Code> 按顺序拼接：前端基座（<Code>frontend.md</Code>）、
             section 通用规则（<Code>section.default.md</Code>）、按类型可选的 <Code>{"section.{type}.md"}</Code>（
             由 <Code>selectSectionPromptId</Code> 按约定文件名是否存在决定，无则回退 default）、
-            选中技能的完整 Markdown、guardrail（项目级 + <Code>designPlan.guardrailIds</Code>）、
-            能力增强片段（<Code>capabilityAssistIds</Code>）、以及输出形态约束（<Code>outputTsx</Code>）。
+            <Code>tailwindMappingGuide</Code> 与 <Code>skillIntegrationContract</Code> 规则、选中技能的完整 Markdown、
+            项目级 <Code>loadGuardrail(&quot;project.consistency&quot;)</Code> 与 <Code>loadGuardrail(&quot;project.accessibility&quot;)</Code>、
+            能力增强片段（<Code>capabilityAssistIds</Code>，若流程启用）以及 <Code>outputTsx</Code> / <Code>framerMotionVariants</Code>。
             逐步骤对照表与 skill 预选细节见{" "}
             <Link href="/docs/generate-project-trace" className="text-foreground underline underline-offset-4 hover:text-primary transition-colors">
               Prompt 拼装 Trace
