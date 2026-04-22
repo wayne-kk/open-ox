@@ -60,6 +60,11 @@ function chooseScreenSkillIds(plan: AppScreenPlan | undefined, keywords: string[
     }
   }
 
+  // Always include bottom tab bar skill — every app screen uses this shell.
+  if (hasSkillPrompt("screen.bottom.tabbar")) {
+    ids.push("screen.bottom.tabbar");
+  }
+
   return Array.from(new Set(ids.filter((id) => hasSkillPrompt(id))));
 }
 
