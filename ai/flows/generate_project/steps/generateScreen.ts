@@ -60,6 +60,11 @@ function chooseScreenSkillIds(plan: AppScreenPlan | undefined, keywords: string[
     }
   }
 
+  // Always include bottom tab bar skill — every app screen uses this shell.
+  if (hasSkillPrompt("screen.bottom.tabbar")) {
+    ids.push("screen.bottom.tabbar");
+  }
+
   return Array.from(new Set(ids.filter((id) => hasSkillPrompt(id))));
 }
 
@@ -114,7 +119,7 @@ export async function stepGenerateScreen({
   const userMessage = `## Project Context
 - Project: ${projectContext.projectTitle}
 - Description: ${projectContext.projectDescription}
-- Language: ${projectContext.language}
+- **Language**: ${projectContext.language} — ⚠️ CRITICAL: ALL user-facing text (labels, headings, buttons, placeholder text, status messages, tab titles, card copy, alt text) MUST be written in this language. Do NOT mix with other languages. Skill example text is structural only — replace it with real ${projectContext.language} content.
 
 ## Known Routes
 ${buildKnownRoutesBlock(projectContext.pages)}

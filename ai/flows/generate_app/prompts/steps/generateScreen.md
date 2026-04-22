@@ -30,6 +30,12 @@ If context indicates discovery/community/feed intent:
 - Keep one dominant feed surface with compact metadata and quick interactions.
 - Two-column card flow is allowed when readability remains strong; otherwise fall back to one column.
 
+## Language Rule (critical)
+
+- The project context specifies a `Language` field. ALL user-facing text — labels, headings, button copy, placeholder text, status messages, tab titles, card body, empty-state copy, and alt text — MUST be written in that language.
+- Do NOT mix languages. Do NOT fall back to English unless the project language is English.
+- Skill example text is structural guidance only — replace every example string with real content in the project language.
+
 ## Output Rules
 
 - Output only raw TSX code.
