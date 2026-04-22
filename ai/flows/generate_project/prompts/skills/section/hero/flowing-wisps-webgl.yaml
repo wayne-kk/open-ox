@@ -1,0 +1,39 @@
+id: flowing-wisps-webgl
+kind: component-skill
+sectionTypes: ["hero"]
+priority: 79
+fallback: false
+when:
+  designKeywords:
+    any:
+      [
+        "webgl",
+        "webgl1",
+        "fragment shader",
+        "shader background",
+        "full screen quad",
+        "flowing lines",
+        "wisps",
+        "wave glow",
+        "additive glow",
+        "screen blend",
+        "mix-blend-screen",
+        "glass nav",
+        "pill nav",
+        "ai hero",
+        "cognition",
+        "dark hero"
+      ]
+    none:
+      [
+        "editorial",
+        "magazine",
+        "warm",
+        "organic",
+        "botanical",
+        "retro",
+        "illustration-only",
+        "no motion"
+      ]
+notes: >
+  WebGL flowing wisps hero with glass nav; colors map to design tokens.

@@ -82,15 +82,15 @@ When this skill is selected, the generated hero MUST include all of the followin
 2. A Three.js scene with `IcosahedronGeometry(1.2~1.5, 0)` and `MeshStandardMaterial` using `flatShading: true`.
 3. At least 3 lights: ambient + key directional + colored rim/back light.
 4. A render loop with:
-   - autonomous rotation,
-   - gentle floating (`sin(elapsedTime)`),
-   - mouse-driven offset/rotation (lerped smoothing).
+  - autonomous rotation,
+  - gentle floating (`sin(elapsedTime)`),
+  - mouse-driven offset/rotation (lerped smoothing).
 5. Proper lifecycle safety:
-   - `useEffect` setup and teardown,
-   - `cancelAnimationFrame`,
-   - remove listeners,
-   - `renderer.dispose()`,
-   - `geometry.dispose()` and `material.dispose()`.
+  - `useEffect` setup and teardown,
+  - `cancelAnimationFrame`,
+  - remove listeners,
+  - `renderer.dispose()`,
+  - `geometry.dispose()` and `material.dispose()`.
 6. GSAP staged reveal for badge, heading text lines, and CTA.
 
 If any item above is missing, the result is NOT considered a valid geometric-webgl implementation.

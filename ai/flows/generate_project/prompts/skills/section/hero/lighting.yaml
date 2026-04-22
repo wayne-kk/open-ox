@@ -5,9 +5,34 @@ priority: 60
 fallback: false
 when:
   designKeywords:
-    any: ["lightning",  "webgl", "plasma", "particle-field", "generative-art"]
-    none: ["editorial", "magazine", "luxury", "minimal", "clean", "nature", "organic", "warm", "festive", "celebration"]
+    any:
+      [
+        "lightning",
+        "lightning bolt",
+        "thunder",
+        "electric",
+        "plasma",
+        "webgl",
+        "shader",
+        "three",
+        "threejs",
+        "procedural lightning",
+        "generative-art",
+        "storm",
+        "放电"
+      ]
+    none:
+      [
+        "editorial",
+        "magazine",
+        "luxury",
+        "minimal",
+        "clean",
+        "nature",
+        "organic",
+        "warm",
+        "festive",
+        "celebration"
+      ]
 notes: >
-  Use ONLY for heroes where WebGL lightning/shader is the explicit design intent.
-  Requires framer-motion and client-side rendering. Do NOT use for general tech,
-  neon, or cyber aesthetics — use impactful instead.
+  Lightning/plasma WebGL hero only—not generic neon, cyber, or plain tech UI.

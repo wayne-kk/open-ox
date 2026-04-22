@@ -10,14 +10,23 @@ when:
         "webgl",
         "three",
         "threejs",
+        "3d",
+        "icosahedron",
+        "faceted",
+        "low poly",
         "geometry",
-        "shader",
-        "3D"
+        "analysis console",
+        "sci-fi ui",
+        "measurement marks",
+        "corner brackets",
+        "indigo",
+        "violet",
+        "radial vignette",
+        "staged reveal",
+        "badge reveal",
+        "gsap",
+        "scrolltrigger"
       ]
     none: ["editorial", "magazine", "luxury", "minimal", "warm", "organic", "nature"]
 notes: >
-  Use for hero sections with geometric frame language and Three.js faceted mesh
-  visuals. Emphasizes dark technical aesthetics, precise line-work, and staged
-  reveal animation.
-
-
+  Sci-fi hero: WebGL faceted mesh, indigo/violet accents, GSAP staged reveals.

@@ -9,14 +9,17 @@ when:
       [
         "three",
         "threejs",
-        "3d",
+        "three.js",
         "webgl",
         "shader",
+        "3d",
         "三维",
-        "3D",
         "着色器",
+        "gltf",
+        "glb",
+        "animation mixer",
+        "orbit controls"
       ]
     none: ["minimal", "static", "editorial", "magazine"]
 notes: >
-  Technical guidance for Three.js motion architecture: scene lifecycle, mixer or
-  procedural animation patterns, timing control, performance, and cleanup.
+  Three.js motion: scene lifecycle, animation timing, perf, dispose/cleanup.

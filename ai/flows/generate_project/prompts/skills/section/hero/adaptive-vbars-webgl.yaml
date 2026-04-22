@@ -7,23 +7,18 @@ when:
   designKeywords:
     any:
       [
-        "webgl",
-        "three",
-        "threejs",
-        "icosahedron",
-        "faceted",
         "v bars",
         "gradient bars",
+        "v-shaped",
+        "luminous bars",
         "cognition",
         "adaptive",
         "emerald",
         "cyan",
         "glass",
         "gsap",
-        "scrolltrigger",
-        "3D"
+        "scrolltrigger"
       ]
     none: ["editorial", "magazine", "warm", "organic", "botanical", "retro"]
 notes: >
-  Use for hero sections with dynamic V-shaped gradient bar background, faceted
-  Three.js center object, and restrained glassmorphism framing.
+  CSS V-bar gradient hero + glass nav + GSAP reveal; no Three.js centerpiece.
