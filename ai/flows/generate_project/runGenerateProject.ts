@@ -13,7 +13,7 @@ import { stepComposeLayout } from "./steps/composeLayout";
 import { stepComposePage } from "./steps/composePage";
 import { stepGenerateScreen } from "./steps/generateScreen";
 import { stepGenerateProjectDesignSystem } from "./steps/generateProjectDesignSystem";
-import { stepMatchDesignSystemSkill } from "./steps/matchDesignSystemSkill";
+import { stepMatchDesignSystemSkill, type DesignSystemMatchResult } from "./steps/matchDesignSystemSkill";
 import { stepGenerateSection } from "./steps/generateSection";
 import { stepInstallDependencies } from "./steps/installDependencies";
 import { stepInferDesignIntent, type DesignIntentResult } from "./steps/inferDesignIntent";
@@ -1004,13 +1004,16 @@ export async function runGenerateProject(
         return `## Design Intent\n- Mood: ${di.mood.join(", ")}\n- Color Direction: ${di.colorDirection}\n- Style: ${di.style}\n- Keywords: ${di.keywords.join(", ")}`;
       })();
 
-      // Phase 1: plan_project + skill matching run in parallel
-      const [planOutcome, matchResult] = await Promise.all([
-        stepPlanProject(normalizedBlueprint).then((out) => {
-          logger.logStep("plan_project", "ok", "section generation plans prepared", undefined, out.trace);
-          return out;
-        }),
-        stepMatchDesignSystemSkill({
+      // Phase 1: plan_project + (optionally) skill matching run in parallel
+      const skillMatchingEnabled = options?.enableSkills !== false;
+
+      const planPromise = stepPlanProject(normalizedBlueprint).then((out) => {
+        logger.logStep("plan_project", "ok", "section generation plans prepared", undefined, out.trace);
+        return out;
+      });
+
+      const matchPromise: Promise<DesignSystemMatchResult> = skillMatchingEnabled
+        ? stepMatchDesignSystemSkill({
           userInput,
         }).then((result) => {
           logger.logStep(
@@ -1026,8 +1029,18 @@ export async function runGenerateProject(
             logger.attachTrace("match_design_system_skill", result.trace);
           }
           return result;
-        }),
-      ]);
+          })
+        : Promise.resolve<DesignSystemMatchResult>({
+          matched: false,
+          skillId: null,
+          reason: "skill matching disabled by user",
+          trace: {},
+        }).then((result) => {
+          logger.logStep("match_design_system_skill", "ok", "skipped — disabled by user");
+          return result;
+        });
+
+      const [planOutcome, matchResult] = await Promise.all([planPromise, matchPromise]);
 
       blueprint = planOutcome.blueprint;
 

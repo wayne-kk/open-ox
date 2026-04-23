@@ -7,18 +7,23 @@ when:
   designKeywords:
     any:
       [
-        "v bars",
-        "gradient bars",
-        "v-shaped",
-        "luminous bars",
-        "cognition",
-        "adaptive",
-        "emerald",
-        "cyan",
-        "glass",
-        "gsap",
-        "scrolltrigger"
+        "ai workflow",
+        "automation",
+        "data platform",
+        "saas",
+        "devtool",
+        "system monitoring",
+        "enterprise",
+        "b2b",
+        "developer",
+        "technical",
+        "precision",
+        "commanding",
+        "forward-thinking",
+        "futuristic",
+        "deep black"
       ]
-    none: ["editorial", "magazine", "warm", "organic", "botanical", "retro"]
+    none: ["warm", "organic", "playful", "retro", "pastel", "editorial"]
 notes: >
-  CSS V-bar gradient hero + glass nav + GSAP reveal; no Three.js centerpiece.
+  Use for hero sections with dynamic V-shaped gradient bar background, faceted
+  Three.js center object, and restrained glassmorphism framing.

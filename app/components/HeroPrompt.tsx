@@ -67,7 +67,7 @@ export function HeroPrompt() {
   const [chips, setChips] = useState<InjectedChip[]>([]);
   const [focused, setFocused] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [enableSkills, setEnableSkills] = useState(false);
+  const [enableSkills, setEnableSkills] = useState(true);
   const [useDatabasePrompts, setUseDatabasePrompts] = useState(true);
   const [generationMode, setGenerationMode] = useState<GenerationMode>("web");
 

@@ -7,33 +7,13 @@ when:
   designKeywords:
     any:
       [
-        "starfield",
-        "stars",
-        "starry",
-        "cosmic",
-        "space",
-        "orbit",
-        "orbital",
-        "planet",
-        "horizon",
-        "macOS",
-        "celestial",
-        "parallax",
-        "scroll parallax",
-        "glassmorphism",
-        "glass",
-        "protocol",
-        "system status",
-        "telemetry",
-        "mono",
-        "monospace",
-        "serif headline",
-        "display serif",
-        "sci-fi",
-        "science fiction",
-        "fintech",
-        "command center",
-        "hud"
+       "Aurora",
+       "Ethereal",
+       "Glow",
+       "AI",
+       "Web3",
+       "Game",
+       "Date"
       ]
     none:
       [

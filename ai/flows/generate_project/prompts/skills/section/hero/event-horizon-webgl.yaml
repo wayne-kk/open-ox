@@ -7,27 +7,23 @@ when:
   designKeywords:
     any:
       [
-        "webgl",
-        "three",
-        "threejs",
-        "3d",
-        "black hole",
-        "event horizon",
-        "accretion",
-        "accretion disk",
-        "singularity",
+        "data platform",
+        "data integration",
+        "analytics",
+        "infrastructure",
+        "intelligence system",
+        "enterprise",
+        "b2b",
+        "technical leader",
+        "convergence",
+        "gravitational",
         "cosmic",
-        "wormhole",
-        "orbit",
-        "particles",
-        "particle disk",
-        "additive glow",
-        "gsap",
-        "scrolltrigger",
-        "glass",
-        "futuristic",
-        "sci-fi frame"
+        "mysterious",
+        "depth",
+        "dark space",
+        "particle"
       ]
-    none: ["editorial", "magazine", "botanical", "organic", "warm", "cute"]
+    none: ["warm", "friendly", "playful", "pastel", "minimal", "editorial"]
 notes: >
-  Accretion-disk WebGL hero: particle ring, frame, GSAP text reveal, glass UI.
+  Use for hero sections featuring a black-hole-like particle accretion disk in
+  WebGL, with framed sci-fi UI, masked text reveal, and restrained glassmorphism.

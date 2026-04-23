@@ -407,6 +407,8 @@ function buildUserMessage(params: {
   componentSkillMetadataBlock: string;
   technicalSkillMetadataBlock: string;
   sectionDesignBrief: string;
+  /** When false, a component skill was selected — do not use describePageSections output as visual guidance. */
+  useDescribePageBrief: boolean;
   layoutMode?: LayoutMode;
 }) {
   const {
@@ -416,17 +418,34 @@ function buildUserMessage(params: {
     componentSkillMetadataBlock,
     technicalSkillMetadataBlock,
     sectionDesignBrief,
+    useDescribePageBrief,
     layoutMode,
   } = params;
 
   const wholePageModeBlock =
     layoutMode === "whole-page"
       ? `## Generation mode: whole-page (single-surface product)
-- This file is the **entire product surface** for the route — not one marketing block among many. Implement the full shell / game / tool / app described in the brief.
-- If **Section Design Brief** or product intent conflict with generic marketing rules in older instructions, this whole-page spec wins.
+- This file is the **entire product surface** for the route — not one marketing block among many. Implement the full shell / game / tool / app ${
+        useDescribePageBrief
+          ? "described in the brief"
+          : "from section intent, content hints, and product context (page-level section brief is omitted because a component skill is in use)"
+      }.
+- ${
+        useDescribePageBrief
+          ? "If **Section Design Brief** or product intent conflict with generic marketing rules in older instructions, this whole-page spec wins."
+          : "If product intent conflicts with generic marketing rules in older instructions, this whole-page spec wins."
+      }
 
 `
       : "";
+
+  const sectionDesignBriefBody = useDescribePageBrief
+    ? sectionDesignBrief
+    : `_(Omitted: a **component skill** in the system prompt is the primary layout and visual reference for this section. Rely on that skill, the design system, and the section intent / content hints below — not the separate page section description from the describe step.)_`;
+
+  const closingGuidance = useDescribePageBrief
+    ? `The Section Design Brief above is your primary visual guidance — follow its background and atmosphere direction closely.`
+    : `The **component skill** in the system prompt is your primary layout and visual guide. Follow it with the design system and section intent.`;
 
   return `${wholePageModeBlock}## Project Context
 - **Project**: ${projectContext.projectTitle}
@@ -446,14 +465,14 @@ ${buildPageContextBlock(pageContext)}
 - **Content Hints**: ${section.contentHints}
 
 ## Section Design Brief
-${sectionDesignBrief}
+${sectionDesignBriefBody}
 
 ${componentSkillMetadataBlock ? `## Available Component Skills\nThe selected component skill (if any) is already included in the system prompt.\n${componentSkillMetadataBlock}` : ""}
 ${technicalSkillMetadataBlock ? `## Available Technical Skills\nThese are implementation guidance skills that may be layered with component skills.\n${technicalSkillMetadataBlock}` : ""}
 
 Generate the complete ${section.fileName}.tsx component.
 Use the design system and project context to make all design decisions (layout, visual style, motion, interaction).
-The Section Design Brief above is your primary visual guidance — follow its background and atmosphere direction closely.`;
+${closingGuidance}`;
 }
 
 // ── Validation ──────────────────────────────────────────────────────────
@@ -618,6 +637,9 @@ export async function stepGenerateSection(params: GenerateSectionParams): Promis
 
   const skillId = componentSkillId ?? technicalSkillIds[0] ?? null;
 
+  /** Scheme A: when a component skill is selected, do not use describePageSections output as visual guidance. */
+  const useDescribePageBrief = !componentSkillId;
+
   const systemPrompt = buildSystemPrompt({
     section,
     skillPrompts: [componentSkillPrompt, ...technicalSkillPrompts],
@@ -632,6 +654,7 @@ export async function stepGenerateSection(params: GenerateSectionParams): Promis
     componentSkillMetadataBlock,
     technicalSkillMetadataBlock,
     sectionDesignBrief,
+    useDescribePageBrief,
     layoutMode,
   });
 
@@ -693,6 +716,7 @@ export async function stepGenerateSection(params: GenerateSectionParams): Promis
         componentSkillId,
         technicalSkillIds,
         componentSkillScores,
+        useDescribePageBrief,
         pageContext: pageContext ? { slug: pageContext.slug, title: pageContext.title } : null,
         layoutMode: layoutMode ?? "split-sections",
       },

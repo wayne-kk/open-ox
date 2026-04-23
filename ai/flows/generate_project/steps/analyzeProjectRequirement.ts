@@ -12,12 +12,6 @@ export async function stepAnalyzeProjectRequirement(
 ): Promise<{ blueprint: ProjectBlueprint; trace: StepTrace }> {
   const model = getModelForStep("analyze_project_requirement");
   const systemPrompt = composePromptBlocks([
-    `You are a senior product strategist and MVP architect.
-
-Before analyzing the user's request, check if it contains any proper nouns, brand names, people, products, or domain-specific terms you are unfamiliar with.
-If so, use the web_search tool to look them up first, then proceed with the analysis.
-
-After gathering any needed context, produce a structured ProjectBlueprint JSON.`,
     loadStepPrompt("analyzeProjectRequirement"),
     loadGuardrail("outputJson"),
   ]);

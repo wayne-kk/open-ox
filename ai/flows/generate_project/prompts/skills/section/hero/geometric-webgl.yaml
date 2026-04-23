@@ -7,26 +7,26 @@ when:
   designKeywords:
     any:
       [
-        "webgl",
-        "three",
-        "threejs",
         "3d",
-        "icosahedron",
-        "faceted",
-        "low poly",
-        "geometry",
-        "analysis console",
-        "sci-fi ui",
-        "measurement marks",
-        "corner brackets",
-        "indigo",
+        "generative",
+        "creative",
+        "computational",
+        "scientific",
+        "creator",
+        "researcher",
+        "innovator",
+        "exploratory",
+        "mysterious",
+        "sci-fi",
+        "intellectual",
+        "bold",
         "violet",
-        "radial vignette",
-        "staged reveal",
-        "badge reveal",
-        "gsap",
-        "scrolltrigger"
+        "crystalline"
       ]
-    none: ["editorial", "magazine", "luxury", "minimal", "warm", "organic", "nature"]
+    none: ["warm", "organic", "casual", "retro", "photography", "illustration"]
 notes: >
-  Sci-fi hero: WebGL faceted mesh, indigo/violet accents, GSAP staged reveals.
+  Use for hero sections with geometric frame language and Three.js faceted mesh
+  visuals. Emphasizes dark technical aesthetics, precise line-work, and staged
+  reveal animation.
+
+
