@@ -1,7 +1,7 @@
 ---
 title: luxury
 created: '2026-04-17T08:25:59.808Z'
-modified: '2026-04-17T08:26:38.609Z'
+modified: '2026-04-20T07:56:31.282Z'
 ---
 
 # luxury
@@ -90,11 +90,11 @@ modified: '2026-04-17T08:26:38.609Z'
 - **Implementation**: Fixed position overlay with SVG fractal noise filter, pointer-events disabled, z-index 50
 - **Purpose**: Adds tactile quality without being visible at first glance—creates "expensive paper" feel
 
+<!-- CHANGED: Image Treatment — removed grayscale default, images are full color by default -->
 **Image Treatment:**
-- **Default State**: Grayscale filter (`grayscale`) — Creates monochromatic editorial look
-- **Hover State**: Full color (`grayscale-0`) — Slow transition reveals color as reward
-- **Transition**: `duration-[1500ms]` to `duration-[2000ms]` — Ultra-slow, cinematic reveal
-- **Transform**: Subtle scale on hover (`group-hover:scale-105`) combined with color transition
+- **Default State**: Full color — Images display in their original color at all times, creating a rich, vivid editorial presentation
+- **Hover State**: Subtle scale (`group-hover:scale-105`) combined with shadow deepening — The interaction reward is lift and depth, not color reveal
+- **Transition**: `duration-[1500ms]` to `duration-[2000ms]` — Ultra-slow, cinematic transform and shadow evolution
 - **Shadow Evolution**: Images gain deeper shadows on hover to enhance lift effect
 - **Group Context**: Use `group` utility on parent for coordinated hover effects
 
@@ -153,8 +153,9 @@ modified: '2026-04-17T08:26:38.609Z'
 - Use thicker top border (`border-t-4`) with gold color (`border-t-[#D4AF37]`) to indicate importance
 - Pricing tier highlighting, special features
 
+<!-- CHANGED: Image Cards — removed grayscale mention -->
 **Image Cards:**
-- Image in grayscale with slow color reveal on hover
+- Images display in full color with slow cinematic scale on hover
 - Use specific aspect ratios: `aspect-[3/4]` for features, `aspect-[4/5]` for blog posts
 - Combine image scale with parent card hover state using `group` utility
 
@@ -180,12 +181,13 @@ modified: '2026-04-17T08:26:38.609Z'
 
 **Hover Effects:**
 - **Duration**: `duration-500` to `duration-700` for most interactions (text, backgrounds, borders)
-- **Duration (Images)**: `duration-[1500ms]` to `duration-[2000ms]` for image transitions
+- **Duration (Images)**: `duration-[1500ms]` to `duration-[2000ms]` for image scale and shadow transitions
 - **Easing**: `ease-out` or custom `cubic-bezier(0.25, 0.46, 0.45, 0.94)` for smooth luxury feel
 - **Color**: Gold accent (`#D4AF37`) appears subtly on hover (text, borders, underlines)
 - **Transform**: Subtle scale (`scale-105`) or translate — never abrupt
 - **Shadow Evolution**: Shadows deepen on hover for lift effect
-- **Testimonials**: Left border changes to gold, padding increases, avatar gains color
+<!-- CHANGED: Testimonials — removed grayscale avatar mention -->
+- **Testimonials**: Left border changes to gold, padding increases, author name turns gold
 - **FAQ**: Question text turns gold, icon square rotates 90° and border turns gold
 
 **Focus States:**
@@ -201,7 +203,8 @@ modified: '2026-04-17T08:26:38.609Z'
 **Micro-interactions:**
 - **FAQ Accordion**: Icon rotates 90°, border turns gold on open, content fades in with translateY animation
 - **Testimonial Stars**: Scale up slightly on card hover (`group-hover:scale-110`)
-- **Blog Cards**: Shadow deepens, image scales and gains color
+<!-- CHANGED: Blog Cards — removed "gains color" -->
+- **Blog Cards**: Shadow deepens, image scales subtly
 - **Navigation Links**: Gold color on hover with 500ms transition
 - **Button Animations**: Gold overlay slides from left on primary buttons, shadow deepens
 
@@ -238,7 +241,8 @@ These signature elements make Luxury/Editorial instantly recognizable and must b
 
 3. **Mixed Italic Headlines**: Within large headlines, alternate between regular and italic styling for specific words to create "spoken" cadence. Use gold color on italic words. Examples: "Curated *Excellence*", "The *Details*", "The *Process*". Headline splits across lines with specific words emphasized.
 
-4. **Grayscale Image Transitions**: All images default to grayscale filter with ultra-slow (1500-2000ms) transition to full color on hover. Combines with subtle scale transform (`group-hover:scale-105`) and shadow deepening. Applied consistently to hero, features, blog, and testimonial avatars.
+<!-- CHANGED: Bold Factor #4 — replaced grayscale transition with cinematic scale + shadow lift -->
+4. **Cinematic Image Hover**: All images display in full color by default. On hover, apply ultra-slow (1500-2000ms) subtle scale transform (`group-hover:scale-105`) combined with shadow deepening. The slow, deliberate motion creates a cinematic, tactile quality. Applied consistently to hero, features, blog, and testimonial images.
 
 5. **Visible Grid Lines**: Fixed vertical lines spanning viewport height, aligned with 12-column grid boundaries, at low opacity (20%). Four lines total (edges and middle thirds). Creates architectural editorial magazine feel. Pointer-events disabled.
 
@@ -250,7 +254,8 @@ These signature elements make Luxury/Editorial instantly recognizable and must b
 
 9. **Layered Shadows**: Subtle shadows create depth without being obvious. Images have box shadows that deepen on hover. Inner borders (`inset` shadows) frame images. Cards lift with shadow evolution. Never harsh—always soft and refined.
 
-10. **Testimonial Interactions**: Left border animation (changes to gold and increases padding on hover), grayscale avatar transitions to color, author name turns gold, stars scale up. Multi-layered coordinated effect.
+<!-- CHANGED: Bold Factor #10 — removed grayscale avatar transition -->
+10. **Testimonial Interactions**: Left border animation (changes to gold and increases padding on hover), author name turns gold, stars scale up. Multi-layered coordinated effect.
 
 ## Anti-Patterns (What to Avoid)
 
@@ -268,7 +273,8 @@ These mistakes will break the luxury aesthetic:
 10. **DO NOT make gold dominant** — Gold is an accent for hover/focus states and specific emphasis, not a primary color
 11. **DO NOT use small images** — Images should be large and prominent, portrait aspect ratios (3:4, 4:5) with shadows and inner borders
 12. **DO NOT use tight tracking on body text** — Only uppercase labels get wide tracking (0.2-0.3em). Body text uses default tracking.
-13. **DO NOT skip the grayscale filter** — All images must default to grayscale. Color is the reward on hover.
+<!-- CHANGED: Anti-Pattern #13 — removed grayscale rule entirely, replaced with full-color rule -->
+13. **DO NOT apply grayscale filters to images** — All images must display in full color by default. The luxury feel comes from rich photography, not desaturation. Hover interactions use scale and shadow, not color reveal.
 14. **DO NOT use generic mobile layouts** — Maintain the core aesthetic on mobile with proper scaling, not generic stacking
 
 ## Animation & Motion (Cinematic Timing)
@@ -288,12 +294,13 @@ These mistakes will break the luxury aesthetic:
 
 **Transition Properties:**
 - Combine multiple properties: `transition-all` or specific `transition-[colors,transform]`
-- Image transforms: Combine `scale` (1 to 1.05) with `grayscale` (1 to 0) in same transition
+<!-- CHANGED: removed grayscale from image transform description -->
+- Image transforms: Subtle `scale` (1 to 1.05) combined with shadow deepening in same transition
 - Button fills: Use transform on absolute positioned overlay rather than background color change
 
 **Hover Effects:**
 - Delay feels intentional — user must pause on element for effect to complete
-- Multiple effects layer together (scale + color + grayscale) for richness
+- Multiple effects layer together (scale + shadow) for richness
 - Text color changes are instant or faster (300ms) while backgrounds are slower
 
 ## Accessibility Considerations
@@ -343,7 +350,8 @@ These mistakes will break the luxury aesthetic:
   - Hero: Smaller type scale `text-5xl` (instead of text-9xl), smaller line and decorative elements
   - Testimonials: Smaller left padding `pl-6` (instead of pl-8)
   - Footer CTA: Stack email input and button vertically with `flex-col` on small screens
-  - Maintain core aesthetic: grayscale images, gold accents, slow animations
+<!-- CHANGED: removed "grayscale images" from maintained aesthetic list -->
+  - Maintain core aesthetic: full-color images, gold accents, slow animations
 
 - **Tablet (768px - 1024px)**:
   - Begin introducing grid layouts (2-3 columns)
@@ -360,7 +368,6 @@ These mistakes will break the luxury aesthetic:
 
 **Performance:**
 - Use CSS transforms (translate, scale) for animations — GPU accelerated
-- Grayscale filter is performant in modern browsers
 - Fixed gridlines and noise overlay use minimal resources
 - Shadows use rgba with low opacity for minimal render cost
 

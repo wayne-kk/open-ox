@@ -1,0 +1,53 @@
+id: starfield-planet-horizon
+kind: component-skill
+sectionTypes: ["hero"]
+priority: 56
+fallback: false
+when:
+  designKeywords:
+    any:
+      [
+        "starfield",
+        "stars",
+        "starry",
+        "cosmic",
+        "space",
+        "orbit",
+        "orbital",
+        "planet",
+        "horizon",
+        "macOS",
+        "celestial",
+        "parallax",
+        "scroll parallax",
+        "glassmorphism",
+        "glass",
+        "protocol",
+        "system status",
+        "telemetry",
+        "mono",
+        "monospace",
+        "serif headline",
+        "display serif",
+        "sci-fi",
+        "science fiction",
+        "fintech",
+        "command center",
+        "hud"
+      ]
+    none:
+      [
+        "webgl",
+        "three",
+        "threejs",
+        "shader",
+        "three.js",
+        "particle",
+        "particles",
+        "canvas",
+        "generative",
+        "3d",
+        "wireframe"
+      ]
+notes: >
+  CSS starfield + blurred planet; scroll parallax; glass UI; mono + display serif.
