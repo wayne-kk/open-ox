@@ -1,0 +1,38 @@
+id: screen-blend-orbs-hero
+kind: component-skill
+sectionTypes: ["hero"]
+priority: 58
+fallback: false
+when:
+  designKeywords:
+    any:
+      [
+        "saas",
+        "live session",
+        "creative tool",
+        "night mode",
+        "ambient",
+        "bokeh",
+        "glow",
+        "dense headline",
+        "app launch",
+        "futuristic"
+      ]
+    none:
+      [
+        "webgl",
+        "three",
+        "threejs",
+        "shader",
+        "fragment",
+        "wireframe",
+        "mesh",
+        "canvas animation",
+        "particle",
+        "particles",
+        "starfield",
+        "planet",
+        "horizon"
+      ]
+notes: >
+  Blurred screen-blend orbs, difference nav, IO stagger; hero-only, tokens not demo hex.

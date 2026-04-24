@@ -7,13 +7,16 @@ when:
   designKeywords:
     any:
       [
-       "Aurora",
-       "Ethereal",
-       "Glow",
-       "AI",
-       "Web3",
-       "Game",
-       "Date"
+        "fintech",
+        "enterprise",
+        "space opera",
+        "orbital",
+        "mission control",
+        "sovereign",
+        "ethereal",
+        "horizon glow",
+        "telemetry",
+        "deep black"
       ]
     none:
       [
@@ -30,4 +33,4 @@ when:
         "wireframe"
       ]
 notes: >
-  CSS starfield + blurred planet; scroll parallax; glass UI; mono + display serif.
+  Starfield + fixed bottom-right limb disc (radial@50% 0%, 40px blur); parallax; hero-only.

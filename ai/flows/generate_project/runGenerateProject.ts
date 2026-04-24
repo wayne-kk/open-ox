@@ -1,7 +1,7 @@
 import { clearTemplate } from "@/lib/clearTemplate";
 import { getSiteRoot as projectManagerGetSiteRoot } from "@/lib/projectManager";
 import { setSiteRoot, getSiteRoot } from "@/ai/tools/system/common";
-import { setSectionSkillsEnabled, getModelId } from "@/lib/config/models";
+import { getModelId } from "@/lib/config/models";
 import { validateSkillFrontmatter } from "@/ai/shared/skillDiscovery";
 import { execSync } from "child_process";
 import { formatSiteFile, syncSiteValidationMarkers, readSiteFile, writeSiteFile, getSkillPromptsRoot } from "./shared/files";
@@ -866,10 +866,6 @@ export async function runGenerateProject(
     userInput,
     getModelId()
   );
-
-  // Set section skills toggle — default off, user can enable from UI
-  // Section skills are always enabled
-  setSectionSkillsEnabled(true);
 
   // When a projectId is provided, point SITE_ROOT at the project directory and
   // skip clearing the template (the project dir was already initialised by the

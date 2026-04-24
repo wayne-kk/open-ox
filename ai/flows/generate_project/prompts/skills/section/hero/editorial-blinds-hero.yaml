@@ -1,0 +1,37 @@
+id: editorial-blinds-hero
+kind: component-skill
+sectionTypes: ["hero"]
+priority: 60
+fallback: false
+when:
+  designKeywords:
+    any:
+      [
+        "editorial",
+        "magazine spread",
+        "outdoor brand",
+        "expedition",
+        "landscape",
+        "film still",
+        "split hero",
+        "parallax",
+        "heritage",
+        "grayscale"
+      ]
+    none:
+      [
+        "webgl",
+        "three",
+        "shader",
+        "canvas",
+        "particle",
+        "particles",
+        "starfield",
+        "orb",
+        "orbs",
+        "glow orbs",
+        "screen blend",
+        "additive"
+      ]
+notes: >
+  B&W photo hero, text stack + parallax image blinds, noise overlay; token colors not demo hex.

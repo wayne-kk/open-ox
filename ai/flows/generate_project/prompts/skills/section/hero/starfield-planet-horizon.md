@@ -2,10 +2,12 @@
 
 Use this skill when `generateSection` should deliver a full-viewport, space-operatic hero: a dense micro-star field, a large soft “planet at the limb” or horizon glow hugging the bottom or corner, and foreground content in a glass/terminal-inspired layer. The motion is light scroll-driven parallax on the planet layer plus staggered content reveal—**no WebGL**—suitable for fintech, infra, or “autonomous system” briefs that ask for depth without 3D runtime cost.
 
+**Scope — hero only:** When the user or brief supplies a full one-pager, implement **only** this first-screen block: background layers (starfield + planet) + in-hero copy/CTAs + optional bottom “deck” telemetry. **Do not** pull in follow-on sections (feature grid, bento, logo strip, or footer) unless a separate `generateSection` call explicitly asks for them. An optional **fixed top bar** (brand mark + “system access” style control) may live in the same section **only** if the layout contract includes global chrome; otherwise keep nav in the app shell.
+
 ## Core Effect
 
 - **Starfield** — A tiled or layered field of 1–2px specular “stars” (radial or dot-like marks) on a very dark ground; low opacity, decorative, never steals contrast from type.
-- **Planet / horizon** — A huge circular or elliptical disc (often bottom-right) built from **blurred** radial layers so it reads as atmosphere + limb light; it sits under content and can drift with scroll.
+- **Planet / horizon** — A huge **circular** disc (often **bottom-right**) built from a **radial gradient** (limb/highlight at the **top** of the circle) plus **heavy blur** so it reads as atmosphere + warm limb light; it must remain **visually present** in every valid implementation (never omitted). It sits under content and can drift with scroll.
 - **Foreground** — Expressive **display** headline, optional system-style eyebrow line, subcopy, primary + secondary actions; optional “telemetry” micro-labels (mono) for atmosphere.
 - **Scroll behavior** — Vertical scroll nudges the planet (translate) and may subtly grow scale; must be throttled or passive-listener safe and **removed on unmount**.
 
@@ -20,6 +22,24 @@ Use this skill when `generateSection` should deliver a full-viewport, space-oper
 1. **Z-order** (bottom → top): (a) root background color from tokens; (b) starfield layer `fixed` or `absolute` inset-0, `pointer-events-none`, lowest decorative z; (c) planet layer same—must not intercept clicks; (d) main section content `relative` with higher z and readable padding; (e) optional absolute footer telemetry inside the section.
 2. **Viewport** — Hero section is at least one full viewport height for the primary message; overflow handled so horizontal scroll is not introduced by the planet blur (`overflow-x-hidden` on a wrapping ancestor if needed).
 
+### Planet horizon — canonical layout (do not drop)
+
+The **planet-horizon** layer is part of the **signature** of this `id`. Generated output **MUST** include a dedicated element (e.g. `.planet-horizon`) with **at least** the following **geometry and treatment** (colors map to design tokens; stop **positions** follow this structure):
+
+| Property | Required pattern |
+|----------|------------------|
+| `position` | `fixed` (or equivalent so it tracks the viewport) |
+| placement | **Bottom–right** limb: e.g. `bottom: -40vh; right: -20vw` (mirror for RTL if the brief says so) |
+| size | **Square** disc, e.g. `width: 120vw; height: 120vw` (both dimensions equal so `border-radius: 50%` is a true circle) |
+| shape | `border-radius: 50%` / `rounded-full` |
+| fill | `background: radial-gradient(circle at 50% 0%, …)` — gradient **centered on the top** of the box so the bright limb reads as a **horizon** arc (dark core → mid tones → **warm accent** band → `transparent` by ~70–75%) |
+| depth | `filter: blur(40px)` (or `blur-[40px]` in Tailwind), **not** a sharp disc |
+| strength | `opacity` ~**0.6** unless the brief calms it down |
+| interaction | `pointer-events: none` |
+| scroll | `transform` may be updated on scroll; optional `transition: transform 2s cubic-bezier(0.2, 0.8, 0.2, 1)` for non-scroll state changes; `z-index` stays **under** main hero content (e.g. `z-0` vs content `z-10`) |
+
+If the planet layer is **missing** or replaced by a **flat** color with no **large off-canvas blurred radial** disc, the result is **not** this skill.
+
 ## Motion Direction
 
 - **Staggered entrance** — Eyebrow, headline, subcopy, and CTAs appear in sequence (CSS `@keyframes` or `framer-motion`) with a short Y-translate + opacity; **stagger delays** ~0.2s / 0.5s / 0.8s / 1.1s class of rhythm (adapt to project motion tokens).
@@ -32,16 +52,18 @@ If the brief extends past the fold, a **feature band** can reuse glass panels, a
 
 ## Required Implementation Blueprint (Do Not Skip)
 
-1. **MUST** implement the background as two non-interactive layers: a **tiled or repeated star spec** (CSS `background` with `radial-gradient` spots and `background-size`, or equivalent) **and** a **blurred** large circular/elliptical “planet/limb” element positioned to sit partially off-canvas, both with `pointer-events: none` and z-index under content.
-2. **MUST** set **surface, text, border, and accent** colors from the **design system / section brief** (tokens, CSS variables, or theme classes)—not hardcoded one-off brand hexes from a reference.
+1. **MUST** implement the background as two non-interactive layers: a **tiled or repeated star spec** (CSS `background` with `radial-gradient` spots and `background-size`, or equivalent) **and** a **planet-horizon** disc as above (**fixed**, **bottom-right** limb, **~120vw** square, **`radial-gradient(circle at 50% 0%, …)`** with **~40px blur**, **~0.6 opacity**), both with `pointer-events: none` and z-index under content. The planet layer is **not optional** for this `id`.
+2. **MUST** set **surface, text, border, and accent** colors from the **design system / section brief** (tokens, CSS variables, or theme classes)—not hardcoded one-off brand hexes from a reference. The **radial-gradient stops** in the planet must use those roles (e.g. dark void → surface → `primary` / warm accent → transparent), matching the **structure** of the reference (dark core, limb band, cut to transparent), not a single flat fill.
 3. **MUST** use a **client component** for scroll-driven `transform` on the planet layer (or a hook that only runs in the browser), and **MUST** remove the scroll listener and reset/cancel any animation frame in the effect cleanup.
 4. **MUST** cap or clamp scroll-driven scale/translate so long scroll does not create extreme transform values or jank; use `passive: true` on scroll listeners if attaching to `window`.
 5. **MUST** stagger the hero’s eyebrow, title block, subcopy, and CTA group with a defined entrance; **MUST** respect `prefers-reduced-motion` by disabling parallax and heavy motion paths when reduced.
-6. **MUST** pair **display/serif** (or `font-display`) for the main headline with **monospace** for system-style labels/telemetry; follow project font configuration (no new Google Fonts unless the brief already names them; otherwise use configured families).
-7. **MUST** provide **primary** and **secondary** actions: primary = filled or soft-filled outline using accent/surface tokens; secondary = border-only or ghost. **MUST** use the project’s icon set (e.g. `lucide-react` per repo conventions) for arrow/icons—**no** CDN `lucide` script or `iconify-icon`.
-8. **MUST NOT** add `<script src="https://…">` for Tailwind, icons, or runtime deps; use the app’s build pipeline and imports only.
+6. **MUST** pair **display/serif** (or `font-display`) for the main headline with **monospace** for system-style labels/telemetry; follow project font configuration (no new Google Fonts unless the brief already names them; otherwise use configured families). A **second headline line** may use **gradient text** (e.g. `bg-clip-text` + token-derived stops) for the sub-phrase, so long as contrast remains acceptable.
+7. **MUST** (hero-only) **not** render placeholder feature columns, “integration” logo rows, or page footer as part of this section output.
+8. **MUST** provide **primary** and **secondary** actions: primary = filled or soft-filled outline using accent/surface tokens; secondary = border-only or ghost. **MUST** use the project’s icon set (e.g. `lucide-react` per repo conventions) for arrow/icons—**no** CDN `lucide` script or `iconify-icon`.
+9. **MUST NOT** add `<script src="https://…">` for Tailwind, icons, or runtime deps; use the app’s build pipeline and imports only.
+10. **MAY** include a **fixed** top **nav strip** (z above starfield, below modal layers): small brand mark or dot, logotype row, and a compact secondary control (e.g. “system access”) with hairline border—**MUST** map bar colors to `background` / `border` / `foreground` tokens, not the sample’s raw neutrals.
 
-If any of the above is missing, the output is **not** valid for `starfield-planet-horizon`.
+If any of the **MUST** (and hero-only) items above is missing, the output is **not** valid for `starfield-planet-horizon`.
 
 ## Reference TSX Skeleton (Adapt, Do Not Copy Blindly)
 
@@ -97,9 +119,9 @@ export function StarfieldPlanetHero() {
       />
       <div
         ref={planetRef}
-        className="pointer-events-none fixed -bottom-[40vh] -right-[20vw] z-0 h-[120vw] w-[120vw] rounded-full opacity-60 blur-3xl"
+        className="pointer-events-none fixed -bottom-[40vh] -right-[20vw] z-0 h-[120vw] w-[120vw] rounded-full opacity-60 [filter:blur(40px)] motion-safe:transition-transform motion-safe:duration-[2s] motion-safe:ease-[cubic-bezier(0.2,0.8,0.2,1)]"
         style={{
-          // Planet limb: map stops to --background, --accent, etc.
+          // Planet limb: circle at 50% 0% = horizon; map stops to tokens
           background:
             "radial-gradient(circle at 50% 0%, rgb(0 0 0) 40%, var(--surface-2) 60%, var(--primary) 65%, var(--primary-foreground) 68%, transparent 72%)",
         }}

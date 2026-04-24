@@ -9,19 +9,14 @@ when:
       [
         "3d",
         "generative",
-        "creative",
-        "computational",
-        "scientific",
-        "creator",
-        "researcher",
-        "innovator",
-        "exploratory",
-        "mysterious",
         "sci-fi",
-        "intellectual",
+        "mysterious",
+        "scientific",
+        "creative",
         "bold",
         "violet",
-        "crystalline"
+        "crystalline",
+        "computational"
       ]
     none: ["warm", "organic", "casual", "retro", "photography", "illustration"]
 notes: >

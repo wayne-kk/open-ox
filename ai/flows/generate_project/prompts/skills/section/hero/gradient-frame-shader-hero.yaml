@@ -1,0 +1,38 @@
+id: gradient-frame-shader-hero
+kind: component-skill
+sectionTypes: ["hero"]
+priority: 77
+fallback: false
+when:
+  designKeywords:
+    any:
+      [
+        "enterprise",
+        "saas",
+        "b2b",
+        "control plane",
+        "infrastructure",
+        "bento",
+        "glassmorphism",
+        "gradient frame",
+        "scroll reveal",
+        "cinematic"
+      ]
+    none:
+      [
+        "particle",
+        "particles",
+        "instanced",
+        "geometry nodes",
+        "gltf",
+        "model",
+        "starfield",
+        "planet",
+        "venetian",
+        "blinds",
+        "editorial spread",
+        "grayscale photo",
+        "css-only"
+      ]
+notes: >
+  Rounded shader card + gradient frame; GSAP mask reveal; Three quad; tokens via uniforms not demo GLSL rgb.

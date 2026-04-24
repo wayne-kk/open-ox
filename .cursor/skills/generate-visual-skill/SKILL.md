@@ -36,13 +36,30 @@ Must be valid for the project loader (`discoverSkills` / `parseSkillMetadata`). 
 | `sectionTypes` | Section skills: array of section names, e.g. `["hero"]`. Technical specs: `["*"]`. |
 | `priority` | Integer. **Set relative to sibling skills** in the same folder: stronger, more distinctive effects slightly higher; generic or heavy effects lower. There is no single magic number—compare existing YAMLs in that directory. |
 | `fallback` | Usually `false` unless the team explicitly marks a catch-all skill. |
-| `when.designKeywords` | `any`: phrases users or briefs might say; `none`: disambiguation to avoid wrong matches. Use lowercase tokens where possible; add non-English terms only when they reflect real product language. |
+| `when.designKeywords` | See **Design keywords (`any` / `none`)** below. **`any`:** at most **10** entries (hard cap). **`none`:** disambiguation only; no fixed max, but keep it purposeful. |
 | `notes` | **One tight sentence** (roughly **≤ 80 characters** after collapsing whitespace). The project truncates notes in discovery UIs—put the distinguishing hook first. |
 | `disabled` | Omit unless the skill should be skipped by discovery (`true`). |
 
 Use a **multi-line array** for `any` / `none` when there are more than a few keywords (matches current repo style).
 
 Do **not** encode one-off hacks in YAML (e.g. duplicate synonyms solely to game ranking). Prefer clear `none` lists when two skills would otherwise collide.
+
+#### Design keywords (`any` / `none`) — **required style**
+
+`designKeywords` are how briefs and natural-language queries **route** to a skill. **Hard cap:** `when.designKeywords.any` has **at most 10** strings—no exceptions in new skills. **Do not** fill `any` with stack jargon as the only signal (e.g. `fragment shader`, `orthographic`, `three.js` as a bulk list). **Do** write keywords the way a **PM or designer** might describe a **page, scene, and product**—and put implementation detail in the `.md` blueprint.
+
+**Baseline mix for `any` (esp. B2B / product / marketing heroes):** anchor to the same *kind* of phrases used in `ai/flows/generate_project/prompts/skills/section/hero/adaptive-vbars-webgl.yaml`: **use case + product or page type + tone**. Examples of that **family** of tokens (pick what fits the source, not all in every file):
+
+- **Scene / workflow:** e.g. `ai workflow`, `automation`, `system monitoring`, `product launch`, `first impression`, `live session`, `outdoor brand`, `expedition`
+- **Product or audience:** e.g. `data platform`, `saas`, `devtool`, `enterprise`, `b2b`, `developer`, `biotech`, `laboratory`
+- **Overall vibe / visual mood:** e.g. `precision`, `technical`, `commanding`, `forward-thinking`, `futuristic`, `deep black`, `immersive`, `editorial`, `cinematic`, `heritage`, `void`, `organic` (as mood, not “organic food”)
+- **Differentiators for *this* skill:** pack **product/audience + scene + 2–4 signature hooks** into the **10 slots** (layout metaphor, material/motion in plain words), e.g. `bento` + `gradient frame` + `scroll reveal`—**never** exceed **10** `any` items total
+
+**What to limit in `any`:** raw engine or API terms (`r128`, `ShaderMaterial`, `orthographic`, `gsap` as a library name unless the product literally asks for “GSAP”), unless the team explicitly wants tech-only routing. If you need one technical anchor, prefer **user-facing** phrasing: `webgl` / `scroll reveal` / `full-bleed` over **pipeline** terms.
+
+**`none`:** use for **disambiguation**—rule **out** the wrong *family* (e.g. “editorial photo blinds” vs “WebGL abstract”, “CSS-only” vs “shader”). It is fine for `none` to use **more technical** exclusion tokens than `any` when that stops the wrong skill from winning.
+
+**Per-skill balance:** match **tone** to peers, but **do not** pad `any` past **10** or paste the same long list into every file—**pick the strongest mix** of scene + product + differentiators. **Style reference:** `adaptive-vbars-webgl.yaml` (10-item `any`; not a template to copy verbatim).
 
 ### Color and palette (critical)
 
@@ -54,7 +71,7 @@ In the skill `.md`:
 - Prefer **token-level language** where the project uses one (e.g. `primary`, `muted`, `background`); otherwise say “map accents to brief” or “derive from design system.”
 - In the **Reference TSX skeleton**, avoid hardcoded demo colors as requirements; use tokens, CSS variables, or clearly labeled placeholders so implementers substitute from the active brief.
 
-YAML `designKeywords` may still use **mood words** (“emerald accent”, “neon”) to route matching—they describe intent for discovery, not mandatory literal values in generated code.
+`when.designKeywords` may use **mood / metaphor** terms for routing (e.g. “emerald accent”, “neon”); they **describe discovery intent**, not mandatory literal values in generated code—align phrasing with the **Design keywords** section above, not a dump of stack names.
 
 ### Skill Markdown (spec)
 
@@ -83,7 +100,7 @@ Structure the `.md` from the **actual stack** in the source—omit sections that
 1. **Classify** — Section `component-skill` vs `technical-spec-skill`; default section `hero` if unspecified.
 2. **Extract primitives** from source: layout, render path, motion, interaction, assets, distinctive constraints—**excluding** locking in specific colors; map color to brief/tokens instead.
 3. **Choose `id`** — Short, descriptive, unique among siblings; avoid overlapping names with existing files in the target folder.
-4. **Author `.yaml`** — Keywords that reflect the effect; `none` that separate it from neighboring skills (same as in repo: e.g. canvas particle text vs WebGL hero).
+4. **Author `.yaml`** — Follow **Design keywords (`any` / `none`)** in this skill: scene + product type + vibe first; distinctive hooks per skill; `none` for disambiguation. Open `adaptive-vbars-webgl.yaml` for baseline **tone** (not a verbatim copy of its list).
 5. **Author `.md`** — Blueprint items must be **checkable** and **sourced**: each MUST should trace to the snippet or to an explicit production constraint you document.
 6. **Safety pass** — Type-safe skeleton, cleanup paths for every allocated resource (DOM nodes, RAF, listeners, WebGL dispose where applicable), no forbidden patterns from **Implementation Constraints**.
 
@@ -103,7 +120,7 @@ Avoid cargo-cult checks: if there is no mesh, do not mandate `mesh.material` dis
 Before finishing, **spot-check against 1–2 existing skills in the same target directory** (read filenames and open one peer `.md` + `.yaml`). Match:
 
 - tone density (how strict the blueprint is),
-- YAML keyword style,
+- YAML keyword style (see **Design keywords** + `adaptive-vbars-webgl.yaml`),
 - notes length,
 - how strictly project constraints are stated.
 
@@ -114,7 +131,7 @@ Do **not** copy a peer’s effect requirements (e.g. a specific geometry or libr
 After writing files, report:
 
 - Absolute or repo-relative paths to both outputs.
-- `designKeywords.any` and `designKeywords.none`.
+- `designKeywords.any` (≤ 10 items) and `designKeywords.none`.
 - The numbered blueprint items (same as in `.md`) as the checklist—pass/fail is whether the generated pair satisfies those items, not a fixed external rubric.
 
 ## User invocation

@@ -7,21 +7,15 @@ when:
   designKeywords:
     any:
       [
-        "webgl",
-        "webgl1",
-        "fragment shader",
-        "shader background",
-        "full screen quad",
+        "saas",
+        "enterprise",
         "flowing lines",
         "wisps",
         "wave glow",
         "additive glow",
         "screen blend",
-        "mix-blend-screen",
         "glass nav",
-        "pill nav",
         "ai hero",
-        "cognition",
         "dark hero"
       ]
     none:

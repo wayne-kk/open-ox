@@ -1,0 +1,38 @@
+id: fluted-glass-shader-hero
+kind: component-skill
+sectionTypes: ["hero"]
+priority: 75
+fallback: false
+when:
+  designKeywords:
+    any:
+      [
+        "enterprise",
+        "saas",
+        "b2b",
+        "biotech",
+        "laboratory",
+        "network gateway",
+        "full-bleed",
+        "reeded glass",
+        "immersive",
+        "futuristic"
+      ]
+    none:
+      [
+        "rounded card",
+        "bento",
+        "gradient border",
+        "chrome frame",
+        "gsap",
+        "scrolltrigger",
+        "word reveal",
+        "masked headline",
+        "stagger",
+        "venetian",
+        "blinds",
+        "photo",
+        "grayscale"
+      ]
+notes: >
+  Full-viewport fluted-glass GLSL + blob field; left logo+rule+type; uniforms follow brief not demo greens.

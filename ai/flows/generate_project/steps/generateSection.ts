@@ -11,7 +11,7 @@ import {
 import { selectSectionPromptId } from "../selectors/sectionPromptSelector";
 import { callLLM, callLLMWithTools, extractContent, extractJSON } from "../shared/llm";
 import { checkTsxFile, formatIssuesForHint, type TsxIssue } from "../shared/tsxDiagnostics";
-import { getModelForStep, getThinkingLevelForStep, isSectionSkillsEnabled } from "@/lib/config/models";
+import { getModelForStep, getThinkingLevelForStep } from "@/lib/config/models";
 import { getSystemToolDefinitions } from "../../../tools/systemToolCatalog";
 import { createImageExecutor } from "../../../tools/system/generateImageTool";
 import type { PendingImage } from "../../../tools/system/generateImageTool";
@@ -619,21 +619,11 @@ export async function stepGenerateSection(params: GenerateSectionParams): Promis
     technicalSkillPrompts,
     technicalSkillMetadataBlock,
     componentSkillScores,
-  } = isSectionSkillsEnabled()
-    ? await discoverAndSelectSkill(
-      section,
-      projectContext.designKeywords,
-      projectContext.rawUserInput,
-    )
-    : {
-      componentSkillId: null,
-      componentSkillPrompt: "",
-      componentSkillMetadataBlock: "",
-      technicalSkillIds: [],
-      technicalSkillPrompts: [],
-      technicalSkillMetadataBlock: "",
-      componentSkillScores: [],
-    };
+  } = await discoverAndSelectSkill(
+    section,
+    projectContext.designKeywords,
+    projectContext.rawUserInput,
+  );
 
   const skillId = componentSkillId ?? technicalSkillIds[0] ?? null;
 
