@@ -82,7 +82,7 @@ Structure the `.md` from the **actual stack** in the source—omit sections that
 1. **Title + opening “Use this skill when…”** — One paragraph tying effect to `generateSection` / layout intent.
 2. **Core Effect** — Bullet list of what the viewer sees and what must exist in the section.
 3. **Visual Language** — Atmosphere, frame language, typography tone; **palette as roles and contrast**, tied to brief/tokens—not a copy of the snippet’s hex values (see **Color and palette** above).
-4. **Structure Requirements** — Layering (frame / nav / background / content), DOM or canvas placement.
+4. **Structure Requirements** — Layering (frame / background / content), DOM or canvas placement. **Hero `component-skill`s:** do **not** specify site `<nav>`, header bars, brand/version top rows, or app-level chrome — the generated section is **visual treatment + hero copy only**; global navigation belongs in the layout/shell, not inside hero skills.
 5. **Motion Direction** — Timelines, RAF, scroll triggers, interaction; call out `prefers-reduced-motion` expectations.
 6. **Rendering / implementation deep-dive (conditional)**  
    - Examples: `WebGL Requirements (Three.js)`, `Particle System`, `CSS / DOM Background`, `Shader passes`—**only if** the source uses them.
@@ -108,6 +108,7 @@ Structure the `.md` from the **actual stack** in the source—omit sections that
 
 The embedded skeleton should illustrate:
 
+- **Hero `component-skill`s:** no `<nav>`, header bar, or app chrome in the snippet — only background/visual layer + hero content.
 - Typed refs and early return if mount targets are missing.
 - Typed animation frame / event handler variables where used.
 - **Dispose only what you create** (e.g. `cancelAnimationFrame`, remove listeners, `dispose()` on Three.js geometry/material/renderer when the skeleton constructs them).

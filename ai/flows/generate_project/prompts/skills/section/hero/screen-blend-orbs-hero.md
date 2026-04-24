@@ -1,26 +1,25 @@
 # Component Skill: Hero — Screen-Blend Orbs (CSS / DOM)
 
-Use this skill when `generateSection` should deliver a **hero-only** block: a near-black void lit by a few **large, heavily blurred circular color masses** that **add** light using `mix-blend-mode: screen` (or equivalent additive read), a **minimal typographic top bar** that can use **difference** blending, and a **dense, fluid-scale headline** with a short eyebrow and muted subcopy. **Scroll-agnostic section variants** of this pattern use **IntersectionObserver** to reveal lines with stagger; do **not** require WebGL or canvas.
+Use this skill when `generateSection` should deliver a **hero-only** block: a near-black void lit by a few **large, heavily blurred circular color masses** that **add** light using `mix-blend-mode: screen` (or equivalent additive read), plus a **dense, fluid-scale headline** with a short eyebrow and muted subcopy. **Scroll-agnostic section variants** of this pattern use **IntersectionObserver** to reveal lines with stagger; do **not** require WebGL or canvas.
 
-**Scope — hero only:** Output **only** the first-screen hero: orbs + optional nav + headline stack. **Do not** include equalizer / spectrum demos, satellite orbit diagrams, full-page “chapter” grids, download bands, or the **bottom timeline** strip—those belong to other sections. If a brief only supplies this hero, keep **orbs in the initial “hero” layout** (two prominent masses + optional third hidden or at zero opacity); do not wire a multi-section orb state machine unless another contract explicitly extends it.
+**Scope — hero only:** Output **only** the first-screen hero: orbs + headline stack — **no** site navigation, header bar, or top chrome (those live in the app shell, not in this section). **Do not** include equalizer / spectrum demos, satellite orbit diagrams, full-page “chapter” grids, download bands, or the **bottom timeline** strip—those belong to other sections. If a brief only supplies this hero, keep **orbs in the initial “hero” layout** (two prominent masses + optional third hidden or at zero opacity); do not wire a multi-section orb state machine unless another contract explicitly extends it.
 
 ## Core Effect
 
 - **Additively lit void** — 2+ oversized circles (`rounded-full`) with a **very strong blur** and **screen** blend; they sit in a `fixed` inset layer and read as soft colored light pools, not hard shapes.
 - **Asymmetric layout** — Orbs are positioned in different quadrants; sizes differ (e.g. 50–60vh class range) to avoid symmetry that feels like a loading spinner.
-- **Top chrome** — Optional **nav row**: brand on one side, version or badge on the other; can use `mix-blend-difference` so light text inverts on bright blends—**verify legibility** with real tokens and orb intensity.
 - **Type stack** — Condensed **display** wordmark line(s), optional line break; eyebrow in **all-caps, widetrack, muted**; body in a **muted-foreground** role from the theme.
 - **Entrance** — Staggered opacity + translateY on scroll-into-view (or on mount) for eyebrow, title, and paragraph.
 
 ## Visual Language
 
 - **Atmosphere** — “Studio dark” with **punchy accent pools**; map orb hues to **semantic roles** (e.g. primary, secondary, success/tertiary) from the brief, **not** the sample’s system-palette hex values.
-- **Figure / ground** — Orbs are decorative; the headline is the main figure. Keep **contrast** high enough for WCAG on the `foreground` + `background` used under the orbs; if difference-nav is used, test against the **worst-case** blend behind it.
+- **Figure / ground** — Orbs are decorative; the headline is the main figure. Keep **contrast** high enough for WCAG on the `foreground` + `background` used under the orbs.
 - **Texture** — All softness comes from **CSS blur** + screen blend, not from noise images.
 
 ## Structure Requirements
 
-1. **Z-order** (bottom → top): (a) page/surface `background` from tokens; (b) **fixed** orb container `inset-0` `overflow-hidden` `pointer-events-none` `z-0`; (c) **relative** hero section `z-10` (min viewport height) with padding from brief (e.g. `px` using `vw` or token spacing); (d) **fixed** nav **above** content z-index when present (e.g. `z-50`–`z-[100]`), not inside the orb layer.
+1. **Z-order** (bottom → top): (a) page/surface `background` from tokens; (b) **fixed** orb container `inset-0` `overflow-hidden` `pointer-events-none` `z-0`; (c) **relative** hero section `z-10` (min viewport height) with padding from brief (e.g. `px` using `vw` or token spacing). **Do not** add a fixed header or `<nav>` in this section.
 2. **Orbs** — Each orb is a single `div` (no SVG required); use **token-based** `background-color`; apply **filter blur** via Tailwind or CSS; `mix-blend-mode: screen`; opacity in the **~0.5–0.7** range unless the brief specifies calmer.
 3. **No interaction capture** on background layers.
 
@@ -39,12 +38,12 @@ Use this skill when `generateSection` should deliver a **hero-only** block: a ne
 ## Required Implementation Blueprint (Do Not Skip)
 
 1. **MUST** place **at least two** large blurred, rounded orb elements in a **non-interactive** `fixed` full-viewport background layer, using `**mix-blend-mode: screen`** (or documented equivalent) and **semantic colors from the design system / section brief**—**not** hardcoded system accent hexes from a one-off reference.
-2. **MUST** use `**pointer-events: none`** on the orb container and each orb, and keep **orb z-index** strictly **below** primary content and nav.
+2. **MUST** use `**pointer-events: none`** on the orb container and each orb, and keep **orb z-index** strictly **below** primary content.
 3. **MUST** implement the **hero** as a `min-h-screen` (or equivalent) column with a width cap (e.g. `max-w-4xl` class of constraint), **eyebrow**, **multi-line `clamp` fluid headline** with **tight negative letter-spacing** at large sizes, and a **subcopy** paragraph in the **muted** role.
 4. **MUST** run **staggered enter visibility** (IntersectionObserver, `useInView`, or `useEffect` + `ref`) and **remove / disconnect the observer** on unmount; **MUST** respect `**prefers-reduced-motion`** by skipping or minimizing translate on entrance.
 5. **MUST** (hero-only) **not** output synthesis/context/download sections, **equalizer** bar columns, **orbiting** satellite UI, or a **scroll timeline** as part of this section.
 6. **MUST** use the project’s **typography and spacing tokens** (or configured `font-sans` / display stack); **MUST NOT** add runtime **Google Fonts** `<link>` or **Tailwind CDN**—fonts come from the app’s pipeline.
-7. **MAY** include a **fixed** minimal **nav** (brand + secondary label) with `**mix-blend-difference`**; **MUST** verify the bar remains readable, or offer a non-difference fallback class when the brief demands guaranteed contrast.
+7. **MUST NOT** include **any** site navigation: no `<nav>`, no header bar, no brand/version row, no `mix-blend-difference` top chrome — shell navigation is **outside** this section.
 8. **MUST NOT** add `<script src="https://…">` for Tailwind, fonts, or libraries.
 
 If any of the **MUST** items (and hero scope in item 5) is missing, the output is **not** valid for `screen-blend-orbs-hero`.
@@ -119,11 +118,6 @@ export function ScreenBlendOrbsHero() {
         />
       </div>
 
-      <nav className="fixed top-0 left-0 z-[100] flex w-full items-start justify-between p-8 mix-blend-difference">
-        <span className="text-xl font-bold tracking-tight">Brand</span>
-        <span className="text-xl font-bold tracking-tight">v1.0</span>
-      </nav>
-
       <section
         ref={sectionRef}
         className="relative z-10 flex min-h-screen flex-col justify-center px-[10vw]"
@@ -173,7 +167,6 @@ Wire `--ease-hero` in global CSS or `theme` to the same **cubic** as the brief; 
 ## Accessibility + Performance
 
 - Decorative orbs: `aria-hidden` on the background wrapper.
-- Nav with `mix-blend-difference`: re-check contrast; if it fails, remove difference or add a **solid** scrim under nav from tokens.
 - Single `IntersectionObserver` per instance; disconnect on unmount; **no** continuous `requestAnimationFrame` loop for orbs in the default hero path.
 
 If the implementation adds **WebGL, Three.js, or a canvas-based** background, the output does **not** match this `id`—use a WebGL hero skill instead.
