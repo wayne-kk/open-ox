@@ -1,126 +1,175 @@
-## Step Prompt: Plan Project — Split Sections
+## 步骤提示词：Plan Project — 分段页面（Split Sections）
 
-You convert a `ProjectBlueprint` into a `PlannedProjectBlueprint` for a **split-sections** page.
-The page is a long-scrolling composition of stacked content blocks that users scroll through top-to-bottom.
+该页面是一个自上而下滚动浏览的长页，由多个内容区块堆叠组成。
 
-### What to produce
+### 你需要产出什么
 
-1. Keep structure valid JSON.
-2. Attach `pageDesignPlan` to each page.
-3. Sections only need: type, intent, contentHints, fileName.
+1. 保持结构为合法 JSON。
+2. 为每个 page 附加 `pageDesignPlan`。
+3. 每个 section 仅需包含：`type`、`intent`、`contentHints`、`fileName`。
 
-### Single-page rule (critical)
+### 单页规则（关键）
 
-- This pipeline builds one page (`slug: "home"`).
-- Do not invent extra pages/routes.
-- Use in-page anchors for navigation.
+- 本流水线只生成一个页面（`slug: "home"`）。
+- 不要虚构额外页面/路由。
+- 导航请使用页内锚点。
 
-### layoutSections vs page sections (critical)
+### sections 边界（关键）
 
-- `layoutSections` = only shared shells (navigation/footer/global bars). Do not change them.
-- All content sections must stay in `pages[].sections`.
+- 本步骤只规划 `pages[].sections` 的内容 section。
+- 共享壳层信息（如 navigation/footer）不在本步骤输出范围内。
 
 ---
 
-### Section count
+### Section 数量
 
-- **3–4 sections** total (including opening and closing). Fewer, stronger sections beat many sparse ones.
-- 3 sections: tight, punchy — single-message campaigns, personal portfolios.
-- 4 sections: standard for multi-feature products, e-commerce, content-rich sites.
+- 总 section 数必须为 **3–4 个**（含开场与收尾）。少而强优于多而散。
+- 3 个 section：紧凑有力——适合单一信息活动页、个人作品集。
+- 4 个 section：标准配置——适合多功能产品、电商、内容较丰富的网站。
 
-Use these defaults unless user request overrides:
+除非用户明确要求，否则使用以下默认值：
 - `DESIGN_VARIANCE = 8`
 - `MOTION_INTENSITY = 6`
 - `VISUAL_DENSITY = 6`
 
 ---
 
-### Section Archetype Palette (Line A — not a closed product list)
+### Section 原型库（Line A，可复用但非封闭列表）
 
-The names below are **reusable building blocks** for a scrolling page. They are **not** the only section types you may use — if the user’s need fits a different `type` string, prefer **faithful naming** from the project copy over forcing a default arc.
+以下名称是滚动页面的**可复用构建块**，并非唯一可选类型。
+如果用户需求更适合其他 `type` 命名，应优先使用**忠实于项目语义**的名称，而不是硬套默认套路。
 
-Do **not** default to `Hero → Feature → Testimonial → CTA` for every product.
-Pick the combination that fits the actual content:
+不要对所有产品都默认 `Hero → Feature → Testimonial → CTA`。
+请根据实际内容选择组合。
 
-**Opening (first section — always required)**
-- `Hero` — full-bleed brand statement with primary CTA
-- `ProductHero` — product-first opening: visual + key specs + buy/try action
-- `EventHero` — date, venue, headline act, ticket CTA
-- `EditorialHero` — magazine-style split: large image + headline + subtext
-- `Manifesto` — bold single-statement brand declaration, minimal copy
+**开场（第一屏，必需）**
+- `Hero` — 全幅品牌主张 + 主 CTA
+- `ProductHero` — 产品导向开场：视觉 + 关键信息 + 购买/试用动作
+- `EventHero` — 日期、地点、主标题、购票 CTA
+- `EditorialHero` — 杂志风分栏：大图 + 标题 + 副文案
+- `Manifesto` — 强宣言式单主题开场，文案极简
 
-**Content / Proof**
-- `Feature` — product capabilities, 2–4 item grid or split layout
-- `BentoGrid` — asymmetric feature showcase, varied card sizes
-- `Metrics` — key numbers/stats band (3–5 figures with labels)
-- `Timeline` — chronological steps, milestones, or process flow
-- `Workflow` — numbered steps showing how a product works
-- `Comparison` — side-by-side feature comparison table
-- `Integration` — logos/icons of connected tools or partners
-- `LogoWall` — client/partner/press logo strip
-- `Gallery` — image or video grid (portfolio, lookbook, press)
-- `VideoShowcase` — embedded or mock video player with supporting copy
-- `CodeShowcase` — syntax-highlighted code sample for developer products
-- `MapEmbed` — location/store map with address and hours
+**内容 / 证据**
+- `Feature` — 能力说明，2–4 项网格或分栏
+- `BentoGrid` — 非对称卡片展示，不同尺寸卡片
+- `Metrics` — 核心数据带（3–5 个指标）
+- `Timeline` — 时间线、里程碑、流程节点
+- `Workflow` — 编号步骤说明产品如何运作
+- `Comparison` — 对比表
+- `Integration` — 生态/合作工具 logo 或图标
+- `LogoWall` — 客户/合作方/媒体 logo 墙
+- `Gallery` — 图片/视频网格（作品、lookbook、媒体素材）
+- `VideoShowcase` — 嵌入或模拟视频播放器 + 配套文案
+- `CodeShowcase` — 面向开发者产品的代码展示
+- `MapEmbed` — 地图 + 地址 + 营业时间
 
-**Social Proof**
-- `Testimonial` — 1–3 quotes with attribution and avatar
-- `CaseStudy` — narrative proof: challenge → solution → outcome
-- `ReviewGrid` — star ratings + short review cards
-- `PressLogos` — "As seen in" media logo band
-- `AwardsBand` — certifications, badges, trust signals
+**社会证明**
+- `Testimonial` — 1–3 条评价（含身份与头像）
+- `CaseStudy` — 案例叙事：挑战 → 方案 → 结果
+- `ReviewGrid` — 星级评分 + 短评卡片
+- `PressLogos` — “媒体报道”logo 带
+- `AwardsBand` — 认证、奖项、可信背书
 
-**Conversion / Action**
-- `Pricing` — 2–3 tier pricing cards with feature lists
-- `CTA` — closing action band
-- `Newsletter` — email capture with value proposition
-- `WaitlistForm` — early access sign-up with social proof counter
-- `ContactForm` — form + contact details split layout
-- `Download` — app store badges or file download CTA
+**转化 / 行动**
+- `Pricing` — 2–3 档价格卡
+- `CTA` — 收尾行动带
+- `Newsletter` — 邮件订阅模块
+- `WaitlistForm` — 候补名单表单 + 社会证明计数
+- `ContactForm` — 表单 + 联系信息分栏
+- `Download` — 应用商店徽章或下载入口
 
-**Content / Editorial**
-- `ArticleGrid` — blog post card grid (image + title + date + tag)
-- `FeaturedPost` — single editorial spotlight with large image
-- `CategoryBand` — horizontally scrollable content category pills
-- `TagCloud` — topic taxonomy visualization
-- `AuthorBio` — writer/creator profile with social links
-- `TableOfContents` — anchor-linked document outline
+**内容 / 编辑型**
+- `ArticleGrid` — 文章卡片网格（图 + 标题 + 日期 + 标签）
+- `FeaturedPost` — 单篇重点内容展示
+- `CategoryBand` — 横向滚动分类标签带
+- `TagCloud` — 主题标签云
+- `AuthorBio` — 作者简介 + 社交链接
+- `TableOfContents` — 锚点目录
 
-**Commerce**
-- `ProductGrid` — catalog cards (image + name + price + add-to-cart)
-- `CategoryGrid` — top-level category navigation with images
-- `CartSummary` — order summary with line items
-- `ProductSpecs` — technical specification table
+**电商**
+- `ProductGrid` — 商品卡（图 + 名称 + 价格 + 加购）
+- `CategoryGrid` — 顶层分类导航
+- `CartSummary` — 购物车汇总
+- `ProductSpecs` — 参数规格表
 
-**Team / About**
-- `Team` — people grid with photo, name, role
-- `FounderStory` — narrative origin story with image
-- `Values` — company principles or culture pillars
-- `JobBoard` — open roles list with department filter
-
----
-
-### Intent and contentHints
-
-- `intent`: what this section **accomplishes** in the page narrative — brand emotion, proof moment, user task, transition.
-- `contentHints`: what is **visible and scannable** — name specific evidence units, layout pattern, image treatment. Include motion guidance (`none` / `subtle` / `emphasis`) and spacing density (`compact` / `standard` / `spacious`).
-
-### Rhythm rules
-
-- Vary surface tone: plan at least one high-contrast band (dark or brand-color background).
-- Vary layout pattern: avoid 3+ consecutive centered stacks or identical card grids.
-- At least one section should be visually bold — full-bleed image, oversized typography, or striking color.
-- Each non-opening section must carry ≥ 2 distinct content units (not just headline + button).
-- Merge weak standalone sections into adjacent ones.
+**团队 / 关于**
+- `Team` — 团队成员网格
+- `FounderStory` — 创始人故事
+- `Values` — 价值观/文化支柱
+- `JobBoard` — 招聘岗位列表 + 部门筛选
 
 ---
 
-### Planning style
+### intent 与 contentHints
 
-- Implementation-oriented, not verbose strategy language.
-- Do NOT include `designPlan` on sections.
+- `intent`：该 section 在页面叙事中**要完成什么**（情绪、证据、任务、转场）。
+- `contentHints`：该 section 中**可见且可扫描**的内容元素（具体证据单元、布局模式、图像处理方式）。必须包含动效建议（`none` / `subtle` / `emphasis`）与空间密度（`compact` / `standard` / `spacious`）。
 
-### Output constraints
+### 节奏规则
 
-- Return JSON only (no markdown).
-- `sections.length` must be between `3` and `4` inclusive.
+- 视觉层次要有变化：至少一个高对比区块（深色或品牌色背景）。
+- 布局模式要有变化：避免连续 3 个以上相同的居中堆叠或同构卡片网格。
+- 至少一个 section 要“视觉强势”（全幅图、超大字号或强色彩）。
+- 除开场外，每个 section 必须包含 ≥ 2 个不同内容单元（不能只有标题 + 按钮）。
+- 弱小 section 要并入相邻 section，避免碎片化。
+
+---
+
+### 规划风格
+
+- 以实现为导向，避免空泛策略语言。
+- 不要在 section 上输出 `designPlan`。
+
+### 输出约束
+
+- 仅返回 JSON（不要 markdown）。
+- `sections.length` 必须在 `3` 到 `4`（含边界）之间。
+- 输出字段必须严格匹配下方“固定输出结构”；不要新增、重命名或省略必填字段。
+
+### 固定输出结构（authoritative）
+
+你的最终输出必须是**单个 JSON 对象**，结构固定为：
+
+{
+  "pages": [
+    {
+      "title": "Home",
+      "slug": "home",
+      "description": "延续输入 blueprint.site.pages[0].description 的单句定位",
+      "journeyStage": "entry",
+      "pageDesignPlan": {
+        "designVariance": 8,
+        "motionIntensity": 6,
+        "visualDensity": 6
+      },
+      "sections": [
+        {
+          "type": "Hero",
+          "intent": "开场叙事目标",
+          "contentHints": "可见内容 + 布局 + 动效级别 + 间距密度",
+          "fileName": "HeroSection"
+        },
+        {
+          "type": "Feature",
+          "intent": "中段证据目标",
+          "contentHints": "可见内容 + 布局 + 动效级别 + 间距密度",
+          "fileName": "FeatureSection"
+        },
+        {
+          "type": "CTA",
+          "intent": "收尾转化目标",
+          "contentHints": "可见内容 + 布局 + 动效级别 + 间距密度",
+          "fileName": "CtaSection"
+        }
+      ]
+    }
+  ]
+}
+
+字段规则（严格）：
+- 顶层必须且只包含：`pages`。
+- `pages` 必须且只能有 1 项，且 `slug` 必须为 `"home"`。
+- `pageDesignPlan` 必须存在，键固定为：`designVariance`、`motionIntensity`、`visualDensity`（数值 1-10）。
+- `sections` 中每项仅允许：`type`、`intent`、`contentHints`、`fileName`。
+- `sections.length` 必须在 3 到 4 之间（含边界）。
+- `fileName` 统一使用 PascalCase + `Section` 后缀（如 `HeroSection`、`PricingSection`）。

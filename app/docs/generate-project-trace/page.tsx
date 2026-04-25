@@ -67,7 +67,7 @@ export default function GenerateProjectTracePage() {
         <h1 className="text-3xl font-bold tracking-tight">Generate Project：Skill 与 Prompt 拼装 Trace</h1>
         <p className="mt-3 text-[15px] leading-7 text-muted-foreground">
           <Code>runGenerateProject</Code> 流水线里组件 skill 如何选出、每个 section 的 system/user 如何拼接，以及日志里能看到什么。
-          对照代码：<Code>runGenerateProject.ts</Code>、<Code>steps/generateSection.ts</Code>、
+          对照代码：<Code>runGenerateProject.ts</Code>、<Code>steps/generateSection</Code>、
           <Code>steps/selectComponentSkills.ts</Code>、<Code>shared/files.ts</Code>（<Code>getCapabilityAssistPath</Code>）。
         </p>
 
@@ -128,7 +128,7 @@ export default function GenerateProjectTracePage() {
         <section id="system" className="scroll-mt-24">
           <H2>3. generate_section：System 拼接顺序（与代码一致）</H2>
           <P>
-            <Code>steps/generateSection.ts</Code> → <Code>buildSystemPrompt</Code>，自上而下 <Code>{"\\n\\n"}</Code> 连接：
+            <Code>steps/generateSection</Code> → <Code>buildSystemPrompt</Code>，自上而下 <Code>{"\\n\\n"}</Code> 连接：
           </P>
           <ol className="mt-3 list-decimal pl-5 text-[14px] leading-7 text-muted-foreground space-y-2">
             <li>
@@ -142,7 +142,7 @@ export default function GenerateProjectTracePage() {
             </li>
             <li>组件 / 技术 skill 全文（若有）</li>
             <li>
-              <Code>loadGuardrail(&quot;project.consistency&quot;)</Code> 与 <Code>loadGuardrail(&quot;project.accessibility&quot;)</Code>（与 <Code>generateScreen</Code> 相同，显式固定）
+              <Code>loadGuardrail(&quot;project.consistency&quot;)</Code> 与 <Code>loadGuardrail(&quot;project.accessibility&quot;)</Code>（显式固定）
             </li>
             <li>
               <Code>loadGuardrail(&quot;outputTsx&quot;)</Code> 与 <Code>loadGuardrail(&quot;framerMotionVariants&quot;)</Code>

@@ -7,7 +7,7 @@
 
 ## 1. `generate_section` 的 System 堆叠顺序（与实现一致）
 
-由下而上（`steps/generateSection.ts` → `buildSystemPrompt` → `composePromptBlocks`）：
+由下而上（`steps/generateSection/index.ts` → `buildSystemPrompt` → `composePromptBlocks`）：
 
 ```
 1. frontend              ← ai/prompts/systems/frontend.md
@@ -16,7 +16,7 @@
 4. section.default + section.{type} ← prompts/sections/
 5. skillIntegrationContract ← prompts/rules/skillIntegrationContract.md
 6. 组件 / 技术 skill（可选）← prompts/skills/{id}.md
-7. project.consistency  ← prompts/rules/project.consistency.md（显式，与 generateScreen 一致）
+7. project.consistency  ← prompts/rules/project.consistency.md（显式固定）
 8. project.accessibility← prompts/rules/project.accessibility.md
 9. outputTsx             ← prompts/rules/outputTsx.md
 10. framerMotionVariants ← prompts/rules/framerMotionVariants.md
@@ -26,14 +26,14 @@
 
 ---
 
-## 2. 项目级 `project.*`（与 `generateScreen` 对齐）
+## 2. 项目级 `project.*`（与 `generate_section` 对齐）
 
 | ID | 说明 |
 |----|------|
 | `project.consistency` | 跨 section 视觉与组件用语一致 |
 | `project.accessibility` | 对比度、语义结构、可及性 |
 
-在代码中与 `generateScreen` 相同：`loadGuardrail("project.consistency")` 与 `loadGuardrail("project.accessibility")` 显式加入 `composePromptBlocks`。
+在代码中：`loadGuardrail("project.consistency")` 与 `loadGuardrail("project.accessibility")` 显式加入 `composePromptBlocks`。
 
 ---
 

@@ -1,9 +1,8 @@
-import { buildDefaultProjectPlan, buildDefaultAppScreenPlan } from "../planners/defaultProjectPlanner";
+import { buildDefaultProjectPlan } from "../planners/defaultProjectPlanner";
 import { composePromptBlocks, loadGuardrail, loadStepPrompt, writeSiteFile } from "../shared/files";
 import { callLLMWithMeta, extractJSON } from "../shared/llm";
 import { stepTraceFromLlmCompletion } from "../shared/llmTrace";
 import type {
-  AppScreenPlan,
   PageDesignPlan,
   PlannedProjectBlueprint,
   PlannedPageBlueprint,
@@ -11,7 +10,6 @@ import type {
   ProjectBlueprint,
   StepTrace,
 } from "../types";
-import { getPromptProfile } from "@/ai/prompts/core/profile";
 import { getModelForStep } from "@/lib/config/models";
 
 const MAX_PAGE_SECTIONS_SPLIT = 4;
@@ -38,19 +36,6 @@ function isPageDesignPlan(value: unknown): value is PageDesignPlan {
   );
 }
 
-function isAppScreenPlan(value: unknown): value is AppScreenPlan {
-  if (!isObjectRecord(value)) return false;
-  if (typeof value.screenType !== "string" || typeof value.shellStyle !== "string" || typeof value.narrative !== "string") {
-    return false;
-  }
-  if (!Array.isArray(value.regions) || !isObjectRecord(value.interactionModel)) return false;
-  return (
-    typeof value.interactionModel.navigationStyle === "string" &&
-    typeof value.interactionModel.primaryActionModel === "string" &&
-    typeof value.interactionModel.feedbackPattern === "string"
-  );
-}
-
 function clampPageSections<T extends { site: { pages: Array<{ sections: PlannedSectionSpec[] }> } }>(
   blueprint: T,
   maxSections: number
@@ -70,10 +55,9 @@ function clampPageSections<T extends { site: { pages: Array<{ sections: PlannedS
 // ── Main Step ────────────────────────────────────────────────────────────
 
 export async function stepPlanProject(
-  blueprint: ProjectBlueprint,
+  blueprint: ProjectBlueprint
 ): Promise<{ blueprint: PlannedProjectBlueprint; trace: StepTrace }> {
-  const appProfile = getPromptProfile() === "app";
-  const wholePage = !appProfile && blueprint.brief.productScope.layoutMode === "whole-page";
+  const wholePage = blueprint.brief.productScope.layoutMode === "whole-page";
   const maxSections = wholePage ? MAX_PAGE_SECTIONS_WHOLE : MAX_PAGE_SECTIONS_SPLIT;
   const defaultPlan = buildDefaultProjectPlan(blueprint);
 
@@ -82,25 +66,14 @@ export async function stepPlanProject(
   const planPromptId = wholePage ? "planProject.wholePage" : "planProject";
   const systemPrompt = composePromptBlocks([loadStepPrompt(planPromptId), loadGuardrail("outputJson")]);
 
-  const appScreenInstruction = appProfile
-    ? `\n## App Screen Plan (required for app profile)
-- For each page include \`appScreenPlan\` with:
-  - screenType
-  - shellStyle
-  - narrative
-  - regions[] (id, title, intent, contentHints, priority)
-  - interactionModel (navigationStyle, primaryActionModel, feedbackPattern)
-- Keep \`sections\` as compatibility fallback, but prioritize coherent screen-first regions over section stacks.`
-    : "";
-
   const layoutModeInstruction = wholePage
     ? `\n## Layout Mode: WHOLE-PAGE / LINE B — single-surface product (critical)
-The user product ("${blueprint.brief.productScope.productType}") is implemented as **one** full route surface — *whatever* UI that implies (app shell, full-stage tool, game, etc.).
+The user product ("${blueprint.brief.productScope.productType}") is implemented as **one** full route surface — *whatever* UI that implies (shell, full-stage tool, game, etc.).
 - Output EXACTLY 1 section in pages[0].sections.
 - Do NOT output Hero / Feature / Testimonial / CTA **marketing** stacks (that is Line A).
 - The single section carries the **entire** product UI as designed — in-page chrome, main interactive area, and panels **only if** the product needs them — not \`layoutSections\` nav/footer.
 - Set \`site.layoutSections\` to \`[]\` (no global Navigation/Footer components).
-- Derive \`type\` and \`fileName\` from the **user’s domain words** in the title/description/MVP; do not pick from a small catalog of app names.`
+- Derive \`type\` and \`fileName\` from the **user’s domain words** in the title/description/MVP.`
     : `\n## Layout Mode: SPLIT SECTIONS
 Output 3–4 sections using appropriate archetypes from the palette in the system prompt.`;
 
@@ -124,16 +97,16 @@ ${blueprint.site.pages
         (page) =>
           `### ${page.title} (/${page.slug}) — ${page.journeyStage}
 - Description: ${page.description}
-- Existing sections: ${page.sections.length > 0 ? page.sections.map((s) => s.type).join(", ") : "NONE — derive from page description"}`,
+- Existing sections: ${page.sections.length > 0 ? page.sections.map((s) => s.type).join(", ") : "NONE — derive from page description"}`
       )
-    .join("\n\n")}
+      .join("\n\n")}
 
 ## Layout Sections (shared shells)
 ${layoutSectionsForPrompt}
 
 ## Keep it simple
 - Sections only need type, intent, contentHints, fileName.
-- Do not include designPlan on sections — guardrails and skills are resolved at generation time.${appScreenInstruction}`;
+- Do not include designPlan on sections — guardrails and skills are resolved at generation time.`;
 
   // ── Call LLM ───────────────────────────────────────────────────────────
 
@@ -181,12 +154,6 @@ ${layoutSectionsForPrompt}
           supportingCapabilityIds: fallbackPage.supportingCapabilityIds,
           sections,
           pageDesignPlan: isPageDesignPlan(page.pageDesignPlan) ? page.pageDesignPlan : fallbackPage.pageDesignPlan,
-          appScreenPlan: appProfile
-            ? isAppScreenPlan(page.appScreenPlan)
-              ? page.appScreenPlan
-              : fallbackPage.appScreenPlan ??
-                buildDefaultAppScreenPlan({ description: String(page.description ?? ""), sections: fallbackPage.sections })
-            : undefined,
         };
       });
 
@@ -203,7 +170,7 @@ ${layoutSectionsForPrompt}
       ...defaultPlan,
       site: {
         ...defaultPlan.site,
-        layoutSections: wholePage ? [] : (parsedLayoutSections ?? defaultPlan.site.layoutSections),
+        layoutSections: wholePage ? [] : parsedLayoutSections ?? defaultPlan.site.layoutSections,
         pages: normalizedPages,
       },
     };

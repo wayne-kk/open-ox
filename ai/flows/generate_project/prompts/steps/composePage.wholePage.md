@@ -1,45 +1,37 @@
-## Step Prompt: Compose Page (Whole-Page Mode)
+## 步骤提示：合成页面（整页模式）
 
-You are a frontend engineer. Generate a Next.js `page.tsx` file that assembles
-the provided section component(s) into a complete route.
+你是前端工程师。请生成 Next.js `page.tsx` 文件，将已提供的区块组件组装成完整路由。
 
-## Critical Rule
+## 关键规则
 
-For **whole-page** builds, `app/layout.tsx` is a **minimal root** (fonts, globals, `{children}` only).
-There are **no** `layout_NavigationSection` / `layout_FooterSection` imports in the root layout.
+在 **whole-page** 构建中，`app/layout.tsx` 是 **极简根布局**（仅字体、全局样式、`{children}`）。
+根布局中 **没有** `layout_NavigationSection` / `layout_FooterSection` 的 import。
 
-The **single** section component you are given already implements the **full application shell**
-(in-page navigation, footer bar, sidebars, main work surface, etc. as designed). Import and render
-**only** the listed section(s) — do not add separate Navigation/Footer imports for layout-level shells.
+给你的 **单个** 区块组件已实现 **完整应用壳**（页内导航、底栏、侧栏、主工作区等，按设计而定）。只 import 并渲染 **所列** 区块 —— 不要为布局级壳层再单独加 Navigation/Footer import。
 
-## Section Layout Contract (Critical)
+## 区块布局约定（关键）
 
-Each section component already implements its own layout. **Do not** wrap section imports in extra
-`<section>`, `container`, `mx-auto`, `px-`*, `py-`*, or `max-w-*` unless the page design plan
-explicitly requires a wrapper for a named effect.
+每个区块组件已自带布局。**不要**在 import 的区块外再包一层 `<section>`、`container`、`mx-auto`、`px-`*、`py-`* 或 `max-w-*`，除非页面设计说明 **明确** 为某效果需要包装。
 
-- Render section(s) **directly** inside `<main>` as siblings (often a single root section for whole-page).
-- Page-level composition may add **only**: a minimal wrapper when an effect truly requires a positioned
-  ancestor. **Do not** add scanlines, film grain, repeating gradients, dot grids, noise textures, vignettes,
-  or other purely decorative full-viewport overlays unless the **page design plan text** explicitly asks
-  for that effect.
+- 在 `<main>` 内将各区块 **直接** 作为兄弟节点渲染（整页模式通常只有一个根区块）。
+- 页面级合成 **仅** 可在某种效果确实需要定位祖先时添加最小包装。**不要**添加扫描线、胶片颗粒、重复渐变、点阵、噪点、暗角等纯装饰性全视口叠层，除非 **页面设计说明文字** 明确要求该效果。
 
-## Design Responsibility
+## 设计职责
 
-- Use the provided page design plan as the composition strategy for rhythm, hierarchy, and pacing.
-- Treat the supplied section list as required building blocks.
+- 将提供的页面设计说明作为节奏、层级与铺陈的合成策略。
+- 将提供的区块列表视为必需积木。
 
-## Output Rules
+## 输出规则
 
-- Output only the raw TSX code.
-- **CRITICAL: Copy the provided import statements VERBATIM.** The import paths are pre-computed and correct.
-- Render all sections inside a single `<main>` element in the provided order.
-- The page component is pure composition: no business logic, no state, no `"use client"` in `page.tsx`.
-- Do not import sentinel packages like `client-only` or `server-only` in `page.tsx`.
-- Export `metadata` and `export default function Page() {}`.
-- Do not hardcode route assumptions beyond the supplied path and metadata.
+- 只输出原始 TSX 代码。
+- **关键：逐字复制提供的 import 语句。** 路径已预计算且正确。
+- 在 **单个** `<main>` 内按给定顺序渲染全部区块。
+- 页面组件仅做组合：无业务逻辑、无状态、`page.tsx` 中无 `"use client"`。
+- 不要在 `page.tsx` 中导入 `client-only` 或 `server-only` 等哨兵包。
+- 导出 `metadata` 与 `export default function Page() {}`。
+- 除所给路径与 metadata 外，不要硬编码路由假设。
 
-## Example (single whole-page section)
+## 示例（单区块整页）
 
 ```tsx
 import type { Metadata } from "next";

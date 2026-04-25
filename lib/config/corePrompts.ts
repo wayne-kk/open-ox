@@ -11,7 +11,7 @@ export interface CorePromptDefinition {
   label: string;
 }
 
-const WEB_CORE_STEP_PROMPTS: CorePromptDefinition[] = [
+const CORE_STEP_PROMPTS: CorePromptDefinition[] = [
   {
     profile: "web",
     stepId: "analyze_project_requirement",
@@ -55,51 +55,11 @@ const WEB_CORE_STEP_PROMPTS: CorePromptDefinition[] = [
   { profile: "web", stepId: "repair_build", kind: "step", promptId: "repairBuild", label: "构建修复" },
 ];
 
-const APP_CORE_STEP_PROMPTS: CorePromptDefinition[] = [
-  {
-    profile: "app",
-    stepId: "analyze_project_requirement",
-    kind: "step",
-    promptId: "analyzeProjectRequirement",
-    label: "需求分析",
-  },
-  { profile: "app", stepId: "infer_design_intent", kind: "step", promptId: "inferDesignIntent", label: "设计意图推断" },
-  { profile: "app", stepId: "plan_project", kind: "step", promptId: "planProject", label: "项目规划" },
-  {
-    profile: "app",
-    stepId: "generate_project_design_system",
-    kind: "step",
-    promptId: "generateProjectDesignSystem",
-    label: "设计系统生成",
-  },
-  {
-    profile: "app",
-    stepId: "apply_project_design_tokens",
-    kind: "step",
-    promptId: "applyProjectDesignTokens",
-    label: "设计 Token 生成",
-  },
-  { profile: "app", stepId: "compose_layout", kind: "step", promptId: "composeLayout", label: "布局组合" },
-  { profile: "app", stepId: "generate_screen", kind: "step", promptId: "generateScreen", label: "Screen 生成" },
-  { profile: "app", stepId: "compose_page", kind: "step", promptId: "composePage", label: "页面组合" },
-  { profile: "app", stepId: "dependency_resolver", kind: "step", promptId: "dependencyResolver", label: "依赖修复" },
-  { profile: "app", stepId: "repair_build", kind: "step", promptId: "repairBuild", label: "构建修复" },
-];
-
-const CORE_STEP_PROMPTS_BY_PROFILE: Record<PromptProfile, CorePromptDefinition[]> = {
-  web: WEB_CORE_STEP_PROMPTS,
-  app: APP_CORE_STEP_PROMPTS,
-};
-
 const stepIdToPromptId = new Map(
-  Object.values(CORE_STEP_PROMPTS_BY_PROFILE)
-    .flat()
-    .map((item) => [`${item.profile}:${item.stepId}`, item.promptId])
+  CORE_STEP_PROMPTS.map((item) => [`${item.profile}:${item.stepId}`, item.promptId])
 );
 const stepIdToKind = new Map(
-  Object.values(CORE_STEP_PROMPTS_BY_PROFILE)
-    .flat()
-    .map((item) => [`${item.profile}:${item.stepId}`, item.kind])
+  CORE_STEP_PROMPTS.map((item) => [`${item.profile}:${item.stepId}`, item.kind])
 );
 
 interface CorePromptRuntimeConfig {
@@ -117,12 +77,15 @@ export async function withCorePromptRuntime<T>(
   return corePromptRuntimeStorage.run(config, runner);
 }
 
+/** Web-only generation; legacy `"app"` values are coerced to `"web"`. */
 export function normalizePromptProfile(profile: unknown): PromptProfile {
-  return profile === "app" ? "app" : "web";
+  void profile;
+  return "web";
 }
 
 export function getCoreStepPrompts(profile: PromptProfile): CorePromptDefinition[] {
-  return CORE_STEP_PROMPTS_BY_PROFILE[profile];
+  void profile;
+  return CORE_STEP_PROMPTS;
 }
 
 export function getCoreStepPromptOverride(params: {

@@ -5,7 +5,7 @@
  * 通过 Bearer token (OPEN_OX_API_KEY) 鉴权，不依赖 session。
  *
  * 请求体:
- *   { prompt: string, mode?: "web"|"app", styleGuide?: string, model?: string }
+ *   { prompt: string, styleGuide?: string, model?: string }
  *
  * 返回 SSE 流:
  *   data: {"type":"step", ...BuildStep}
@@ -13,7 +13,7 @@
  *   data: {"type":"error", "message": string}
  */
 
-import { runGenerateApp, runGenerateProject } from "@/ai/flows";
+import { runGenerateProject } from "@/ai/flows";
 import { initProjectDir } from "@/lib/projectManager";
 import { setRuntimeModelId, type ModelId } from "@/lib/config/models";
 import type { BuildStep } from "@/ai/flows";
@@ -40,7 +40,6 @@ export async function POST(req: Request) {
 
   const body = await req.json();
   const prompt: string | undefined = body.prompt;
-  const mode: "web" | "app" = body.mode === "app" ? "app" : "web";
   const styleGuide: string | undefined = body.styleGuide;
   const model: string | undefined = body.model;
 
@@ -62,13 +61,10 @@ export async function POST(req: Request) {
       };
 
       try {
-        // 用 service role 初始化项目目录（不需要用户 session）
         const db = createSupabaseServiceRoleClient();
         await initProjectDir(db, projectId);
 
-        const runGeneration = mode === "app" ? runGenerateApp : runGenerateProject;
-
-        const result = await runGeneration(
+        const result = await runGenerateProject(
           prompt,
           (step: BuildStep) => {
             send({ type: "step", ...redactBuildStepForTransport(step) });

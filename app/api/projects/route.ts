@@ -67,7 +67,7 @@ export async function POST(req: Request) {
       folderId?: string | null;
       generationMode?: GenerationMode;
     };
-    if (generationMode !== undefined && generationMode !== "web" && generationMode !== "app") {
+    if (generationMode !== undefined && generationMode !== "web") {
       return NextResponse.json({ error: "Invalid generationMode" }, { status: 400 });
     }
     if (!userPrompt?.trim()) {

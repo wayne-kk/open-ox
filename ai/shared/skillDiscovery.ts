@@ -281,6 +281,16 @@ export function discoverSkillsBySectionType(
 }
 
 /**
+ * Skills with `kind: "technical-spec-skill"` (3D/shaders, etc.), sorted by priority desc.
+ * Uses the same `discoverSkills` cache as full discovery.
+ */
+export function discoverTechnicalSpecSkills(rootPath: string): SkillMetadata[] {
+  return discoverSkills(rootPath)
+    .filter((c) => c.kind === "technical-spec-skill")
+    .sort((a, b) => b.priority - a.priority);
+}
+
+/**
  * 为 LLM 准备的紧凑 metadata（不含 prompt 正文）
  */
 export function toCompactMetadata(skill: SkillMetadata): Record<string, unknown> {

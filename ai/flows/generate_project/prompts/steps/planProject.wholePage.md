@@ -1,51 +1,44 @@
-## Step Prompt: Plan Project — Whole Page (Line B — single-surface product)
+## 步骤提示：规划项目 — 整页（Line B — 单表面产品）
 
-You convert a `ProjectBlueprint` into a `PlannedProjectBlueprint` for **Line B** (`layoutMode: whole-page`): **one** section on `/` is the **entire** user-facing product for this pipeline — *whatever domain* the user described (feed, back office, game, instrument, etc.). It is **not** Line A (a stacked marketing/landing page).
+你将 `ProjectBlueprint` 转为 **Line B**（`layoutMode: whole-page`）的 `PlannedProjectBlueprint`：`/` 上的 **一个** 区块就是本流水线面向用户的 **完整** 产品，领域不限（feed、后台、游戏、工具等）。**不是** Line A（堆叠式营销/落地页）。
 
-**Do not** pick the product from a small internal list of “allowed apps.” Derive `type` and `fileName` from **domain vocabulary in** `projectTitle`, `projectDescription`, `mvpDefinition`, and the page copy.
+**不要**从内部一小份「允许的应用」列表里选产品。从 `projectTitle`、`projectDescription`、`mvpDefinition` 与页面文案中的 **领域词汇** 推导 `type` 和 `fileName`。
 
-### What to produce
+### 要产出什么
 
-1. Keep structure valid JSON.
-2. Attach `pageDesignPlan` to each page.
-3. Output **exactly 1 section** — it carries the full application UI.
+1. 保持为合法 JSON 结构。
+2. 为每个页面附加 `pageDesignPlan`。
+3. 只输出 **恰好 1 个** 区块 —— 由它承载完整应用 UI。
 
-### Single-page rule (critical)
+### 单页规则（关键）
 
-- This pipeline builds one page (`slug: "home"`).
-- Do not invent extra pages/routes.
+- 本流水线只构建一个页面（`slug: "home"`）。
+- 不要杜撰额外页面/路由。
+- 唯一内容区块放在 `pages[0].sections`，且仅一条。
 
-### layoutSections vs page sections (critical)
+### 这唯一一个区块
 
-- Set `site.layoutSections` to **`[]`**. Do **not** output separate global `NavigationSection` / `FooterSection` for the root layout — the **one** page section may implement *whatever* chrome the product needs (full-screen stage only, or shell + main area, or multi-pane) **inside** that component.
-- The only content section lives in `pages[0].sections` (exactly one entry).
+在 `pages[0].sections` 中输出恰好 **1** 个区块。该区块即完整应用界面。
 
----
+**命名 `type` 与 `fileName`（无固定目录）**
+- **`type`**：来自 **用户产品** 的 `PascalCase` 标识（如简介中的用词），说明「它 **是** 什么」—— 不要用 `MainContent`、`App` 等泛化名，除非用户确实没有给任何领域词。
+- **`fileName`**：格式为 `"{相同词干}Section"`，且与导出组件词干一致（如 `RacingGridSection` → 组件名 `RacingGridSection`）。
 
-### The single section
+**`intent`**：用 1–2 句话写该表面的 **主循环或主任务**：用户 **反复** 或 **首先** 做什么，以及怎样算「完成」。不要用营销定位话术。
 
-Output exactly **1 section** in `pages[0].sections`. This section is the entire application interface.
-
-**Naming `type` and `fileName` (no fixed catalog)**
-- **`type`**: `PascalCase` identifier from the **user’s product** (e.g. words from the brief), describing what the thing *is* — not a generic label like `MainContent` or `App` unless the user truly gave no domain words.
-- **`fileName`**: `"{SameStem}Section"` and must match the exported component stem (e.g. `RacingGridSection` → component `RacingGridSection`).
-
-**`intent`**: In 1–2 sentences, the **primary loop or task** on this surface: what the user *does* repeatedly or first, and what “done” looks like. No marketing positioning language.
-
-**`contentHints`**: Be specific and **morphology-agnostic** — describe the real UI, not a template:
-- **Layout morphology**: e.g. multi-pane app shell, **or** full-bleed **stage** (game/canvas/instrument) with controls/HUD, **or** table-first, **or** single scrolling feed — *whatever matches* the product.
-- **Major regions and what they hold** (only those that apply): chrome (nav/bars), **primary interactive surface**, side panels, drawers, footers, tool rails, etc.
-- **Interactions & density**: key affordances, realistic mock **counts** (rows, list items, entities) so downstream generation is not sparse; name input modalities if relevant (keyboard, drag, etc.).
+**`contentHints`**：要具体、且 **不绑定某种形态** —— 描述真实 UI，不要套模板：
+- **布局形态**：例如多窗格应用壳、**或** 全幅 **舞台**（游戏/画布/工具）+ 控件/HUD、**或** 表格优先、**或** 单列滚动 feed —— **以产品为准**。
+- **主要区域与承载内容**（只写 applicable 的）：chrome（导航/栏）、**主交互面**、侧栏、抽屉、底栏、工具轨等。
+- **交互与密度**：关键 affordance、合理 mock **数量**（行、列表项、实体），避免下游生成过空；若相关则写明输入方式（键盘、拖拽等）。
 
 ---
 
-### Planning style
+### 规划风格
 
-- Product / tool / play designer — not a **landing-page** copywriter. No default Hero → feature → testimonial **unless** the user is literally asking for a promo surface (they usually are not in `whole-page`).
-- The goal is a **credible, interactive** interface for the described domain, not a best-of Behance marketing mock.
+- 像产品 / 工具 / 玩法设计 —— 不是 **落地页** 文案。**不要** 默认 Hero → 功能点 → 证言，**除非** 用户明确要的是推广面（`whole-page` 里通常不是）。
+- 目标是对所述领域有 **可信、可交互** 的界面，而不是 Behance 风营销假图。
 
-### Output constraints
+### 输出约束
 
-- Return JSON only (no markdown).
-- `pages[0].sections.length` must be exactly `1`.
-- `site.layoutSections` must be `[]` (empty array).
+- 只返回 JSON（不要 markdown）。
+- `pages[0].sections.length` 必须恰好为 `1`。

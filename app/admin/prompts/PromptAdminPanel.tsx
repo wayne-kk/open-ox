@@ -26,12 +26,12 @@ interface PromptItem {
 }
 
 interface PromptResponse {
-  profile: PromptProfile;
+  profile: "web";
   canEdit: boolean;
   prompts: PromptItem[];
 }
 
-type PromptProfile = "web" | "app";
+const PROFILE = "web" as const;
 
 export function PromptAdminPanel() {
   const [loading, setLoading] = useState(true);
@@ -39,25 +39,15 @@ export function PromptAdminPanel() {
   const [savedStepId, setSavedStepId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [canEdit, setCanEdit] = useState(false);
-  const [activeProfile, setActiveProfile] = useState<PromptProfile>("web");
-  const [itemsByProfile, setItemsByProfile] = useState<Record<PromptProfile, PromptItem[]>>({
-    web: [],
-    app: [],
-  });
-  const [activeStepByProfile, setActiveStepByProfile] = useState<Record<PromptProfile, string>>({
-    web: "",
-    app: "",
-  });
-  const [draftsByProfile, setDraftsByProfile] = useState<Record<PromptProfile, Record<string, string>>>({
-    web: {},
-    app: {},
-  });
+  const [items, setItems] = useState<PromptItem[]>([]);
+  const [activeStepId, setActiveStepId] = useState("");
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
 
-  async function load(profile: PromptProfile) {
+  async function load() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/core-prompts?profile=${profile}`);
+      const res = await fetch(`/api/core-prompts?profile=${PROFILE}`);
       const data = (await res.json()) as PromptResponse | { error?: string };
       if (!res.ok) {
         throw new Error("error" in data && data.error ? data.error : "Failed to load prompts");
@@ -65,18 +55,14 @@ export function PromptAdminPanel() {
       const payload = data as PromptResponse;
       const prompts = payload.prompts;
       setCanEdit(payload.canEdit);
-      setItemsByProfile((prev) => ({ ...prev, [profile]: prompts }));
-      setDraftsByProfile((prev) => ({
-        ...prev,
-        [profile]: prompts.reduce<Record<string, string>>((acc, item) => {
+      setItems(prompts);
+      setDrafts(
+        prompts.reduce<Record<string, string>>((acc, item) => {
           acc[item.stepId] = item.dbPrompt ?? item.localPrompt;
           return acc;
-        }, {}),
-      }));
-      setActiveStepByProfile((prev) => ({
-        ...prev,
-        [profile]: prev[profile] || prompts[0]?.stepId || "",
-      }));
+        }, {})
+      );
+      setActiveStepId((prev) => prev || prompts[0]?.stepId || "");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -85,24 +71,24 @@ export function PromptAdminPanel() {
   }
 
   useEffect(() => {
-    void load(activeProfile);
-  }, [activeProfile]);
+    void load();
+  }, []);
 
-  async function save(profile: PromptProfile, stepId: string, promptContent: string) {
-    const saveKey = `${profile}:${stepId}`;
+  async function save(stepId: string, promptContent: string) {
+    const saveKey = `${PROFILE}:${stepId}`;
     setSavingStepId(saveKey);
     setError(null);
     try {
       const res = await fetch("/api/core-prompts", {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ profile, stepId, promptContent }),
+        body: JSON.stringify({ profile: PROFILE, stepId, promptContent }),
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) {
         throw new Error(data.error ?? "Failed to save prompt");
       }
-      await load(profile);
+      await load();
       setSavedStepId(saveKey);
       setTimeout(() => {
         setSavedStepId((current) => (current === saveKey ? null : current));
@@ -114,30 +100,16 @@ export function PromptAdminPanel() {
     }
   }
 
-  const items = itemsByProfile[activeProfile];
-  const activeStepId = activeStepByProfile[activeProfile];
-  const drafts = draftsByProfile[activeProfile];
   const activeItem = items.find((item) => item.stepId === activeStepId) ?? items[0];
 
-  const setActiveStepId = (stepId: string) => {
-    setActiveStepByProfile((prev) => ({
-      ...prev,
-      [activeProfile]: stepId,
-    }));
-  };
-
   const updateDraft = (stepId: string, content: string) => {
-    setDraftsByProfile((prev) => ({
+    setDrafts((prev) => ({
       ...prev,
-      [activeProfile]: {
-        ...prev[activeProfile],
-        [stepId]: content,
-      },
+      [stepId]: content,
     }));
   };
 
-  const isSavingActiveStep =
-    !!activeItem && savingStepId === `${activeProfile}:${activeItem.stepId}`;
+  const isSavingActiveStep = !!activeItem && savingStepId === `${PROFILE}:${activeItem.stepId}`;
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
@@ -145,32 +117,6 @@ export function PromptAdminPanel() {
       <p className="mt-2 text-sm text-muted-foreground">
         每个节点都支持覆盖本地 prompt。留空保存表示回退到本地默认值。
       </p>
-      <div className="mt-4 inline-flex items-center rounded-lg border border-white/12 bg-white/3 p-0.5">
-        <button
-          type="button"
-          onClick={() => setActiveProfile("web")}
-          className={`rounded-md px-3 py-1 font-mono text-[11px] tracking-[0.08em] transition ${
-            activeProfile === "web"
-              ? "bg-primary/20 text-primary"
-              : "text-muted-foreground/70 hover:text-foreground"
-          }`}
-          aria-pressed={activeProfile === "web"}
-        >
-          Web
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveProfile("app")}
-          className={`rounded-md px-3 py-1 font-mono text-[11px] tracking-[0.08em] transition ${
-            activeProfile === "app"
-              ? "bg-primary/20 text-primary"
-              : "text-muted-foreground/70 hover:text-foreground"
-          }`}
-          aria-pressed={activeProfile === "app"}
-        >
-          App
-        </button>
-      </div>
 
       {loading ? <p className="mt-6 text-sm text-muted-foreground">加载中...</p> : null}
 
@@ -200,7 +146,7 @@ export function PromptAdminPanel() {
             <div className="mb-2">
               <h2 className="text-sm font-medium">{activeItem.label}</h2>
               <p className="text-xs text-muted-foreground">
-                {activeProfile} / {activeItem.stepId}
+                {PROFILE} / {activeItem.stepId}
               </p>
             </div>
             <textarea
@@ -213,7 +159,7 @@ export function PromptAdminPanel() {
               <button
                 className="rounded-md border border-primary/35 bg-primary/15 px-3 py-1.5 text-xs disabled:opacity-50"
                 disabled={!canEdit || isSavingActiveStep}
-                onClick={() => void save(activeProfile, activeItem.stepId, drafts[activeItem.stepId] ?? "")}
+                onClick={() => void save(activeItem.stepId, drafts[activeItem.stepId] ?? "")}
               >
                 {isSavingActiveStep ? (
                   <span className="inline-flex items-center gap-1.5">
@@ -244,7 +190,7 @@ export function PromptAdminPanel() {
                   <AlertDialogFooter>
                     <AlertDialogCancel>取消</AlertDialogCancel>
                     <AlertDialogAction
-                      onClick={() => void save(activeProfile, activeItem.stepId, "")}
+                      onClick={() => void save(activeItem.stepId, "")}
                       className="bg-red-500 text-white hover:bg-red-500/90"
                     >
                       确认回退
@@ -252,7 +198,7 @@ export function PromptAdminPanel() {
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
-              {savedStepId === `${activeProfile}:${activeItem.stepId}` ? (
+              {savedStepId === `${PROFILE}:${activeItem.stepId}` ? (
                 <TooltipProvider>
                   <Tooltip open>
                     <TooltipTrigger asChild>

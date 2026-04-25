@@ -1,62 +1,46 @@
-## Step Prompt: Compose Page
+## 步骤提示：合成页面
 
-You are a frontend engineer. Generate a Next.js `page.tsx` file that assembles
-the provided content section components into a complete page.
+你是前端工程师。请生成一个 Next.js `page.tsx` 文件，将已提供的内容区块组件组装成完整页面。
 
-## Critical Rule
+## 关键规则
 
-`NavigationSection` and `FooterSection` (and any other layout-level sections)
-are already handled in `app/layout.tsx`.
-Do not import or render layout-level sections in `page.tsx`.
+`NavigationSection`、`FooterSection`（以及任何其他布局级区块）已在 `app/layout.tsx` 中处理。
+不要在 `page.tsx` 中导入或渲染布局级区块。
 
-## Section Layout Contract (Critical)
+## 区块布局约定（关键）
 
-Each section component already implements its own layout: an outer full-width layer
-for background and an inner `container mx-auto px-* py-*` for content (per project
-section layout rules). **Do not** wrap section imports in extra `<section>`,
-`container`, `mx-auto`, `px-`*, `py-`*, or `max-w-*` — that duplicates padding and
-width constraints and breaks rhythm.
+每个区块组件已实现自身布局：外层全宽背景层，内层 `container mx-auto px-* py-*` 承载内容（按项目
+的区块布局规则）。**不要**在导入的区块外再包一层 `<section>`、`container`、`mx-auto`、`px-`*、`py-`* 或 `max-w-*`——会重复内边距与宽度约束并破坏版式节奏。
 
-- Render sections **directly** as siblings inside `<main>`: `<HeroSection />`,
-`<FeaturesSection />`, etc.
-- Page-level composition may add **only**: a minimal wrapper when an effect truly
-requires a positioned ancestor (e.g. one absolute child next to the hero). **Do not**
-add scanlines, film grain, repeating gradients, dot grids, noise textures, vignettes,
-or other purely decorative full-viewport overlays unless the **page design plan text**
-explicitly asks for that effect. Default composition is sections inside `<main>` only.
-Never use `border-t` / `border-b` / `divide-`* / `<hr />` between sections on the page
-file; spacing and separation belong inside section components or via background
-contrast.
+- 在 `<main>` 内**直接**将各区块作为兄弟节点渲染：`<HeroSection />`、`<FeaturesSection />` 等。
+- 页面级合成**仅**可在某种效果确实需要定位祖先时添加最小包装（例如与 hero 并列的一个 absolute 子节点）。**不要**添加扫描线、胶片颗粒、重复渐变、点阵、噪点纹理、暗角等纯装饰性的全视口叠层，除非**页面设计说明文字**明确要求该效果。默认合成仅为 `<main>` 内的各区块。
+不要在页面文件中用 `border-t` / `border-b` / `divide-`* / `<hr />` 区分各区块；间距与分隔应在各区块组件内或通过背景对比实现。
 
-## Design Responsibility
+## 设计职责
 
-- Use the provided page design plan as the composition strategy for rhythm, hierarchy, and pacing.
-- Respect the provided role / capability / journey-stage context when composing the page.
-- Treat the supplied section list as required building blocks, but compose them into a coherent page rather than a flat import dump.
+- 将提供的页面设计说明作为节奏、层级与铺陈的合成策略。
+- 合成页面时尊重所给角色 / 能力 / 旅程阶段等上下文。
+- 将提供的区块列表视为必需积木，但要合成成连贯页面，而不是扁平的「只 import 一堆」。
 
-## Output Rules
+## 输出规则
 
-- Output only the raw TSX code.
-- **CRITICAL: Copy the provided import statements VERBATIM. Do not change the import paths, component names, or file names. The import paths are pre-computed and correct.**
-- Render all sections inside a single `<main>` element in the provided order.
-- Do not add per-section spacing or container wrappers (see Section Layout Contract above).
-- If and only if the page design plan explicitly specifies a global overlay (e.g. grain,
-grid, vignette), add it as a single fixed `pointer-events-none` element outside `<main>`.
-Otherwise omit overlays entirely.
-- The page component is pure composition: no business logic, no state, no
-`"use client"`.
-- Do not import sentinel packages like `client-only` or `server-only` in `page.tsx`.
-- Export `metadata` and `export default function Page() {}`.
-- Do not hardcode route assumptions beyond the supplied path and metadata.
+- 只输出原始 TSX 代码。
+- **关键：逐字复制提供的 import 语句。不要改 import 路径、组件名或文件名。路径已预计算且正确。**
+- 按给定顺序，在**单个** `<main>` 内渲染全部区块。
+- 不要为各区块额外加间距或容器包装（见上文「区块布局约定」）。
+- 当且仅当页面设计说明**明确**要求全局叠层（例如颗粒、网格、暗角）时，在 `<main>` 外添加**一个**固定的 `pointer-events-none` 元素；否则完全不要叠层。
+- 页面组件仅做组合：无业务逻辑、无状态、无 `"use client"`。
+- 不要在 `page.tsx` 中导入 `client-only` 或 `server-only` 这类哨兵包。
+- 导出 `metadata` 与 `export default function Page() {}`。
+- 除所给路径与 metadata 外，不要硬编码路由假设。
 
-## Example Structure (default — no decorative overlays)
+## 示例结构（默认 — 无装饰性叠层）
 
-The example below is the **baseline**. Do not copy decorative layers from other pages
-or from memory; only add an overlay when the design plan explicitly requires it.
+下例为**基线**。不要从其他页面或凭记忆复制装饰层；仅当设计说明明确要求时才加叠层。
 
 ```tsx
 import type { Metadata } from "next";
-// Import paths follow the pattern: @/components/sections/{slug}_{ComponentName}
+// 导入路径遵循模式：@/components/sections/{slug}_{ComponentName}
 import HeroSection from "@/components/sections/home_HeroSection";
 import FeaturesSection from "@/components/sections/home_FeaturesSection";
 import PricingSection from "@/components/sections/home_PricingSection";

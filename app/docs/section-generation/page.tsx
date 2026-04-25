@@ -68,7 +68,7 @@ export default function SectionGenerationPage() {
           <P>
             生成一条 section 的本质是：在已确定的<strong>设计系统</strong>、<strong>全局样式</strong>和<strong>项目语境</strong>下，
             让模型输出<strong>单个文件的完整 TSX</strong>，并写入站点目录。核心实现集中在{" "}
-            <Code>ai/flows/generate_project/steps/generateSection.ts</Code> 中的{" "}
+            <Code>ai/flows/generate_project/steps/generateSection</Code> 中的{" "}
             <Code>stepGenerateSection</Code>。
           </P>
           <P>

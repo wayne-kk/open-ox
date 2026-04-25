@@ -7,7 +7,7 @@
  *   data: {"type":"error", "message": string}\n\n
  */
 
-import { runGenerateApp, runGenerateProject } from "@/ai/flows";
+import { runGenerateProject } from "@/ai/flows";
 import {
   detectCheckpoint,
   type CheckpointResult,
@@ -18,7 +18,6 @@ import {
   initProjectDir,
   updateProjectStatus,
   renameProject,
-  type GenerationMode,
 } from "@/lib/projectManager";
 import { scheduleUploadFullProject } from "@/lib/storage";
 import { setRuntimeModelId, type ModelId } from "@/lib/config/models";
@@ -57,19 +56,15 @@ export async function POST(req: Request) {
     const useDatabasePrompts = false;
     const folderId: string | null | undefined =
       typeof body.folderId === "string" ? body.folderId : body.folderId === null ? null : undefined;
-    const requestGenerationMode: GenerationMode | undefined = body.generationMode;
-    if (
-      requestGenerationMode !== undefined &&
-      requestGenerationMode !== "web" &&
-      requestGenerationMode !== "app"
-    ) {
+    const requestGenerationMode: string | undefined = body.generationMode;
+    if (requestGenerationMode !== undefined && requestGenerationMode !== "web") {
       return NextResponse.json({ error: "Invalid generationMode" }, { status: 400 });
     }
 
     // For retry or pre-created project: load existing project's prompt and model
     let effectivePrompt = userPrompt as string | undefined;
     let effectiveModel = modelOverride;
-    let effectiveGenerationMode: GenerationMode = requestGenerationMode ?? "web";
+    let effectiveGenerationMode = requestGenerationMode ?? "web";
     if (retryProjectId || preCreatedProjectId) {
       const lookupId = retryProjectId ?? preCreatedProjectId!;
       const existing = await getProject(db, lookupId);
@@ -209,7 +204,6 @@ export async function POST(req: Request) {
           }
 
           // Step 3: Run generation, writing files into sites/{projectId}/
-          const runGeneration = effectiveGenerationMode === "app" ? runGenerateApp : runGenerateProject;
           const result = await withCorePromptRuntime(
             {
               promptProfile,
@@ -217,7 +211,7 @@ export async function POST(req: Request) {
               dbPromptByStepId: corePromptOverrides,
             },
             () =>
-              runGeneration(
+              runGenerateProject(
                 effectivePrompt,
                 (step: BuildStep) => {
               // SSE is the sole real-time channel — no DB writes during generation.

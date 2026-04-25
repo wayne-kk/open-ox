@@ -1,21 +1,13 @@
 import { existsSync, readdirSync } from "fs";
 import { join } from "path";
 import type { PromptKind } from "./types";
-import type { PromptProfile } from "./profile";
-import { getPromptProfile } from "./profile";
 
 const ROOT = process.cwd();
 
-function getGenerateFlowNameForProfile(profile: PromptProfile): "generate_project" | "generate_app" {
-  return profile === "app" ? "generate_app" : "generate_project";
-}
-
-function getGenerateFlowName(): "generate_project" | "generate_app" {
-  return getGenerateFlowNameForProfile(getPromptProfile());
-}
+const GENERATE_PROJECT_ROOT = join(ROOT, "ai", "flows", "generate_project", "prompts");
 
 export function resolveGeneratePromptsRoot(): string {
-  return join(ROOT, "ai", "flows", getGenerateFlowName(), "prompts");
+  return GENERATE_PROJECT_ROOT;
 }
 
 /**
@@ -23,11 +15,9 @@ export function resolveGeneratePromptsRoot(): string {
  * Returns the first match or null.
  */
 function findFileRecursive(dir: string, filename: string): string | null {
-  // Check top-level first (fast path)
   const direct = join(dir, filename);
   if (existsSync(direct)) return direct;
 
-  // Recurse into subdirectories
   if (!existsSync(dir)) return null;
   const entries = readdirSync(dir, { withFileTypes: true });
   for (const entry of entries) {
@@ -40,17 +30,7 @@ function findFileRecursive(dir: string, filename: string): string | null {
 }
 
 export function resolvePromptPath(kind: PromptKind, id: string): string {
-  const generateRoot = resolveGeneratePromptsRoot();
-  return resolvePromptPathInRoot(generateRoot, kind, id);
-}
-
-export function resolvePromptPathForProfile(
-  profile: PromptProfile,
-  kind: PromptKind,
-  id: string
-): string {
-  const generateRoot = join(ROOT, "ai", "flows", getGenerateFlowNameForProfile(profile), "prompts");
-  return resolvePromptPathInRoot(generateRoot, kind, id);
+  return resolvePromptPathInRoot(GENERATE_PROJECT_ROOT, kind, id);
 }
 
 function resolvePromptPathInRoot(generateRoot: string, kind: PromptKind, id: string): string {

@@ -6,12 +6,11 @@ import { validateSkillFrontmatter } from "@/ai/shared/skillDiscovery";
 import { execSync } from "child_process";
 import { formatSiteFile, syncSiteValidationMarkers, readSiteFile, writeSiteFile, getSkillPromptsRoot } from "./shared/files";
 import { createArtifactLogger, createStepLogger } from "./shared/logging";
-import { buildScreenFilePath, buildSectionFilePath } from "./shared/paths";
+import { buildSectionFilePath } from "./shared/paths";
 import { stepAnalyzeProjectRequirement } from "./steps/analyzeProjectRequirement";
 import { stepApplyProjectDesignTokens } from "./steps/applyProjectDesignTokens";
 import { stepComposeLayout } from "./steps/composeLayout";
 import { stepComposePage } from "./steps/composePage";
-import { stepGenerateScreen } from "./steps/generateScreen";
 import { stepGenerateProjectDesignSystem } from "./steps/generateProjectDesignSystem";
 import { stepMatchDesignSystemSkill, type DesignSystemMatchResult } from "./steps/matchDesignSystemSkill";
 import { stepGenerateSection } from "./steps/generateSection";
@@ -42,8 +41,6 @@ import type { PendingImage } from "../../tools/system/generateImageTool";
 import { awaitPendingImages } from "../../tools/system/generateImageTool";
 import type { CheckpointResult } from "./shared/checkpoint";
 import { resetSectionTscCache } from "./shared/tsxDiagnostics";
-import { getPromptProfile } from "@/ai/prompts/core/profile";
-
 
 function summarizeFailures(prefix: string, failures: Array<{ name: string; message: string }>): string {
   const detail = failures.map((failure) => `${failure.name}: ${failure.message}`).join("; ");
@@ -175,10 +172,6 @@ function getDescribePageSectionsStepName(slug: string): string {
   return `describe_page_sections:${slug}`;
 }
 
-function getGenerateScreenStepName(slug: string): string {
-  return `generate_screen:${slug}`;
-}
-
 function getBuildStepName(attempt: number): string {
   return attempt === 0 ? "run_build" : `run_build:retry_${attempt}`;
 }
@@ -189,33 +182,6 @@ function getRepairStepName(attempt: number): string {
 
 function getInstallDependenciesStepName(scope: string): string {
   return `install_dependencies:${scope}`;
-}
-
-function buildAppScreenFirstLayout(language: string): string {
-  const lang = language?.trim() || "en";
-  return `import type { Metadata } from "next";
-import { Inter } from "next/font/google";
-import "./globals.css";
-
-const inter = Inter({ subsets: ["latin"] });
-
-export const metadata: Metadata = {
-  title: "Generated App",
-  description: "Screen-first generated app experience.",
-};
-
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
-  return (
-    <html lang="${lang}">
-      <body className={inter.className}>{children}</body>
-    </html>
-  );
-}
-`;
 }
 
 function buildWholePageMinimalLayout(blueprint: PlannedProjectBlueprint): string {
@@ -245,24 +211,6 @@ export default function RootLayout({
   );
 }
 `;
-}
-
-async function ensureAppScreenFirstLayout(params: {
-  language: string;
-  artifactLogger: ArtifactLogger;
-}): Promise<string> {
-  const { language, artifactLogger } = params;
-  const layoutPath = "app/layout.tsx";
-  const content = buildAppScreenFirstLayout(language);
-  await writeSiteFile(layoutPath, content);
-  await formatSiteFile(layoutPath);
-  await persistJsonArtifact(artifactLogger, "compose_layout", "output", {
-    layoutPath,
-    mode: "app-screen-first",
-    language,
-  });
-  await persistSiteFileArtifact(artifactLogger, "compose_layout", layoutPath, "layout");
-  return layoutPath;
 }
 
 async function ensureWholePageMinimalLayout(params: {
@@ -529,7 +477,6 @@ async function generatePages(params: {
   runtimeContext: ProjectRuntimeContext;
   artifactLogger: ArtifactLogger;
   logger: StepLogger;
-  appScreenFirstEnabled: boolean;
   skipSections?: Set<string>;
   skipPages?: Set<string>;
   trajectoryCollector?: import("./trajectoryCollector").GenerateTrajectoryCollector;
@@ -540,7 +487,6 @@ async function generatePages(params: {
     runtimeContext,
     artifactLogger,
     logger,
-    appScreenFirstEnabled,
     skipSections,
     skipPages,
     trajectoryCollector,
@@ -551,68 +497,6 @@ async function generatePages(params: {
   // Pages are independent (distinct output paths per slug); run in parallel for wall-clock time.
   const pageOutcomes = await Promise.all(
     blueprint.site.pages.map(async (page) => {
-      if (appScreenFirstEnabled) {
-        const screenStepName = getGenerateScreenStepName(page.slug);
-        const screenOutput = buildScreenFilePath(page.slug);
-        logger.startStep(screenStepName);
-        const screenResult = await stepGenerateScreen({
-          page,
-          designSystem,
-          projectContext: runtimeContext,
-          outputFileRelative: screenOutput,
-        });
-        logger.logStep(
-          screenStepName,
-          "ok",
-          `${screenResult.filePath}${screenResult.skillIds.length ? ` | ${screenResult.skillIds.join(", ")}` : ""}`,
-          undefined,
-          screenResult.trace
-        );
-        await persistJsonArtifact(artifactLogger, screenStepName, "output", {
-          slug: page.slug,
-          outputFile: screenResult.filePath,
-          skillIds: screenResult.skillIds,
-          appScreenPlan: page.appScreenPlan ?? null,
-        });
-        await persistSiteFileArtifact(
-          artifactLogger,
-          screenStepName,
-          screenResult.filePath,
-          "screen"
-        );
-
-        if (skipPages?.has(page.slug)) {
-          const pagePath = page.slug === "home" ? "app/page.tsx" : `app/${page.slug}/page.tsx`;
-          logger.logStep(getComposePageStepName(page.slug), "ok", "resumed from checkpoint");
-          return { files: [screenResult.filePath, pagePath], pendingImages: [] };
-        }
-
-        const pageCompose = await logger.timed(
-          getComposePageStepName(page.slug),
-          () =>
-            stepComposePage(page, designSystem, [], {
-              appScreenComponentName: "AppScreen",
-            }),
-          (r) => ({ detail: r.pagePath, trace: r.trace })
-        );
-        const pagePath = pageCompose.pagePath;
-        await persistJsonArtifact(artifactLogger, getComposePageStepName(page.slug), "output", {
-          pagePath,
-          slug: page.slug,
-          title: page.title,
-          composeMode: "app-screen-first",
-          screenComponent: "AppScreen",
-          screenFile: screenResult.filePath,
-        });
-        await persistSiteFileArtifact(
-          artifactLogger,
-          getComposePageStepName(page.slug),
-          pagePath,
-          "page"
-        );
-        return { files: [screenResult.filePath, pagePath], pendingImages: [] };
-      }
-
       // Deduplicate page sections by fileName to prevent duplicate generation
       const seenFileNames = new Set<string>();
       const dedupedSections = page.sections.filter((s) => {
@@ -725,9 +609,7 @@ async function generatePages(params: {
         getComposePageStepName(page.slug),
         () =>
             stepComposePage(page, designSystem, dedupedSections, {
-              wholePage:
-                getPromptProfile() !== "app" &&
-                blueprint.brief.productScope.layoutMode === "whole-page",
+              wholePage: blueprint.brief.productScope.layoutMode === "whole-page",
             }),
         (r) => ({ detail: r.pagePath, trace: r.trace })
       );
@@ -876,7 +758,6 @@ export async function runGenerateProject(
   }
 
   const cp = options?.checkpoint;
-  const appScreenFirstEnabled = getPromptProfile() === "app";
 
   try {
     // Always validate skill files (skills are enabled by default)
@@ -1090,7 +971,6 @@ export async function runGenerateProject(
           pages: blueprint.site.pages.map((page) => ({
             slug: page.slug,
             pageDesignPlan: page.pageDesignPlan,
-            appScreenPlan: page.appScreenPlan ?? null,
             sections: page.sections.map((section) => ({
               type: section.type,
               fileName: section.fileName,
@@ -1149,32 +1029,6 @@ export async function runGenerateProject(
     })();
 
     const uiGenerationPromise = (async () => {
-      if (appScreenFirstEnabled) {
-        const layoutPath = await logger.timed(
-          "compose_layout",
-          () =>
-            ensureAppScreenFirstLayout({
-              language: blueprint.brief.language,
-              artifactLogger,
-            }),
-          (path) => path
-        );
-        appendGeneratedFiles(result, [layoutPath]);
-
-        const pageResult = await generatePages({
-          blueprint,
-          designSystem,
-          runtimeContext,
-          artifactLogger,
-          logger,
-          appScreenFirstEnabled: true,
-          skipPages: cp?.composedPages,
-          trajectoryCollector,
-        });
-        appendGeneratedFiles(result, pageResult.files);
-        return pageResult.pendingImages;
-      }
-
       const [layoutResult, pageResult] = await Promise.all([
         generateSharedLayoutSections({
           blueprint,
@@ -1191,7 +1045,6 @@ export async function runGenerateProject(
           runtimeContext,
           artifactLogger,
           logger,
-          appScreenFirstEnabled: false,
           skipSections: cp?.generatedSections,
           skipPages: cp?.composedPages,
           trajectoryCollector,

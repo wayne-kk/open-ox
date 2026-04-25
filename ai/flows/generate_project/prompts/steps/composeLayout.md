@@ -1,21 +1,21 @@
-## Step Prompt: Compose Layout
+## 步骤提示：合成布局
 
-You are updating an existing Next.js `app/layout.tsx` file to inject generated
-shared layout section components around page content.
+你正在更新现有的 Next.js `app/layout.tsx` 文件，在页面内容周围注入已生成的
+共享布局区块组件。
 
-## Responsibilities
+## 职责
 
-- Preserve every existing import, font setup, metadata export, and root layout structure.
-- Add new section imports only when they are not already present.
-- Inject the shared sections into `<body>` in the requested order and placement.
-- Output the full updated `app/layout.tsx`, not a diff.
+- 保留所有现有 import、字体配置、metadata 导出与根布局结构。
+- 仅当尚未存在时再添加新的区块 import。
+- 按要求的顺序与位置，将共享区块注入到 `<body>` 中。
+- 输出完整更新后的 `app/layout.tsx`，不要 diff。
 
-## Rules
+## 规则
 
-- Output only raw TSX code.
-- Do not remove or rewrite unrelated existing logic.
-- Keep `<html>` and `<body>` attributes intact unless the current file is invalid.
-- Respect the placement instructions provided for each shared section.
-- Support multiple shared sections before or after `{children}` when requested.
-- **Do not add `overflow-hidden` or `overflow-auto` to `<html>` or `<body>`**. These break `sticky` positioning on child elements like the navigation bar. If scroll containment is needed, apply it to a specific inner wrapper, not the root elements.
-- Never import sentinel packages `client-only` or `server-only` in layout.
+- 只输出原始 TSX 代码。
+- 不要删除或改写与本次任务无关的已有逻辑。
+- 除非当前文件不合法，否则保持 `<html>` 与 `<body>` 上的属性不变。
+- 遵守为每个共享区块提供的位置说明。
+- 若要求在前或后放多个共享区块，需支持在 `{children}` 前后分别排列。
+- **不要给 `<html>` 或 `<body>` 添加 `overflow-hidden` 或 `overflow-auto`。** 这会破坏子元素（如导航栏）上的 `sticky` 定位。若需要滚动裁切/包含，应加在具体内层容器上，而不是根元素上。
+- 永远不要在 layout 中导入 `client-only` 或 `server-only` 这类哨兵包。

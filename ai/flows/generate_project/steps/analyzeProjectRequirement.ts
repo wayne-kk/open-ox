@@ -1,4 +1,4 @@
-import { composePromptBlocks, loadGuardrail, loadStepPrompt } from "../shared/files";
+import { composePromptBlocks, loadStepPrompt } from "../shared/files";
 import { callLLMWithTools, extractJSON } from "../shared/llm";
 import { webSearchTool, executeWebSearch } from "../../../tools/system/webSearchTool";
 import type { ProjectBlueprint, StepTrace } from "../types";
@@ -13,7 +13,6 @@ export async function stepAnalyzeProjectRequirement(
   const model = getModelForStep("analyze_project_requirement");
   const systemPrompt = composePromptBlocks([
     loadStepPrompt("analyzeProjectRequirement"),
-    loadGuardrail("outputJson"),
   ]);
 
   const { content: raw, toolCalls } = await callLLMWithTools({

@@ -4,7 +4,11 @@ import { Dirent } from "fs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const WORKSPACE_ROOT = process.cwd();
-export type GenerationMode = "web" | "app";
+export type GenerationMode = "web";
+
+function coerceGenerationMode(_stored: string | null | undefined): GenerationMode {
+  return "web";
+}
 
 export interface ModificationRecord {
   instruction: string;
@@ -70,7 +74,7 @@ interface ProjectRow {
   log_directory: string | null;
   total_duration: number | null;
   model_id: string | null;
-  generation_mode: GenerationMode | null;
+  generation_mode: string | null;
   user_id: string | null;
   folder_id: string | null;
   owner_username?: string | null;
@@ -94,7 +98,7 @@ function rowToMetadata(row: ProjectRow): ProjectMetadata {
     logDirectory: row.log_directory ?? undefined,
     totalDuration: row.total_duration ?? undefined,
     modelId: row.model_id ?? undefined,
-    generationMode: row.generation_mode ?? "web",
+    generationMode: coerceGenerationMode(row.generation_mode),
     folderId: row.folder_id ?? undefined,
     modificationHistory: row.modification_history ?? [],
     ...(row.user_id
@@ -126,7 +130,7 @@ interface ProjectListRow {
   error: string | null;
   verification_status: "passed" | "failed" | null;
   model_id: string | null;
-  generation_mode: GenerationMode | null;
+  generation_mode: string | null;
   folder_id: string | null;
   user_id: string | null;
   owner_username: string | null;
@@ -212,7 +216,7 @@ export async function listProjectsSummary(
     error: row.error ?? undefined,
     verificationStatus: row.verification_status ?? undefined,
     modelId: row.model_id ?? undefined,
-    generationMode: row.generation_mode ?? "web",
+    generationMode: coerceGenerationMode(row.generation_mode),
     folderId: row.folder_id ?? undefined,
     modificationHistory: [],
     ownerUserId: row.user_id ?? undefined,

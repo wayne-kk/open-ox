@@ -1,7 +1,8 @@
 /**
- * Dev Server Manager — E2B Cloud Sandboxes (Static Build)
+ * Dev Server Manager — static export preview
  *
- * Flow:
+ * Default: local `next build` + `npx serve` (see `localDevServerManager.ts`).
+ * E2B: set `OPEN_OX_PREVIEW_BACKEND=e2b`. Flow in cloud:
  *   1. Check Supabase for existing sandboxId → try reconnect
  *   2. Create sandbox from custom template (large memory)
  *   3. Upload generated files + inject `output: 'export'` into next.config
@@ -15,8 +16,21 @@ import fs from "fs/promises";
 import path from "path";
 import { Sandbox } from "e2b";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import * as localPreview from "./localDevServerManager";
+import { isPreviewE2B } from "./previewMode";
+import { getSavedFingerprint, saveFingerprint } from "./previewFingerprintDb";
+import {
+  collectFiles,
+  computeProjectFingerprint,
+  PREVIEW_FALLBACK_FILES,
+  TEMPLATE_BASE_FILE_NAMES,
+  UPLOAD_EXCLUDE,
+  ensureGlobalErrorFromTemplateForProject,
+} from "./previewShared";
 import { getSiteRoot, WORKSPACE_ROOT } from "./projectManager";
 import { restoreProjectFiles } from "./storage";
+
+export { classifyModificationScope, type PreviewRefreshMode } from "./previewShared";
 
 /** Known deps baked into the E2B template — parsed from e2b-template/package.json at build time */
 const TEMPLATE_PKG_PATH = path.join(WORKSPACE_ROOT, "e2b-template", "package.json");
@@ -93,153 +107,8 @@ function e2bOpts() {
   return { apiKey };
 }
 
-const UPLOAD_EXCLUDE = new Set(["node_modules", ".next", ".git"]);
-
-type FallbackFile = {
-  path: string;
-  content: string;
-};
-
-/**
- * Some AI-generated projects keep the default app/layout imports but forget
- * to generate these files. Add tiny runtime-safe stubs in sandbox only when
- * those files are absent, so preview build can proceed.
- */
-const PREVIEW_FALLBACK_FILES: FallbackFile[] = [
-  {
-    path: "app/components/ConditionalNav.tsx",
-    content: `export function ConditionalNav() {
-  return null;
-}
-`,
-  },
-  {
-    path: "app/components/ConditionalFooter.tsx",
-    content: `export function ConditionalFooter() {
-  return null;
-}
-`,
-  },
-  {
-    path: "app/components/DynamicFavicon.tsx",
-    content: `export function DynamicFavicon() {
-  return null;
-}
-`,
-  },
-  {
-    path: "app/contexts/FaviconContext.tsx",
-    content: `import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
-
-export type FaviconState = "idle" | "thinking" | "notify" | "error";
-
-interface FaviconContextValue {
-  state: FaviconState;
-  setState: (s: FaviconState) => void;
-  startThinking: () => void;
-  flashNotify: (durationMs?: number) => void;
-  flashError: (durationMs?: number) => void;
-}
-
-const FaviconContext = createContext<FaviconContextValue | null>(null);
-
-export function FaviconProvider({ children }: { children: ReactNode }) {
-  const [state, setStateRaw] = useState<FaviconState>("idle");
-
-  const setState = useCallback((nextState: FaviconState) => {
-    setStateRaw(nextState);
-  }, []);
-
-  const startThinking = useCallback(() => {
-    setStateRaw("thinking");
-  }, []);
-
-  const flashNotify = useCallback(() => {
-    setStateRaw("notify");
-  }, []);
-
-  const flashError = useCallback(() => {
-    setStateRaw("error");
-  }, []);
-
-  return (
-    <FaviconContext.Provider value={{ state, setState, startThinking, flashNotify, flashError }}>
-      {children}
-    </FaviconContext.Provider>
-  );
-}
-
-export function useFavicon() {
-  const ctx = useContext(FaviconContext);
-  if (!ctx) {
-    throw new Error("useFavicon must be used within <FaviconProvider>");
-  }
-  return ctx;
-}
-`,
-  },
-];
-
-// ── Project fingerprint ───────────────────────────────────────────────────────
-// Lightweight hash of all project files (path + size + mtime).
-// Used to detect whether local files changed since the last sandbox upload,
-// so startDevServer can skip rebuild when nothing changed.
-
-async function computeProjectFingerprint(projectId: string): Promise<string> {
-  const { createHash } = await import("crypto");
-  const projectDir = getSiteRoot(projectId);
-  const files = await collectFiles(projectDir, projectDir);
-  files.sort(); // deterministic order
-  const hash = createHash("sha256");
-  for (const relPath of files) {
-    const fullPath = path.join(projectDir, relPath);
-    const content = await fs.readFile(fullPath);
-    const fileHash = createHash("sha256").update(content).digest("hex");
-    hash.update(`${relPath}:${fileHash}\n`);
-  }
-  return hash.digest("hex").slice(0, 16); // 16 hex chars is plenty
-}
-
-async function getSavedFingerprint(db: SupabaseClient, projectId: string): Promise<string | null> {
-  const { data } = await db
-    .from("projects")
-    .select("files_hash")
-    .eq("id", projectId)
-    .single();
-  return (data as { files_hash: string | null } | null)?.files_hash ?? null;
-}
-
-async function saveFingerprint(db: SupabaseClient, projectId: string, hash: string): Promise<void> {
-  await db
-    .from("projects")
-    .update({ files_hash: hash, updated_at: new Date().toISOString() })
-    .eq("id", projectId);
-}
-
-async function collectFiles(dir: string, base: string): Promise<string[]> {
-  const entries = await fs.readdir(dir, { withFileTypes: true });
-  const files: string[] = [];
-  for (const entry of entries) {
-    if (UPLOAD_EXCLUDE.has(entry.name)) continue;
-    const full = path.join(dir, entry.name);
-    if (entry.isSymbolicLink()) {
-      try {
-        const stat = await fs.stat(full);
-        if (stat.isDirectory()) continue;
-        files.push(path.relative(base, full));
-      } catch { /* broken symlink */ }
-      continue;
-    }
-    if (entry.isDirectory()) {
-      files.push(...(await collectFiles(full, base)));
-    } else if (entry.isFile()) {
-      files.push(path.relative(base, full));
-    }
-  }
-  return files;
-}
-
 async function uploadProjectToSandbox(sandbox: Sandbox, projectId: string): Promise<void> {
+  await ensureGlobalErrorFromTemplateForProject(projectId);
   const projectDir = getSiteRoot(projectId);
   const templateDir = path.join(WORKSPACE_ROOT, "sites", "template");
   const files = await collectFiles(projectDir, projectDir);
@@ -249,16 +118,8 @@ async function uploadProjectToSandbox(sandbox: Sandbox, projectId: string): Prom
   // Template base files that must always be present in the sandbox.
   // If the project dir is missing any (e.g. after a Storage restore that only
   // contains AI-generated files), fall back to the local template copy.
-  const TEMPLATE_BASE_FILES = [
-    "next.config.ts",
-    "tsconfig.json",
-    "postcss.config.mjs",
-    "tailwind.config.ts",
-    "eslint.config.mjs",
-    "components.json",
-  ];
   const fileSet = new Set(files);
-  for (const f of TEMPLATE_BASE_FILES) {
+  for (const f of TEMPLATE_BASE_FILE_NAMES) {
     if (!fileSet.has(f)) files.push(f);
   }
 
@@ -268,7 +129,7 @@ async function uploadProjectToSandbox(sandbox: Sandbox, projectId: string): Prom
     await Promise.all(
       batch.map(async (relPath) => {
         // For package.json and template base files, prefer template copy
-        const useTemplate = relPath === "package.json" || TEMPLATE_BASE_FILES.includes(relPath);
+        const useTemplate = relPath === "package.json" || TEMPLATE_BASE_FILE_NAMES.includes(relPath);
         let localPath = path.join(projectDir, relPath);
         if (useTemplate) {
           const templatePath = path.join(templateDir, relPath);
@@ -513,6 +374,16 @@ export async function startDevServer(
   db: SupabaseClient,
   projectId: string
 ): Promise<{ url: string; port: number }> {
+  if (!isPreviewE2B()) {
+    return localPreview.startLocalDevServer(db, projectId);
+  }
+  return startE2BDevServer(db, projectId);
+}
+
+async function startE2BDevServer(
+  db: SupabaseClient,
+  projectId: string
+): Promise<{ url: string; port: number }> {
   const projectDir = getSiteRoot(projectId);
   try {
     await fs.access(projectDir);
@@ -666,6 +537,10 @@ export async function startDevServer(
 }
 
 export async function stopDevServer(db: SupabaseClient, projectId: string): Promise<void> {
+  if (!isPreviewE2B()) {
+    await localPreview.stopLocalDevServer(projectId);
+    return;
+  }
   const sandboxId = await getSandboxId(db, projectId);
   if (sandboxId) {
     try { await Sandbox.kill(sandboxId, e2bOpts()); } catch { /* already dead */ }
@@ -704,66 +579,6 @@ async function uploadFilesToSandbox(
 }
 
 /**
- * Classify modification diffs to determine if a full rebuild is needed
- * or if a lightweight file-swap + browser refresh is sufficient.
- */
-export type PreviewRefreshMode = "hot" | "rebuild";
-
-export function classifyModificationScope(
-  diffs: Array<{ file: string; patch: string; stats: { additions: number; deletions: number } }>
-): PreviewRefreshMode {
-  if (diffs.length === 0) return "hot";
-
-  for (const diff of diffs) {
-    const { file, patch } = diff;
-
-    // New or deleted files always need rebuild
-    if (diff.stats.additions > 0 && diff.stats.deletions === 0 && patch.includes("--- /dev/null")) {
-      return "rebuild";
-    }
-
-    // Changes to config files need rebuild
-    if (
-      file === "next.config.ts" ||
-      file === "tsconfig.json" ||
-      file === "package.json" ||
-      file === "postcss.config.mjs" ||
-      file === "tailwind.config.ts"
-    ) {
-      return "rebuild";
-    }
-
-    // Changes to layout.tsx need rebuild (affects all pages)
-    if (file === "app/layout.tsx") {
-      return "rebuild";
-    }
-
-    // Analyze the patch content for structural vs cosmetic changes
-    const patchLines = patch.split("\n");
-    for (const line of patchLines) {
-      if (!line.startsWith("+") || line.startsWith("+++")) continue;
-      const content = line.slice(1).trim();
-      if (!content) continue;
-
-      // Import changes need rebuild
-      if (content.startsWith("import ") || content.startsWith("export ")) {
-        // Exception: re-exports of existing components are fine
-        if (!content.includes("from ")) continue;
-        return "rebuild";
-      }
-
-      // New component definitions need rebuild
-      if (content.match(/^(export\s+)?(function|const|class)\s+\w+/)) {
-        return "rebuild";
-      }
-    }
-  }
-
-  // If we got here, changes are likely cosmetic (text, className, CSS values)
-  return "hot";
-}
-
-/**
  * Hot-refresh: upload changed files to sandbox and trigger browser reload.
  * No `next build` — just file swap + serve restart.
  * Only works for cosmetic changes (text, CSS, className).
@@ -773,6 +588,9 @@ export async function hotRefreshDevServer(
   projectId: string,
   changedFiles: string[]
 ): Promise<{ url: string; port: number; mode: "hot" }> {
+  if (!isPreviewE2B()) {
+    return localPreview.hotRefreshLocalDevServer(db, projectId, changedFiles);
+  }
   const sandboxId = await getSandboxId(db, projectId);
   if (!sandboxId) {
     // No sandbox — fall back to full start
@@ -790,10 +608,13 @@ export async function hotRefreshDevServer(
     return { ...result, mode: "hot" };
   }
 
-  console.log(`[e2b hot] Uploading ${changedFiles.length} changed file(s) to sandbox ${sandboxId}`);
+  await ensureGlobalErrorFromTemplateForProject(projectId);
+  const changedWithGlobal = Array.from(new Set([...changedFiles, "app/global-error.tsx"]));
+  console.log(
+    `[e2b hot] Uploading ${changedWithGlobal.length} file(s) to sandbox ${sandboxId} (includes stable global-error)`
+  );
 
-  // Upload only the changed files
-  await uploadFilesToSandbox(sandbox, projectId, changedFiles);
+  await uploadFilesToSandbox(sandbox, projectId, changedWithGlobal);
 
   // For static export, we need to rebuild even for hot refresh
   // But we can skip dependency installation since no imports changed
@@ -831,6 +652,9 @@ export async function rebuildDevServer(
   db: SupabaseClient,
   projectId: string
 ): Promise<{ url: string; port: number }> {
+  if (!isPreviewE2B()) {
+    return localPreview.rebuildLocalDevServer(db, projectId);
+  }
   const sandboxId = await getSandboxId(db, projectId);
 
   let sandbox: Sandbox | null = null;
@@ -938,6 +762,9 @@ export async function ensureDevServerAlive(
   db: SupabaseClient,
   projectId: string
 ): Promise<{ status: "ok" | "down"; url?: string }> {
+  if (!isPreviewE2B()) {
+    return localPreview.ensureLocalDevServerAlive(db, projectId);
+  }
   const sandboxId = await getSandboxId(db, projectId);
   if (!sandboxId) return { status: "down" };
 
@@ -994,6 +821,9 @@ export async function getDevServerStatus(
   db: SupabaseClient,
   projectId: string
 ): Promise<{ status: "running" | "stopped"; url?: string }> {
+  if (!isPreviewE2B()) {
+    return localPreview.getLocalDevServerStatus(db, projectId);
+  }
   const sandboxId = await getSandboxId(db, projectId);
   if (!sandboxId) return { status: "stopped" };
   try {

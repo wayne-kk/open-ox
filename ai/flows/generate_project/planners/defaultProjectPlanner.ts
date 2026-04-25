@@ -1,13 +1,10 @@
 import type {
-  AppScreenPlan,
   PageDesignPlan,
   PlannedPageBlueprint,
   PlannedProjectBlueprint,
   ProjectBlueprint,
   SectionSpec,
 } from "../types";
-import { getPromptProfile } from "@/ai/prompts/core/profile";
-
 
 function buildDefaultPageDesignPlan(
   page: {
@@ -15,22 +12,21 @@ function buildDefaultPageDesignPlan(
     journeyStage: string;
     sections: SectionSpec[];
   },
-  wholePage = false,
+  wholePage = false
 ): PageDesignPlan {
-  const appProfile = getPromptProfile() === "app";
   const sectionTypes = page.sections.map((section) => section.type);
 
-  const narrativeArc = appProfile || wholePage
+  const narrativeArc = wholePage
     ? "Expose the primary workflow immediately. The interface should feel like a product, not a marketing page."
     : sectionTypes.length <= 3
       ? "Keep the page tightly focused: establish value, support it, then convert."
       : "Move from orientation to persuasion, then social proof, and finish with a decisive conversion close.";
 
-  const layoutStrategy = appProfile || wholePage
+  const layoutStrategy = wholePage
     ? "Full-viewport persistent shell. Layout regions (sidebar, main content, panels) defined by product function, not marketing narrative."
     : `Use section rhythm, spacing, and contrast to support the ${page.journeyStage} stage of the user journey.`;
 
-  const hierarchy = appProfile || wholePage
+  const hierarchy = wholePage
     ? [
         "The interface must be immediately usable — expose the core workflow in the first viewport.",
         "Navigation and structural regions should be persistent and predictable.",
@@ -50,83 +46,26 @@ function buildDefaultPageDesignPlan(
     constraints: [
       "Preserve the given section order unless a wrapper or grouping is required for coherence.",
       "Avoid repetitive section pacing; vary density and emphasis across the page.",
-      ...((appProfile || wholePage)
+      ...(wholePage
         ? ["Avoid landing-page patterns: no hero manifestos, testimonial bands, or FAQ-heavy layouts."]
         : []),
     ],
   };
 }
 
-export function buildDefaultAppScreenPlan(
-  page: {
-    description: string;
-    sections: SectionSpec[];
-  }
-): AppScreenPlan {
-  const feedLike = page.sections.some((section) => ["content", "feed"].includes(section.type));
-  return {
-    screenType: feedLike ? "feed-discovery" : "task-dashboard",
-    shellStyle: "mobile-app-shell-with-bottom-tab-navigation",
-    narrative: feedLike
-      ? "Keep the screen anchored on a continuous discovery stream with quick interactions."
-      : "Keep the screen focused on immediate task entry, status visibility, and short feedback loops.",
-    regions: page.sections.map((section, index) => ({
-      id: `${section.type}-${index + 1}`,
-      title: section.fileName,
-      intent: section.intent,
-      contentHints: section.contentHints,
-      priority: index === 0 ? "primary" : index === 1 ? "secondary" : "supporting",
-    })),
-    interactionModel: {
-      navigationStyle: "bottom-tab-and-in-screen-jump-points",
-      primaryActionModel: "always-visible-primary-action",
-      feedbackPattern: "compact-status-cues-and-immediate-acknowledgement",
-    },
-    preferredSkillIds: feedLike ? ["screen.feed.discovery"] : ["screen.dashboard.utility"],
-  };
-}
-
-export function buildDefaultProjectPlan(
-  blueprint: ProjectBlueprint
-): PlannedProjectBlueprint {
-  const appProfile = getPromptProfile() === "app";
-  const wholePage = !appProfile && blueprint.brief.productScope.layoutMode === "whole-page";
+export function buildDefaultProjectPlan(blueprint: ProjectBlueprint): PlannedProjectBlueprint {
+  const wholePage = blueprint.brief.productScope.layoutMode === "whole-page";
   // Whole-page: a single home section implements the full shell (nav/footer inside it).
-  // Do not generate shared layout_NavigationSection / layout_FooterSection.
   const layoutSections = wholePage ? [] : blueprint.site.layoutSections;
 
   const buildMinimalPageSections = (): SectionSpec[] => {
-    if (appProfile) {
-      return [
-        {
-          type: "content",
-          intent: "Deliver the primary in-app feed/workspace immediately.",
-          contentHints: "Card-based content stream with scan-first information hierarchy.",
-          fileName: "ContentSection",
-        },
-        {
-          type: "interactive",
-          intent: "Provide direct actions that keep users in the core loop.",
-          contentHints: "Action chips, quick filters, composer/entry affordances, and feedback states.",
-          fileName: "InteractiveSection",
-        },
-        {
-          type: "stats",
-          intent: "Reinforce activity and confidence using compact social/progress signals.",
-          contentHints: "Small stats row with concise labels, counts, and contextual relevance.",
-          fileName: "StatsSection",
-        },
-      ];
-    }
-
-    // Whole-page web app: single section carries the entire application UI
     if (wholePage) {
       return [
         {
           type: "ProductSurface",
           intent: `Deliver the full interactive surface described in the project: ${blueprint.brief.projectDescription}`,
           contentHints:
-            "Single route implements the whole product. Derive structure (app chrome, full-bleed stage, table-first, " +
+            "Single route implements the whole product. Derive structure (in-page chrome, full-bleed stage, table-first, " +
             "feed, or other) from the product description and scope — do not assume a default three-column admin shell. " +
             "Include rich, realistic mock data appropriate to that domain.",
           fileName: "ProductSurfaceSection",
@@ -174,7 +113,6 @@ export function buildDefaultProjectPlan(
       ...page,
       pageDesignPlan: buildDefaultPageDesignPlan({ ...page, sections }, wholePage),
       sections,
-      appScreenPlan: appProfile ? buildDefaultAppScreenPlan({ ...page, sections }) : undefined,
     };
   });
 

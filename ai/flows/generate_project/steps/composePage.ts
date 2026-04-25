@@ -9,15 +9,10 @@ import {
 import { callLLMWithMeta, extractContent } from "../shared/llm";
 import { stepTraceFromLlmCompletion } from "../shared/llmTrace";
 import { getModelForStep } from "@/lib/config/models";
-import {
-  buildSectionImportPath,
-  buildScreenImportPath,
-  slugToPagePath,
-} from "../shared/paths";
+import { buildSectionImportPath, slugToPagePath } from "../shared/paths";
 import type { PlannedPageBlueprint, PlannedSectionSpec, StepTrace } from "../types";
 
 export interface ComposePageOptions {
-  appScreenComponentName?: string;
   /** Web whole-page: root layout has no global nav/footer; one section contains the full shell. */
   wholePage?: boolean;
 }
@@ -35,28 +30,6 @@ export async function stepComposePage(
   options?: ComposePageOptions
 ): Promise<ComposePageResult> {
   const targetPagePath = slugToPagePath(blueprint.slug);
-  if (options?.appScreenComponentName) {
-    const appScreenImportPath = buildScreenImportPath(blueprint.slug);
-    const tsx = `import type { Metadata } from "next";
-import ${options.appScreenComponentName} from "${appScreenImportPath}";
-
-export const metadata: Metadata = {
-  title: "${blueprint.title}",
-  description: "${blueprint.description}",
-};
-
-export default function Page() {
-  return (
-    <main className="relative min-h-screen bg-background">
-      <${options.appScreenComponentName} />
-    </main>
-  );
-}
-`;
-    await writeSiteFile(targetPagePath, tsx);
-    await formatSiteFile(targetPagePath);
-    return { pagePath: targetPagePath };
-  }
 
   const systemPrompt = composePromptBlocks([
     loadSystem("frontend"),

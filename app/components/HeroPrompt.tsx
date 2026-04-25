@@ -21,7 +21,6 @@ interface PendingBuildPayload {
   /** When true (default), POST /api/ai loads core prompts from DB; false uses repo prompts only */
   useDatabasePrompts: boolean;
   folderId: string | null;
-  generationMode: GenerationMode;
 }
 
 function savePendingBuild(p: PendingBuildPayload) {
@@ -31,8 +30,6 @@ function savePendingBuild(p: PendingBuildPayload) {
     /* quota / private mode */
   }
 }
-
-type GenerationMode = "web" | "app";
 
 // ── Typewriter placeholders ──────────────────────────────────────────────────
 const PLACEHOLDERS = [
@@ -69,7 +66,6 @@ export function HeroPrompt() {
   const [submitting, setSubmitting] = useState(false);
   const [enableSkills, setEnableSkills] = useState(true);
   const [useDatabasePrompts, setUseDatabasePrompts] = useState(true);
-  const [generationMode, setGenerationMode] = useState<GenerationMode>("web");
 
   // ── Typewriter ─────────────────────────────────────────────────────────────
   const [placeholderIdx, setPlaceholderIdx] = useState(0);
@@ -224,7 +220,6 @@ export function HeroPrompt() {
           body: JSON.stringify({
             userPrompt: finalPrompt,
             ...(snapshot.folderId ? { folderId: snapshot.folderId } : {}),
-            generationMode: snapshot.generationMode,
           ...(styleGuide ? { styleGuide } : {}),
             ...(referenceProjectId ? { referenceProjectId } : {}),
             ...(referenceUrl ? { referenceUrl } : {}),
@@ -291,7 +286,6 @@ export function HeroPrompt() {
         enableSkills: Boolean(pending.enableSkills),
         useDatabasePrompts: pending.useDatabasePrompts !== false,
         folderId: pending.folderId ?? null,
-        generationMode: pending.generationMode ?? "web",
       });
     });
   }, [runCreateProject]);
@@ -307,7 +301,7 @@ export function HeroPrompt() {
       data: { session },
     } = await supabase.auth.getSession();
     if (!session) {
-      savePendingBuild({ v: 1, value, chips, enableSkills, useDatabasePrompts, folderId, generationMode });
+      savePendingBuild({ v: 1, value, chips, enableSkills, useDatabasePrompts, folderId });
       const here =
         typeof window !== "undefined"
           ? `${window.location.pathname}${window.location.search}`
@@ -316,7 +310,7 @@ export function HeroPrompt() {
       return;
     }
 
-    await runCreateProject({ v: 1, value, chips, enableSkills, useDatabasePrompts, folderId, generationMode });
+    await runCreateProject({ v: 1, value, chips, enableSkills, useDatabasePrompts, folderId });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -409,33 +403,6 @@ export function HeroPrompt() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-3">
-            <div className="inline-flex items-center rounded-lg border border-white/12 bg-white/3 p-0.5">
-              <button
-                type="button"
-                onClick={() => setGenerationMode("web")}
-                className={`rounded-md px-2.5 py-1 font-mono text-[11px] tracking-[0.08em] transition ${
-                  generationMode === "web"
-                    ? "bg-primary/20 text-primary"
-                    : "text-muted-foreground/70 hover:text-foreground"
-                }`}
-                aria-pressed={generationMode === "web"}
-              >
-                Web
-              </button>
-              <button
-                type="button"
-                onClick={() => setGenerationMode("app")}
-                className={`rounded-md px-2.5 py-1 font-mono text-[11px] tracking-[0.08em] transition ${
-                  generationMode === "app"
-                    ? "bg-primary/20 text-primary"
-                    : "text-muted-foreground/70 hover:text-foreground"
-                }`}
-                aria-pressed={generationMode === "app"}
-              >
-                App
-              </button>
-            </div>
-
             <span className="font-mono text-[11px] text-muted-foreground/40">
                 <kbd className="rounded border border-white/10 px-1 py-0.5 text-[10px]">/</kbd> 风格
                 {" · "}
