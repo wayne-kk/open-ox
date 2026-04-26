@@ -17,6 +17,8 @@ const STAGE_MAP: Record<string, StageId> = {
   describe_page_sections: "compose",
   generate_section: "generate",
   install_dependencies: "verify",
+  /** Scoped in-process tsc on generated .tsx (ENABLE_PREBUILD_TSC), before `run_build` */
+  typecheck_generated: "verify",
   run_build: "verify",
   repair_build: "repair",
   mark_unvalidated_files: "verify",
@@ -38,6 +40,7 @@ function inferStage(stepName: string): StageId {
   if (stepName.startsWith("generate_section:")) return "generate";
   if (stepName.startsWith("compose_page:")) return "compose";
   if (stepName.startsWith("install_dependencies:")) return "verify";
+  if (stepName.startsWith("typecheck_generated")) return "verify";
   if (stepName.startsWith("run_build")) return "verify";
   if (stepName.startsWith("repair_build")) return "repair";
   if (stepName.startsWith("mark_unvalidated") || stepName.startsWith("clear_validation")) return "verify";
@@ -47,6 +50,7 @@ function inferStage(stepName: string): StageId {
 function inferKind(stepName: string, stage: StageId): GraphNode["kind"] {
   if (stage === "repair") return "repair";
   if (stepName === "match_design_system_skill") return "decision";
+  if (stepName.startsWith("typecheck_generated")) return "verification";
   if (stepName.startsWith("run_build") || stepName.startsWith("install_dependencies")) return "verification";
   if (stepName.startsWith("generate_section") || stepName.startsWith("compose_page")) return "generation";
   if (stepName.startsWith("describe_page_sections")) return "transform";
@@ -69,6 +73,9 @@ function formatStepLabel(step: string): string {
   }
   if (step.startsWith("install_dependencies:")) {
     return `install:${step.replace("install_dependencies:", "")}`;
+  }
+  if (step.startsWith("typecheck_generated")) {
+    return "typecheck (generated .tsx)";
   }
   if (step.startsWith("run_build")) {
     const suffix = step.replace("run_build", "");

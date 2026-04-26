@@ -19,6 +19,7 @@ import ts from "typescript";
 import fs from "fs";
 import path from "path";
 import { getSiteRoot } from "../../../tools/system/common";
+import type { StepTrace } from "../types";
 
 export interface TsxIssue {
   file: string;
@@ -296,4 +297,188 @@ export function formatIssuesForHint(issues: TsxIssue[], limit = 8): string {
     lines.push(`- … and ${moreCount} more error(s) omitted`);
   }
   return lines.join("\n");
+}
+
+/** True when the same opt-out that disables per-section `checkTsxFile` is not set. */
+export function isSectionTscCheckEnabled(): boolean {
+  return process.env.DISABLE_SECTION_TSC !== "1";
+}
+
+/**
+ * Whether a path is included in the scoped pre-build pass. Currently **.tsx
+ * only** (per product requirement: new generated TSX, not a full `tsc` run).
+ */
+export function isGeneratedTypeScriptPath(relativePath: string): boolean {
+  return relativePath.toLowerCase().endsWith(".tsx");
+}
+
+/**
+ * One line per issue, shaped like `tsc --pretty false` so repair agents can
+ * `selectRepairTargets` on file names.
+ */
+export function formatTsxIssuesAsTscStyleLog(issues: TsxIssue[]): string {
+  if (issues.length === 0) {
+    return "";
+  }
+  return issues
+    .filter((i) => i.category === "error" || i.category === "warning")
+    .map((i) => {
+      const sev = i.category === "error" ? "error" : "warning";
+      return `${i.file}(${i.line},${i.column}): ${sev} TS${i.code ?? 0}: ${i.message}`;
+    })
+    .join("\n");
+}
+
+export interface CheckGeneratedTypeScriptResult {
+  passed: boolean;
+  fileCount: number;
+  /** Relative paths (site root) that were passed to `checkTsxFile`, sorted. */
+  checkedFiles: string[];
+  issues: TsxIssue[];
+  errorCount: number;
+  warningCount: number;
+  /** Human-readable log (header + tsc-style lines) for `stepRepairBuild`. */
+  tscStyleLog: string;
+  skipped?: "disabled" | "no_tsx_files";
+}
+
+/**
+ * Run the same in-process `checkTsxFile` pass over **only** the given
+ * `*.tsx` paths (typically `result.generatedFiles` filtered) — not full
+ * `npx tsc` on the whole site. Suitable before `next build` to catch
+ * issues on new section/page TSX, then hand off to a patch-style repair.
+ */
+export async function checkGeneratedTypeScriptFiles(
+  relativePaths: string[]
+): Promise<CheckGeneratedTypeScriptResult> {
+  if (!isSectionTscCheckEnabled()) {
+    return {
+      passed: true,
+      fileCount: 0,
+      checkedFiles: [],
+      issues: [],
+      errorCount: 0,
+      warningCount: 0,
+      tscStyleLog: "",
+      skipped: "disabled",
+    };
+  }
+
+  const unique = Array.from(new Set(relativePaths.filter((p) => p && isGeneratedTypeScriptPath(p)))).sort();
+  if (unique.length === 0) {
+    return {
+      passed: true,
+      fileCount: 0,
+      checkedFiles: [],
+      issues: [],
+      errorCount: 0,
+      warningCount: 0,
+      tscStyleLog: "",
+      skipped: "no_tsx_files",
+    };
+  }
+
+  const allIssues: TsxIssue[] = [];
+  for (const p of unique) {
+    const r = await checkTsxFile(p);
+    allIssues.push(...r.issues);
+  }
+
+  const errorCount = allIssues.filter((i) => i.category === "error").length;
+  const warningCount = allIssues.filter((i) => i.category === "warning").length;
+  const body = formatTsxIssuesAsTscStyleLog(allIssues);
+  const tscStyleLog = [
+    `// Scoped typecheck: ${unique.length} generated .tsx file(s), in-process (not full project)`,
+    body,
+  ]
+    .filter((line) => line.length > 0)
+    .join("\n");
+
+  return {
+    passed: errorCount === 0,
+    fileCount: unique.length,
+    checkedFiles: unique,
+    issues: allIssues,
+    errorCount,
+    warningCount,
+    tscStyleLog,
+  };
+}
+
+const TYPECHECK_DETAIL_MAX_FILES = 80;
+const TYPECHECK_TRACE_MAX_ISSUES = 120;
+
+/**
+ * Multiline `BuildStep.detail` for Studio "Output" and logs: lists checked
+ * files and, when non-empty, the same tsc-style diagnostic lines.
+ */
+export function formatScopedTypecheckDetail(
+  scoped: CheckGeneratedTypeScriptResult,
+  repairNote?: string
+): string {
+  if (scoped.skipped === "disabled") {
+    return "skipped (DISABLE_SECTION_TSC=1)";
+  }
+  if (scoped.skipped === "no_tsx_files") {
+    return "no .tsx in generated file list";
+  }
+  const files = scoped.checkedFiles;
+  const show = files.slice(0, TYPECHECK_DETAIL_MAX_FILES);
+  const rest = files.length - show.length;
+  const lines: string[] = [
+    "In-process tsc: `checkTsxFile` per .tsx (TypeScript LanguageService), not a full-project `npx tsc`.",
+    `Files checked (${files.length}):`,
+    ...show.map((f) => `  - ${f}`),
+  ];
+  if (rest > 0) {
+    lines.push(`  … and ${rest} more`);
+  }
+  if (scoped.errorCount === 0 && scoped.warningCount === 0) {
+    lines.push("Result: no errors or warnings.");
+  } else if (scoped.tscStyleLog.trim().length > 0) {
+    lines.push("", "Diagnostics:", scoped.tscStyleLog);
+  }
+  if (repairNote) {
+    lines.push("", repairNote);
+  }
+  return lines.join("\n");
+}
+
+/**
+ * `BuildStep.trace` for the topology Detail drawer: **Output** tab shows JSON
+ * with `issues` (capped) and full `tscStyleLog` for copy/paste.
+ */
+export function buildScopedTypecheckStepTrace(
+  scoped: CheckGeneratedTypeScriptResult,
+  extra?: { repairTouched?: string[]; repairSuccess?: boolean }
+): StepTrace {
+  if (scoped.skipped) {
+    return { output: { scopedTypecheck: { skipped: scoped.skipped } } };
+  }
+  const issues = scoped.issues;
+  const fixMeta =
+    extra && (extra.repairSuccess !== undefined || (extra.repairTouched && extra.repairTouched.length > 0))
+      ? {
+          ...(extra.repairTouched && extra.repairTouched.length > 0
+            ? { repairTouchedFiles: extra.repairTouched }
+            : {}),
+          ...(extra.repairSuccess !== undefined ? { repairSuccess: extra.repairSuccess } : {}),
+        }
+      : {};
+  return {
+    output: {
+      scopedTypecheck: {
+        engine: "checkTsxFile (typescript LanguageService, one root file at a time)",
+        checkedFiles: scoped.checkedFiles,
+        fileCount: scoped.fileCount,
+        errorCount: scoped.errorCount,
+        warningCount: scoped.warningCount,
+        issues: issues.slice(0, TYPECHECK_TRACE_MAX_ISSUES),
+        issuesTotal: issues.length,
+        issuesTruncated: issues.length > TYPECHECK_TRACE_MAX_ISSUES,
+        tscStyleLog: scoped.tscStyleLog,
+        ...fixMeta,
+      },
+    },
+  };
 }

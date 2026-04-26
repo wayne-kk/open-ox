@@ -3,6 +3,18 @@
 生成一个响应式顶部导航组件，要求可全局复用、
 适配 sticky 场景，且视觉风格与设计系统一致。
 
+## Next.js App Router（必守）
+
+- 本组件由根 `app/layout.tsx` 引入；父级为 **Server Component**。**文件第一行**（位于所有 `import` 之前）**必须**为：
+
+  `"use client";`
+
+  不要省略：除 hooks / 事件外，使用 **`styled-jsx`**（如 `<style jsx>`）或其它走 `client-only` 的写法也会在默认 RSC 树下直接构建失败（Turbopack：`styled-jsx` / `client-only` cannot be imported from a Server Component）。
+
+- **禁止使用 `styled-jsx`**：不要写 `<style jsx>`、不要 `import "styled-jsx/..."`。导航样式**只**用 **Tailwind `className`**（与设计系统一致）。
+
+- 使用 `useState`、`useEffect`、`useRef`、`useCallback`、浏览器 API、或 `onClick` / `onChange` 等与上文一致：**仍**保持首行 `"use client";`。
+
 ## 必备结构
 
 1. 品牌标识与站点名称。
@@ -28,5 +40,5 @@
 
 ## 其他规则
 
-- 仅在真实交互需求下使用 hooks（如菜单状态或滚动状态）。
+- 仅在真实交互需求下使用 hooks（如菜单状态或滚动状态）；首行 `"use client";` 已固定要求，与是否用 hooks 无关。
 - 保持移动端菜单简洁、可访问，并且容易关闭。

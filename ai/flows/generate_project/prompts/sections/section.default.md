@@ -25,7 +25,8 @@
   - 当横向空间仍充足时，不要强制换行（`<br />`、硬编码 `\n`）。
   - 桌面端避免过窄的文本包裹容器（例如在分栏布局标题区不必要地使用 `max-w-md`/`max-w-lg`）。
 - 对营销类 section：**少文字，多设计**。对内容类 section：真实数据的丰富度更重要。
-- 默认生成服务端安全组件（不要加 `"use client"`），除非交互确实需要客户端状态/事件。
+- **不要使用 `styled-jsx`**：禁止 `<style jsx>`、禁止依赖 `styled-jsx` 的写法；样式统一用 Tailwind `className`。否则在 App Router 下容易触发 `client-only` / “styled-jsx only works in a Client Component” 类构建错误。
+- 默认生成服务端安全组件（不要加 `"use client"`），除非交互确实需要客户端状态/事件、浏览器 API、或事件处理器；需要时**首行**加 `"use client";`（仍优先避免 styled-jsx，见上条）。
 - 避免空泛的 AI 套话，优先具体、明确的表达。
 
 ### 语言一致性 - 严格要求

@@ -3,8 +3,12 @@ import { getSiteRoot as projectManagerGetSiteRoot } from "@/lib/projectManager";
 import { setSiteRoot, getSiteRoot } from "@/ai/tools/system/common";
 import { getModelId } from "@/lib/config/models";
 import { validateSkillFrontmatter } from "@/ai/shared/skillDiscovery";
-import { execSync } from "child_process";
 import { formatSiteFile, syncSiteValidationMarkers, readSiteFile, writeSiteFile, getSkillPromptsRoot } from "./shared/files";
+import {
+  buildScopedTypecheckStepTrace,
+  checkGeneratedTypeScriptFiles,
+  formatScopedTypecheckDetail,
+} from "./shared/tsxDiagnostics";
 import { createArtifactLogger, createStepLogger } from "./shared/logging";
 import { buildSectionFilePath } from "./shared/paths";
 import { stepAnalyzeProjectRequirement } from "./steps/analyzeProjectRequirement";
@@ -1102,47 +1106,102 @@ export async function runGenerateProject(
       appendGeneratedFiles(result, imagePaths);
     }
 
-    // ── Optional pre-build typecheck ──────────────────────────────────────────
-    // Running `tsc --noEmit` before `next build` duplicates heavy checks and can
-    // significantly slow verification for large section batches. Keep it opt-in.
+    // ── Optional pre-build typecheck (generated .tsx only) ───────────────────
+    // In-process `checkTsxFile` per file (same engine as section validation), not
+    // `npx tsc` on the whole site. On errors, `stepRepairBuild` uses edit_file
+    // (small patches), same style as the modify flow's patch tools. Opt-in.
     const enablePrebuildTypecheck = process.env.ENABLE_PREBUILD_TSC === "1";
     if (enablePrebuildTypecheck) {
-      const tscStepName = "typecheck";
+      const tscStepName = "typecheck_generated";
       logger.startStep(tscStepName);
-      try {
-        execSync("npx tsc --noEmit --pretty false 2>&1", {
-          cwd: getSiteRoot(),
-          encoding: "utf-8",
-          timeout: 60_000,
-          maxBuffer: 1024 * 1024,
+      const scoped = await checkGeneratedTypeScriptFiles(result.generatedFiles);
+      if (scoped.skipped === "disabled") {
+        logger.logStep(
+          tscStepName,
+          "ok",
+          formatScopedTypecheckDetail(scoped),
+          undefined,
+          buildScopedTypecheckStepTrace(scoped)
+        );
+        await persistJsonArtifact(artifactLogger, tscStepName, "output", { scoped: "disabled" });
+      } else if (scoped.skipped === "no_tsx_files") {
+        logger.logStep(
+          tscStepName,
+          "ok",
+          formatScopedTypecheckDetail(scoped),
+          undefined,
+          buildScopedTypecheckStepTrace(scoped)
+        );
+        await persistJsonArtifact(artifactLogger, tscStepName, "output", { scoped: "no_tsx_files" });
+      } else if (scoped.passed) {
+        logger.logStep(
+          tscStepName,
+          "ok",
+          formatScopedTypecheckDetail(scoped),
+          undefined,
+          buildScopedTypecheckStepTrace(scoped)
+        );
+        await persistJsonArtifact(artifactLogger, tscStepName, "output", {
+          fileCount: scoped.fileCount,
+          checkedFiles: scoped.checkedFiles,
+          errorCount: 0,
+          warningCount: scoped.warningCount,
+          issues: scoped.issues,
         });
-        logger.logStep(tscStepName, "ok", "no type errors");
-      } catch (err) {
-        const tscErrors = (err as { stdout?: string }).stdout?.trim() ?? "";
-        const errorCount = (tscErrors.match(/error TS\d+/g) ?? []).length;
-        console.warn(`[typecheck] ${errorCount} error(s) found, attempting repair...`);
-
+      } else {
+        const errorCount = scoped.errorCount;
+        console.warn(
+          `[typecheck] scoped: ${errorCount} error(s) in ${scoped.fileCount} file(s), attempting repair...`
+        );
         const repairResult = await stepRepairBuild({
           blueprint,
-          buildOutput: tscErrors,
+          buildOutput: scoped.tscStyleLog,
           generatedFiles: result.generatedFiles,
         });
-
         if (repairResult.success) {
           appendGeneratedFiles(result, repairResult.touchedFiles);
-          logger.logStep(tscStepName, "ok", `${errorCount} error(s) repaired: ${repairResult.touchedFiles.join(", ")}`);
+          logger.logStep(
+            tscStepName,
+            "ok",
+            formatScopedTypecheckDetail(
+              scoped,
+              `Repair: patched file(s) — ${repairResult.touchedFiles.join(", ")}`
+            ),
+            undefined,
+            buildScopedTypecheckStepTrace(scoped, {
+              repairTouched: repairResult.touchedFiles,
+              repairSuccess: true,
+            })
+          );
         } else {
-          logger.logStep(tscStepName, "error", `${errorCount} error(s), repair failed`);
+          logger.logStep(
+            tscStepName,
+            "error",
+            formatScopedTypecheckDetail(
+              scoped,
+              "Repair: step_repair_build did not apply edits; see trace / `.open-ox/logs/.../typecheck_generated/`."
+            ),
+            undefined,
+            buildScopedTypecheckStepTrace(scoped, { repairSuccess: false })
+          );
         }
-
         await persistJsonArtifact(artifactLogger, tscStepName, "output", {
-          errorCount,
-          errors: tscErrors.slice(0, 2000),
+          fileCount: scoped.fileCount,
+          checkedFiles: scoped.checkedFiles,
+          errorCount: scoped.issues.length,
+          errors: scoped.tscStyleLog.slice(0, 4000),
+          issues: scoped.issues,
           repairResult: { success: repairResult.success, touchedFiles: repairResult.touchedFiles },
         });
       }
     } else {
-      logger.logStep("typecheck", "ok", "skipped (ENABLE_PREBUILD_TSC!=1)");
+      logger.logStep(
+        "typecheck_generated",
+        "ok",
+        "skipped (ENABLE_PREBUILD_TSC is not 1; set ENABLE_PREBUILD_TSC=1 to run)",
+        undefined,
+        { output: { scopedTypecheck: { skipped: "enable_prebuild_tsc" } } }
+      );
     }
 
     const buildLifecycle = await runBuildWithRepair({ blueprint, artifactLogger, result, logger });
