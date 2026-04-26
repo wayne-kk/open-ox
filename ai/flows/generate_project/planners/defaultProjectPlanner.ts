@@ -6,7 +6,7 @@ import type {
   SectionSpec,
 } from "../types";
 
-function buildDefaultPageDesignPlan(
+export function buildDefaultPageDesignPlan(
   page: {
     description: string;
     journeyStage: string;

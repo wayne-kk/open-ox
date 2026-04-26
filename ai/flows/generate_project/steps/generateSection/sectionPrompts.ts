@@ -8,37 +8,7 @@ import { selectSectionPromptId } from "../../selectors/sectionPromptSelector";
 import type { LayoutMode, PlannedSectionSpec } from "../../types";
 import type { GenerateSectionPageContext, GenerateSectionProjectContext } from "./types";
 
-const WHOLE_PAGE_MODE_COPY = {
-  withDescribeBrief: {
-    implementationSource: "described in the brief",
-    priorityRule:
-      "If **Section Design Brief** or product intent conflict with generic marketing rules in older instructions, this whole-page spec wins.",
-  },
-  withComponentSkill: {
-    implementationSource:
-      "from section intent, content hints, and product context (page-level section brief is omitted because a component skill is in use)",
-    priorityRule:
-      "If product intent conflicts with generic marketing rules in older instructions, this whole-page spec wins.",
-  },
-} as const;
 
-export function buildWholePageModeBlock(
-  layoutMode: LayoutMode | undefined,
-  useDescribePageBrief: boolean,
-): string {
-  if (layoutMode !== "whole-page") {
-    return "";
-  }
-  const { implementationSource, priorityRule } = useDescribePageBrief
-    ? WHOLE_PAGE_MODE_COPY.withDescribeBrief
-    : WHOLE_PAGE_MODE_COPY.withComponentSkill;
-
-  return `## Generation mode: whole-page (single-surface product)
-- This file is the **entire product surface** for the route — not one marketing block among many. Implement the full shell / game / tool / app ${implementationSource}.
-- ${priorityRule}
-
-`;
-}
 
 function buildSectionPromptBlocks(sectionType: string, layoutMode?: LayoutMode) {
   const sectionPromptId = selectSectionPromptId(sectionType);
@@ -68,8 +38,8 @@ export function buildSystemPrompt(params: {
     buildSectionPromptBlocks(section.type, layoutMode),
     loadGuardrail("skillIntegrationContract"),
     selectedSkillPromptBlock,
-    loadGuardrail("framerMotionVariants"),
-    loadGuardrail("outputTsx"),
+    // loadGuardrail("framerMotionVariants"),
+    // loadGuardrail("outputTsx"),
   ]);
 }
 
@@ -81,70 +51,54 @@ function formatKnownRoutesBlock(pages: GenerateSectionProjectContext["pages"]) {
 
 function buildPageContextBlock(pageContext?: GenerateSectionPageContext) {
   if (!pageContext) {
-    return `## Page Context\nThis is a shared layout section. Design it to work coherently across the whole project.`;
+    return `## 页面上下文\n这是共享布局中的 section，需在整个项目内保持视觉与结构一致。`;
   }
-  return `## Page Context
-- **Title**: ${pageContext.title}
-- **Route**: ${pageContext.slug === "home" ? "/" : `/${pageContext.slug}`}
-- **Description**: ${pageContext.description}`;
+  return `## 页面上下文
+- **标题**：${pageContext.title}
+- **路由**：${pageContext.slug === "home" ? "/" : `/${pageContext.slug}`}
+- **描述**：${pageContext.description}`;
 }
 
 export function buildUserMessage(params: {
   projectContext: GenerateSectionProjectContext;
   pageContext?: GenerateSectionPageContext;
   section: PlannedSectionSpec;
-  componentSkillMetadataBlock: string;
-  technicalSkillMetadataBlock: string;
+  skillPrompts: string[];
   sectionDesignBrief: string;
-  /** When false, a component skill was selected — do not use describePageSections output as visual guidance. */
-  useDescribePageBrief: boolean;
-  layoutMode?: LayoutMode;
+
 }) {
   const {
     projectContext,
     pageContext,
     section,
-    componentSkillMetadataBlock,
-    technicalSkillMetadataBlock,
     sectionDesignBrief,
-    useDescribePageBrief,
-    layoutMode,
+    skillPrompts,
   } = params;
+  const selectedSkillPromptBlock = skillPrompts.filter(Boolean).join("\n\n");
 
-  const wholePageModeBlock = buildWholePageModeBlock(layoutMode, useDescribePageBrief);
 
-  const sectionDesignBriefBody = useDescribePageBrief
-    ? sectionDesignBrief
-    : `_(Omitted: a **component skill** in the system prompt is the primary layout and visual reference for this section. Rely on that skill, the design system, and the section intent / content hints below — not the separate page section description from the describe step.)_`;
 
-  const closingGuidance = useDescribePageBrief
-    ? `The Section Design Brief above is your primary visual guidance — follow its background and atmosphere direction closely.`
-    : `The **component skill** in the system prompt is your primary layout and visual guide. Follow it with the design system and section intent.`;
+  return `## 项目上下文
+- **项目**：${projectContext.projectTitle}
+- **说明**：${projectContext.projectDescription}
+- **语言**：${projectContext.language} — ⚠️ 重要：所有面向用户的文案（标题、按钮、正文、标签、alt 等）**必须**使用上述语言。不要混用其他语言。Skill 示例中的英文仅表示结构，请替换为真实的 ${projectContext.language} 内容。
 
-  return `${wholePageModeBlock}## Project Context
-- **Project**: ${projectContext.projectTitle}
-- **Description**: ${projectContext.projectDescription}
-- **Language**: ${projectContext.language} — ⚠️ CRITICAL: ALL user-facing text (headlines, buttons, copy, labels, alt text) MUST be written in this language. Do NOT mix with other languages. Skill examples showing English text are structural only — replace with real ${projectContext.language} content.
 
-## Known Routes
-**These are the ONLY valid routes. Navigation must use exactly these routes.**
-${formatKnownRoutesBlock(projectContext.pages) || "- / (home)"}
+## 有效路由
+**以下为唯一合法路由；导航必须严格使用这些路径。**
+${formatKnownRoutesBlock(projectContext.pages) || "- /（首页）"}
 
 ${buildPageContextBlock(pageContext)}
 
-## Section to Generate
-- **Type**: ${section.type}
-- **Component Name**: ${section.fileName}
-- **Intent**: ${section.intent}
-- **Content Hints**: ${section.contentHints}
+## 待生成 Section
+- **类型**：${section.type}
+- **组件文件名**：${section.fileName}
+- **意图**：${section.intent}
+- **内容提示**：${section.contentHints}
 
-## Section Design Brief
-${sectionDesignBriefBody}
+## Section 设计简介
+${selectedSkillPromptBlock ? selectedSkillPromptBlock : sectionDesignBrief}
 
-${componentSkillMetadataBlock ? `## Available Component Skills\nThe selected component skill (if any) is already included in the system prompt.\n${componentSkillMetadataBlock}` : ""}
-${technicalSkillMetadataBlock ? `## Available Technical Skills\nThese are implementation guidance skills that may be layered with component skills.\n${technicalSkillMetadataBlock}` : ""}
 
-Generate the complete ${section.fileName}.tsx component.
-Use the design system and project context to make all design decisions (layout, visual style, motion, interaction).
-${closingGuidance}`;
+请生成完整的 \`${section.fileName}.tsx\` 组件。`;
 }

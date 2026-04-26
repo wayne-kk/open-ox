@@ -1,4 +1,4 @@
-import { buildDefaultProjectPlan } from "../planners/defaultProjectPlanner";
+import { buildDefaultPageDesignPlan, buildDefaultProjectPlan } from "../planners/defaultProjectPlanner";
 import { composePromptBlocks, loadGuardrail, loadStepPrompt, writeSiteFile } from "../shared/files";
 import { callLLMWithMeta, extractJSON } from "../shared/llm";
 import { stepTraceFromLlmCompletion } from "../shared/llmTrace";
@@ -12,15 +12,17 @@ import type {
 } from "../types";
 import { getModelForStep } from "@/lib/config/models";
 
-const MAX_PAGE_SECTIONS_SPLIT = 4;
-const MAX_PAGE_SECTIONS_WHOLE = 1;
-
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
 function asString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
+}
+
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((x): x is string => typeof x === "string");
 }
 
 function isPageDesignPlan(value: unknown): value is PageDesignPlan {
@@ -36,29 +38,12 @@ function isPageDesignPlan(value: unknown): value is PageDesignPlan {
   );
 }
 
-function clampPageSections<T extends { site: { pages: Array<{ sections: PlannedSectionSpec[] }> } }>(
-  blueprint: T,
-  maxSections: number
-): T {
-  return {
-    ...blueprint,
-    site: {
-      ...blueprint.site,
-      pages: blueprint.site.pages.map((page) => ({
-        ...page,
-        sections: page.sections.slice(0, maxSections),
-      })),
-    },
-  };
-}
-
 // ── Main Step ────────────────────────────────────────────────────────────
 
 export async function stepPlanProject(
   blueprint: ProjectBlueprint
 ): Promise<{ blueprint: PlannedProjectBlueprint; trace: StepTrace }> {
   const wholePage = blueprint.brief.productScope.layoutMode === "whole-page";
-  const maxSections = wholePage ? MAX_PAGE_SECTIONS_WHOLE : MAX_PAGE_SECTIONS_SPLIT;
   const defaultPlan = buildDefaultProjectPlan(blueprint);
 
   // ── Build LLM prompt ───────────────────────────────────────────────────
@@ -66,47 +51,24 @@ export async function stepPlanProject(
   const planPromptId = wholePage ? "planProject.wholePage" : "planProject";
   const systemPrompt = composePromptBlocks([loadStepPrompt(planPromptId), loadGuardrail("outputJson")]);
 
-  const layoutModeInstruction = wholePage
-    ? `\n## Layout Mode: WHOLE-PAGE / LINE B — single-surface product (critical)
-The user product ("${blueprint.brief.productScope.productType}") is implemented as **one** full route surface — *whatever* UI that implies (shell, full-stage tool, game, etc.).
-- Output EXACTLY 1 section in pages[0].sections.
-- Do NOT output Hero / Feature / Testimonial / CTA **marketing** stacks (that is Line A).
-- The single section carries the **entire** product UI as designed — in-page chrome, main interactive area, and panels **only if** the product needs them — not \`layoutSections\` nav/footer.
-- Set \`site.layoutSections\` to \`[]\` (no global Navigation/Footer components).
-- Derive \`type\` and \`fileName\` from the **user’s domain words** in the title/description/MVP.`
-    : `\n## Layout Mode: SPLIT SECTIONS
-Output 3–4 sections using appropriate archetypes from the palette in the system prompt.`;
-
-  const layoutSectionsForPrompt = wholePage
-    ? "None — whole-page uses an empty `layoutSections` array; the shell is inside the single page section."
-    : blueprint.site.layoutSections.map((s) => `- ${s.type}: ${s.intent}`).join("\n");
-
-  const userMessage = `## Project: ${blueprint.brief.projectTitle}
+  const userMessage = `## 项目：${blueprint.brief.projectTitle}
 ${blueprint.brief.projectDescription}
 
-## Minimal Product Scope
-- Type: ${blueprint.brief.productScope.productType}
-- MVP: ${blueprint.brief.productScope.mvpDefinition}
-- Core Outcome: ${blueprint.brief.productScope.coreOutcome}
-- Design Keywords: ${blueprint.experience.designIntent.keywords.join(", ")}
-${layoutModeInstruction}
+## 最小产品范围
+- 类型：${blueprint.brief.productScope.productType}
+- MVP：${blueprint.brief.productScope.mvpDefinition}
+- 核心结果：${blueprint.brief.productScope.coreOutcome}
+- 设计关键词：${blueprint.experience.designIntent.keywords.join(", ")}
 
-## Pages to plan sections for
+## 需要规划 section 的页面
 ${blueprint.site.pages
       .map(
         (page) =>
           `### ${page.title} (/${page.slug}) — ${page.journeyStage}
-- Description: ${page.description}
-- Existing sections: ${page.sections.length > 0 ? page.sections.map((s) => s.type).join(", ") : "NONE — derive from page description"}`
+- 描述：${page.description}`
       )
       .join("\n\n")}
-
-## Layout Sections (shared shells)
-${layoutSectionsForPrompt}
-
-## Keep it simple
-- Sections only need type, intent, contentHints, fileName.
-- Do not include designPlan on sections — guardrails and skills are resolved at generation time.`;
+`;
 
   // ── Call LLM ───────────────────────────────────────────────────────────
 
@@ -125,35 +87,33 @@ ${layoutSectionsForPrompt}
     const parsedPages = Array.isArray(parsedSite?.pages) ? parsedSite.pages : [];
     const parsedLayoutSections = Array.isArray(parsedSite?.layoutSections) ? parsedSite.layoutSections : undefined;
 
-    // Trust the LLM output structure where valid. Fill only missing/invalid fields.
     const pages: PlannedPageBlueprint[] = parsedPages
       .filter((candidate): candidate is Record<string, unknown> => isObjectRecord(candidate))
       .map((page) => {
-        const pageSlug = typeof page.slug === "string" ? page.slug : defaultPlan.site.pages[0]?.slug;
-        const fallbackPage = defaultPlan.site.pages.find((p) => p.slug === pageSlug) ?? defaultPlan.site.pages[0];
         const rawSections = Array.isArray(page.sections) ? page.sections : [];
         const sections: PlannedSectionSpec[] = rawSections
           .filter((section): section is Record<string, unknown> => isObjectRecord(section))
-          .slice(0, maxSections)
-          .map((s, index) => {
-            const fallbackSection = fallbackPage.sections[index] ?? fallbackPage.sections[0];
-            return {
-              type: typeof s.type === "string" ? s.type : fallbackSection?.type ?? "Feature",
-              intent: typeof s.intent === "string" ? s.intent : fallbackSection?.intent ?? "Support primary page narrative.",
-              contentHints: asString(s.contentHints) ?? fallbackSection?.contentHints ?? "",
-              fileName: typeof s.fileName === "string" ? s.fileName : fallbackSection?.fileName ?? `Section${index + 1}`,
-            };
-          });
+          .map((s, index) => ({
+            type: typeof s.type === "string" ? s.type : "Feature",
+            intent: typeof s.intent === "string" ? s.intent : "",
+            contentHints: asString(s.contentHints) ?? "",
+            fileName: typeof s.fileName === "string" ? s.fileName : `Section${index + 1}`,
+          }));
+
+        const description = asString(page.description) ?? "";
+        const journeyStage = asString(page.journeyStage) ?? "";
 
         return {
-          title: asString(page.title) ?? fallbackPage.title,
-          slug: asString(page.slug) ?? fallbackPage.slug,
-          description: asString(page.description) ?? fallbackPage.description,
-          journeyStage: asString(page.journeyStage) ?? fallbackPage.journeyStage,
-          primaryRoleIds: fallbackPage.primaryRoleIds,
-          supportingCapabilityIds: fallbackPage.supportingCapabilityIds,
+          title: asString(page.title) ?? "",
+          slug: asString(page.slug) ?? "",
+          description,
+          journeyStage,
+          primaryRoleIds: asStringArray(page.primaryRoleIds),
+          supportingCapabilityIds: asStringArray(page.supportingCapabilityIds),
           sections,
-          pageDesignPlan: isPageDesignPlan(page.pageDesignPlan) ? page.pageDesignPlan : fallbackPage.pageDesignPlan,
+          pageDesignPlan: isPageDesignPlan(page.pageDesignPlan)
+            ? page.pageDesignPlan
+            : buildDefaultPageDesignPlan({ description, journeyStage, sections }, wholePage),
         };
       });
 
@@ -176,13 +136,13 @@ ${layoutSectionsForPrompt}
     };
 
     return {
-      blueprint: clampPageSections(mergedBlueprint, maxSections),
+      blueprint: mergedBlueprint,
       trace,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return {
-      blueprint: clampPageSections(defaultPlan, maxSections),
+      blueprint: defaultPlan,
       trace: {
         llmCall: {
           model,

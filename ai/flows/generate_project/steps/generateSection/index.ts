@@ -55,10 +55,8 @@ export async function stepGenerateSection(params: GenerateSectionParams): Promis
   const {
     componentSkillId,
     componentSkillPrompt,
-    componentSkillMetadataBlock,
     technicalSkillIds,
     technicalSkillPrompts,
-    technicalSkillMetadataBlock,
     componentSkillScores,
   } = await discoverAndSelectSkill(
     section,
@@ -72,7 +70,7 @@ export async function stepGenerateSection(params: GenerateSectionParams): Promis
 
   const systemPrompt = buildSystemPrompt({
     section,
-    skillPrompts: [componentSkillPrompt, ...technicalSkillPrompts],
+    skillPrompts: [...technicalSkillPrompts],
     designSystem,
     layoutMode,
   });
@@ -80,12 +78,9 @@ export async function stepGenerateSection(params: GenerateSectionParams): Promis
   const userMessage = buildUserMessage({
     projectContext,
     pageContext,
+    skillPrompts: [componentSkillPrompt],
     section,
-    componentSkillMetadataBlock,
-    technicalSkillMetadataBlock,
     sectionDesignBrief,
-    useDescribePageBrief,
-    layoutMode,
   });
 
   const componentName = section.fileName.replace(/\.tsx$/, "");
