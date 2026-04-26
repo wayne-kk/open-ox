@@ -319,7 +319,7 @@ export function DetailDrawer({
           {node.detail && (
             <div>
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Output</div>
-              <div className="mt-1.5 rounded-lg bg-black/30 px-3 py-2.5 font-mono text-[12px] leading-6 text-foreground break-all">
+              <div className="mt-1.5 max-h-[min(60vh,480px)] overflow-y-auto rounded-lg bg-black/30 px-3 py-2.5 font-mono text-[12px] leading-6 text-foreground whitespace-pre-wrap break-words scrollbar-unified">
                 {node.detail}
               </div>
             </div>

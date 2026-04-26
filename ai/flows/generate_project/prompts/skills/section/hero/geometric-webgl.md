@@ -24,13 +24,10 @@ Keep the implementation self-contained in the hero component — no extra compon
 
 ## Structure Requirements
 
-- **Header/Nav**:
-  - Left: compact logo mark + wordmark.
-  - Middle (desktop): 3 concise nav links.
-  - Right (mobile): menu icon button.
+- **Hero shell (no navigation)** — **Do not** implement `<nav>`, logo+links header rows, hamburger menus, or site chrome. Those belong in the app layout, not this section.
 - **Hero Main**:
-  - Full-height area below header.
-  - Absolute WebGL canvas container filling hero.
+  - Full-viewport hero area (`min-h-screen` class of constraint).
+  - Absolute WebGL canvas container filling the hero.
   - Radial gradient overlay to blend edges into dark background.
 - **Content Overlay**:
   - Top badge with vertical indicator line (revealed by animation).
@@ -92,6 +89,7 @@ When this skill is selected, the generated hero MUST include all of the followin
   - `renderer.dispose()`,
   - `geometry.dispose()` and `material.dispose()`.
 6. GSAP staged reveal for badge, heading text lines, and CTA.
+7. **MUST NOT** add top navigation, persistent header links, or mobile menu affordances inside this section.
 
 If any item above is missing, the result is NOT considered a valid geometric-webgl implementation.
 

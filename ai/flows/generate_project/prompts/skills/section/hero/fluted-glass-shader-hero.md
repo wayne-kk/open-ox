@@ -4,6 +4,8 @@ Use this skill when `generateSection` should deliver a **cinematic, edge-to-edge
 
 **Scope — hero only:** The reference page is **already** hero-sized; the section **MUST** **not** **pull** in **subsequent** **landings** **blocks**. **If** **global** **nav** or **CTA** **rows** **are** **required**, they **should** be **siblings** in the **page** **layout** **or** the **app** **shell**, **not** **mandatory** **inside** this **section** **for** `fluted-glass-shader-hero`.
 
+**Full-bleed background (critical):** The shader **fills the entire first screen** (viewport width × at least viewport height). The `<canvas>` is **never** a “card,” **never** inside `max-w-*` / `container` / centered column wrappers, and **never** given a small fixed `w-*`/`h-*` — only the **typography overlay** may use `max-w-*` for line length. If the page wraps sections in a narrow main, the section root **must** use the project’s **full-bleed / breakout** pattern (e.g. `w-screen` + width breakout) so the canvas still spans **100vw**, not the text column.
+
 ## Core Effect
 
 - **Fluted / ribbed** **glass** **read** — **Screen-space** **vertical** **bands** with **a** **normal** **approximation** (rounded **cylinder** **slice**), **darker** **seams**, and **a** **shallow** **horizontal** **UV** **shift** to **mimic** **refraction**.
@@ -18,7 +20,7 @@ Use this skill when `generateSection` should deliver a **cinematic, edge-to-edge
 
 ## Structure Requirements
 
-1. **Z-order** — Canvas `absolute` or `fixed` `inset-0` at `z-0`; content `relative` `z-10`. Whether the page uses `overflow: hidden` on `html`/`body` (as in the reference) is a product decision: if a full view lock is not desired, use `min-h-screen` on the section and allow page scroll; avoid trapping focus or scroll in a way that breaks accessibility.
+1. **Z-order** — The **shader is the full-screen (full hero viewport) background**, not a card inset or partial-width panel: canvas `absolute` or `fixed` **`inset-0`** at `z-0` so it covers **100%** of the section’s width and height; the section itself is **`min-h-screen`** (or `h-screen`) **edge-to-edge**. Content `relative` `z-10` sits on top. Whether the page uses `overflow: hidden` on `html`/`body` (as in the reference) is a product decision: if a full view lock is not desired, use `min-h-screen` on the section and allow page scroll; avoid trapping focus or scroll in a way that breaks accessibility.
 2. **Pointer events** — The source sets `pointer-events-none` on the overlay so the background reads as the focus; if the section includes links or buttons, set `pointer-events-auto` on those elements only.
 3. **Logo** — Inline SVG or imported asset; `currentColor` and token-based sizing so the mark matches theme.
 
@@ -34,13 +36,17 @@ Use this skill when `generateSection` should deliver a **cinematic, edge-to-edge
 
 ## Required Implementation Blueprint (Do Not Skip)
 
-1. **MUST** implement a full-viewport (or full-bleed) orthographic WebGL background with one fullscreen quad and a custom `ShaderMaterial`.
-2. **MUST** in the fragment shader (optionally in sibling `.glsl` files) combine: (a) a vertical **ribbed / fluted** term, (b) a **time-animated** fluid blob (or similar) field mixed with it, and (c) specular and optional vignette so the read is “shaped glass,” even if the math is a modest approximation of the source.
-3. **MUST** pass brand-critical color roles (base, mid, bright, highlight) as GLSL `uniform` vectors and document how they map to the design system so generated code does not rely on unlabeled demo `vec3` literals.
-4. **MUST** drive `u_time` in a `requestAnimationFrame` loop, render each frame, and on unmount cancel the loop, remove the `resize` listener, and `dispose()` geometry, material, and renderer.
-5. **MUST** set `u_resolution` on init and on every resize, and avoid `setSize` with zero width/height.
-6. **MUST** build the left cluster as: (a) a brand mark (SVG with `currentColor`), (b) a vertical 1–3px rule using `border` or `bg` tokens, (c) an eyebrow with a small icon (e.g. `Cpu` from `lucide-react`, not Iconify), and (d) a single `h1` (or the heading level the layout requires for a11y).
-7. **MUST** load `three` and all icons from the app bundle (no CDN `<script src="https://...">` for Three, Tailwind, or Iconify).
+1. **MUST** implement a **full-viewport / full-bleed** orthographic WebGL background: one fullscreen quad, custom `ShaderMaterial`, and a **root `<section>`** that is at least **`min-h-screen`** (or `min-h-[100dvh]`) and spans the **full visual width** of the hero (see scope note on breakout if the parent layout is narrow).
+2. **MUST** place the `<canvas>` as a **full-bleed layer**: **`absolute inset-0`** (or `fixed inset-0` if the project standard uses sticky viewport backgrounds) with **`w-full h-full`**, **`z-0`**, **first** or **early** child of the section — **not** nested inside flex/grid cells that shrink it, **not** wrapped in `rounded-*` / `Card` / `max-w-*` / `container`.
+3. **MUST** size the renderer with the **canvas element’s displayed size** (`canvas.clientWidth` / `canvas.clientHeight`, or `getBoundingClientRect()`), **not** a hardcoded small pixel rect; update `u_resolution` to match on every resize. Using only `window.innerWidth` while the canvas is layout-shrunk produces an invalid “postage stamp” look.
+4. **MUST** in the fragment shader (optionally in sibling `.glsl` files) combine: (a) a vertical **ribbed / fluted** term, (b) a **time-animated** fluid blob (or similar) field mixed with it, and (c) specular and optional vignette so the read is “shaped glass,” even if the math is a modest approximation of the source.
+5. **MUST** pass brand-critical color roles (base, mid, bright, highlight) as GLSL `uniform` vectors and document how they map to the design system so generated code does not rely on unlabeled demo `vec3` literals.
+6. **MUST** drive `u_time` in a `requestAnimationFrame` loop, render each frame, and on unmount cancel the loop, remove the `resize` listener, and `dispose()` geometry, material, and renderer.
+7. **MUST** set `u_resolution` on init and on every resize, and avoid `setSize` with zero width/height.
+8. **MUST** build the left cluster as: (a) a brand mark (SVG with `currentColor`), (b) a vertical 1–3px rule using `border` or `bg` tokens, (c) an eyebrow with a small icon (e.g. `Cpu` from `lucide-react`, not Iconify), and (d) a single `h1` (or the heading level the layout requires for a11y).
+9. **MUST** load `three` and all icons from the app bundle (no CDN `<script src="https://...">` for Three, Tailwind, or Iconify).
+
+**Invalid for this `id`:** shader canvas inside a `max-w-*` column; canvas with explicit small `w-96`/`h-64`-style classes; hero root that is not at least viewport-tall; WebGL buffer sized to window while the canvas element is smaller (mismatched `setSize`).
 
 If any **MUST** item is missing, the output is **not** valid for `fluted-glass-shader-hero`.
 
@@ -111,10 +117,11 @@ export function FlutedGlassShaderHero() {
     const t0 = performance.now();
 
     const resize = () => {
-      const w = window.innerWidth;
-      const h = window.innerHeight;
+      // Use the canvas layout box — not window alone — so the GL buffer matches the visible full-bleed area.
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
       if (w === 0 || h === 0) return;
-      renderer.setSize(w, h);
+      renderer.setSize(w, h, false);
       mat.uniforms.u_resolution.value.set(w, h);
     };
 
@@ -138,10 +145,11 @@ export function FlutedGlassShaderHero() {
   }, []);
 
   return (
-    <section className="relative h-screen w-full overflow-hidden bg-background text-foreground">
+    <section className="relative min-h-[100dvh] w-full max-w-none overflow-hidden bg-background text-foreground">
+      {/* Canvas: full-bleed under the section — do not wrap in max-w, Card, or rounded container */}
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 z-0 block h-full w-full"
+        className="absolute inset-0 z-0 block h-full w-full min-h-[100dvh]"
         aria-hidden
       />
       <main className="pointer-events-none relative z-10 h-full w-full p-8 md:p-16 lg:p-[4.5rem]">
@@ -184,7 +192,8 @@ Bind `u_color_*` from CSS variables or a theme hook in production; the `Vector3`
 
 ## Layout Details
 
-- Generous padding (e.g. `p-8` scaling to `lg:px-[72px]` in the source) creates a safe gutter; add safe-area insets if the brief targets notched devices.
+- Generous padding on the **overlay** only (e.g. `p-8` scaling to `lg:px-[72px]`) creates a safe gutter — **do not** pad or constrain the **canvas** wrapper. Optional: `max-w-prose` or similar **only** on a inner text wrapper, never on the section or canvas.
+- If the site uses a narrow content wrapper, apply the same full-bleed breakout the rest of the marketing pages use so this hero’s background is **viewport-wide**.
 
 ## Content Rules
 

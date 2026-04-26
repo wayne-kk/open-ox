@@ -1,6 +1,6 @@
 # Component Skill: Hero - Flowing Wisps WebGL
 
-Use this skill when generating a hero section with a full-viewport WebGL background made of flowing wave wisps, plus a restrained glass capsule nav and centered product copy.
+Use this skill when generating a hero section with a full-viewport WebGL background made of flowing wave wisps and **centered product copy** (headline, support line, CTA group). **No** site navigation, header bar, or glass pill nav — global chrome belongs in the app shell, not in this section.
 
 ## Core Effect
 
@@ -8,8 +8,7 @@ Build a full-viewport hero with:
 
 - near-dark base and subtle structural texture.
 - full-screen fragment-shader wisps (multi-layer wave glow) behind content.
-- compact glass pill navigation in the top region.
-- centered headline, support copy, and two-action CTA group.
+- centered headline, support copy, and two-action CTA group (optional glassmorphism on **buttons only**, not a nav bar).
 
 Keep the implementation self-contained in one section component.
 
@@ -17,7 +16,7 @@ Keep the implementation self-contained in one section component.
 
 1. Atmosphere: dark technical canvas with soft luminous trails.
 2. Palette strategy: use design-system roles (`background`, `foreground`, `primary`, `muted`) or theme variables; do not hardcode reference palette values.
-3. Surfaces: restrained glassmorphism for nav and optional secondary CTA.
+3. Surfaces: restrained glassmorphism for CTAs only if the brief calls for it — not for a top nav strip.
 4. Rhythm: smooth, continuous flow motion (ambient, not noisy or chaotic).
 
 ## Structure Requirements
@@ -26,9 +25,9 @@ Keep the implementation self-contained in one section component.
   - absolute/fixed full-bleed canvas (`inset-0`) for WebGL rendering.
   - optional blend/opacity wrapper for subtle integration with content.
 - **Foreground Shell**
-  - top-centered pill nav with logo mark + concise links.
   - hero copy block centered with clear vertical hierarchy.
   - primary CTA + secondary CTA in a compact group.
+  - **Do not** add `<nav>`, logo+links top bar, or pill navigation — shell only: wisps + copy + CTAs.
 - **Readability Layer**
   - use a soft dark overlay or radial fade so moving wisps never reduce text legibility.
 
@@ -40,7 +39,7 @@ Use two motion channels:
   - animate layered sine/cosine wave paths over time.
   - blend multiple wisps with varying phase/frequency for depth.
 2. UI micro-motion:
-  - subtle hover transitions on nav links and CTAs.
+  - subtle hover/focus transitions on CTAs (and links inside copy if any).
   - avoid heavy parallax or aggressive camera moves.
 
 ## Rendering Requirements
@@ -68,7 +67,7 @@ When this skill is selected, generated output MUST include:
 1. a full-screen WebGL canvas background for the hero.
 2. flowing multi-layer wisp lines (not static gradients).
 3. shader loop using `u_time` + `u_resolution`.
-4. glass pill nav + centered headline/copy/CTA composition.
+4. centered headline/copy/CTA composition **without** any top navigation bar or site header inside the section.
 5. cleanup safety:
    - cancel animation frame,
    - remove resize listeners,
@@ -222,7 +221,6 @@ export default function HeroSection() {
 
 - keep `min-h-screen` hero with centered composition and generous vertical breathing room.
 - place canvas below content (`z-0`) and UI layers above (`z-10+`).
-- keep nav compact (`max-w-2xl` style capsule) to preserve focus on headline.
 - maintain CTA grouping in one row on desktop and stacked on mobile.
 
 ## Content Rules

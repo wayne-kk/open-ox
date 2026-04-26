@@ -1,6 +1,6 @@
 # Component Skill: Hero - Adaptive V-Bars
 
-Use this skill when generating a hero section that combines dynamic V-shaped luminous background bars, a compact glass navigation shell, and GSAP-driven headline reveals — **without** a Three.js mesh or central 3D object.
+Use this skill when generating a hero section that combines dynamic V-shaped luminous background bars and GSAP-driven headline reveals — **without** a Three.js mesh or central 3D object. **No** site `<nav>`, header bar, or glass pill navigation — frame rails + typography + CTAs only; global chrome belongs in the app shell.
 
 ## Core Effect
 
@@ -9,7 +9,7 @@ Build a full-viewport hero with:
 - dark technical base and subtle grid texture.
 - animated V-shaped vertical gradient bars in the background.
 - masked headline reveal using GSAP + ScrollTrigger.
-- clean, premium glass navigation capsule and restrained bracket framing.
+- restrained bracket / rail framing (decorative lines only — not a nav strip).
 
 Keep the implementation self-contained in a single section component.
 
@@ -25,8 +25,6 @@ Keep the implementation self-contained in a single section component.
 - **Frame Layer**
   - centered max-width rails with border-x.
   - corner dots/brackets and tiny alignment markers.
-- **Nav Layer**
-  - floating pill nav with subtle gradient border and blur.
 - **Hero Core Layer**
   - dynamic V-bar background container (full-bleed, behind typography).
   - reveal headline + support copy + CTA group centered or aligned per layout brief.
@@ -51,7 +49,8 @@ When this skill is selected, generated output MUST include all of the following:
 2. GSAP masked word reveal on title.
 3. frame language (rails + corner bracket/dot accents).
 4. smooth bar animation loop with typed cleanup (`cancelAnimationFrame`, teardown of dynamically created bar nodes).
-5. no CDN scripts, no `iconify-icon`, no `<style jsx>`.
+5. **MUST NOT** include top navigation, `<nav>`, logo+links rows, or floating pill menus inside this section.
+6. no CDN scripts, no `iconify-icon`, no `<style jsx>`.
 
 If any item above is missing, this is NOT a valid `adaptive-vbars-webgl` implementation.
 

@@ -20,5 +20,4 @@ when:
       ]
     none: ["warm", "organic", "playful", "retro", "pastel", "editorial"]
 notes: >
-  Use for hero sections with dynamic V-shaped gradient bar background, faceted
-  Three.js center object, and restrained glassmorphism framing.
+  V-shaped gradient bars + GSAP headline reveal + rail framing; CSS/DOM only, no nav chrome.

@@ -33,4 +33,4 @@ when:
         "wireframe"
       ]
 notes: >
-  Starfield + fixed bottom-right limb disc (radial@50% 0%, 40px blur); parallax; hero-only.
+  Starfield + limb disc + parallax; hero-only, no top nav chrome; CSS/DOM only.

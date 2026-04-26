@@ -35,4 +35,4 @@ when:
         "css-only"
       ]
 notes: >
-  Rounded shader card + gradient frame; GSAP mask reveal; Three quad; tokens via uniforms not demo GLSL rgb.
+  Rounded shader card + gradient frame; GSAP reveal; Three quad; no nav in section; token colors via uniforms.

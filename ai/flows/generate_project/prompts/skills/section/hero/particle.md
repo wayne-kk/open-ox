@@ -1,6 +1,6 @@
 # Component Skill: Hero — Particle Text
 
-Use this skill when generating a hero section where the headline is rendered as an animated particle system on a `<canvas>`. Particles swarm to form words, cycle through them automatically, and respond to mouse interaction.
+Use this skill when generating a hero section where the headline is rendered as an animated particle system on a `<canvas>`. Particles swarm to form words, cycle through them automatically, and respond to mouse interaction. **No** `<nav>`, header bars, or site link rows in this section — overlay is subheading + CTAs (+ optional eyebrow) only.
 
 ## Core Effect
 
@@ -117,7 +117,7 @@ export default function HeroSection() {
       <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
       {/* Overlay layout — split into 3 vertical zones */}
       <div className="relative z-10 flex flex-col h-full px-6 sm:px-12">
-        {/* Top zone: eyebrow / nav badge — small, hugs the top */}
+        {/* Top zone: optional small eyebrow — not navigation */}
         <div className="pt-8 sm:pt-12">
           {/* Optional: small eyebrow label or logo */}
         </div>

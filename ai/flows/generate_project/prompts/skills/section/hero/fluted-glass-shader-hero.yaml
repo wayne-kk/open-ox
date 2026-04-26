@@ -24,6 +24,8 @@ when:
         "bento",
         "gradient border",
         "chrome frame",
+        "max-w canvas",
+        "postage stamp",
         "gsap",
         "scrolltrigger",
         "word reveal",
@@ -35,4 +37,4 @@ when:
         "grayscale"
       ]
 notes: >
-  Full-viewport fluted-glass GLSL + blob field; left logo+rule+type; uniforms follow brief not demo greens.
+  Full-viewport fluted GLSL; logo+rule+type overlay only; no nav; clientWidth resize; no card wrap.

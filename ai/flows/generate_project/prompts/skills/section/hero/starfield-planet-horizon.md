@@ -2,7 +2,7 @@
 
 Use this skill when `generateSection` should deliver a full-viewport, space-operatic hero: a dense micro-star field, a large soft “planet at the limb” or horizon glow hugging the bottom or corner, and foreground content in a glass/terminal-inspired layer. The motion is light scroll-driven parallax on the planet layer plus staggered content reveal—**no WebGL**—suitable for fintech, infra, or “autonomous system” briefs that ask for depth without 3D runtime cost.
 
-**Scope — hero only:** When the user or brief supplies a full one-pager, implement **only** this first-screen block: background layers (starfield + planet) + in-hero copy/CTAs + optional bottom “deck” telemetry. **Do not** pull in follow-on sections (feature grid, bento, logo strip, or footer) unless a separate `generateSection` call explicitly asks for them. An optional **fixed top bar** (brand mark + “system access” style control) may live in the same section **only** if the layout contract includes global chrome; otherwise keep nav in the app shell.
+**Scope — hero only:** When the user or brief supplies a full one-pager, implement **only** this first-screen block: background layers (starfield + planet) + in-hero copy/CTAs + optional bottom “deck” telemetry. **Do not** pull in follow-on sections (feature grid, bento, logo strip, or footer) unless a separate `generateSection` call explicitly asks for them. **Do not** add a fixed top bar, `<nav>`, or “system access” chrome rows inside this section — keep navigation in the app shell.
 
 ## Core Effect
 
@@ -61,7 +61,7 @@ If the brief extends past the fold, a **feature band** can reuse glass panels, a
 7. **MUST** (hero-only) **not** render placeholder feature columns, “integration” logo rows, or page footer as part of this section output.
 8. **MUST** provide **primary** and **secondary** actions: primary = filled or soft-filled outline using accent/surface tokens; secondary = border-only or ghost. **MUST** use the project’s icon set (e.g. `lucide-react` per repo conventions) for arrow/icons—**no** CDN `lucide` script or `iconify-icon`.
 9. **MUST NOT** add `<script src="https://…">` for Tailwind, icons, or runtime deps; use the app’s build pipeline and imports only.
-10. **MAY** include a **fixed** top **nav strip** (z above starfield, below modal layers): small brand mark or dot, logotype row, and a compact secondary control (e.g. “system access”) with hairline border—**MUST** map bar colors to `background` / `border` / `foreground` tokens, not the sample’s raw neutrals.
+10. **MUST NOT** include top navigation, fixed header strips, brand+links bars, or `<nav>` inside this section.
 
 If any of the **MUST** (and hero-only) items above is missing, the output is **not** valid for `starfield-planet-horizon`.
 

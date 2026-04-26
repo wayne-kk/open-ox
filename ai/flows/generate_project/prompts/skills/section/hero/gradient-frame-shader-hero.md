@@ -2,7 +2,7 @@
 
 Use this skill when `generateSection` should deliver a **bento-style marketing hero**: a **large rounded rectangle** (heavy radius) with a **fake 1px “chrome” border** (outer gradient stroke), **dark inner field**, **full-viewport WebGL** as a **single orthographic quad** running a **time-animated fragment shader** (noise + horizontal streak read), `**mix-blend-mode: screen`** on the canvas, a **vignette-style** dark **gradient overlay** on top of the field, and **foreground copy** in **light text** with a **per-word masked rise** driven by **GSAP + ScrollTrigger** (stagger). **Icons and layout** follow a **control-plane / platform** tone. **No GLB geometry, particles, or external 3D assets**—only **procedural shader** output.
 
-**Scope — hero only:** Ship **one** rounded hero block (height ~`75vh`with sensible`min-height`, max width within page grid). **Do not** include the **four-column micro-demo grid**, feature cards, or any `**`siblings** below the hero from source one-pagers. **Site header** is **optional**: if the brief includes global nav, place it **outside** this section in the app shell; the skill **does not** require the Aura header—only the **card + its inner WebGL + copy** are mandatory for this`id`.
+**Scope — hero only:** Ship **one** rounded hero block (height ~`75vh`with sensible`min-height`, max width within page grid). **Do not** include the **four-column micro-demo grid**, feature cards, or any `**`siblings** below the hero from source one-pagers. **Do not** place `<nav>`, site headers, or top link rows **inside** this section — only the **card + its inner WebGL + copy** (and CTAs) are in scope; global nav stays in the app shell.
 
 ## Core Effect
 
@@ -45,8 +45,9 @@ Use this skill when `generateSection` should deliver a **bento-style marketing h
 6. **MUST** implement **per-word (or per-unit) masked rise**: **parent** `overflow-hidden`, **child** `inline-block` with **from** `**translateY(100%–120%)`** and **small** `**rotateZ`** **to** **neutral**; **MUST** trigger on **enter view** (ScrollTrigger, **IntersectionObserver**, or `whileInView`) with **stagger**; **MUST** respect `**prefers-reduced-motion`**.
 7. **MUST** use `**flex` / `grid`** so on `**lg`** the **headline block** and **subtext + CTA** sit in a **two-column** **bottom** alignment (`items-end` or matching token).
 8. **MUST** use project **icons** (e.g. `**lucide-react`**) for eyebrow, CTA arrow, and any chrome—MUST NOT use `**iconify-icon`**, **CDN** Iconify, or **unstyled** **external** **icon** scripts.
-9. **MUST** (hero-only) **not** output the **four-card** feature grid, **steppers**, or **stat** widgets from reference marketing pages.
-10. **MUST NOT** add `**<script src="https://…">`** for **Three, GSAP, Tailwind, or Iconify**; **import** from `**npm`** packages (`three`, `gsap` if used) in the app bundle.
+9. **MUST NOT** include `<nav>`, site headers, or top navigation links inside this section (only the rounded hero card + copy + CTAs).
+10. **MUST** (hero-only) **not** output the **four-card** feature grid, **steppers**, or **stat** widgets from reference marketing pages.
+11. **MUST NOT** add `**<script src="https://…">`** for **Three, GSAP, Tailwind, or Iconify**; **import** from `**npm`** packages (`three`, `gsap` if used) in the app bundle.
 
 If any of the **MUST** items is missing, the output is **not** valid for `gradient-frame-shader-hero`.
 

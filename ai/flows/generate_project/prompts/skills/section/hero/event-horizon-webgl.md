@@ -27,8 +27,7 @@ Build a full-viewport hero with:
 - **Frame Layer**
   - perimeter border, 4 corner brackets, and tiny alignment guide marks.
 - **Content Layer**
-  - top nav + center links + action.
-  - main hero copy + CTA group.
+  - main hero copy + CTA group (and optional glass-side panel) — **no** site `<nav>`, link rows, or header bar inside this section.
   - optional right-side quote/system panel with subtle glass card treatment.
 
 ## Motion Direction
@@ -62,7 +61,8 @@ When this skill is selected, generated output MUST include:
 3. mouse-influenced camera drift/parallax.
 4. GSAP masked word reveal on hero heading.
 5. frame language elements (corner brackets + guide ticks/rails).
-6. complete cleanup:
+6. **MUST NOT** include `<nav>`, top link rows, or site header chrome inside this section.
+7. complete cleanup:
    - cancel RAF,
    - remove mouse/resize listeners,
    - dispose geometry/material/renderer.

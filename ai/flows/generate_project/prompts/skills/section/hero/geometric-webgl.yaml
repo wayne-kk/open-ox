@@ -20,8 +20,5 @@ when:
       ]
     none: ["warm", "organic", "casual", "retro", "photography", "illustration"]
 notes: >
-  Use for hero sections with geometric frame language and Three.js faceted mesh
-  visuals. Emphasizes dark technical aesthetics, precise line-work, and staged
-  reveal animation.
-
+  Geometric frame + Three.js faceted mesh + staged reveal; no nav chrome in hero.
 

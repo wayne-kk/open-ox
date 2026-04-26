@@ -20,5 +20,4 @@ when:
       ]
     none: ["warm", "friendly", "playful", "pastel", "minimal", "editorial"]
 notes: >
-  Use for hero sections featuring a black-hole-like particle accretion disk in
-  WebGL, with framed sci-fi UI, masked text reveal, and restrained glassmorphism.
+  Particle accretion disk WebGL + frame + GSAP reveal; no top nav in section; glass content only.

@@ -2,7 +2,7 @@
 
 Use this skill when `generateSection` should deliver a **print-meets-landscape** hero: a **soft neutral field** with a **full-bleed desaturated photo**, **layered scrims** for readability, an **optional paper-grain / noise** veil, a **right-aligned (or mirrored) block of stacked display words** with a small **inset label/badge**, a **serif or accent italic** supporting line, a **solid CTA**—and on the other side, a set of **vertical “blind” columns** that each reveal a **horizontal slice of the same wide image** (pano / strip composition), with **scroll-linked vertical parallax** on those slices. **No WebGL, canvas effects, or particle systems**—this is **CSS backgrounds + rAF-throttled scroll**.
 
-**Scope — hero only:** Output **one** section (the first screen block) plus its inline asset hooks. **Do not** add unrelated page chrome beyond what is common for the hero: **no** footer, **no** “spacer” sections to pad scroll unless the product brief needs extra body height to feel parallax; the **parallax** script targets **blind layer transforms only** while the user scrolls through / past the hero.
+**Scope — hero only:** Output **one** section (the first screen block) plus its inline asset hooks. **Do not** add unrelated page chrome beyond what is common for the hero: **no** footer, **no** `<nav>` or site header rows inside this section, **no** “spacer” sections to pad scroll unless the product brief needs extra body height to feel parallax; the **parallax** script targets **blind layer transforms only** while the user scrolls through / past the hero.
 
 ## Core Effect
 

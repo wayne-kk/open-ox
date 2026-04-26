@@ -59,7 +59,7 @@ When this skill is selected, the generated section MUST satisfy all items below:
 - Output only raw TSX. No markdown fences, no prose.
 - Must be a Client Component (`"use client"`).
 - Use realistic copy. Fix typos (e.g. "feel free" not "fill free").
-- Mobile-first: readable text, touch-friendly slider, collapsible nav.
+- Mobile-first: readable text, touch-friendly slider; stack or collapse **secondary controls** (not site navigation — no nav menu in this section).
 - Must preserve the target section's layout contract: `w-full` section wrapper, inner container, and brief-defined spacing density.
 - Do not default to `min-h-screen` unless explicitly required by the section brief.
 

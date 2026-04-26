@@ -14,7 +14,7 @@ when:
         "wave glow",
         "additive glow",
         "screen blend",
-        "glass nav",
+        "full-bleed hero",
         "ai hero",
         "dark hero"
       ]
@@ -30,4 +30,4 @@ when:
         "no motion"
       ]
 notes: >
-  WebGL flowing wisps hero with glass nav; colors map to design tokens.
+  Full-viewport WebGL wisps + centered copy/CTAs; no nav chrome; token-mapped colors.
