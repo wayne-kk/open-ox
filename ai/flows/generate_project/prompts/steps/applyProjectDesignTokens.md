@@ -117,7 +117,7 @@ Tailwind v4 `@theme` tokens **automatically** generate utility classes. You MUST
 
 **@layer utilities — ONLY for non-Tailwind effects:**
 
-- Use neutral semantic names (for example `fx-`* / `clip-*`) only when truly necessary
+- Use neutral semantic names (for example `fx-`* / `clip-`*) only when truly necessary
 - Do NOT mirror `@theme` tokens — Tailwind already generates those utilities
 - Keep this section minimal — most design tokens need zero custom classes
 

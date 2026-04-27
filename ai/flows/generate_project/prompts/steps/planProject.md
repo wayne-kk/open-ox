@@ -144,7 +144,7 @@
       },
       "sections": [
         {
-          "type": "Hero",
+          "type": "hero",
           "intent": "开场叙事目标",
           "contentHints": "可见内容 + 布局 + 动效级别 + 间距密度",
           "fileName": "HeroSection"
