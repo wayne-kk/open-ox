@@ -8,7 +8,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { supabase } from "./supabase";
-import { getSiteRoot } from "./projectManager";
+import { getSiteRoot, WORKSPACE_ROOT } from "./projectManager";
 
 const BUCKET = "project-files";
 const STORAGE_UPLOAD_EXCLUDE = new Set(["node_modules", ".next", ".git", "out"]);
@@ -208,6 +208,8 @@ async function listAllFiles(prefix: string): Promise<string[]> {
 
 /** Download all files for a project from Storage to local sites/ directory */
 export async function restoreProjectFiles(projectId: string): Promise<string[]> {
+  const projectRoot = getSiteRoot(projectId);
+  await fs.mkdir(projectRoot, { recursive: true });
   await restoreTemplateBaseFiles(projectId);
 
   const allPaths = await listAllFiles(projectId);
@@ -262,7 +264,7 @@ async function removeStoragePaths(storagePaths: string[]): Promise<void> {
 }
 
 async function restoreTemplateBaseFiles(projectId: string): Promise<void> {
-  const templateRoot = path.join(process.cwd(), "sites", "template");
+  const templateRoot = path.join(WORKSPACE_ROOT, "sites", "template");
   const projectRoot = getSiteRoot(projectId);
   await copyTemplateMissing(templateRoot, projectRoot, templateRoot);
 }

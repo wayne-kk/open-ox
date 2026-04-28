@@ -385,16 +385,12 @@ async function startE2BDevServer(
   projectId: string
 ): Promise<{ url: string; port: number }> {
   const projectDir = getSiteRoot(projectId);
+  console.log(`[devServerManager] Hydrating workspace for E2B preview: ${projectId}`);
+  await restoreProjectFiles(projectId);
   try {
-    await fs.access(projectDir);
+    await fs.access(path.join(projectDir, "package.json"));
   } catch {
-    // Directory missing — try restoring from Supabase Storage
-    console.log(`[devServerManager] Project dir missing, attempting restore from storage: ${projectId}`);
-    const restored = await restoreProjectFiles(projectId);
-    if (restored.length === 0) {
-      throw new Error(`Project directory not found: ${projectDir}`);
-    }
-    console.log(`[devServerManager] Restored ${restored.length} files from storage`);
+    throw new Error(`Project directory not found: ${projectDir}`);
   }
 
   // Compute current file fingerprint

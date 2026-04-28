@@ -27,10 +27,7 @@
 - 3 个 section：紧凑有力——适合单一信息活动页、个人作品集。
 - 4 个 section：标准配置——适合多功能产品、电商、内容较丰富的网站。
 
-除非用户明确要求，否则使用以下默认值：
-- `DESIGN_VARIANCE = 8`
-- `MOTION_INTENSITY = 6`
-- `VISUAL_DENSITY = 6`
+除非用户明确要求，否则在 `pageDesignPlan` 的文案中体现相近的强度：**设计变化度偏高、动效中等、信息密度中等**（写入 `layoutStrategy` / `constraints`，不要用单独的 1–10 数字字段）。
 
 ---
 
@@ -138,9 +135,19 @@
       "description": "延续输入 blueprint.site.pages[0].description 的单句定位",
       "journeyStage": "entry",
       "pageDesignPlan": {
-        "designVariance": 8,
-        "motionIntensity": 6,
-        "visualDensity": 6
+        "pageGoal": "与本页 description 一致的单句目标",
+        "narrativeArc": "建立价值 → 支撑证据 → 推动转化的节奏",
+        "layoutStrategy": "用区块节奏与间距对比支撑该 journeyStage 的旅程阶段",
+        "hierarchy": [
+          "首屏快速建立情境与价值",
+          "中段加深信任或说明方案",
+          "末段降低阻力并强化行动"
+        ],
+        "constraints": [
+          "保持给定 section 顺序",
+          "避免区块节奏与密度重复",
+          "动效与装饰克制，信息扫描优先"
+        ]
       },
       "sections": [
         {
@@ -169,7 +176,7 @@
 字段规则（严格）：
 - 顶层必须且只包含：`pages`。
 - `pages` 必须且只能有 1 项，且 `slug` 必须为 `"home"`。
-- `pageDesignPlan` 必须存在，键固定为：`designVariance`、`motionIntensity`、`visualDensity`（数值 1-10）。
+- `pageDesignPlan` 必须存在，键固定为：`pageGoal`、`narrativeArc`、`layoutStrategy`、`hierarchy`（字符串数组）、`constraints`（字符串数组）；均为非空、可执行的短句。
 - `sections` 中每项仅允许：`type`、`intent`、`contentHints`、`fileName`。
 - `sections.length` 必须在 3 到 4 之间（含边界）。
 - `fileName` 统一使用 PascalCase + `Section` 后缀（如 `HeroSection`、`PricingSection`）。

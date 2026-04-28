@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import {
   ChevronDown,
   ChevronRight,
+  Download,
   FileCode2,
   File as FileIcon,
   Folder,
@@ -142,6 +143,7 @@ export function ProjectCodePanel({ projectId }: { projectId: string }) {
   const [fileError, setFileError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [exportingZip, setExportingZip] = useState(false);
 
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const editorRef = useRef<{
@@ -221,6 +223,38 @@ export function ProjectCodePanel({ projectId }: { projectId: string }) {
     return () => controller.abort();
   }, [projectId, selectedPath]);
 
+  const downloadWorkspaceZip = useCallback(async () => {
+    setExportingZip(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/export`);
+      if (!res.ok) {
+        const text = await res.text();
+        let msg = text;
+        try {
+          const parsed = JSON.parse(text) as { error?: string };
+          if (typeof parsed.error === "string") msg = parsed.error;
+        } catch {
+          if (!text) msg = `HTTP ${res.status}`;
+        }
+        throw new Error(msg);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      try {
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${projectId}.zip`;
+        a.click();
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "Export failed");
+    } finally {
+      setExportingZip(false);
+    }
+  }, [projectId]);
+
   const saveFile = useCallback(async () => {
     if (!selectedPath || !dirty) return;
     setSaving(true);
@@ -286,6 +320,16 @@ export function ProjectCodePanel({ projectId }: { projectId: string }) {
           )}
         </div>
         <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => void downloadWorkspaceZip()}
+            disabled={exportingZip}
+            className="rounded border border-white/10 px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/80 transition-colors hover:border-white/20 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            title="Pack local workspace (fast). First download or stale files: Refresh explorer or use Export API ?sync=1 to merge Storage before zipping."
+          >
+            <Download className={cn("mr-1 inline h-3 w-3", exportingZip && "animate-pulse")} />
+            {exportingZip ? "ZIP…" : "ZIP"}
+          </button>
           <button
             type="button"
             onClick={() => void editorRef.current?.getAction("actions.find")?.run()}

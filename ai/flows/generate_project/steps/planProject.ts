@@ -1,4 +1,3 @@
-import { buildDefaultPageDesignPlan, buildDefaultProjectPlan } from "../planners/defaultProjectPlanner";
 import { composePromptBlocks, loadGuardrail, loadStepPrompt, writeSiteFile } from "../shared/files";
 import { callLLMWithMeta, extractJSON } from "../shared/llm";
 import { stepTraceFromLlmCompletion } from "../shared/llmTrace";
@@ -38,15 +37,24 @@ function isPageDesignPlan(value: unknown): value is PageDesignPlan {
   );
 }
 
+function mapToPlannedSections(raw: unknown): PlannedSectionSpec[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((section): section is Record<string, unknown> => isObjectRecord(section))
+    .map((s, index) => ({
+      type: typeof s.type === "string" ? s.type : "Feature",
+      intent: typeof s.intent === "string" ? s.intent : "",
+      contentHints: asString(s.contentHints) ?? "",
+      fileName: typeof s.fileName === "string" ? s.fileName : `Section${index + 1}`,
+    }));
+}
+
 // ── Main Step ────────────────────────────────────────────────────────────
 
 export async function stepPlanProject(
   blueprint: ProjectBlueprint
 ): Promise<{ blueprint: PlannedProjectBlueprint; trace: StepTrace }> {
   const wholePage = blueprint.brief.productScope.layoutMode === "whole-page";
-  const defaultPlan = buildDefaultProjectPlan(blueprint);
-
-  // ── Build LLM prompt ───────────────────────────────────────────────────
 
   const planPromptId = wholePage ? "planProject.wholePage" : "planProject";
   const systemPrompt = composePromptBlocks([loadStepPrompt(planPromptId), loadGuardrail("outputJson")]);
@@ -70,88 +78,74 @@ ${blueprint.site.pages
       .join("\n\n")}
 `;
 
-  // ── Call LLM ───────────────────────────────────────────────────────────
-
   const model = getModelForStep("plan_project");
 
-  try {
-    const meta = await callLLMWithMeta(systemPrompt, userMessage, 0.4, undefined, model);
-    const raw = meta.content;
-    const trace = stepTraceFromLlmCompletion(systemPrompt, userMessage, meta);
-    const parsed = JSON.parse(extractJSON(raw)) as unknown;
+  const meta = await callLLMWithMeta(systemPrompt, userMessage, 0.4, undefined, model);
+  const raw = meta.content;
+  const trace = stepTraceFromLlmCompletion(systemPrompt, userMessage, meta);
+  const parsed = JSON.parse(extractJSON(raw)) as unknown;
 
-    // Persist the raw LLM output into the generated project.
-    await writeSiteFile("project-plan.json", JSON.stringify(parsed, null, 2));
+  await writeSiteFile("project-plan.json", JSON.stringify(parsed, null, 2));
 
-    const parsedSite = isObjectRecord(parsed) && isObjectRecord(parsed.site) ? parsed.site : undefined;
-    const parsedPages = Array.isArray(parsedSite?.pages) ? parsedSite.pages : [];
-    const parsedLayoutSections = Array.isArray(parsedSite?.layoutSections) ? parsedSite.layoutSections : undefined;
+  const parsedPages =
+    isObjectRecord(parsed) && Array.isArray(parsed.pages)
+      ? parsed.pages
+      : isObjectRecord(parsed) && isObjectRecord(parsed.site) && Array.isArray(parsed.site.pages)
+        ? parsed.site.pages
+        : [];
 
-    const pages: PlannedPageBlueprint[] = parsedPages
-      .filter((candidate): candidate is Record<string, unknown> => isObjectRecord(candidate))
-      .map((page) => {
-        const rawSections = Array.isArray(page.sections) ? page.sections : [];
-        const sections: PlannedSectionSpec[] = rawSections
-          .filter((section): section is Record<string, unknown> => isObjectRecord(section))
-          .map((s, index) => ({
-            type: typeof s.type === "string" ? s.type : "Feature",
-            intent: typeof s.intent === "string" ? s.intent : "",
-            contentHints: asString(s.contentHints) ?? "",
-            fileName: typeof s.fileName === "string" ? s.fileName : `Section${index + 1}`,
-          }));
-
-        const description = asString(page.description) ?? "";
-        const journeyStage = asString(page.journeyStage) ?? "";
-
-        return {
-          title: asString(page.title) ?? "",
-          slug: asString(page.slug) ?? "",
-          description,
-          journeyStage,
-          primaryRoleIds: asStringArray(page.primaryRoleIds),
-          supportingCapabilityIds: asStringArray(page.supportingCapabilityIds),
-          sections,
-          pageDesignPlan: isPageDesignPlan(page.pageDesignPlan)
-            ? page.pageDesignPlan
-            : buildDefaultPageDesignPlan({ description, journeyStage, sections }, wholePage),
-        };
-      });
-
-    const normalizedPages = pages.length > 0 ? pages : defaultPlan.site.pages;
-
-    if (!parsedSite || parsedPages.length === 0) {
-      trace.output = {
-        ...trace.output,
-        warning: "Invalid plan_project JSON shape: missing site/pages, used default pages fallback.",
-      };
-    }
-
-    const mergedBlueprint: PlannedProjectBlueprint = {
-      ...defaultPlan,
-      site: {
-        ...defaultPlan.site,
-        layoutSections: wholePage ? [] : parsedLayoutSections ?? defaultPlan.site.layoutSections,
-        pages: normalizedPages,
-      },
-    };
-
-    return {
-      blueprint: mergedBlueprint,
-      trace,
-    };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return {
-      blueprint: defaultPlan,
-      trace: {
-        llmCall: {
-          model,
-          systemPrompt,
-          userMessage,
-          rawResponse: `[plan_project failed — using default plan]\n${message}`,
-        },
-        output: { fallbackToDefaultPlan: true },
-      },
-    };
+  if (!isObjectRecord(parsed) || parsedPages.length === 0) {
+    throw new Error("plan_project: invalid JSON — missing pages or empty pages array");
   }
+
+  const parsedLayoutSections =
+    isObjectRecord(parsed) && isObjectRecord(parsed.site) && Array.isArray(parsed.site.layoutSections)
+      ? parsed.site.layoutSections
+      : undefined;
+
+  const pages: PlannedPageBlueprint[] = parsedPages
+    .filter((candidate): candidate is Record<string, unknown> => isObjectRecord(candidate))
+    .map((page, pageIndex) => {
+      const rawSections = Array.isArray(page.sections) ? page.sections : [];
+      const sections: PlannedSectionSpec[] = mapToPlannedSections(rawSections);
+
+      const description = asString(page.description) ?? "";
+      const journeyStage = asString(page.journeyStage) ?? "";
+
+      if (!isPageDesignPlan(page.pageDesignPlan)) {
+        throw new Error(
+          `plan_project: page at index ${pageIndex} (${asString(page.slug) ?? "?"}) has missing or invalid pageDesignPlan`
+        );
+      }
+
+      return {
+        title: asString(page.title) ?? "",
+        slug: asString(page.slug) ?? "",
+        description,
+        journeyStage,
+        primaryRoleIds: asStringArray(page.primaryRoleIds),
+        supportingCapabilityIds: asStringArray(page.supportingCapabilityIds),
+        sections,
+        pageDesignPlan: page.pageDesignPlan,
+      };
+    });
+
+  const mergedBlueprint: PlannedProjectBlueprint = {
+    brief: blueprint.brief,
+    experience: blueprint.experience,
+    site: {
+      informationArchitecture: blueprint.site.informationArchitecture,
+      layoutSections: wholePage
+        ? []
+        : parsedLayoutSections !== undefined
+          ? mapToPlannedSections(parsedLayoutSections)
+          : blueprint.site.layoutSections,
+      pages,
+    },
+  };
+
+  return {
+    blueprint: mergedBlueprint,
+    trace,
+  };
 }

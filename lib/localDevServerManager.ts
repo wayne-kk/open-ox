@@ -245,13 +245,11 @@ function stopDevInRegistry(projectId: string): void {
 
 async function ensureProjectDirExists(projectId: string): Promise<string> {
   const projectDir = getSiteRoot(projectId);
+  await restoreProjectFiles(projectId);
   try {
-    await fs.access(projectDir);
+    await fs.access(path.join(projectDir, "package.json"));
   } catch {
-    const restored = await restoreProjectFiles(projectId);
-    if (restored.length === 0) {
-      throw new Error(`Project directory not found: ${projectDir}`);
-    }
+    throw new Error(`Project directory not found: ${projectDir}`);
   }
   return projectDir;
 }
