@@ -154,7 +154,7 @@ export async function callLLMWithToolsFromMessages(params: {
   const {
     messages,
     tools,
-    temperature = 0.1,
+    temperature = 0.5,
     maxIterations = 12,
     executeToolOverrides = {},
     shouldAbortAfterToolResults,

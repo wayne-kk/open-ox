@@ -12,7 +12,7 @@
 
 ### 硬性目标
 
-1. **`page.tsx` 必须存在**：路径由用户消息给出（`home` → `app/page.tsx`）。
+1. `**page.tsx` 必须存在**：路径由用户消息给出（`home` → `app/page.tsx`）。
 2. **导出默认 React Server or Client Component**（与现有模板一致）；需要交互时用 `"use client"` 并按需下放 client 边界。
 3. **自行拆文件**：将业务组件放在 `components/` 下有意义的路径（例如 `components/features/`、`components/home/`、`components/ui/`）；**勿**与不存在的「计划 section 清单」对齐。
 4. **遵守设计系统**：`design-system.md` / tokens / Tailwind：颜色与间距对齐 token，不要为了抄参考站硬编码一整套色板。
@@ -29,6 +29,6 @@
 
 ### 完成方式
 
-当你确认本路由与抽离的组件文件都已写好、import 合理时，**立即调用** 工具 **`page_implementation_complete`**（附一句 `summary`，描述你创建/修改了哪些文件、采用了什么布局方式）。之后流水线会跑生产级 `build` / 修复；你不必在本轮用 `run_build` 代替全局验证（除非你在排查具体错误）。
+当你确认本路由与抽离的组件文件都已写好、import 合理时，**立即调用** 工具 `**page_implementation_complete`**（附一句 `summary`，描述你创建/修改了哪些文件、采用了什么布局方式）。之后流水线会跑生产级 `build` / 修复；你不必在本轮用 `run_build` 代替全局验证（除非你在排查具体错误）。
 
 **最终一步永远是** `page_implementation_complete`。

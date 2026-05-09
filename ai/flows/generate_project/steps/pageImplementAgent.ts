@@ -182,7 +182,7 @@ Do not invent extra top-level routes beyond this page.`;
   const { content, toolCalls } = await callLLMWithToolsFromMessages({
     messages,
     tools: [...getSystemToolDefinitions([...TOOL_NAMES]), completeTool],
-    temperature: 0.2,
+    temperature: 0.5,
     maxIterations,
     model,
     ...(thinking ? { thinkingLevel: thinking } : {}),
