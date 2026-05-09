@@ -21,11 +21,14 @@ export function StepRow({ step, flowStart }: { step: BuildStep; flowStart: numbe
   const [open, setOpen] = useState(false);
   const isSection = step.step.startsWith("generate_section:");
   const isToolCall = step.step.startsWith("tool_call:");
+  const isAgentTool = step.step.startsWith("page_agent_tool:");
   const stepLabel = isSection
     ? step.step.replace("generate_section:", "section:")
     : isToolCall
       ? step.step.replace("tool_call:", "🔍 tool:")
-      : step.step;
+      : isAgentTool
+        ? (step.detail ?? step.step)
+        : step.step;
   const narrative = getStepNarrative(step);
   const hasTrace = step.trace != null;
 
@@ -53,7 +56,7 @@ export function StepRow({ step, flowStart }: { step: BuildStep; flowStart: numbe
   })();
 
   return (
-    <div className={`rounded-xl hover:bg-white/3 ${isToolCall ? "border border-blue-400/10 bg-blue-400/3" : ""}`}>
+    <div className={`rounded-xl hover:bg-white/3 ${isToolCall ? "border border-blue-400/10 bg-blue-400/3" : isAgentTool ? "border border-emerald-400/10 bg-emerald-400/3" : ""}`}>
       <div
         className="flex cursor-pointer items-start gap-2 px-2 py-2"
         onClick={() => setOpen((v) => !v)}
@@ -61,13 +64,13 @@ export function StepRow({ step, flowStart }: { step: BuildStep; flowStart: numbe
         <span className="w-[68px] shrink-0 pt-0.5 font-mono text-[10px] text-muted-foreground">
           [{formatTimestamp(step.timestamp, flowStart)}]
         </span>
-        <span className={`shrink-0 pt-0.5 text-[11px] ${step.status === "ok" ? (isToolCall ? "text-blue-400" : "text-primary") : step.status === "active" ? "text-primary" : "text-red-400"}`}>
+        <span className={`shrink-0 pt-0.5 text-[11px] ${step.status === "ok" ? (isToolCall ? "text-blue-400" : isAgentTool ? "text-emerald-400" : "text-primary") : step.status === "active" ? "text-primary" : "text-red-400"}`}>
           {step.status === "ok" ? ">" : step.status === "active" ? (
             <span className="inline-block h-3 w-3 animate-spin rounded-full border-[1.5px] border-primary border-t-transparent" />
           ) : "✗"}
         </span>
         <div className="min-w-0 flex-1 overflow-hidden">
-          <div className={`break-all font-mono text-[11px] ${isSection ? "text-accent-tertiary" : isToolCall ? "text-blue-300" : "text-foreground"}`}>
+          <div className={`break-all font-mono text-[11px] ${isSection ? "text-accent-tertiary" : isToolCall ? "text-blue-300" : isAgentTool ? "text-emerald-300" : "text-foreground"}`}>
             {stepLabel}
             {stepSkillHints.length > 0 ? (
               <span className="ml-1.5 text-[10px] text-accent-tertiary/80">[{stepSkillHints.join(", ")}]</span>

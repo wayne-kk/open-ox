@@ -1,144 +1,140 @@
 ---
 name: generate-visual-skill
-description: Convert provided WebGL/animation/source snippets into generate_project section skills (`.md` + `.yaml`) with production-safe constraints; colors follow the brief/design tokens, not a copy of the reference palette. Use when user shares effect source code and asks to "转成 skill", "生成 skill yaml", "沉淀为可复用特效模板", or similar.
+description: Convert provided WebGL/animation/source snippets into generate_project section skills — for hero, append metadata to `section/hero/skills.yaml` and add `<skill-id>.md`; other sections may still use per-skill `.yaml`+`.md` until bundled. Production-safe constraints; colors follow the brief/design tokens, not a copy of the reference palette. Use when user shares effect source and asks to "转成 skill", "生成 skill yaml", "沉淀为可复用特效模板", or similar.
 ---
 
 # Generate Visual Skill
 
 ## Purpose
 
-Turn a user-provided visual effect implementation (WebGL, canvas, shader, GSAP, CSS, DOM-driven motion, etc.) into a reusable **skill pair** for the `generate_project` flow:
+Turn a user-provided visual effect implementation (WebGL, canvas, shader, GSAP, CSS, DOM-driven motion, etc.) into a reusable skill for the `generate_project` flow.
+
+### Hero section (`section/hero/`) — **single registry file**
+
+- **Metadata:** append one new item to the `skills:` array in  
+  `ai/flows/generate_project/prompts/skills/section/hero/skills.yaml`
+- **Prompt body:** add or update  
+  `ai/flows/generate_project/prompts/skills/section/hero/<skill-id>.md`  
+  where `<skill-id>` equals the `name` field in the registry (same as today’s kebab-case ids).
+
+**Do not** add separate `hero/<skill-id>.yaml` files — discovery loads all hero metadata from `skills.yaml` only (`skillDiscovery` bundle parser).
+
+### Other section folders
+
+If the user targets a section that **does not** yet use a bundled `skills.yaml`, you may still emit the legacy pair:
 
 - `ai/flows/generate_project/prompts/skills/section/<section>/<skill-id>.md`
 - `ai/flows/generate_project/prompts/skills/section/<section>/<skill-id>.yaml`
 
-Default `<section>` is `hero` unless the user names another section type (e.g. future `features` under the same tree).
+Default `<section>` is `hero` unless the user names another.
 
-For **cross-cutting technical guidance** (not tied to one section layout), use:
+### Cross-cutting technical guidance
+
+When the source is clearly architecture/patterns (e.g. Three.js lifecycle) rather than a concrete section UI:
 
 - `ai/flows/generate_project/prompts/skills/technical-spec/<skill-id>.md`
 - `ai/flows/generate_project/prompts/skills/technical-spec/<skill-id>.yaml`
 
-Choose `technical-spec` only when the source is clearly architecture/patterns (e.g. Three.js lifecycle, animation mixers) rather than a concrete section UI.
+---
 
 ## Output Contract
 
-Always produce **both** files with the **same basename** (`<skill-id>`). Metadata lives in `.yaml`; the runnable spec and narrative live in `.md`.
+### Hero: bundled entry in `skills.yaml`
 
-### Skill YAML (metadata)
-
-Must be valid for the project loader (`discoverSkills` / `parseSkillMetadata`). Include:
+Append **one** list item under `skills:` (match existing indentation and key order style in that file). Loader maps fields as follows:
 
 | Field | Rules |
 |--------|--------|
-| `id` | Lowercase `kebab-case`; stable, specific; must match filenames without extension. |
-| `kind` | `component-skill` for section implementations; `technical-spec-skill` for shared technical guidance. |
-| `sectionTypes` | Section skills: array of section names, e.g. `["hero"]`. Technical specs: `["*"]`. |
-| `priority` | Integer. **Set relative to sibling skills** in the same folder: stronger, more distinctive effects slightly higher; generic or heavy effects lower. There is no single magic number—compare existing YAMLs in that directory. |
-| `fallback` | Usually `false` unless the team explicitly marks a catch-all skill. |
-| `when.designKeywords` | See **Design keywords (`any` / `none`)** below. **`any`:** at most **10** entries (hard cap). **`none`:** disambiguation only; no fixed max, but keep it purposeful. |
-| `notes` | **One tight sentence** (roughly **≤ 80 characters** after collapsing whitespace). The project truncates notes in discovery UIs—put the distinguishing hook first. |
-| `disabled` | Omit unless the skill should be skipped by discovery (`true`). |
+| `name` | **Skill id** — lowercase `kebab-case`; must match `<skill-id>.md` basename. **This is the registry id** (not a separate top-level `id` key). |
+| `kind` | `component-skill` for section implementations. |
+| `sectionTypes` | e.g. `[hero]`. |
+| `priority` | Integer; set **relative to siblings** in the same `skills:` list (compare neighboring entries). |
+| `notes` | Short block (`>` folded style allowed); loader truncates for discovery UI — put the hook first. |
+| `keywords` | Routed to `when.designKeywords.any`. **At most 10** strings — same rule as legacy per-skill YAML. |
+| `exclude_keywords` | Routed to `when.designKeywords.none` (disambiguation; can be longer than `keywords` when useful). |
+| `disabled` | Optional; omit unless the skill should be skipped. |
 
-Use a **multi-line array** for `any` / `none` when there are more than a few keywords (matches current repo style).
+Do **not** add a duplicate `id` key — **`name` is the id** for bundled hero skills.
 
-Do **not** encode one-off hacks in YAML (e.g. duplicate synonyms solely to game ranking). Prefer clear `none` lists when two skills would otherwise collide.
+**Keyword style** (unchanged intent): scene + product/page type + vibe first; avoid stuffing `keywords` with pipeline jargon. See existing entries in `hero/skills.yaml` (e.g. `adaptive-vbars-webgl` block) for tone — **do not** paste its list verbatim into new skills.
 
-#### Design keywords (`any` / `none`) — **required style**
+**Merge ritual for new hero skills:**
 
-`designKeywords` are how briefs and natural-language queries **route** to a skill. **Hard cap:** `when.designKeywords.any` has **at most 10** strings—no exceptions in new skills. **Do not** fill `any` with stack jargon as the only signal (e.g. `fragment shader`, `orthographic`, `three.js` as a bulk list). **Do** write keywords the way a **PM or designer** might describe a **page, scene, and product**—and put implementation detail in the `.md` blueprint.
+1. Open `skills.yaml`, find the `skills:` array, append the new `- name: ...` block in a sensible place (often by priority or alphabetically within tier — follow surrounding file convention).
+2. Ensure no duplicate `name`.
+3. Write or update the matching `.md` blueprint.
 
-**Baseline mix for `any` (esp. B2B / product / marketing heroes):** anchor to the same *kind* of phrases used in `ai/flows/generate_project/prompts/skills/section/hero/adaptive-vbars-webgl.yaml`: **use case + product or page type + tone**. Examples of that **family** of tokens (pick what fits the source, not all in every file):
+### Hero: `.md` (spec)
 
-- **Scene / workflow:** e.g. `ai workflow`, `automation`, `system monitoring`, `product launch`, `first impression`, `live session`, `outdoor brand`, `expedition`
-- **Product or audience:** e.g. `data platform`, `saas`, `devtool`, `enterprise`, `b2b`, `developer`, `biotech`, `laboratory`
-- **Overall vibe / visual mood:** e.g. `precision`, `technical`, `commanding`, `forward-thinking`, `futuristic`, `deep black`, `immersive`, `editorial`, `cinematic`, `heritage`, `void`, `organic` (as mood, not “organic food”)
-- **Differentiators for *this* skill:** pack **product/audience + scene + 2–4 signature hooks** into the **10 slots** (layout metaphor, material/motion in plain words), e.g. `bento` + `gradient frame` + `scroll reveal`—**never** exceed **10** `any` items total
+Same structure requirements as before (sections, blueprint MUSTs, no demo hex lock-in, no app chrome in hero skills, a11y/perf, etc.) — see **Skill Markdown (spec)** below.
 
-**What to limit in `any`:** raw engine or API terms (`r128`, `ShaderMaterial`, `orthographic`, `gsap` as a library name unless the product literally asks for “GSAP”), unless the team explicitly wants tech-only routing. If you need one technical anchor, prefer **user-facing** phrasing: `webgl` / `scroll reveal` / `full-bleed` over **pipeline** terms.
+### Legacy per-skill YAML (non-bundled sections only)
 
-**`none`:** use for **disambiguation**—rule **out** the wrong *family* (e.g. “editorial photo blinds” vs “WebGL abstract”, “CSS-only” vs “shader”). It is fine for `none` to use **more technical** exclusion tokens than `any` when that stops the wrong skill from winning.
+If you emit `<skill-id>.yaml` elsewhere, it must remain valid for `parseSkillMetadata`: use top-level `id` (not `name`), `when.designKeywords.any` / `none`, etc., per the old schema.
 
-**Per-skill balance:** match **tone** to peers, but **do not** pad `any` past **10** or paste the same long list into every file—**pick the strongest mix** of scene + product + differentiators. **Style reference:** `adaptive-vbars-webgl.yaml` (10-item `any`; not a template to copy verbatim).
+---
 
-### Color and palette (critical)
+## Color and palette (critical)
 
-**Do not freeze or “复刻” literal colors from the source snippet** (hex, RGB, gradient stops copied from demo code). Colors **follow the product brief and design system** (tokens, theme, brand palette) when `generateSection` runs.
+**Do not freeze** literal colors from the source snippet. Colors **follow the product brief and design system** when `generateSection` runs. In the `.md`, describe **roles and relationships** and token-level language — not a swatch copy.
 
-In the skill `.md`:
+---
 
-- Describe **roles and relationships**: background vs accent, figure vs ground, contrast level, warm/cool bias—**not** a fixed swatch lifted from the reference implementation.
-- Prefer **token-level language** where the project uses one (e.g. `primary`, `muted`, `background`); otherwise say “map accents to brief” or “derive from design system.”
-- In the **Reference TSX skeleton**, avoid hardcoded demo colors as requirements; use tokens, CSS variables, or clearly labeled placeholders so implementers substitute from the active brief.
+## Skill Markdown (spec)
 
-`when.designKeywords` may use **mood / metaphor** terms for routing (e.g. “emerald accent”, “neon”); they **describe discovery intent**, not mandatory literal values in generated code—align phrasing with the **Design keywords** section above, not a dump of stack names.
-
-### Skill Markdown (spec)
-
-Structure the `.md` from the **actual stack** in the source—omit sections that do not apply.
+Structure the `.md` from the **actual stack** in the source — omit sections that do not apply.
 
 **Recommended sections (pick and rename as needed):**
 
 1. **Title + opening “Use this skill when…”** — One paragraph tying effect to `generateSection` / layout intent.
 2. **Core Effect** — Bullet list of what the viewer sees and what must exist in the section.
-3. **Visual Language** — Atmosphere, frame language, typography tone; **palette as roles and contrast**, tied to brief/tokens—not a copy of the snippet’s hex values (see **Color and palette** above).
-4. **Structure Requirements** — Layering (frame / background / content), DOM or canvas placement. **Hero `component-skill`s:** do **not** specify site `<nav>`, header bars, brand/version top rows, or app-level chrome — the generated section is **visual treatment + hero copy only**; global navigation belongs in the layout/shell, not inside hero skills.
-5. **Motion Direction** — Timelines, RAF, scroll triggers, interaction; call out `prefers-reduced-motion` expectations.
-6. **Rendering / implementation deep-dive (conditional)**  
-   - Examples: `WebGL Requirements (Three.js)`, `Particle System`, `CSS / DOM Background`, `Shader passes`—**only if** the source uses them.
-7. **Required Implementation Blueprint (Do Not Skip)** — Numbered, testable MUST items **derived from the source** (and from distinctive constraints you add for production safety). End with: if any item is missing, output is NOT valid for this `id`.
-8. **Reference TSX Skeleton (Adapt, Do Not Copy Blindly)** — When the deliverable is a React section: strict TypeScript, null-safe refs, cleanup. Strip product-specific copy; keep structure. **Do not treat source demo colors as the spec**—use tokens/variables or neutral placeholders.
-9. **Layout Details** — Viewport, stacking, readability over motion.
-10. **Content Rules** — What copy/CTA tone fits this visual.
-11. **Implementation Constraints** — Project-wide: e.g. `use client` when needed, no CDN script tags, no `iconify-icon`, no `<style jsx>`, icons via project system (e.g. `lucide-react`) or inline SVG.
-12. **Accessibility + Performance** — Reduced motion, `pointer-events-none` on decorative layers, reasonable DPR cap for WebGL, listener/RAF disposal.
+3. **Visual Language** — Atmosphere, frame language, typography tone; **palette as roles and contrast**, tied to brief/tokens.
+4. **Structure Requirements** — Layering, DOM/canvas placement. **Hero component-skills:** no site `<nav>` / app chrome in the section.
+5. **Motion Direction** — Timelines, RAF, scroll triggers; `prefers-reduced-motion`.
+6. **Rendering / implementation deep-dive (conditional)** — WebGL, particles, CSS-only, etc., only if relevant.
+7. **Required Implementation Blueprint (Do Not Skip)** — Numbered MUSTs; end with validity sentence for this `id`.
+8. **Reference TSX Skeleton** — Strict TS, cleanup, tokens/placeholders — not demo colors as requirements.
+9. **Layout Details** — Viewport, stacking, readability.
+10. **Content Rules** — Copy/CTA tone.
+11. **Implementation Constraints** — `use client` when needed, no CDN scripts, project icon rules, etc.
+12. **Accessibility + Performance** — Reduced motion, decorative `pointer-events-none`, DPR cap, disposal.
 
-**Do not** require a fixed global outline (e.g. forcing `Rendering Requirements` for a CSS-only hero). **Do** require that every generated skill remains internally consistent: if the blueprint says “no WebGL,” the skeleton must not import Three.js.
+---
 
 ## Conversion Workflow
 
-1. **Classify** — Section `component-skill` vs `technical-spec-skill`; default section `hero` if unspecified.
-2. **Extract primitives** from source: layout, render path, motion, interaction, assets, distinctive constraints—**excluding** locking in specific colors; map color to brief/tokens instead.
-3. **Choose `id`** — Short, descriptive, unique among siblings; avoid overlapping names with existing files in the target folder.
-4. **Author `.yaml`** — Follow **Design keywords (`any` / `none`)** in this skill: scene + product type + vibe first; distinctive hooks per skill; `none` for disambiguation. Open `adaptive-vbars-webgl.yaml` for baseline **tone** (not a verbatim copy of its list).
-5. **Author `.md`** — Blueprint items must be **checkable** and **sourced**: each MUST should trace to the snippet or to an explicit production constraint you document.
-6. **Safety pass** — Type-safe skeleton, cleanup paths for every allocated resource (DOM nodes, RAF, listeners, WebGL dispose where applicable), no forbidden patterns from **Implementation Constraints**.
+1. **Classify** — Section `component-skill` vs `technical-spec-skill`; default section `hero`.
+2. **Extract primitives** from source (layout, motion, interaction) — **excluding** locking demo colors.
+3. **Choose `name` / `<skill-id>`** — unique among `skills:` in `hero/skills.yaml`.
+4. **Hero:** append the bundled YAML block + author/update `hero/<skill-id>.md`.
+5. **Safety pass** — Type-safe skeleton, cleanup, no forbidden patterns.
+
+---
 
 ## TSX skeleton rules (when applicable)
 
-The embedded skeleton should illustrate:
+Same as before: hero skills contain **visual + hero copy only** (no global nav); typed refs; dispose listeners/RAF/WebGL you create; guard resize.
 
-- **Hero `component-skill`s:** no `<nav>`, header bar, or app chrome in the snippet — only background/visual layer + hero content.
-- Typed refs and early return if mount targets are missing.
-- Typed animation frame / event handler variables where used.
-- **Dispose only what you create** (e.g. `cancelAnimationFrame`, remove listeners, `dispose()` on Three.js geometry/material/renderer when the skeleton constructs them).
-- Resize handling that guards zero-sized targets before updating camera/renderer.
+---
 
-Avoid cargo-cult checks: if there is no mesh, do not mandate `mesh.material` disposal patterns.
+## Quality bar
 
-## Quality bar (non-prescriptive)
+Spot-check **one neighboring entry** in `hero/skills.yaml` + one peer `.md` for structural parity (notes density, keyword discipline, blueprint strictness).
 
-Before finishing, **spot-check against 1–2 existing skills in the same target directory** (read filenames and open one peer `.md` + `.yaml`). Match:
-
-- tone density (how strict the blueprint is),
-- YAML keyword style (see **Design keywords** + `adaptive-vbars-webgl.yaml`),
-- notes length,
-- how strictly project constraints are stated.
-
-Do **not** copy a peer’s effect requirements (e.g. a specific geometry or library) unless the user’s source actually uses them. The bar is **structural parity**, not **effect parity**.
+---
 
 ## Final handoff message
 
-After writing files, report:
+Report:
 
-- Absolute or repo-relative paths to both outputs.
-- `designKeywords.any` (≤ 10 items) and `designKeywords.none`.
-- The numbered blueprint items (same as in `.md`) as the checklist—pass/fail is whether the generated pair satisfies those items, not a fixed external rubric.
+- Paths touched: `hero/skills.yaml` (+ line or skill `name`) and `hero/<skill-id>.md`.
+- `keywords` (≤ 10) and `exclude_keywords` added.
+- Numbered blueprint MUSTs from `.md`.
+
+---
 
 ## User invocation
 
-When the user supplies source and asks for conversion:
-
 - Infer `section` and `kind`; default `hero` + `component-skill`.
-- Emit `<skill-id>.md` + `<skill-id>.yaml` in the correct tree.
-- If multiple unrelated snippets are provided, emit **one skill pair per snippet** with distinct `id`s.
+- **Hero:** registry row in `skills.yaml` + one `.md` per skill.
+- **Multiple snippets:** distinct `name` values and distinct `.md` files; append multiple blocks to `skills.yaml` (or one block per skill in one edit).

@@ -3,6 +3,7 @@ import { callLLMWithMeta, extractJSON } from "../shared/llm";
 import { stepTraceFromLlmCompletion } from "../shared/llmTrace";
 import type {
   PageDesignPlan,
+  PageCodegenMode,
   PlannedProjectBlueprint,
   PlannedPageBlueprint,
   PlannedSectionSpec,
@@ -52,12 +53,22 @@ function mapToPlannedSections(raw: unknown): PlannedSectionSpec[] {
 // ── Main Step ────────────────────────────────────────────────────────────
 
 export async function stepPlanProject(
-  blueprint: ProjectBlueprint
+  blueprint: ProjectBlueprint,
+  options?: { pageCodegenMode?: PageCodegenMode }
 ): Promise<{ blueprint: PlannedProjectBlueprint; trace: StepTrace }> {
-  const wholePage = blueprint.brief.productScope.layoutMode === "whole-page";
+  const agentMode = options?.pageCodegenMode === "agent";
 
-  const planPromptId = wholePage ? "planProject.wholePage" : "planProject";
+  const planPromptId = agentMode ? "planProject.agent" : "planProject";
   const systemPrompt = composePromptBlocks([loadStepPrompt(planPromptId), loadGuardrail("outputJson")]);
+
+  const pageListHeading = agentMode
+    ? "## 需要制定页面级纲要的页面（本步骤不列举 section 文件）"
+    : "## 需要规划 section 的页面";
+
+  const layoutHint =
+    blueprint.site.layoutSections.length > 0
+      ? "## 站点壳层（来自需求分析）\n已规划全局 layout 片段（如导航/页脚），将写入 `app/layout.tsx`；主路由实现阶段**不要**再在 `page.tsx` 里复制一套全局主导航/页脚。"
+      : "## 站点壳层（来自需求分析）\n未规划独立全局导航/页脚；根布局将为极简模式，**主路由**负责完整产品界面（含你判断需要的顶栏、侧栏等）。";
 
   const userMessage = `## 项目：${blueprint.brief.projectTitle}
 ${blueprint.brief.projectDescription}
@@ -68,7 +79,9 @@ ${blueprint.brief.projectDescription}
 - 核心结果：${blueprint.brief.productScope.coreOutcome}
 - 设计关键词：${blueprint.experience.designIntent.keywords.join(", ")}
 
-## 需要规划 section 的页面
+${layoutHint}
+
+${pageListHeading}
 ${blueprint.site.pages
       .map(
         (page) =>
@@ -107,7 +120,9 @@ ${blueprint.site.pages
     .filter((candidate): candidate is Record<string, unknown> => isObjectRecord(candidate))
     .map((page, pageIndex) => {
       const rawSections = Array.isArray(page.sections) ? page.sections : [];
-      const sections: PlannedSectionSpec[] = mapToPlannedSections(rawSections);
+      const sections: PlannedSectionSpec[] = agentMode
+        ? []
+        : mapToPlannedSections(rawSections);
 
       const description = asString(page.description) ?? "";
       const journeyStage = asString(page.journeyStage) ?? "";
@@ -135,9 +150,8 @@ ${blueprint.site.pages
     experience: blueprint.experience,
     site: {
       informationArchitecture: blueprint.site.informationArchitecture,
-      layoutSections: wholePage
-        ? []
-        : parsedLayoutSections !== undefined
+      layoutSections:
+        parsedLayoutSections !== undefined
           ? mapToPlannedSections(parsedLayoutSections)
           : blueprint.site.layoutSections,
       pages,

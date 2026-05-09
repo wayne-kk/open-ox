@@ -1,7 +1,6 @@
 import type {
   CapabilitySpec,
   InformationArchitecture,
-  LayoutMode,
   PageBlueprint,
   PageMapEntry,
   ProductScope,
@@ -35,7 +34,6 @@ function normalizeProductScope(value: unknown, projectDescription: string): Prod
   if (!value || typeof value !== "object") {
     return {
       productType: "marketing website",
-      layoutMode: "split-sections" as LayoutMode,
       mvpDefinition: projectDescription,
       coreOutcome: projectDescription,
       businessGoal: "Launch the smallest coherent website that proves the core value proposition.",
@@ -46,13 +44,8 @@ function normalizeProductScope(value: unknown, projectDescription: string): Prod
   }
 
   const candidate = value as Partial<ProductScope>;
-  const layoutMode: LayoutMode =
-    candidate.layoutMode === "whole-page" || candidate.layoutMode === "split-sections"
-      ? candidate.layoutMode
-      : "split-sections";
   return {
     productType: typeof candidate.productType === "string" ? candidate.productType : "website",
-    layoutMode,
     mvpDefinition:
       typeof candidate.mvpDefinition === "string" ? candidate.mvpDefinition : projectDescription,
     coreOutcome:

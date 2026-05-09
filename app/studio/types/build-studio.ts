@@ -59,9 +59,34 @@ export interface PlannedProjectBlueprint {
     };
 }
 
+export interface IntentAgentOption {
+    id: string;
+    label: string;
+    hint?: string;
+}
+
+export interface IntentAgentTurn {
+    status: "yield" | "implicit_yield" | "commit_generate" | "error";
+    turnCounter?: number;
+    mergedBrief?: string;
+    errorMessage?: string;
+    assistantText?: string;
+    yieldPayload?: {
+        kind: "capability" | "clarify" | "options" | "confirm_brief";
+        message: string;
+        suggestedReplies?: string[];
+        options?: IntentAgentOption[];
+        briefDraftMarkdown?: string;
+    };
+    toolCallNames?: string[];
+}
+
 export interface AiResponse {
     content: string;
     projectId?: string;
+    intentAgent?: IntentAgentTurn;
+    mergedBrief?: string;
+    mergedBriefFromAgent?: string;
     generatedFiles?: string[];
     blueprint?: PlannedProjectBlueprint;
     verificationStatus?: "passed" | "failed";

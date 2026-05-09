@@ -16,7 +16,7 @@
 import { runGenerateProject } from "@/ai/flows";
 import { initProjectDir } from "@/lib/projectManager";
 import { setRuntimeModelId, type ModelId } from "@/lib/config/models";
-import type { BuildStep } from "@/ai/flows";
+import type { BuildStep, PageCodegenMode } from "@/ai/flows";
 import { redactBuildStepForTransport } from "@/ai/flows/generate_project/shared/buildStepPayload";
 import { SSE_RESPONSE_HEADERS } from "@/lib/sse-headers";
 import { NextResponse } from "next/server";
@@ -42,6 +42,10 @@ export async function POST(req: Request) {
   const prompt: string | undefined = body.prompt;
   const styleGuide: string | undefined = body.styleGuide;
   const model: string | undefined = body.model;
+  const enableIntentGuide: boolean = body.enableIntentGuide !== false;
+  const rawPageCodegen: unknown = body.pageCodegenMode;
+  const pageCodegenMode: PageCodegenMode | undefined =
+    rawPageCodegen === "agent" || rawPageCodegen === "sections" ? rawPageCodegen : undefined;
 
   if (!prompt || typeof prompt !== "string") {
     return NextResponse.json({ error: "prompt is required" }, { status: 400 });
@@ -69,7 +73,7 @@ export async function POST(req: Request) {
           (step: BuildStep) => {
             send({ type: "step", ...redactBuildStepForTransport(step) });
           },
-          { projectId, styleGuide }
+          { projectId, styleGuide, enableIntentGuide, pageCodegenMode }
         );
 
         if (result.success) {
@@ -84,6 +88,17 @@ export async function POST(req: Request) {
             verificationStatus: result.verificationStatus,
             generatedFiles: result.generatedFiles,
             blueprint: result.blueprint,
+            intentGuideDeferred: result.intentGuideDeferred === true,
+            intentGuide: result.intentGuide
+              ? {
+                  outcome: result.intentGuide.outcome,
+                  phase: result.intentGuide.phase,
+                  assistantMessage: result.intentGuide.assistantMessage,
+                  suggestedReplies: result.intentGuide.suggestedReplies,
+                  choiceOptions: result.intentGuide.choiceOptions,
+                  buildPromptAppendix: result.intentGuide.buildPromptAppendix,
+                }
+              : undefined,
             installedDependencies: result.installedDependencies,
             dependencyInstallFailures: result.dependencyInstallFailures,
             steps: result.steps.map(redactBuildStepForTransport),

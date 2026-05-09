@@ -5,6 +5,8 @@
  *   data: {"type":"step", ...BuildStep}\n\n
  *   data: {"type":"done", "result": ProcessResult}\n\n
  *   data: {"type":"error", "message": string}\n\n
+ *
+ * Optional body: pageCodegenMode `"agent"` | `"sections"` — overrides per-route codegen (default agent + env GENERATE_PROJECT_PAGE_CODEGEN).
  */
 
 import { runGenerateProject } from "@/ai/flows";
@@ -27,7 +29,7 @@ import {
   normalizePromptProfile,
   withCorePromptRuntime,
 } from "@/lib/config/corePrompts";
-import type { BuildStep } from "@/ai/flows";
+import type { BuildStep, PageCodegenMode } from "@/ai/flows";
 import { redactBuildStepForTransport } from "@/ai/flows/generate_project/shared/buildStepPayload";
 import { SSE_RESPONSE_HEADERS } from "@/lib/sse-headers";
 import { NextResponse } from "next/server";
@@ -51,6 +53,11 @@ export async function POST(req: Request) {
     const preCreatedProjectId: string | undefined = body.projectId;
     const styleGuide: string | undefined = body.styleGuide;
     const enableSkills: boolean = body.enableSkills === true;
+    /** Defaults on: run `project_intent_guide` before analyze; callers may pass false to bypass. */
+    const enableIntentGuide: boolean = body.enableIntentGuide !== false;
+    const rawPageCodegen: unknown = body.pageCodegenMode;
+    const pageCodegenMode: PageCodegenMode | undefined =
+      rawPageCodegen === "agent" || rawPageCodegen === "sections" ? rawPageCodegen : undefined;
     // Temporarily force local prompt files only.
     // Ignore remote/database prompt toggle from client requests.
     const useDatabasePrompts = false;
@@ -116,7 +123,14 @@ export async function POST(req: Request) {
           startedAt: number;
         } | null = null;
         const mapPhase = (stepName: string): "setup" | "planning" | "execution" | "verification" | "finalize" => {
-          if (stepName.includes("analyze") || stepName.includes("plan")) return "planning";
+          if (
+            stepName.includes("analyze") ||
+            stepName.includes("plan") ||
+            stepName.includes("intent_guide") ||
+            stepName.includes("intent_agent")
+          ) {
+            return "planning";
+          }
           if (stepName.includes("build") || stepName.includes("typecheck")) return "verification";
           if (stepName.includes("clear") || stepName.includes("checkpoint")) return "setup";
           if (stepName.includes("run")) return "finalize";
@@ -355,7 +369,15 @@ export async function POST(req: Request) {
                 meta: { source: "build_step" },
               });
             },
-                { projectId, styleGuide, enableSkills, useDatabasePrompts, checkpoint }
+                {
+                  projectId,
+                  styleGuide,
+                  enableSkills,
+                  useDatabasePrompts,
+                  checkpoint,
+                  enableIntentGuide,
+                  pageCodegenMode,
+                }
               )
           );
 
@@ -379,6 +401,12 @@ export async function POST(req: Request) {
 
             // Step 6: Persist to Storage asynchronously (does not block preview / SSE done).
             scheduleUploadFullProject(projectId);
+          } else if (result.intentGuideDeferred && result.intentGuide) {
+            await updateProjectStatus(db, projectId, "failed", {
+              error:
+                `[intent_guide] ${result.intentGuide.assistantMessage.slice(0, 480)}`,
+              buildSteps: result.steps.map(redactBuildStepForTransport),
+            });
           } else {
             // Generation completed but reported failure — still persist steps for debugging
             await updateProjectStatus(db, projectId, "failed", {
@@ -401,11 +429,14 @@ export async function POST(req: Request) {
                   .join("; ")}`
               : "";
 
-          const content = result.success
-            ? result.verificationStatus === "passed"
-              ? `项目构建完成并通过校验。\n${fileSummary}${installedSummary}${installFailureSummary}${logSummary}`
-              : `项目文件已写入正式目录，但当前未通过校验，相关生成文件已标记。\n${fileSummary}${installedSummary}${installFailureSummary}${logSummary}`
-            : `项目生成失败：${result.error}`;
+          const content =
+            result.intentGuideDeferred && result.intentGuide
+              ? result.intentGuide.assistantMessage
+              : result.success
+                ? result.verificationStatus === "passed"
+                  ? `项目构建完成并通过校验。\n${fileSummary}${installedSummary}${installFailureSummary}${logSummary}`
+                  : `项目文件已写入正式目录，但当前未通过校验，相关生成文件已标记。\n${fileSummary}${installedSummary}${installFailureSummary}${logSummary}`
+                : `项目生成失败：${result.error}`;
 
           if (trajectory) {
             enqueueTrajectoryEvent({
@@ -437,6 +468,17 @@ export async function POST(req: Request) {
               buildSteps: result.steps.map(redactBuildStepForTransport),
               logDirectory: result.logDirectory,
               buildTotalDuration: result.totalDuration,
+              intentGuideDeferred: result.intentGuideDeferred === true,
+              intentGuide: result.intentGuide
+                ? {
+                    outcome: result.intentGuide.outcome,
+                    phase: result.intentGuide.phase,
+                    assistantMessage: result.intentGuide.assistantMessage,
+                    suggestedReplies: result.intentGuide.suggestedReplies,
+                    choiceOptions: result.intentGuide.choiceOptions,
+                    buildPromptAppendix: result.intentGuide.buildPromptAppendix,
+                  }
+                : undefined,
             },
           });
 

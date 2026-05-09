@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { runBuildSite } from "../lib/build-studio-api";
-import type { AiResponse, BuildStep } from "../types/build-studio";
+import type { AiResponse, BuildStep, IntentAgentTurn } from "../types/build-studio";
 
 export type RightPanel = "topology" | "preview" | "code";
 
@@ -43,6 +43,13 @@ export interface ModifyRecord {
   isSystemMessage?: boolean;
 }
 
+export interface ConversationMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  intentPayload?: IntentAgentTurn["yieldPayload"];
+}
+
 export interface BuildStudioState {
   // Build
   input: string;
@@ -50,10 +57,13 @@ export interface BuildStudioState {
   loading: boolean;
   clearing: boolean;
   response: AiResponse | null;
+  intentAgent: IntentAgentTurn | null;
+  mergedBrief: string | null;
+  conversationMessages: ConversationMessage[];
   lastRunInput: string | null;
   elapsed: number;
   flowStart: number;
-  handleRun: () => Promise<void>;
+  handleRun: (messageOverride?: string) => Promise<void>;
   handleClear: () => Promise<void>;
   handleRetry: () => Promise<void>;
 
@@ -108,6 +118,7 @@ export interface BuildStudioState {
 
 const AUTO_PREVIEW_STORAGE_KEY = "open-ox:studio:autoPreviewAfterBuild";
 const USE_DB_PROMPTS_STORAGE_KEY = "open-ox:studio:useDatabasePrompts";
+const CONVERSATION_STORAGE_PREFIX = "open-ox:studio:conversation:";
 
 function readAutoPreviewAfterBuild(): boolean {
   if (typeof window === "undefined") return true;
@@ -124,6 +135,40 @@ function readUseDatabasePrompts(): boolean {
     return localStorage.getItem(USE_DB_PROMPTS_STORAGE_KEY) !== "false";
   } catch {
     return true;
+  }
+}
+
+function conversationStorageKey(projectId: string): string {
+  return `${CONVERSATION_STORAGE_PREFIX}${projectId}`;
+}
+
+function readStoredConversationMessages(projectId: string): ConversationMessage[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = sessionStorage.getItem(conversationStorageKey(projectId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as ConversationMessage[];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter(
+        (message): message is ConversationMessage =>
+          Boolean(message) &&
+          typeof message.id === "string" &&
+          (message.role === "user" || message.role === "assistant") &&
+          typeof message.content === "string"
+      )
+      .slice(-50);
+  } catch {
+    return [];
+  }
+}
+
+function writeStoredConversationMessages(projectId: string, messages: ConversationMessage[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(conversationStorageKey(projectId), JSON.stringify(messages.slice(-50)));
+  } catch {
+    /* ignore quota / private mode */
   }
 }
 
@@ -149,6 +194,9 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
   const [loading, setLoading] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [response, setResponse] = useState<AiResponse | null>(null);
+  const [intentAgent, setIntentAgent] = useState<IntentAgentTurn | null>(null);
+  const [mergedBrief, setMergedBrief] = useState<string | null>(null);
+  const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>([]);
   const [lastRunInput, setLastRunInput] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
@@ -246,6 +294,30 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     setLoading(false);
   }, []);
 
+  const appendConversationMessage = useCallback(
+    (message: Omit<ConversationMessage, "id">) => {
+      setConversationMessages((prev) => {
+        const last = prev[prev.length - 1];
+        if (last?.role === message.role && last.content === message.content) {
+          return prev;
+        }
+        return [
+          ...prev,
+          {
+          ...message,
+          id: `${Date.now()}-${prev.length}-${message.role}`,
+          },
+        ];
+      });
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!projectId || conversationMessages.length === 0) return;
+    writeStoredConversationMessages(projectId, conversationMessages);
+  }, [projectId, conversationMessages]);
+
   // ── Elapsed timer ──────────────────────────────────────────────────────
   useEffect(() => {
     if (loading && startedAt) {
@@ -299,16 +371,63 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         completedAt: r.modifiedAt,
       })));
     }
+    const restoredBuildSteps = (project.buildSteps ?? []) as import("../types/build-studio").BuildStep[];
+    const restoredIntentStep = restoredBuildSteps.find((step) => step.step === "intent_agent");
+    const storedConversation = readStoredConversationMessages(project.id);
+    if (project.status === "awaiting_input" && restoredIntentStep) {
+      const restoredIntent: IntentAgentTurn = {
+        status: restoredIntentStep.status === "error" ? "error" : "yield",
+        yieldPayload: restoredIntentStep.status === "error"
+          ? undefined
+          : {
+            kind: "clarify",
+            message: restoredIntentStep.detail ?? "我还需要你补充或确认需求，然后再开始生成。",
+            suggestedReplies: [],
+            options: [],
+          },
+        errorMessage: restoredIntentStep.status === "error" ? restoredIntentStep.detail : undefined,
+      };
+      setIntentAgent(restoredIntent);
+      setConversationMessages(
+        storedConversation.length > 0
+          ? storedConversation
+          : [
+            ...(project.userPrompt
+              ? [{ id: `${project.id}-initial-user`, role: "user" as const, content: project.userPrompt }]
+              : []),
+            {
+              id: `${project.id}-awaiting-assistant`,
+              role: "assistant" as const,
+              content:
+                restoredIntent.yieldPayload?.message ??
+                restoredIntent.errorMessage ??
+                "我还需要你补充或确认需求，然后再开始生成。",
+              intentPayload: restoredIntent.yieldPayload,
+            },
+          ]
+      );
+    } else if (project.status !== "awaiting_input") {
+      setIntentAgent(null);
+      setConversationMessages(
+        storedConversation.length > 0
+          ? storedConversation
+          : project.userPrompt
+          ? [{ id: `${project.id}-initial-user`, role: "user", content: project.userPrompt }]
+          : []
+      );
+    }
     setResponse({
       content: project.status === "ready"
         ? `项目已生成完成。${project.verificationStatus === "passed" ? "构建验证通过。" : ""}`
         : project.status === "failed"
           ? `项目生成失败：${project.error ?? "未知错误"}`
-          : "项目生成中...",
+          : project.status === "awaiting_input"
+            ? "我还需要你补充或确认需求，然后再开始生成。"
+            : "项目生成中...",
       projectId: project.id,
       verificationStatus: project.verificationStatus as "passed" | "failed" | undefined,
       blueprint: project.blueprint as import("../types/build-studio").AiResponse["blueprint"],
-      buildSteps: (project.buildSteps ?? []) as import("../types/build-studio").BuildStep[],
+      buildSteps: restoredBuildSteps,
       generatedFiles: project.generatedFiles ?? [],
       logDirectory: project.logDirectory,
       buildTotalDuration: project.totalDuration,
@@ -335,6 +454,8 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     if (!projectId) {
       setResponse(null);
       setLastRunInput(null);
+      setIntentAgent(null);
+      setConversationMessages([]);
       return;
     }
 
@@ -418,6 +539,9 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         : [...existing, step];
       return {
         content: prev?.content ?? "",
+        projectId: prev?.projectId,
+        intentAgent: prev?.intentAgent,
+        mergedBrief: prev?.mergedBrief,
         generatedFiles: prev?.generatedFiles,
         verificationStatus: prev?.verificationStatus,
         unvalidatedFiles: prev?.unvalidatedFiles,
@@ -431,7 +555,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
   }, []);
 
   // ── handleRun ──────────────────────────────────────────────────────────
-  async function handleRun() {
+  async function handleRun(messageOverride?: string) {
     abortRef.current?.abort();
     abortRef.current = new AbortController();
     stopPolling(); // kill any leftover polling from a previous page-load
@@ -451,25 +575,83 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     setPreviewUrl(null);
     setPreviewState("idle");
 
-    let displayPrompt = input;
+    const explicitInput = (messageOverride ?? input).trim();
+    let outboundInput = explicitInput;
+    let displayPrompt = outboundInput;
     if (!displayPrompt && projectId) {
       try {
         const r = await fetch(`/api/projects/${projectId}`);
         if (r.ok) { const p = await r.json(); displayPrompt = p.userPrompt ?? ""; }
       } catch { /* ignore */ }
     }
+    if (!outboundInput) outboundInput = displayPrompt.trim();
     setLastRunInput(displayPrompt || null);
+    if (explicitInput) {
+      appendConversationMessage({ role: "user", content: outboundInput });
+      setInput("");
+    }
 
     try {
       await runBuildSite(
-        input,
+        outboundInput,
         {
+          onIntentTurn: (turn) => {
+            setIntentAgent(turn);
+            const assistantContent =
+              turn.yieldPayload?.message ??
+              turn.assistantText ??
+              turn.errorMessage ??
+              "";
+            if (assistantContent) {
+              appendConversationMessage({
+                role: "assistant",
+                content: assistantContent,
+                intentPayload: turn.yieldPayload,
+              });
+            }
+            setResponse((prev) => ({
+              content:
+                turn.yieldPayload?.message ??
+                turn.assistantText ??
+                turn.errorMessage ??
+                prev?.content ??
+                "",
+              projectId: projectId ?? prev?.projectId ?? undefined,
+              intentAgent: turn,
+              mergedBrief: prev?.mergedBrief,
+              buildSteps: prev?.buildSteps,
+              generatedFiles: prev?.generatedFiles,
+              verificationStatus: prev?.verificationStatus,
+              logDirectory: prev?.logDirectory,
+              error: turn.status === "error" ? turn.errorMessage : prev?.error,
+            }));
+          },
+          onIntentCommit: (brief) => {
+            const cleanBrief = brief.trim();
+            setMergedBrief(cleanBrief || null);
+            appendConversationMessage({
+              role: "assistant",
+              content: "需求已确认，开始生成项目...",
+            });
+            setResponse((prev) => ({
+              content: "需求已确认，开始生成项目...",
+              projectId: projectId ?? prev?.projectId ?? undefined,
+              intentAgent: prev?.intentAgent,
+              mergedBrief: cleanBrief || prev?.mergedBrief,
+              buildSteps: prev?.buildSteps ?? [],
+            }));
+          },
           onStep: handleStepEvent,
           onDone: (result) => {
             finishBuildLiveState(result.buildTotalDuration);
+            setIntentAgent(result.intentAgent ?? null);
+            setMergedBrief(result.mergedBriefFromAgent ?? result.mergedBrief ?? null);
             // done payload carries the authoritative final buildSteps from the server.
             // This replaces whatever the SSE stream built up, ensuring consistency.
             setResponse((prev) => ({ ...result, buildSteps: result.buildSteps ?? prev?.buildSteps }));
+            if (result.intentAgent && !result.buildSteps?.length) {
+              setInput("");
+            }
             const nextProjectId = result.projectId ?? projectId ?? null;
             if (nextProjectId) {
               projectIdFromGenerationRef.current = nextProjectId;
@@ -481,6 +663,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
           },
           onError: (msg) => {
             finishBuildLiveState();
+            appendConversationMessage({ role: "assistant", content: `流程出错：${msg}` });
             setResponse({ content: "", error: msg });
           },
         },
@@ -518,7 +701,9 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       );
     } catch (err) {
       if ((err as Error).name !== "AbortError") {
-        setResponse({ content: "", error: err instanceof Error ? err.message : String(err) });
+        const message = err instanceof Error ? err.message : String(err);
+        appendConversationMessage({ role: "assistant", content: `流程出错：${message}` });
+        setResponse({ content: "", error: message });
       }
     } finally {
       sseActiveRef.current = false;
@@ -912,7 +1097,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       : startedAt ?? 0;
 
   return {
-    input, setInput, loading, clearing, response, lastRunInput, elapsed, flowStart,
+    input, setInput, loading, clearing, response, intentAgent, mergedBrief, conversationMessages, lastRunInput, elapsed, flowStart,
     handleRun, handleClear, handleRetry,
     selectedModel, setSelectedModel, availableModels,
     projectId, setProjectId, projectLoading,

@@ -1,6 +1,6 @@
 import { getModelId } from "../../../../lib/config/models";
 import { chatCompletion } from "@/ai/shared/llm/gateway";
-import { callLLMWithTools } from "@/ai/shared/llm/toolLoop";
+import { callLLMWithTools, callLLMWithToolsFromMessages } from "@/ai/shared/llm/toolLoop";
 import { throwClassifiedLLMError } from "@/ai/shared/llm/errorClassifier";
 
 export { extractContent, extractJSON } from "@/ai/shared/llm/contentExtractors";
@@ -10,7 +10,7 @@ export type {
   ChatCompletionResponse,
   AgentToolCallRecord,
 } from "@/ai/shared/llm/types";
-export { chatCompletion, callLLMWithTools };
+export { chatCompletion, callLLMWithTools, callLLMWithToolsFromMessages };
 
 export interface LLMCallResult {
   content: string;

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import type { GraphNode } from "@/lib/atlas/types";
-import type { BuildStep } from "../types/build-studio";
+import type { BuildStep, IntentAgentTurn } from "../types/build-studio";
 import { parseStepsToTopology } from "@/lib/atlas/parseSteps";
 import { PannableCanvas } from "./PannableCanvas";
 import { StageColumn } from "./StageColumn";
@@ -75,6 +75,7 @@ export function GenerationAtlas({
     loading,
     verificationStatus,
     totalDuration,
+    intentAgent,
     showEventStream = false,
 }: {
     steps: BuildStep[];
@@ -82,26 +83,31 @@ export function GenerationAtlas({
     loading: boolean;
     verificationStatus?: "passed" | "failed";
     totalDuration?: number;
+    intentAgent?: IntentAgentTurn | null;
     showEventStream?: boolean;
 }) {
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+    const pipelineSteps = useMemo(
+        () => steps.filter((step) => step.step !== "intent_agent"),
+        [steps]
+    );
 
     // Deselect when steps change significantly (new build)
     const prevStepCountRef = useRef(0);
     useEffect(() => {
-        if (steps.length === 0) {
+        if (pipelineSteps.length === 0 && !intentAgent) {
             setSelectedNodeId(null);
             prevStepCountRef.current = 0;
         }
-        prevStepCountRef.current = steps.length;
-    }, [steps.length]);
+        prevStepCountRef.current = pipelineSteps.length;
+    }, [pipelineSteps.length, intentAgent]);
 
     // Memoize topology — reparse when steps change (new step or status update)
-    const stepsFingerprint = steps.map((s) => `${s.step}:${s.status}`).join("|");
+    const stepsFingerprint = `${intentAgent?.status ?? "none"}:${pipelineSteps.map((s) => `${s.step}:${s.status}`).join("|")}`;
     const topology = useMemo(
-        () => (steps.length > 0 ? parseStepsToTopology(steps, flowStart) : null),
+        () => (pipelineSteps.length > 0 || intentAgent ? parseStepsToTopology(pipelineSteps, flowStart, { intentAgent }) : null),
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [stepsFingerprint, flowStart]
+        [stepsFingerprint, flowStart, intentAgent, pipelineSteps]
     );
 
     if (!topology) {

@@ -117,6 +117,22 @@ export function getStepNarrative(step: BuildStep): {
             note: step.detail ?? undefined,
         };
     }
+    if (s.startsWith("page_implement_agent:")) {
+        const slug = s.replace("page_implement_agent:", "");
+        return {
+            what: `Page Agent 正在实现「${slug}」路由，自主探索项目结构并生成页面与组件代码。`,
+            output: ok
+                ? `${slug} 页面已由 Agent 完成实现。`
+                : `${slug} 页面 Agent 实现失败。`,
+            note: step.detail ?? undefined,
+        };
+    }
+    if (s.startsWith("page_agent_tool:")) {
+        return {
+            what: "Page Agent 工具调用",
+            output: step.detail ?? "tool executed",
+        };
+    }
 
     return {
         what: `执行步骤：${s}`,

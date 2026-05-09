@@ -1,7 +1,7 @@
 ---
 title: professional
 created: '2026-04-17T09:27:53.528Z'
-modified: '2026-04-17T09:28:23.905Z'
+modified: '2026-05-06T00:00:00.000Z'
 ---
 
 # professional

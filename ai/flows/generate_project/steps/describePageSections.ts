@@ -2,7 +2,7 @@ import { getModelForStep } from "@/lib/config/models";
 import { callLLMWithMeta } from "../shared/llm";
 import { stepTraceFromLlmCompletion } from "../shared/llmTrace";
 import { loadStepPrompt, writeSiteFile } from "../shared/files";
-import type { LayoutMode, PlannedPageBlueprint, PlannedSectionSpec, StepTrace } from "../types";
+import type { PlannedPageBlueprint, PlannedSectionSpec, StepTrace } from "../types";
 
 export interface PageSectionDesignBrief {
   fileName: string;
@@ -19,7 +19,6 @@ export interface DescribePageSectionsResult {
 export interface DescribePageSectionsParams {
   designSystem: string;
   language: string;
-  layoutMode: LayoutMode;
   page: PlannedPageBlueprint;
   sections: PlannedSectionSpec[];
 }
@@ -93,12 +92,9 @@ function parseSectionBriefs(
 export async function stepDescribePageSections(
   params: DescribePageSectionsParams
 ): Promise<DescribePageSectionsResult> {
-  const { language, layoutMode, page, sections, designSystem } = params;
+  const { language, page, sections, designSystem } = params;
 
-  const promptId = layoutMode === "whole-page"
-    ? "describePageSections.wholePage"
-    : "describePageSections";
-  const systemPrompt = loadStepPrompt(promptId);
+  const systemPrompt = loadStepPrompt("describePageSections");
 
   const sectionList = sections
     .map(

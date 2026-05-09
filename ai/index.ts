@@ -22,6 +22,8 @@ export interface ProcessResult {
   buildSteps?: import("./flows").BuildStep[];
   logDirectory?: string;
   buildTotalDuration?: number;
+  intentGuideDeferred?: boolean;
+  intentGuide?: Omit<import("./flows").ProjectIntentGuideResult, "trace">;
 }
 
 function buildProcessContent(result: import("./flows").GenerateProjectResult): string {
@@ -50,12 +52,24 @@ function buildProcessContent(result: import("./flows").GenerateProjectResult): s
  */
 export async function processInput(
   userInput: string,
-  options: ProcessInputOptions = {}
+  options: ProcessInputOptions & {
+    enableIntentGuide?: boolean;
+    pageCodegenMode?: import("./flows").PageCodegenMode;
+  } = {}
 ): Promise<ProcessResult> {
-  const result = await runGenerateProject(userInput, options.onStep);
+  const { enableIntentGuide, pageCodegenMode, ...rest } = options;
+  const result = await runGenerateProject(userInput, rest.onStep, {
+    enableIntentGuide,
+    pageCodegenMode,
+  });
 
   return {
-    content: result.success ? buildProcessContent(result) : `项目生成失败：${result.error}`,
+    content:
+      result.intentGuideDeferred && result.intentGuide
+        ? result.intentGuide.assistantMessage
+        : result.success
+          ? buildProcessContent(result)
+          : `项目生成失败：${result.error}`,
     generatedFiles: result.generatedFiles,
     blueprint: result.blueprint,
     verificationStatus: result.verificationStatus,
@@ -65,10 +79,21 @@ export async function processInput(
     buildSteps: result.steps,
     logDirectory: result.logDirectory,
     buildTotalDuration: result.totalDuration,
+    intentGuideDeferred: result.intentGuideDeferred,
+    intentGuide: result.intentGuide
+      ? {
+          outcome: result.intentGuide.outcome,
+          phase: result.intentGuide.phase,
+          assistantMessage: result.intentGuide.assistantMessage,
+          suggestedReplies: result.intentGuide.suggestedReplies,
+          choiceOptions: result.intentGuide.choiceOptions,
+          buildPromptAppendix: result.intentGuide.buildPromptAppendix,
+        }
+      : undefined,
   };
 }
 
-export { runGenerateProject } from "./flows";
+export { runGenerateProject, runIntentAgentTurn, parseYieldArgs } from "./flows";
 export type {
   AutoInstalledDependency,
   BuildStep,
@@ -79,8 +104,17 @@ export type {
   DesignIntent,
   GuardrailId,
   GenerateProjectResult,
+  ProjectIntentChoiceOption,
+  ProjectIntentGuideOutcome,
+  ProjectIntentGuidePhase,
+  ProjectIntentGuideResult,
+  RunIntentAgentTurnParams,
+  IntentAgentOption,
+  IntentAgentTurnResult,
+  IntentAgentYieldPayload,
   InformationArchitecture,
   PageBlueprint,
+  PageCodegenMode,
   PageDesignPlan,
   PageMapEntry,
   PlannedProjectBlueprint,

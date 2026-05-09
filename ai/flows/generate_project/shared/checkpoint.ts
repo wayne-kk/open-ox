@@ -9,6 +9,7 @@ import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import type { ProjectMetadata } from "@/lib/projectManager";
 import type { PlannedProjectBlueprint, BuildStep } from "../types";
+import { buildSectionFilePath } from "./paths";
 
 // ── Step completion validators ───────────────────────────────────────────────
 
@@ -72,21 +73,20 @@ const STEP_VALIDATORS: Record<string, StepValidator> = {
 function isSectionGenerated(ctx: CheckpointContext, scopeKey: string, fileName: string): boolean {
     const stepName = `generate_section:${scopeKey}:${fileName}`;
     if (!stepCompleted(ctx.buildSteps, stepName)) return false;
-    // Verify the TSX file actually exists on disk
-    const filePath = scopeKey === "layout"
-        ? `components/sections/layout_${fileName}`
-        : `components/sections/${scopeKey}_${fileName}`;
+    // Same relative path as stepGenerateSection / runSectionBatch (includes .tsx)
+    const filePath = buildSectionFilePath(scopeKey, fileName);
     return siteFileExists(ctx.siteRoot, filePath);
 }
 
 /**
- * Check if a compose_page step completed.
+ * Legacy compose step OR agent page implementation completes the route.
  */
-function isPageComposed(ctx: CheckpointContext, slug: string): boolean {
-    const stepName = `compose_page:${slug}`;
-    if (!stepCompleted(ctx.buildSteps, stepName)) return false;
+function isPageImplementationDone(ctx: CheckpointContext, slug: string): boolean {
     const pagePath = slug === "home" ? "app/page.tsx" : `app/${slug}/page.tsx`;
-    return siteFileExists(ctx.siteRoot, pagePath);
+    if (!siteFileExists(ctx.siteRoot, pagePath, 10)) return false;
+    const legacy = stepCompleted(ctx.buildSteps, `compose_page:${slug}`);
+    const agentDone = stepCompleted(ctx.buildSteps, `page_implement_agent:${slug}`);
+    return legacy || agentDone;
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────
@@ -180,7 +180,7 @@ export function detectCheckpoint(project: ProjectMetadata): CheckpointResult {
                     result.generatedSections.add(`${page.slug}:${section.fileName}`);
                 }
             }
-            if (isPageComposed(ctx, page.slug)) {
+            if (isPageImplementationDone(ctx, page.slug)) {
                 result.composedPages.add(page.slug);
             }
         }

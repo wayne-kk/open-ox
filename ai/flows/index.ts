@@ -1,4 +1,4 @@
-export { runGenerateProject } from "./generate_project";
+export { runGenerateProject, runIntentAgentTurn, parseYieldArgs } from "./generate_project";
 export type {
   AutoInstalledDependency,
   BuildRepairResult,
@@ -10,8 +10,13 @@ export type {
   DesignIntent,
   GuardrailId,
   GenerateProjectResult,
+  ProjectIntentChoiceOption,
+  ProjectIntentGuideOutcome,
+  ProjectIntentGuidePhase,
+  ProjectIntentGuideResult,
   InformationArchitecture,
   PageBlueprint,
+  PageCodegenMode,
   PageDesignPlan,
   PageMapEntry,
   PlannedPageBlueprint,
@@ -30,4 +35,12 @@ export type {
   TaskLoop,
   UserRole,
   VerificationStatus,
+  IntentAgentOption,
+  IntentAgentToolExtensions,
+  IntentAgentToolHandler,
+  IntentAgentTurnResult,
+  IntentAgentTurnStatus,
+  IntentAgentYieldKind,
+  IntentAgentYieldPayload,
+  RunIntentAgentTurnParams,
 } from "./generate_project";

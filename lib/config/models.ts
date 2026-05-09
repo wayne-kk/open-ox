@@ -96,6 +96,8 @@ export function clearStepConfig(stepName: string): void {
 
 /** Available generation steps that can have model overrides */
 export const GENERATION_STEPS = [
+    { id: "intent_agent", label: "建站意向 Task Agent" },
+    { id: "project_intent_guide", label: "建站意向引导" },
     { id: "analyze_project_requirement", label: "需求分析" },
     { id: "infer_design_intent", label: "设计意图推断" },
     { id: "plan_project", label: "项目规划" },
@@ -106,6 +108,7 @@ export const GENERATION_STEPS = [
     { id: "preselect_skills", label: "技能匹配" },
     { id: "generate_section", label: "组件生成" },
     { id: "compose_page", label: "页面组合" },
+    { id: "page_implement_agent", label: "页面实现 Agent" },
     { id: "repair_build", label: "构建修复" },
 ] as const;
 

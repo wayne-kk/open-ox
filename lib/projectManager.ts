@@ -38,7 +38,7 @@ export interface ProjectMetadata {
   id: string;
   name: string;
   userPrompt: string;
-  status: "generating" | "ready" | "failed";
+  status: "awaiting_input" | "generating" | "ready" | "failed";
   createdAt: string;
   updatedAt: string;
   completedAt?: string;
@@ -62,7 +62,7 @@ interface ProjectRow {
   id: string;
   name: string;
   user_prompt: string;
-  status: "generating" | "ready" | "failed";
+  status: "awaiting_input" | "generating" | "ready" | "failed";
   created_at: string;
   updated_at: string;
   completed_at: string | null;
@@ -123,7 +123,7 @@ interface ProjectListRow {
   id: string;
   name: string;
   user_prompt: string;
-  status: "generating" | "ready" | "failed";
+  status: "awaiting_input" | "generating" | "ready" | "failed";
   created_at: string;
   updated_at: string;
   completed_at: string | null;

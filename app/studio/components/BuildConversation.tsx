@@ -368,6 +368,8 @@ export function BuildConversation({
     loading,
     clearing,
     response,
+    mergedBrief,
+    conversationMessages,
     lastRunInput,
     elapsed,
     flowStart,
@@ -427,6 +429,25 @@ export function BuildConversation({
         value: modifyInstruction,
         setValue: setModifyInstruction,
     });
+    const hasGeneratedProject = Boolean(
+        response?.verificationStatus ||
+        (response?.generatedFiles?.length ?? 0) > 0 ||
+        (response?.blueprint && (response?.buildSteps?.length ?? 0) > 0)
+    );
+    const pipelineSteps = response?.buildSteps?.filter((step) => step.step !== "intent_agent") ?? [];
+    const hasBuildActivity = Boolean(
+        pipelineSteps.length > 0 ||
+        response?.generatedFiles?.length ||
+        response?.blueprint ||
+        response?.verificationStatus ||
+        response?.logDirectory ||
+        response?.buildTotalDuration
+    );
+    const latestAssistantMessageId = [...conversationMessages].reverse().find((message) => message.role === "assistant")?.id;
+    const showThinkingBubble =
+        loading &&
+        !hasBuildActivity &&
+        conversationMessages[conversationMessages.length - 1]?.role !== "assistant";
 
     // Auto-scroll only when the user is already near the bottom.
     // If they scrolled up to read earlier content, don't yank them back.
@@ -447,10 +468,10 @@ export function BuildConversation({
         if (isNearBottomRef.current && chatRef.current) {
             chatRef.current.scrollTop = chatRef.current.scrollHeight;
         }
-    }, [response, loading, modifying, modifyToolCalls, modifyThinking, modifySteps, modifyDiffs, modifyError, modifyHistory]);
+    }, [response, conversationMessages, loading, modifying, modifyToolCalls, modifyThinking, modifySteps, modifyDiffs, modifyError, modifyHistory]);
 
     return (
-        <aside className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden lg:w-[540px] lg:max-h-full scrollbar-hidden">
+        <aside className="flex h-full min-h-0 w-full shrink-0 flex-col overflow-hidden lg:w-[540px] lg:max-h-full scrollbar-hidden">
             <div className="flex items-center justify-between border-b border-white/8 px-5 py-2">
                 <div>
                     <div className="text-sm font-semibold text-foreground">Build conversation</div>
@@ -465,7 +486,7 @@ export function BuildConversation({
 
             <div ref={chatRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-5 scrollbar-hidden">
                 <div className="space-y-5">
-                    {!response && !loading ? (
+                    {!response && !loading && conversationMessages.length === 0 ? (
                         <ChatBubble role="assistant">
                             <div className="text-sm font-medium text-foreground">你想构建什么？</div>
                             <p className="mt-2 text-sm leading-7 text-muted-foreground">
@@ -474,16 +495,74 @@ export function BuildConversation({
                         </ChatBubble>
                     ) : null}
 
-                    {lastRunInput ? (
-                        <ChatBubble role="user">
-                            <div className="text-[11px] font-medium text-foreground">You</div>
-                            <pre className="mt-2 whitespace-pre-wrap font-body text-[14px] leading-7 text-foreground">
-                                {lastRunInput}
-                            </pre>
+                    {conversationMessages.map((message) => (
+                        <ChatBubble key={message.id} role={message.role}>
+                            <div className="text-[11px] font-medium text-foreground">
+                                {message.role === "user" ? "You" : "意图助手"}
+                            </div>
+                            <div className="mt-2 space-y-3">
+                                <div className="text-[13px] leading-7 text-foreground">
+                                    {message.content.split("\n").filter(Boolean).map((line, i) => (
+                                        <p key={i}>{line}</p>
+                                    ))}
+                                </div>
+
+                                {/* Brief draft — always visible so the confirmed structure stays in the conversation */}
+                                {message.role === "assistant" && message.intentPayload?.briefDraftMarkdown ? (
+                                    <pre className="rounded-2xl border border-white/8 bg-black/20 px-4 py-3 whitespace-pre-wrap text-[12px] leading-6 text-muted-foreground">
+                                        {message.intentPayload.briefDraftMarkdown}
+                                    </pre>
+                                ) : null}
+
+                                {/* Interactive options — only on the latest assistant message (clicking old buttons is meaningless) */}
+                                {message.role === "assistant" && message.intentPayload && message.id === latestAssistantMessageId ? (
+                                    <>
+                                        {((message.intentPayload.options ?? []).length > 0 || (message.intentPayload.suggestedReplies ?? []).length > 0) ? (
+                                            <div className="flex flex-wrap gap-2 pt-1">
+                                                {(message.intentPayload.options ?? []).map((option) => (
+                                                    <button
+                                                        key={option.id}
+                                                        type="button"
+                                                        onClick={() => void handleRun(`${option.label}${option.hint ? `：${option.hint}` : ""}`)}
+                                                        disabled={loading}
+                                                        className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-left text-[12px] text-foreground transition-colors hover:border-primary/45 disabled:opacity-50"
+                                                        title={option.hint}
+                                                    >
+                                                        <span className="block font-medium">{option.label}</span>
+                                                        {option.hint ? <span className="mt-0.5 block text-[11px] text-muted-foreground">{option.hint}</span> : null}
+                                                    </button>
+                                                ))}
+                                                {(message.intentPayload.suggestedReplies ?? []).map((reply) => (
+                                                    <button
+                                                        key={reply}
+                                                        type="button"
+                                                        onClick={() => void handleRun(reply)}
+                                                        disabled={loading}
+                                                        className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[12px] text-muted-foreground transition-colors hover:border-white/20 hover:text-foreground disabled:opacity-50"
+                                                    >
+                                                        {reply}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        ) : null}
+                                    </>
+                                ) : null}
+                            </div>
+                        </ChatBubble>
+                    ))}
+
+                    {showThinkingBubble ? (
+                        <ChatBubble role="assistant">
+                            <div className="text-[11px] font-medium text-foreground">意图助手</div>
+                            <div className="mt-2 space-y-3">
+                                <div className="text-[13px] leading-7 text-foreground">
+                                    <p className="text-muted-foreground">正在理解你的需求...</p>
+                                </div>
+                            </div>
                         </ChatBubble>
                     ) : null}
 
-                    {response || loading ? (
+                    {hasBuildActivity ? (
                         <ChatBubble role="assistant">
                             <div className="text-[11px] font-medium text-foreground">构建助手</div>
                             <div className="mt-3 space-y-3">
@@ -492,9 +571,9 @@ export function BuildConversation({
                                         run build_site{" "}
                                         <span className="text-muted-foreground">
                                             &quot;
-                                            {(lastRunInput ?? input).length > 72
-                                                ? `${(lastRunInput ?? input).slice(0, 72)}...`
-                                                : lastRunInput ?? input}
+                                            {(mergedBrief ?? lastRunInput ?? input).length > 72
+                                                ? `${(mergedBrief ?? lastRunInput ?? input).slice(0, 72)}...`
+                                                : mergedBrief ?? lastRunInput ?? input}
                                             &quot;
                                         </span>
                                     </TermLine>
@@ -502,7 +581,7 @@ export function BuildConversation({
 
                                 <LogSection title="执行日志">
                                     <div className="space-y-0.5">
-                                        {response?.buildSteps?.map((step, index) => (
+                                        {pipelineSteps.map((step, index) => (
                                             <StepRow key={`${step.step}-${index}`} step={step} flowStart={flowStart} />
                                         ))}
                                         {loading ? (
@@ -751,7 +830,7 @@ export function BuildConversation({
 
             {/* Input area */}
             <div className="border-t border-white/8 px-4 py-4">
-                {projectId && !loading && response && !response.error ? (
+                {projectId && !loading && hasGeneratedProject && response && !response.error ? (
                     /* Modify mode — project ready */
                     <div className="rounded-[24px] border border-white/10 bg-black/25 p-3">
                         <div className="mb-2 flex items-center justify-between">
@@ -858,27 +937,42 @@ export function BuildConversation({
                         </div>
                     </div>
                 ) : (
-                    /* Generate mode — auto-started from homepage, show prompt + status only */
+                    /* Intent / generate mode */
                     <div className="rounded-[20px] border border-white/10 bg-black/25 p-4">
-                        {input && (
-                            <p className="font-body text-[13px] leading-relaxed text-muted-foreground line-clamp-3 mb-3">
-                                {input}
-                            </p>
-                        )}
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                {loading ? (
-                                    <>
-                                        <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                                        <span className="font-mono text-[11px] text-primary">Building · {formatMs(elapsed)}</span>
-                                    </>
-                                ) : (
-                                    <span className="font-mono text-[11px] text-muted-foreground/60">Build complete</span>
-                                )}
-                            </div>
-                            <Link href="/" className="font-mono text-[11px] text-muted-foreground/50 hover:text-foreground transition-colors">
-                                ← New build
-                            </Link>
+                        <textarea
+                            rows={2}
+                            disabled={loading}
+                            className="w-full resize-none border-0 bg-transparent px-1 py-1 font-body text-[14px] leading-7 text-foreground outline-none placeholder:text-white/50 max-h-[180px] overflow-y-auto scrollbar-hidden disabled:opacity-50"
+                            value={input}
+                            onChange={(e) => setInput(e.target.value)}
+                            onKeyDown={(e) => {
+                                if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !loading && input.trim()) {
+                                    e.preventDefault();
+                                    void handleRun();
+                                }
+                            }}
+                            placeholder={loading ? "Agent 正在处理..." : "继续补充你的需求，或回复上面的选项..."}
+                        />
+                        <div className="mt-3 flex items-center justify-between">
+                            {loading ? (
+                                <div className="flex items-center gap-2">
+                                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                                    <span className="font-mono text-[11px] text-primary">Agent working · {formatMs(elapsed)}</span>
+                                </div>
+                            ) : (
+                                <Link href="/" className="font-mono text-[11px] text-muted-foreground/50 hover:text-foreground transition-colors">
+                                    ← New build
+                                </Link>
+                            )}
+                            <button
+                                type="button"
+                                onClick={() => void handleRun()}
+                                disabled={loading || !input.trim()}
+                                className="defi-button flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                <Send className="h-4 w-4" />
+                                Send
+                            </button>
                         </div>
                     </div>
                 )}

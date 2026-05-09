@@ -5,6 +5,7 @@
 export type NodeStatus = "pending" | "active" | "ok" | "error";
 
 export type NodeKind =
+  | "intent"     // intent agent turn, yield, commit
   | "transform"   // analyze, plan, design, compose
   | "decision"    // skill selection, dependency resolution
   | "generation"  // generate_section, compose_page
@@ -13,6 +14,7 @@ export type NodeKind =
   | "terminal";  // success / failed
 
 export type StageId =
+  | "intent"
   | "understand"
   | "plan"
   | "design"

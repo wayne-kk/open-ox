@@ -5,15 +5,14 @@ import {
   loadSystem,
 } from "../../shared/files";
 import { selectSectionPromptId } from "../../selectors/sectionPromptSelector";
-import type { LayoutMode, PlannedSectionSpec } from "../../types";
+import type { PlannedSectionSpec } from "../../types";
 import type { GenerateSectionPageContext, GenerateSectionProjectContext } from "./types";
 
 
 
-function buildSectionPromptBlocks(sectionType: string, layoutMode?: LayoutMode) {
+function buildSectionPromptBlocks(sectionType: string) {
   const sectionPromptId = selectSectionPromptId(sectionType);
-  const basePromptId = layoutMode === "whole-page" ? "section.wholePage" : "section.default";
-  return [loadSectionPrompt(basePromptId), sectionPromptId !== "section.default" ? loadSectionPrompt(sectionPromptId) : ""]
+  return [loadSectionPrompt("section.default"), sectionPromptId !== "section.default" ? loadSectionPrompt(sectionPromptId) : ""]
     .filter(Boolean)
     .join("\n\n");
 }
@@ -25,9 +24,8 @@ export function buildSystemPrompt(params: {
   section: PlannedSectionSpec;
   skillPrompts: string[];
   designSystem: string;
-  layoutMode?: LayoutMode;
 }): string {
-  const { section, skillPrompts, designSystem, layoutMode } = params;
+  const { section, skillPrompts, designSystem } = params;
   const selectedSkillPromptBlock = skillPrompts.filter(Boolean).join("\n\n");
 
   return composePromptBlocks([
@@ -35,7 +33,7 @@ export function buildSystemPrompt(params: {
     loadGuardrail("project.accessibility"),
     `## Design System\n${designSystem}`,
     loadGuardrail("tailwindMappingGuide"),
-    buildSectionPromptBlocks(section.type, layoutMode),
+    buildSectionPromptBlocks(section.type),
     loadGuardrail("skillIntegrationContract"),
     selectedSkillPromptBlock,
     // loadGuardrail("framerMotionVariants"),

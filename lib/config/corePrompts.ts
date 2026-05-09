@@ -19,6 +19,20 @@ const CORE_STEP_PROMPTS: CorePromptDefinition[] = [
     promptId: "analyzeProjectRequirement",
     label: "需求分析",
   },
+  {
+    profile: "web",
+    stepId: "project_intent_guide",
+    kind: "step",
+    promptId: "projectIntentGuide",
+    label: "建站意向引导",
+  },
+  {
+    profile: "web",
+    stepId: "intent_agent",
+    kind: "step",
+    promptId: "projectIntentAgent",
+    label: "建站意向 Task Agent",
+  },
   { profile: "web", stepId: "infer_design_intent", kind: "step", promptId: "inferDesignIntent", label: "设计意图推断" },
   { profile: "web", stepId: "plan_project", kind: "step", promptId: "planProject", label: "项目规划" },
   {

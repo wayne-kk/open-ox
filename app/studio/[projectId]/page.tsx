@@ -33,6 +33,13 @@ function StudioInner({ projectId }: { projectId: string }) {
     error: studio.response?.error ?? studio.modifyError,
   });
   const buildSteps = response?.buildSteps ?? [];
+  const pipelineSteps = buildSteps.filter((step) => step.step !== "intent_agent");
+  const awaitingIntentInput = Boolean(
+    response?.intentAgent &&
+    response.intentAgent.status !== "commit_generate" &&
+    pipelineSteps.length === 0 &&
+    !loading
+  );
   const canPreview = !!projectId && !loading;
   const canCode = !!projectId && !projectLoading;
   const [conversationCollapsed, setConversationCollapsed] = useState(false);
@@ -98,13 +105,18 @@ function StudioInner({ projectId }: { projectId: string }) {
                     <div className="flex items-center gap-1.5 rounded-full border border-primary/25 bg-primary/8 px-3 py-1">
                       <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
                       <span className="font-mono text-[10px] text-primary tracking-[0.15em]">
-                        BUILDING · {formatMs(elapsed)}
+                        {pipelineSteps.length > 0 ? "BUILDING" : "THINKING"} · {formatMs(elapsed)}
                       </span>
                     </div>
                   ) : response?.error ? (
                     <div className="flex items-center gap-1.5 rounded-full border border-red-400/25 bg-red-400/8 px-3 py-1">
                       <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
                       <span className="font-mono text-[10px] text-red-400 tracking-[0.15em]">FAILED</span>
+                    </div>
+                  ) : awaitingIntentInput ? (
+                    <div className="flex items-center gap-1.5 rounded-full border border-amber-400/25 bg-amber-400/8 px-3 py-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                      <span className="font-mono text-[10px] text-amber-300 tracking-[0.15em]">AWAITING INPUT</span>
                     </div>
                   ) : response ? (
                     <div className="flex items-center gap-1.5 rounded-full border border-green-400/25 bg-green-400/8 px-3 py-1">
@@ -139,7 +151,7 @@ function StudioInner({ projectId }: { projectId: string }) {
           <div
             className={cn(
               "min-h-0 shrink-0 overflow-hidden transition-[max-height,width,min-width] duration-300 ease-out",
-              "max-lg:max-h-[min(100dvh,1600px)] lg:max-h-none",
+              "max-lg:h-[calc(100dvh-48px)] max-lg:max-h-[calc(100dvh-48px)] lg:max-h-none",
               conversationCollapsed
                 ? "max-lg:max-h-0 pointer-events-none lg:w-0 lg:min-w-0 lg:max-w-0 lg:max-h-none"
                 : "lg:w-[540px] lg:min-w-[540px] lg:max-w-[540px]",
@@ -279,6 +291,7 @@ function StudioInner({ projectId }: { projectId: string }) {
                     loading={loading}
                     verificationStatus={response?.verificationStatus}
                     totalDuration={response?.buildTotalDuration}
+                    intentAgent={response?.intentAgent ?? studio.intentAgent}
                     showEventStream={false}
                   />
                 </div>

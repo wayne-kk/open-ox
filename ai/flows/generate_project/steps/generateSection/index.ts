@@ -5,7 +5,7 @@ import { getSystemToolDefinitions } from "../../../../tools/systemToolCatalog";
 import { createImageExecutor } from "../../../../tools/system/generateImageTool";
 import type { PendingImage } from "../../../../tools/system/generateImageTool";
 import type { TsxIssue } from "../../shared/tsxDiagnostics";
-import type { LayoutMode, PlannedSectionSpec, StepTrace } from "../../types";
+import type { PlannedSectionSpec, StepTrace } from "../../types";
 import { discoverAndSelectSkill } from "./sectionSkillSelection";
 import { buildSystemPrompt, buildUserMessage } from "./sectionPrompts";
 import { buildRetryHint, getSectionMaxRetries, validateSection } from "./sectionValidation";
@@ -24,8 +24,6 @@ export interface GenerateSectionParams {
   outputFileRelative: string;
   pageContext?: GenerateSectionPageContext;
   sectionDesignBrief: string;
-  /** When `"whole-page"`, use `section.wholePage` instead of `section.default` as the base prompt. */
-  layoutMode?: LayoutMode;
   /** Optional: callback to collect conversation messages for trajectory logging */
   onMessage?: (msg: import("@/ai/shared/llm/types").ChatMessage) => void;
 }
@@ -50,7 +48,6 @@ export async function stepGenerateSection(params: GenerateSectionParams): Promis
     outputFileRelative,
     pageContext,
     sectionDesignBrief,
-    layoutMode,
   } = params;
   const {
     componentSkillId,
@@ -72,7 +69,6 @@ export async function stepGenerateSection(params: GenerateSectionParams): Promis
     section,
     skillPrompts: [...technicalSkillPrompts],
     designSystem,
-    layoutMode,
   });
 
   const userMessage = buildUserMessage({
@@ -137,7 +133,6 @@ export async function stepGenerateSection(params: GenerateSectionParams): Promis
         componentSkillScores,
         useDescribePageBrief,
         pageContext: pageContext ? { slug: pageContext.slug, title: pageContext.title } : null,
-        layoutMode: layoutMode ?? "split-sections",
       },
       output: {
         filePath,

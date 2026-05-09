@@ -46,7 +46,7 @@ export class GenerateTrajectoryCollector {
             role: "system",
             content: [
                 "你是一个 AI 网站生成代理，负责根据用户描述生成完整的 Next.js 网站。",
-                "你通过多个步骤工作：分析需求、规划项目、生成设计系统、生成各组件、构建验证、自动修复。",
+                "你通过多个步骤工作：分析需求、规划项目、生成设计系统、页面 Agent 或分块生成组件、构建验证、自动修复。",
                 "可用工具：write_file, read_file, edit_file, search_code, run_build, generate_image",
             ].join("\n"),
         });

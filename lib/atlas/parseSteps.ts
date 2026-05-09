@@ -3,6 +3,7 @@
  */
 
 import type { BuildStep } from "@/ai";
+import type { IntentAgentTurn } from "@/app/studio/types/build-studio";
 import type { GraphNode, Stage, StageId, TopologyGraph } from "./types";
 
 const STAGE_MAP: Record<string, StageId> = {
@@ -26,6 +27,7 @@ const STAGE_MAP: Record<string, StageId> = {
 };
 
 const STAGE_LABELS: Record<StageId, string> = {
+  intent: "Intent",
   understand: "Understand",
   plan: "Plan",
   design: "Design",
@@ -38,6 +40,9 @@ const STAGE_LABELS: Record<StageId, string> = {
 function inferStage(stepName: string): StageId {
   if (stepName.startsWith("describe_page_sections:")) return "compose";
   if (stepName.startsWith("generate_section:")) return "generate";
+  if (stepName.startsWith("page_implement_agent:")) return "generate";
+  if (stepName.startsWith("page_agent_tool:")) return "generate";
+  if (stepName.startsWith("intent_agent")) return "intent";
   if (stepName.startsWith("compose_page:")) return "compose";
   if (stepName.startsWith("install_dependencies:")) return "verify";
   if (stepName.startsWith("typecheck_generated")) return "verify";
@@ -49,10 +54,12 @@ function inferStage(stepName: string): StageId {
 
 function inferKind(stepName: string, stage: StageId): GraphNode["kind"] {
   if (stage === "repair") return "repair";
+  if (stage === "intent") return "intent";
   if (stepName === "match_design_system_skill") return "decision";
   if (stepName.startsWith("typecheck_generated")) return "verification";
   if (stepName.startsWith("run_build") || stepName.startsWith("install_dependencies")) return "verification";
   if (stepName.startsWith("generate_section") || stepName.startsWith("compose_page")) return "generation";
+  if (stepName.startsWith("page_implement_agent:") || stepName.startsWith("page_agent_tool:")) return "generation";
   if (stepName.startsWith("describe_page_sections")) return "transform";
   if (stepName.startsWith("analyze_") || stepName.startsWith("plan_")) return "transform";
   if (stepName.startsWith("generate_project_design") || stepName.startsWith("apply_project")) return "transform";
@@ -70,6 +77,19 @@ function formatStepLabel(step: string): string {
   }
   if (step.startsWith("compose_page:")) {
     return `compose:${step.replace("compose_page:", "")}`;
+  }
+  if (step.startsWith("page_agent_tool:")) {
+    // page_agent_tool:home:write_file:3 → detail carries the human-readable label
+    // fallback: extract tool name from the step name
+    const parts = step.replace("page_agent_tool:", "").split(":");
+    const toolName = parts[1]?.replace(/_/g, " ") ?? "tool";
+    return `agent ${toolName}`;
+  }
+  if (step.startsWith("page_implement_agent:")) {
+    return `page agent:${step.replace("page_implement_agent:", "")}`;
+  }
+  if (step.startsWith("intent_agent")) {
+    return "intent agent";
   }
   if (step.startsWith("install_dependencies:")) {
     return `install:${step.replace("install_dependencies:", "")}`;
@@ -105,7 +125,42 @@ function extractSkillHints(step: BuildStep): string[] {
   return Array.from(hints);
 }
 
-export function parseStepsToTopology(steps: BuildStep[], flowStart: number): TopologyGraph {
+function buildIntentNode(intentAgent: IntentAgentTurn | null | undefined, flowStart: number): GraphNode | null {
+  if (!intentAgent) return null;
+  const isError = intentAgent.status === "error";
+  const isCommitted = intentAgent.status === "commit_generate";
+  return {
+    id: "intent_agent",
+    step: "intent_agent",
+    stage: "intent",
+    kind: "intent",
+    status: isError ? "error" : isCommitted ? "ok" : "active",
+    detail:
+      intentAgent.yieldPayload?.message ??
+      intentAgent.assistantText ??
+      intentAgent.errorMessage ??
+      intentAgent.mergedBrief ??
+      undefined,
+    duration: 0,
+    timestamp: flowStart || Date.now(),
+    index: -1,
+    trace: {
+      output: {
+        status: intentAgent.status,
+        turnCounter: intentAgent.turnCounter,
+        toolCallNames: intentAgent.toolCallNames,
+        options: intentAgent.yieldPayload?.options,
+        briefDraftMarkdown: intentAgent.yieldPayload?.briefDraftMarkdown,
+      },
+    },
+  };
+}
+
+export function parseStepsToTopology(
+  steps: BuildStep[],
+  flowStart: number,
+  options?: { intentAgent?: IntentAgentTurn | null }
+): TopologyGraph {
   // Deduplicate: for each step name, keep the last entry (active gets replaced by ok/error)
   const deduped = new Map<string, { step: BuildStep; index: number }>();
   steps.forEach((s, index) => {
@@ -133,9 +188,12 @@ export function parseStepsToTopology(steps: BuildStep[], flowStart: number): Top
       trace: stepWithExtra.trace,
     };
   });
+  const intentNode = buildIntentNode(options?.intentAgent, flowStart);
+  if (intentNode) nodes.unshift(intentNode);
   nodes.sort((a, b) => (a.timestamp - b.timestamp) || (a.index - b.index));
 
   const stageOrder: StageId[] = [
+    "intent",
     "understand",
     "plan",
     "design",

@@ -1,7 +1,9 @@
-import type { AiResponse, BuildStep } from "../types/build-studio";
+import type { AiResponse, BuildStep, IntentAgentTurn } from "../types/build-studio";
 
 interface BuildSiteCallbacks {
   onStep: (step: BuildStep) => void;
+  onIntentTurn?: (turn: IntentAgentTurn) => void;
+  onIntentCommit?: (mergedBrief: string) => void;
   onDone: (result: AiResponse) => void;
   onError: (msg: string) => void;
 }
@@ -15,11 +17,15 @@ function processSSEChunk(
 
   try {
     const event = JSON.parse(line) as {
-      type: "step" | "done" | "error";
+      type: "intent_agent_turn" | "intent_agent_commit" | "step" | "done" | "error";
       [key: string]: unknown;
     };
 
-    if (event.type === "step") {
+    if (event.type === "intent_agent_turn") {
+      callbacks.onIntentTurn?.(event.turn as IntentAgentTurn);
+    } else if (event.type === "intent_agent_commit") {
+      callbacks.onIntentCommit?.(String(event.mergedBrief ?? ""));
+    } else if (event.type === "step") {
       callbacks.onStep(event as unknown as BuildStep);
     } else if (event.type === "done") {
       callbacks.onDone(event.result as AiResponse);
@@ -45,18 +51,31 @@ export async function runBuildSite(
     useDatabasePrompts?: boolean;
   }
 ): Promise<void> {
-  const res = await fetch("/api/ai", {
+  const useIntentAgent = Boolean(options?.projectId && !options.retryProjectId);
+  const res = await fetch(useIntentAgent ? "/api/ai/intent-agent" : "/api/ai", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      userPrompt: input,
-      ...(options?.model ? { model: options.model } : {}),
-      ...(options?.retryProjectId ? { retryProjectId: options.retryProjectId } : {}),
-      ...(options?.projectId ? { projectId: options.projectId } : {}),
-      ...(options?.styleGuide ? { styleGuide: options.styleGuide } : {}),
-      ...(options?.enableSkills ? { enableSkills: true } : {}),
-      ...(options?.useDatabasePrompts === false ? { useDatabasePrompts: false } : {}),
-    }),
+    body: JSON.stringify(
+      useIntentAgent
+        ? {
+          projectId: options?.projectId,
+          message: input,
+          ...(options?.model ? { model: options.model } : {}),
+          ...(options?.styleGuide ? { styleGuide: options.styleGuide } : {}),
+          ...(options?.enableSkills ? { enableSkills: true } : {}),
+          ...(options?.useDatabasePrompts === false ? { useDatabasePrompts: false } : {}),
+          runGenerateOnCommit: true,
+        }
+        : {
+          userPrompt: input,
+          ...(options?.model ? { model: options.model } : {}),
+          ...(options?.retryProjectId ? { retryProjectId: options.retryProjectId } : {}),
+          ...(options?.projectId ? { projectId: options.projectId } : {}),
+          ...(options?.styleGuide ? { styleGuide: options.styleGuide } : {}),
+          ...(options?.enableSkills ? { enableSkills: true } : {}),
+          ...(options?.useDatabasePrompts === false ? { useDatabasePrompts: false } : {}),
+        }
+    ),
     signal,
   });
 

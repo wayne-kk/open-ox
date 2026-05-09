@@ -1,7 +1,7 @@
 ---
 title: luxury
 created: '2026-04-17T08:25:59.808Z'
-modified: '2026-04-20T07:56:31.282Z'
+modified: '2026-04-28T12:00:00.000Z'
 ---
 
 # luxury
@@ -11,11 +11,11 @@ modified: '2026-04-20T07:56:31.282Z'
 
 ## Design Philosophy
 
-**Core Principles**: Elegance through restraint, precision, and depth. This style emulates high-end fashion magazines (Vogue, Harper's Bazaar, Kinfolk) and luxury brand websites (Chanel, Hermès, Aesop). Success depends on **exquisite typography hierarchy**, **generous negative space**, **slow cinematic motion**, **intentional asymmetry**, and **layered depth through subtle shadows**. The design creates visual tension through grid-breaking layouts while maintaining perfect architectural balance.
+**Core Principles**: Elegance through restraint, precision, and depth. This style emulates high-end fashion magazines (Vogue, Harper's Bazaar, Kinfolk) and luxury brand websites (Chanel, Hermès, Aesop). Success depends on **exquisite typography hierarchy**, **generous negative space**, **slow cinematic motion**, and **layered depth through subtle shadows**. Page structure and composition are chosen per section skill or product brief—not prescribed here.
 
 **Vibe**: Sophisticated, Timeless, Expensive, Serene, Curated, Deliberate, Editorial, Tactile.
 
-**The Secret**: Luxury isn't about adding decoration—it's about removing everything unnecessary and perfecting what remains. Every element must feel intentional and considered. Slow down all motion to cinematic speeds (1500-2000ms for images). Add more space than feels comfortable. Use asymmetry to create visual interest. Layer depth through subtle shadows (never harsh drops) and inner borders. The design should feel like expensive paper that you want to touch.
+**The Secret**: Luxury isn't about adding decoration—it's about removing everything unnecessary and perfecting what remains. Every element must feel intentional and considered. Slow down all motion to cinematic speeds (1500-2000ms for images). Add more space than feels comfortable. Layer depth through subtle shadows (never harsh drops) and inner borders. The design should feel like expensive paper that you want to touch.
 
 ## Design Token System (The DNA)
 
@@ -41,8 +41,8 @@ modified: '2026-04-20T07:56:31.282Z'
 - **Body Font**: "Inter" (Humanist sans-serif) — Clean, modern, highly legible. Use for body text, labels, UI elements.
 
 **Type Scale & Hierarchy:**
-- **Hero Headlines**: `text-6xl` to `text-9xl` (4rem to 8rem+) — Massive, dramatic. Use `leading-[0.9]` for tight, compressed vertical rhythm.
-- **Section Headlines**: `text-5xl` to `text-7xl` (3rem to 4.5rem) — Still large, commanding attention.
+- **Hero Headlines**: `text-6xl` to `text-7xl` (4rem to 8rem+) — Massive, dramatic. Use `leading-[0.9]` for tight, compressed vertical rhythm.
+- **Section Headlines**: `text-5xl` to `text-6xl` (3rem to 4.5rem) — Still large, commanding attention.
 - **Subsection Titles**: `text-3xl` to `text-4xl` (1.875rem to 2.25rem) — For card titles, feature headings.
 - **Body Text**: `text-base` to `text-lg` (1rem to 1.125rem) — Comfortable reading size with `leading-relaxed` (1.625).
 - **Overlines/Labels**: `text-xs` (0.75rem) — Always uppercase with wide tracking.
@@ -98,20 +98,6 @@ modified: '2026-04-20T07:56:31.282Z'
 - **Shadow Evolution**: Images gain deeper shadows on hover to enhance lift effect
 - **Group Context**: Use `group` utility on parent for coordinated hover effects
 
-### Grid & Vertical Lines (Structural Framework)
-
-**Visible Grid System:**
-- **4 Vertical Gridlines**: Fixed position lines spanning full viewport height, positioned at column boundaries
-- **Implementation**: `w-px` divs with `bg-[#1A1A1A]/20`, fixed position, pointer-events disabled
-- **Purpose**: Creates visible editorial grid structure, adds architectural quality
-- **Spacing**: Aligned with 12-column layout breakpoints, typically at container edges and middle thirds
-
-**Layout Grid:**
-- **Columns**: 12-column grid system
-- **Max Width**: 1600px for content container
-- **Padding**: `px-8` mobile, `px-16` desktop — Generous horizontal breathing room
-- **Asymmetry**: Use offset column starts (`col-start-2`, `col-start-6`) to create visual interest
-
 ## Component Styling Principles
 
 ### Buttons (Minimalist with Luxury Details)
@@ -156,7 +142,6 @@ modified: '2026-04-20T07:56:31.282Z'
 <!-- CHANGED: Image Cards — removed grayscale mention -->
 **Image Cards:**
 - Images display in full color with slow cinematic scale on hover
-- Use specific aspect ratios: `aspect-[3/4]` for features, `aspect-[4/5]` for blog posts
 - Combine image scale with parent card hover state using `group` utility
 
 ### Inputs (Underline Only)
@@ -208,54 +193,23 @@ modified: '2026-04-20T07:56:31.282Z'
 - **Navigation Links**: Gold color on hover with 500ms transition
 - **Button Animations**: Gold overlay slides from left on primary buttons, shadow deepens
 
-## Layout Principles (Breaking Symmetry)
-
-**Asymmetric Composition:**
-- **Avoid 50/50 splits**: Use 7/5, 4/4/4, or 4 offset by 2 column starts instead
-- **Bottom-left alignment**: Position primary content at bottom of container, aligned left
-- **Offset grids**: Start content at column 2 or 6 instead of 1, leaving deliberate empty space
-
-**Vertical Spacing (Generous Air):**
-- **Section Padding**: `py-24` to `py-32` (6rem to 8rem) — Massive vertical space between sections
-- **Component Padding**: `p-8` to `p-12` for cards and containers
-- **Element Spacing**: Use `gap-12` or `gap-16` for component groups, not tight spacing
-- **Breathing Room**: If it feels like too much space, it's probably correct for luxury design
-
-**Section Alternation:**
-- Alternate light (`bg-[#F9F8F6]`) and dark (`bg-[#1A1A1A]`) sections for rhythm
-- Use top borders (`border-t`) to separate sections without color changes
-- Dark sections use inverted color palette with muted text at 60-80% opacity
-
-**Content Width:**
-- Maximum container: `max-w-[1600px]`
-- Centered with `mx-auto`
-- Text columns: `max-w-md` to `max-w-xl` for comfortable reading
-
 ## The "Bold Factor" (Non-Genericness)
 
-These signature elements make Luxury/Editorial instantly recognizable and must be present:
+These signature elements make Luxury/Editorial instantly recognizable. Placement and section composition come from **section skills** and the **page brief**, not from this token sheet.
 
-1. **Vertical Text Labels**: Use CSS `writing-mode: vertical-rl` for decorative side labels (e.g., "Editorial / Vol. 01"). Position absolutely on images, typically on left or right edges. Uppercase with wide tracking. Hidden on mobile, visible on desktop.
+1. **Mixed Italic Headlines**: Within large headlines, alternate between regular and italic styling for specific words to create "spoken" cadence. Use gold color on italic words. Examples: "Curated *Excellence*", "The *Details*", "The *Process*."
 
-2. **Drop Caps**: Large initial letter for introductory paragraphs using `float-left`, Playfair Display font, 7xl size, tight line-height (0.8), with right margin (mr-3). Applied to first paragraph of Product Detail and Features intro. Creates classic editorial feel.
+<!-- CHANGED: Bold Factor — replaced grayscale transition with cinematic scale + shadow lift -->
+2. **Cinematic Image Hover**: All images display in full color by default. On hover, apply ultra-slow (1500-2000ms) subtle scale transform (`group-hover:scale-105`) combined with shadow deepening. The slow, deliberate motion creates a cinematic, tactile quality.
 
-3. **Mixed Italic Headlines**: Within large headlines, alternate between regular and italic styling for specific words to create "spoken" cadence. Use gold color on italic words. Examples: "Curated *Excellence*", "The *Details*", "The *Process*". Headline splits across lines with specific words emphasized.
+3. **Gold Sliding Animation**: Primary button hover reveals gold background (`#D4AF37`) sliding from left using `translate-x` transform. Requires layered span structure with z-index. Combined with shadow deepening from `shadow-[0_4px_16px]` to `shadow-[0_8px_24px]`.
 
-<!-- CHANGED: Bold Factor #4 — replaced grayscale transition with cinematic scale + shadow lift -->
-4. **Cinematic Image Hover**: All images display in full color by default. On hover, apply ultra-slow (1500-2000ms) subtle scale transform (`group-hover:scale-105`) combined with shadow deepening. The slow, deliberate motion creates a cinematic, tactile quality. Applied consistently to hero, features, blog, and testimonial images.
+4. **Extreme Type Scale**: Massive headlines (`text-5xl` mobile to `text-9xl` desktop) combined with tiny uppercase labels (`text-[10px]` to `text-xs`) creates dramatic hierarchy essential to luxury feel. Responsive scaling maintains proportions.
 
-5. **Visible Grid Lines**: Fixed vertical lines spanning viewport height, aligned with 12-column grid boundaries, at low opacity (20%). Four lines total (edges and middle thirds). Creates architectural editorial magazine feel. Pointer-events disabled.
+5. **Layered Shadows**: Subtle shadows create depth without being obvious. Images have box shadows that deepen on hover. Inner borders (`inset` shadows) frame images. Cards lift with shadow evolution. Never harsh—always soft and refined.
 
-6. **Gold Sliding Animation**: Primary button hover reveals gold background (`#D4AF37`) sliding from left using `translate-x` transform. Requires layered span structure with z-index. Combined with shadow deepening from `shadow-[0_4px_16px]` to `shadow-[0_8px_24px]`.
-
-7. **Decorative Horizontal Lines**: Short horizontal lines (`h-px w-8 md:w-12`) used as decorative elements before labels (hero) or between metadata (blog dates). Deliberate, architectural spacing elements.
-
-8. **Extreme Type Scale**: Massive headlines (`text-5xl` mobile to `text-9xl` desktop) combined with tiny uppercase labels (`text-[10px]` to `text-xs`) creates dramatic hierarchy essential to luxury feel. Responsive scaling maintains proportions.
-
-9. **Layered Shadows**: Subtle shadows create depth without being obvious. Images have box shadows that deepen on hover. Inner borders (`inset` shadows) frame images. Cards lift with shadow evolution. Never harsh—always soft and refined.
-
-<!-- CHANGED: Bold Factor #10 — removed grayscale avatar transition -->
-10. **Testimonial Interactions**: Left border animation (changes to gold and increases padding on hover), author name turns gold, stars scale up. Multi-layered coordinated effect.
+<!-- CHANGED: Bold Factor — removed grayscale avatar transition -->
+6. **Testimonial Interactions**: Left border animation (changes to gold and increases padding on hover), author name turns gold, stars scale up. Multi-layered coordinated effect.
 
 ## Anti-Patterns (What to Avoid)
 
@@ -266,16 +220,12 @@ These mistakes will break the luxury aesthetic:
 3. **DO NOT use pure black (#000000) or pure white (#FFFFFF)** — Use charcoal (#1A1A1A) and alabaster (#F9F8F6)
 4. **DO NOT use fast animations** — Minimum 500ms for interactions, 1500-2000ms for images. Luxury is deliberate and slow.
 5. **DO NOT use vibrant colors** — Stick to monochromatic palette with gold (#D4AF37) as only accent
-6. **DO NOT center everything** — Use asymmetry, offset columns, bottom-left alignment. Break the grid intentionally.
-7. **DO NOT overcrowd spacing** — More space is better. If it feels too airy, you're on the right track. Mobile: py-20, Desktop: py-32.
-8. **DO NOT use decorative fonts** — Only Playfair Display (serif) and Inter (sans-serif). No script or display fonts.
-9. **DO NOT use icons prominently** — If needed, use lucide-react with thin strokes (1-2px), sparingly. Icons are functional, not decorative.
-10. **DO NOT make gold dominant** — Gold is an accent for hover/focus states and specific emphasis, not a primary color
-11. **DO NOT use small images** — Images should be large and prominent, portrait aspect ratios (3:4, 4:5) with shadows and inner borders
-12. **DO NOT use tight tracking on body text** — Only uppercase labels get wide tracking (0.2-0.3em). Body text uses default tracking.
-<!-- CHANGED: Anti-Pattern #13 — removed grayscale rule entirely, replaced with full-color rule -->
-13. **DO NOT apply grayscale filters to images** — All images must display in full color by default. The luxury feel comes from rich photography, not desaturation. Hover interactions use scale and shadow, not color reveal.
-14. **DO NOT use generic mobile layouts** — Maintain the core aesthetic on mobile with proper scaling, not generic stacking
+6. **DO NOT overcrowd spacing** — More space is better. If it feels too airy, you're on the right track.
+7. **DO NOT use decorative fonts** — Only Playfair Display (serif) and Inter (sans-serif). No script or display fonts.
+8. **DO NOT use icons prominently** — If needed, use lucide-react with thin strokes (1-2px), sparingly. Icons are functional, not decorative.
+9. **DO NOT make gold dominant** — Gold is an accent for hover/focus states and specific emphasis, not a primary color
+10. **DO NOT use tight tracking on body text** — Only uppercase labels get wide tracking (0.2-0.3em). Body text uses default tracking.
+11. **DO NOT apply grayscale filters to images** — All images must display in full color by default. The luxury feel comes from rich photography, not desaturation. Hover interactions use scale and shadow, not color reveal.
 
 ## Animation & Motion (Cinematic Timing)
 
@@ -325,7 +275,7 @@ These mistakes will break the luxury aesthetic:
 - Large body text size (16-18px base) ensures readability
 - High contrast ratio for primary text
 - Generous line-height (1.625) improves readability
-- Avoid justified text — use left alignment
+- Avoid justified text — prefer comfortable alignment for the language and layout at hand
 
 **Interactive Areas:**
 - Buttons have minimum 48px height (h-12) for touch targets
@@ -338,37 +288,15 @@ These mistakes will break the luxury aesthetic:
 - Tailwind CSS v4 for all styling with custom color values
 - Google Fonts for "Playfair Display" and "Inter"
 - Lucide React for icons (if needed, use sparingly with thin stroke-width)
-- Custom CSS for noise texture (SVG data URI) and vertical writing mode
+- Custom CSS for noise texture (SVG data URI) when the page brief calls for it
 
 **Responsive Strategy:**
-- **Mobile (< 768px)**:
-  - Stack all columns vertically
-  - Reduce padding: `px-8`, `py-20` (instead of px-16, py-32)
-  - Scale down typography: `text-4xl` headlines (instead of text-6xl), `text-xl` quotes (instead of text-3xl)
-  - Reduce gaps: `gap-8`, `gap-12` (instead of gap-12, gap-24)
-  - Stats: 2 columns, smaller text (text-3xl instead of text-5xl)
-  - Hero: Smaller type scale `text-5xl` (instead of text-9xl), smaller line and decorative elements
-  - Testimonials: Smaller left padding `pl-6` (instead of pl-8)
-  - Footer CTA: Stack email input and button vertically with `flex-col` on small screens
-<!-- CHANGED: removed "grayscale images" from maintained aesthetic list -->
-  - Maintain core aesthetic: full-color images, gold accents, slow animations
-
-- **Tablet (768px - 1024px)**:
-  - Begin introducing grid layouts (2-3 columns)
-  - Medium padding: `px-8 md:px-16`, `py-20 md:py-32`
-  - Typography scales up: `text-5xl md:text-6xl`
-  - Complex layouts still stack (testimonials, FAQ)
-
-- **Desktop (> 1024px)**:
-  - Full 12-column asymmetric grid with offset columns
-  - Maximum padding and spacing
-  - Visible vertical gridlines (4 lines at column boundaries)
-  - Vertical writing mode text visible
-  - Full typographic scale (text-9xl for hero)
+- Scale headline and body sizes down on narrow viewports so hierarchy stays readable; keep motion slow and honor `prefers-reduced-motion`.
+- Preserve the palette, gold accent discipline, rectangular corners, and full-color photography—implementation details belong to section components and layouts, not this document.
 
 **Performance:**
 - Use CSS transforms (translate, scale) for animations — GPU accelerated
-- Fixed gridlines and noise overlay use minimal resources
+- Noise overlays should be lightweight when used
 - Shadows use rgba with low opacity for minimal render cost
 
 **Code Organization:**

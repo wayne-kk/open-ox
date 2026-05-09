@@ -14,11 +14,15 @@ export type ShellPlacement = "beforePageContent" | "afterPageContent";
 export type RolePriority = "primary" | "secondary" | "supporting";
 export type CapabilityPriority = "must-have" | "should-have" | "nice-to-have";
 
-export type LayoutMode = "whole-page" | "split-sections";
+/**
+ * How each route’s UI is produced after `plan_project`.
+ * - `agent`: multi-turn tool loop implements the page (Cursor-style); no fixed section stack.
+ * - `sections`: legacy — describe sections → one file per planned section → compose page.
+ */
+export type PageCodegenMode = "agent" | "sections";
 
 export interface ProductScope {
   productType: string;
-  layoutMode: LayoutMode;
   mvpDefinition: string;
   coreOutcome: string;
   businessGoal: string;
@@ -171,6 +175,31 @@ export interface StepTrace {
   };
 }
 
+export type ProjectIntentGuideOutcome = "continue_build" | "guide_user";
+
+export type ProjectIntentGuidePhase =
+  | "meta_capability"
+  | "clarify"
+  | "confirm_summary"
+  | "choices"
+  | "build_ready";
+
+export interface ProjectIntentChoiceOption {
+  id: string;
+  label: string;
+  hint?: string;
+}
+
+export interface ProjectIntentGuideResult {
+  outcome: ProjectIntentGuideOutcome;
+  phase: ProjectIntentGuidePhase;
+  assistantMessage: string;
+  suggestedReplies: string[];
+  choiceOptions: ProjectIntentChoiceOption[];
+  buildPromptAppendix: string | null;
+  trace: StepTrace;
+}
+
 export interface BuildStep {
   step: string;
   status: "ok" | "error" | "active";
@@ -208,6 +237,8 @@ export interface GenerateProjectResult {
   totalDuration?: number;
   error?: string;
   verificationOutput?: string;
+  intentGuideDeferred?: boolean;
+  intentGuide?: ProjectIntentGuideResult;
 }
 
 export interface BuildVerificationResult {

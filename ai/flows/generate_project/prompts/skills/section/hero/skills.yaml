@@ -1,0 +1,568 @@
+skills:
+  - name: adaptive-vbars-webgl
+    kind: component-skill
+    sectionTypes: [hero]
+    priority: 81
+    notes: >
+      动态 V 形渐变条 WebGL 背景，适合 AI/SaaS/DevTool/企业级产品的 hero。
+      深色系、精密感、前瞻感。
+    keywords:
+      - ai workflow
+      - automation
+      - data platform
+      - saas
+      - devtool
+      - system monitoring
+      - enterprise
+      - b2b
+      - developer
+      - technical
+      - precision
+      - commanding
+      - forward-thinking
+      - futuristic
+      - deep black
+    exclude_keywords:
+      - warm
+      - organic
+      - playful
+      - retro
+      - pastel
+      - editorial
+
+  - name: event-horizon-webgl
+    kind: component-skill
+    sectionTypes: [hero]
+    priority: 78
+    notes: >
+      黑洞粒子吸积盘 WebGL 效果，适合数据平台/分析/基础设施类产品。
+      宇宙感、引力感、深邃神秘。
+    keywords:
+      - data platform
+      - data integration
+      - analytics
+      - infrastructure
+      - intelligence system
+      - enterprise
+      - b2b
+      - technical leader
+      - convergence
+      - gravitational
+      - cosmic
+      - mysterious
+      - depth
+      - dark space
+      - particle
+    exclude_keywords:
+      - warm
+      - friendly
+      - playful
+      - pastel
+      - minimal
+      - editorial
+
+  - name: flowing-wisps-webgl
+    kind: component-skill
+    sectionTypes: [hero]
+    priority: 79
+    notes: >
+      WebGL 流动光丝效果 + 玻璃导航栏，颜色映射到 design tokens。
+      适合 AI/认知/暗色 hero 场景。
+    keywords:
+      - webgl
+      - fragment shader
+      - flowing lines
+      - wisps
+      - wave glow
+      - additive glow
+      - glass nav
+      - pill nav
+      - ai hero
+      - cognition
+      - dark hero
+    exclude_keywords:
+      - editorial
+      - magazine
+      - warm
+      - organic
+      - botanical
+      - retro
+      - no motion
+
+  - name: geometric-webgl
+    kind: component-skill
+    sectionTypes: [hero]
+    priority: 80
+    notes: >
+      几何框架语言 + Three.js 切面网格视觉，适合 3D/生成艺术/科学/创作者类产品。
+      探索感、科幻感、知性、大胆。
+    keywords:
+      - 3d
+      - generative
+      - creative
+      - computational
+      - scientific
+      - creator
+      - researcher
+      - innovator
+      - exploratory
+      - mysterious
+      - sci-fi
+      - intellectual
+      - bold
+      - violet
+      - crystalline
+    exclude_keywords:
+      - warm
+      - organic
+      - casual
+      - retro
+      - photography
+      - illustration
+
+  - name: lighting
+    kind: component-skill
+    sectionTypes: [hero]
+    priority: 60
+    notes: >
+      WebGL 闪电/等离子 shader 效果，仅用于明确需要闪电/shader 视觉的 hero。
+    keywords:
+      - lightning
+      - webgl
+      - plasma
+      - particle-field
+      - generative-art
+    exclude_keywords:
+      - editorial
+      - magazine
+      - luxury
+      - minimal
+      - clean
+      - nature
+      - organic
+      - warm
+      - festive
+      - celebration
+
+  - name: particle
+    kind: component-skill
+    sectionTypes: [hero]
+    priority: 80
+    notes: >
+      Canvas 粒子文字效果，粒子组成文字并可交互散开/聚合。
+      适合动感、生成艺术、交互式 hero。
+    keywords:
+      - particle
+      - generative
+      - interactive
+      - canvas
+      - text-effect
+      - kinetic
+      - dissolve
+      - scatter
+      - 粒子
+      - 粒子效果
+    exclude_keywords:
+      - editorial
+      - magazine
+      - luxury
+      - minimal
+      - dashboard
+      - shader
+      - webgl
+      - lightning
+
+  - name: starfield-planet-horizon
+    kind: component-skill
+    sectionTypes: [hero]
+    priority: 56
+    notes: >
+      CSS 星空 + 模糊星球地平线，滚动视差，玻璃 UI，等宽 + 展示衬线字体。
+      适合极光/空灵/AI/Web3/游戏/约会类产品。
+    keywords:
+      - Aurora
+      - Ethereal
+      - Glow
+      - AI
+      - Web3
+      - Game
+      - Date
+    exclude_keywords:
+      - webgl
+      - three
+      - threejs
+      - shader
+      - three.js
+      - particle
+      - particles
+      - canvas
+      - generative
+      - 3d
+      - wireframe
+
+  - name: gradient-frame-shader-hero
+    kind: component-skill
+    sectionTypes: [hero]
+    priority: 77
+    notes: >
+      圆角 bento 大卡片 + 伪金属渐变相框 + Three 全屏正交 quad 自定义 shader，canvas 为 screen 混合叠层。
+      GSAP+ScrollTrigger 逐词遮罩上升；无 section 内 nav；色走 uniform/ token。
+    keywords:
+      - enterprise
+      - saas
+      - b2b
+      - control plane
+      - infrastructure
+      - bento
+      - glassmorphism
+      - gradient frame
+      - scroll reveal
+      - cinematic
+    exclude_keywords:
+      - particle
+      - particles
+      - starfield
+      - planet
+      - venetian
+      - blinds
+      - editorial spread
+      - gltf
+      - model
+      - instanced
+      - css-only
+
+  - name: fluted-glass-shader-hero
+    kind: component-skill
+    sectionTypes: [hero]
+    priority: 75
+    notes: >
+      全视口全幅竖纹/凹槽玻璃 GLSL（正交全屏四边形）+ 流体 blob 与高光，仅 logomark+竖线+字叠层。
+      无圆角 bento 外框、无必须 GSAP 词动画；按 canvas client 尺寸 setSize。
+    keywords:
+      - enterprise
+      - saas
+      - b2b
+      - biotech
+      - laboratory
+      - network gateway
+      - full-bleed
+      - reeded glass
+      - fluted glass
+      - immersive
+      - futuristic
+    exclude_keywords:
+      - bento
+      - rounded card
+      - gradient border
+      - chrome frame
+      - gsap
+      - scrolltrigger
+      - word reveal
+      - venetian
+      - editorial
+      - magazine
+
+  - name: screen-blend-orbs-hero
+    kind: component-skill
+    sectionTypes: [hero]
+    priority: 58
+    notes: >
+      三颗大模糊色团 + mix-blend screen；随页面滚动在单 hero 内按 progress 分三档形变（位移/缩放/透明度/语义色），
+      ~2s 过渡；IO 分步入场。无 WebGL。无顶栏/时间轴。
+    keywords:
+      - saas
+      - screen blend
+      - orbs
+      - bokeh
+      - ambient
+      - night mode
+      - creative tool
+      - app launch
+      - dense headline
+      - glow
+      - live session
+    exclude_keywords:
+      - webgl
+      - three
+      - threejs
+      - shader
+      - wireframe
+      - mesh
+      - canvas animation
+      - particle
+      - particles
+      - starfield
+      - planet
+      - horizon
+
+  - name: signal-grid-split-hero
+    kind: component-skill
+    sectionTypes: [hero]
+    priority: 80
+    notes: >
+      Split hero: telemetry + stacked type; rails + atmosphere; framed image panel + HUD chrome; no nav.
+    keywords:
+      - creative studio
+      - photographer
+      - documentary
+      - technical
+      - brutalist
+      - split layout
+      - grid system
+      - high contrast
+      - signal ui
+      - first impression
+    exclude_keywords:
+      - webgl
+      - shader
+      - particle
+      - blinds
+      - parallax
+      - playful
+      - pastel
+
+  - name: sphere-swarm-webgl
+    kind: component-skill
+    sectionTypes: [hero]
+    priority: 82
+    notes: >
+      THREE point swarm; mouse pull + click impulse; additive glow; stats ribbon; hero only, no nav.
+    keywords:
+      - spatial computing
+      - neural platform
+      - data platform
+      - enterprise
+      - b2b
+      - devtool
+      - futuristic
+      - immersive
+      - deep black
+      - live system
+    exclude_keywords:
+      - editorial
+      - magazine
+      - particle text
+      - kinetic typography
+      - warm
+      - playful
+      - pastel
+
+  - name: wireframe-torus-arch-webgl
+    kind: component-skill
+    sectionTypes: [hero]
+    priority: 81
+    notes: >
+      Twin torus wireframe WebGL arc, mask-fade to copy; giant gradient title + glow; no shell nav here.
+    keywords:
+      - developer conference
+      - community platform
+      - product launch
+      - enterprise
+      - commanding
+      - futuristic
+      - immersive
+      - monumental type
+      - gateway metaphor
+      - cool accent glow
+    exclude_keywords:
+      - editorial
+      - photography hero
+      - particle text
+      - blinds
+      - warm
+      - organic
+      - playful pastel
+
+  - name: ember-radial-blades-hero
+    kind: component-skill
+    sectionTypes: [hero]
+    priority: 77
+    notes: >
+      余烬径向渐变 + 胶片噪点；GSAP 右侧扇形叶片雕塑 + ScrollTrigger 遮罩标题；打包依赖；无 nav/CDN。
+    keywords:
+      - energy brand
+      - premium launch
+      - first impression
+      - cinematic
+      - ember glow
+      - dramatic typography
+      - organic motion
+      - light metaphor
+      - visionary
+      - scroll storytelling
+    exclude_keywords:
+      - webgl
+      - three.js
+      - shader
+      - canvas
+      - editorial blinds
+      - photography hero
+      - split hero telemetry
+      - bento
+
+  - name: portfolio-tilt-card-rail-hero
+    kind: component-skill
+    sectionTypes: [hero]
+    priority: 74
+    notes: >
+      居中渐变标题 + 悬浮角色胶囊；六张肖像卡错落倾斜 + 点击聚光（模糊/压暗 siblings）；双 CTA；无 nav。
+    keywords:
+      - portfolio showcase
+      - creative community
+      - gallery preview
+      - first impression
+      - collectors
+      - playful cards
+      - spotlight focus
+      - maker brand
+      - gradient headline
+      - floating labels
+    exclude_keywords:
+      - webgl
+      - shader
+      - particle
+      - editorial blinds
+      - split hero
+      - brutalist
+      - data dashboard
+      - telemetry
+
+  - name: bento-split-marquee-gallery-hero
+    kind: component-skill
+    sectionTypes: [hero]
+    priority: 73
+    notes: >
+      左侧 Bento：主文案 + 配置条 + 可跟踪光晕拖放区；右侧三列无限纵向跑马灯图廊，约 40/60；无 app 顶栏。
+    keywords:
+      - creative studio
+      - generative tool
+      - asset pipeline
+      - saas
+      - first impression
+      - bento layout
+      - upload dropzone
+      - moodboard
+      - gallery preview
+      - premium dark ui
+    exclude_keywords:
+      - webgl
+      - shader
+      - three.js
+      - canvas
+      - editorial blinds
+      - full-bleed photography
+      - ember glow sculpture
+      - split hero telemetry
+
+  - name: cinematic-photo-glass-hero
+    kind: component-skill
+    sectionTypes: [hero]
+    priority: 70
+    notes: >
+      全幅摄影背景 + 玻璃公告条 + 衬线大标题 + 双 CTA + 合作 logo 条；section 内不含顶栏 nav。
+    keywords:
+      - aerospace
+      - space tourism
+      - premium brand
+      - first impression
+      - cinematic
+      - full bleed
+      - photography hero
+      - announcement
+      - partnership
+      - explorer
+    exclude_keywords:
+      - webgl
+      - shader
+      - particle
+      - canvas
+      - editorial blinds
+      - parallax blinds
+      - split hero telemetry
+      - brutalist grid
+      - bento
+
+  - name: unicorn-studio-embed-hero-bg
+    kind: component-skill
+    sectionTypes: [hero]
+    priority: 64
+    notes: >
+      Unicorn Studio 全屏嵌入作背景，前景需叠 hero 文案；project id 来自 brief；单次 init；固定版或自托管 UMD。
+    keywords:
+      - creative studio
+      - immersive landing
+      - first impression
+      - motion graphics
+      - premium brand
+      - experiential marketing
+      - animated backdrop
+      - unicorn studio
+      - interactive brand
+      - design portfolio
+    exclude_keywords:
+      - static photography hero
+      - editorial blinds
+      - bento dashboard
+      - custom three.js
+      - shader hero
+      - css marquee gallery
+      - split telemetry
+
+  - name: editorial-blinds-hero
+    kind: component-skill
+    sectionTypes: [hero]
+    priority: 60
+    notes: >
+      去饱和全幅照片 + 竖条百叶视差切片 + 可选纸张噪点；色走 token；无 section 内 nav。
+    keywords:
+      - editorial
+      - magazine spread
+      - outdoor brand
+      - expedition
+      - landscape
+      - film still
+      - split hero
+      - parallax
+      - heritage
+      - grayscale
+    exclude_keywords:
+      - webgl
+      - three
+      - shader
+      - canvas
+      - particle
+      - particles
+      - starfield
+      - orb
+      - orbs
+      - glow orbs
+      - screen blend
+      - additive
+
+
+  - name: triple-phone-mockup-fan-hero
+    kind: component-skill
+    sectionTypes: [hero]
+    priority: 72
+    notes: >
+      双栏：状态条、指标胶囊、双 CTA、头像叠层；右侧三部扇形手机壳 + 不同 App 屏（卡片/地图/直播）。
+    keywords:
+      - outdoor brand
+      - trail app
+      - hike planning
+      - first impression
+      - mobile product
+      - live activity
+      - community
+      - split hero
+      - nature travel
+      - fitness outdoors
+    exclude_keywords:
+      - webgl
+      - shader
+      - unicorn studio
+      - full-bleed photo only
+      - editorial blinds
+      - bento generator
+      - ember sculpture
+      - telemetry split

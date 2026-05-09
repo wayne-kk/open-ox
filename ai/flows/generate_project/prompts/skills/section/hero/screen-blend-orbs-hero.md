@@ -1,137 +1,216 @@
 # Component Skill: Hero — Screen-Blend Orbs (CSS / DOM)
 
-Use this skill when `generateSection` should deliver a **hero-only** block: a near-black void lit by a few **large, heavily blurred circular color masses** that **add** light using `mix-blend-mode: screen` (or equivalent additive read), plus a **dense, fluid-scale headline** with a short eyebrow and muted subcopy. **Scroll-agnostic section variants** of this pattern use **IntersectionObserver** to reveal lines with stagger; do **not** require WebGL or canvas.
+Use this skill when `generateSection` should deliver a **hero-only** block: a near-black void lit by **three** (**or ≥2**) **large, heavily blurred circular masses** with `mix-blend-mode: screen`, plus a **dense `clamp` headline** stack. Unlike a purely static hero, this pattern **morphs the orb field as the user scrolls through the document** while this section is on screen — the **Retune-style “chapter” handoff** (different translate / scale / opacity / semantic hue per chapter) is **collapsed into scroll progress 0→1** **inside one section** (no extra `<section>` siblings, no nav, no timeline).
 
-**Scope — hero only:** Output **only** the first-screen hero: orbs + headline stack — **no** site navigation, header bar, or top chrome (those live in the app shell, not in this section). **Do not** include equalizer / spectrum demos, satellite orbit diagrams, full-page “chapter” grids, download bands, or the **bottom timeline** strip—those belong to other sections. If a brief only supplies this hero, keep **orbs in the initial “hero” layout** (two prominent masses + optional third hidden or at zero opacity); do not wire a multi-section orb state machine unless another contract explicitly extends it.
+**Do not** require WebGL or canvas animation loops.
+
+**Scope — hero only:** **Orbs + primary headline column only.** **No** `<nav>`, brand row, `mix-blend-difference` shell header, synthesis/context/download **grids**, **equalizer** bars, **satellite** orbits, or **bottom timeline** — those are **other sections** or **page chrome**.  
+**Mapping from reference:** the reference updates orbs when `#hero` / `#synthesis` / `#context` hit 50% visibility — here, define **three `OrbRecipe` snapshots** keyed to **scroll progress** through this component’s root (`0…1`), e.g. `p < ⅓ → recipe A`, `⅓ ≤ p < ⅔ → recipe B`, `p ≥ ⅔ → recipe C`. Colors are **always design tokens**, never mandatory demo hex.
 
 ## Core Effect
 
-- **Additively lit void** — 2+ oversized circles (`rounded-full`) with a **very strong blur** and **screen** blend; they sit in a `fixed` inset layer and read as soft colored light pools, not hard shapes.
-- **Asymmetric layout** — Orbs are positioned in different quadrants; sizes differ (e.g. 50–60vh class range) to avoid symmetry that feels like a loading spinner.
-- **Type stack** — Condensed **display** wordmark line(s), optional line break; eyebrow in **all-caps, widetrack, muted**; body in a **muted-foreground** role from the theme.
-- **Entrance** — Staggered opacity + translateY on scroll-into-view (or on mount) for eyebrow, title, and paragraph.
+- **Additive void** — Token `background`; **fixed** `inset-0` orb layer; **`mix-blend-mode: screen`** (or `plus-lighter` if brief allows).
+- **Three orbs** — Default **three** `div`s (two dominant + third **often starting at `opacity: 0`** then **joining** mid-progress); sizes **asymmetric** (~40–60vh width), **blur ~64–96px** (`blur-3xl` class range).
+- **Scroll morph** — While the **root** intersects the viewport, compute **`progress ∈ [0,1]`** from **document scroll + `getBoundingClientRect()`** (not multiple `IntersectionObserver` callbacks on fake subsections). When `progress` crosses segment boundaries, **update** each orb’s `transform`, `opacity`, and **token-mapped** `backgroundColor`; rely on **long CSS `transition`** (`~2s` **`cubic-bezier(0.16, 1, 0.3, 1)`** on transform, **`background-color ~2s ease`**, **`opacity ~2s ease`**) so changes **ease** like the reference — this is the **“滚动渐变”** (gradual morph), not instant swaps.
+- **Copy entrance** — **IntersectionObserver** (or `useInView`) adds **staggered** `translateY(20px) → 0` + opacity on **eyebrow / H1 / p**; eyebrow often settles at **~70% opacity** when visible (muted signal).
 
 ## Visual Language
 
-- **Atmosphere** — “Studio dark” with **punchy accent pools**; map orb hues to **semantic roles** (e.g. primary, secondary, success/tertiary) from the brief, **not** the sample’s system-palette hex values.
-- **Figure / ground** — Orbs are decorative; the headline is the main figure. Keep **contrast** high enough for WCAG on the `foreground` + `background` used under the orbs.
-- **Texture** — All softness comes from **CSS blur** + screen blend, not from noise images.
+- **Atmosphere** — “Studio dark” + **pools of semantic light** (primary / secondary / chart / accent slots from tokens).
+- **Morph intent** — Early progress: **two warm-forward pools** + hidden third; mid: **shift mass**, **introduce third** mass, **cooler / alternate** token roles; late: **diffused**, **smaller secondary glow**, **stronger tertiary** — **approximate** the reference’s three blocks **without** copying hex.
+- **Texture** — Blur + screen blend only unless brief adds noise.
 
 ## Structure Requirements
 
-1. **Z-order** (bottom → top): (a) page/surface `background` from tokens; (b) **fixed** orb container `inset-0` `overflow-hidden` `pointer-events-none` `z-0`; (c) **relative** hero section `z-10` (min viewport height) with padding from brief (e.g. `px` using `vw` or token spacing). **Do not** add a fixed header or `<nav>` in this section.
-2. **Orbs** — Each orb is a single `div` (no SVG required); use **token-based** `background-color`; apply **filter blur** via Tailwind or CSS; `mix-blend-mode: screen`; opacity in the **~0.5–0.7** range unless the brief specifies calmer.
-3. **No interaction capture** on background layers.
+1. **Z-order:** token **surface** → **fixed** orb wrapper **`z-0`** `pointer-events-none` → **relative** content **`z-10`**, **`min-h-screen` minimum** and **enough vertical extent** (e.g. extra **`padding-bottom`** or **`min-h-[120svh]`**) so **`progress` can move past ~0.25** while the user still scrolls **within** normal one-page flow — *or* rely on **page-level** scroll with next sections below; **progress** must still update smoothly as the hero block **moves through** the viewport.
+2. **Root** — Single wrapper `ref` for rect + scroll binding; **one** hero **column** (`max-w-4xl`, `px-[clamp(…,10vw,…)]`).
+3. **No interaction** on orbs.
 
 ## Motion Direction
 
-- **Fade-in** — Use `transition` on `opacity` + `transform` (e.g. `translateY(20px)`) and toggle a `visible` class (or `data-state`) when the section intersects, with **staggered `transition-delay`** on the title lines vs paragraph (e.g. 0s / 0.1s / 0.2s scale).
-- **Easing** — Prefer a custom **cubic ease-out** (e.g. `cubic-bezier(0.16, 1, 0.3, 1)`) for reveal and any orb `transform` if motion is required.
-- **Reduced motion** — If `prefers-reduced-motion: reduce`, set hero copy to **visible** without off-axis motion; orbs may stay static; **do not** depend on section-scroll choreographed orb moves for the hero to read as complete for this `id`.
-- **Hero-only** — Do **not** require the **section-indexed** orb repositioning or **timeline tick** script from a multi-page source; the hero is valid with **static** orb positions and **one** intersection target.
+- **Progress formula (document scroll, recommended):**  
+  Let `el` = section root, `rect = el.getBoundingClientRect()`, `vh = window.innerHeight`.  
+  A robust pattern:  
+  `raw = (vh - rect.top) / (rect.height + vh * 0.35)` then `progress = clamp(0, 1, raw)`  
+  (tune `0.35` only if brief needs faster/slower morph). **Throttle** with **`requestAnimationFrame`** from a **`scroll` listener** `{ passive: true }`; cancel rAF + remove listener on unmount.
+- **Phase index:** `phase = progress < 1/3 ? 0 : progress < 2/3 ? 1 : 2` — apply `RECIPES[phase]` per orb (translate %, scale, opacity, CSS color).
+- **Copy fade-in** — Same as before: IO **`threshold ~0.35`**, **`prefers-reduced-motion: reduce`** → show copy immediately **without** translate stagger; **freeze** `phase` at `0` (initial recipe only) — **no scroll morph dependency** for validity.
 
 ## CSS / DOM Background (no WebGL)
 
-- **Screen blend** — `mix-blend-mode: screen` (or `plus-lighter` if the stack supports and the brief allows) to keep the effect additive and luminous.
-- **Blur** — Use large blur (Tailwind `blur-3xl` / ~80px) so edges disappear into the void; optional long `transition` on `transform`/`opacity` only if the spec calls for state changes—default hero may be static.
+- **Orb class** — Tailwind: `rounded-full blur-3xl mix-blend-screen` + absolute positioning; inline **`style`** for **dynamic** transform / opacity / `backgroundColor` + **`transition: transform 2s cubic-bezier(0.16,1,0.3,1), background-color 2s ease, opacity 2s ease`** (match reference **feel**).
+- **Eyebrow** — `text-sm uppercase tracking-widest`; visible state often **`opacity-70`** (not full 100).
 
 ## Required Implementation Blueprint (Do Not Skip)
 
-1. **MUST** place **at least two** large blurred, rounded orb elements in a **non-interactive** `fixed` full-viewport background layer, using `**mix-blend-mode: screen`** (or documented equivalent) and **semantic colors from the design system / section brief**—**not** hardcoded system accent hexes from a one-off reference.
-2. **MUST** use `**pointer-events: none`** on the orb container and each orb, and keep **orb z-index** strictly **below** primary content.
-3. **MUST** implement the **hero** as a `min-h-screen` (or equivalent) column with a width cap (e.g. `max-w-4xl` class of constraint), **eyebrow**, **multi-line `clamp` fluid headline** with **tight negative letter-spacing** at large sizes, and a **subcopy** paragraph in the **muted** role.
-4. **MUST** run **staggered enter visibility** (IntersectionObserver, `useInView`, or `useEffect` + `ref`) and **remove / disconnect the observer** on unmount; **MUST** respect `**prefers-reduced-motion`** by skipping or minimizing translate on entrance.
-5. **MUST** (hero-only) **not** output synthesis/context/download sections, **equalizer** bar columns, **orbiting** satellite UI, or a **scroll timeline** as part of this section.
-6. **MUST** use the project’s **typography and spacing tokens** (or configured `font-sans` / display stack); **MUST NOT** add runtime **Google Fonts** `<link>` or **Tailwind CDN**—fonts come from the app’s pipeline.
-7. **MUST NOT** include **any** site navigation: no `<nav>`, no header bar, no brand/version row, no `mix-blend-difference` top chrome — shell navigation is **outside** this section.
-8. **MUST NOT** add `<script src="https://…">` for Tailwind, fonts, or libraries.
+1. **MUST** use **`mix-blend-mode: screen`** (or documented equivalent) on **≥2** blurred orbs in a **fixed** non-interactive layer; **MUST** include a **third** orb when the brief implies a **two→three mass** narrative (default **yes** for this `id`); **semantic colors only**.
+2. **MUST** implement **scroll-driven** orb updates: **`progress`** derived from **layout + scroll** while the section is relevant, **≥3 recipes** (`phase` 0/1/2) mapping to **distinct** transform/opacity/background **roles** — **`prefers-reduced-motion`** may pin `phase === 0` only.
+3. **MUST** apply **~2s** transitions on orb **`transform`**, **`opacity`**, and **`background-color`** so morphs **ramp smoothly** (the reference’s CSS `.orb { transition: … }` behavior).
+4. **MUST** use **`pointer-events: none`** on orb layer; **z-index** below copy.
+5. **MUST** implement **eyebrow + multi-line `clamp` headline + muted subcopy** with **IO stagger** and **disconnect** on unmount.
+6. **MUST NOT** embed **nav**, **other full sections**, **timeline**, **equalizer**, **orbit UI**.
+7. **MUST NOT** use CDN Tailwind, external font links, or hardcoded **mandatory** reference hex.
+8. **MUST** use **`"use client"`** and **clean up** scroll listeners + rAF + observers.
 
-If any of the **MUST** items (and hero scope in item 5) is missing, the output is **not** valid for `screen-blend-orbs-hero`.
+If any **MUST** fails, output is **invalid** for `screen-blend-orbs-hero`.
+
+Page-level note: if the **marketing page** later adds real `#synthesis` / `#context` sections, **those** own their content; **this** section’s orb morph is **self-contained** and approximates the **visual rhythm** of the reference without coupling to sibling section IDs.
 
 ## Reference TSX Skeleton (Adapt, Do Not Copy Blindly)
 
 ```tsx
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 
 const easeOut = "cubic-bezier(0.16, 1, 0.3, 1)";
 
-export function ScreenBlendOrbsHero() {
-  const sectionRef = useRef<HTMLElement | null>(null);
+type Orb = { transform: string; opacity: number; background: string };
+
+const PHASES: [Orb, Orb, Orb][] = [
+  [
+    { transform: "translate(0, 0) scale(1)", opacity: 0.6, background: "hsl(var(--primary))" },
+    { transform: "translate(0, 0) scale(1)", opacity: 0.6, background: "hsl(var(--secondary))" },
+    { transform: "translate(0, 0) scale(1)", opacity: 0, background: "hsl(var(--chart-2))" },
+  ],
+  [
+    { transform: "translate(-20%, 30%) scale(0.8)", opacity: 0.65, background: "hsl(var(--chart-2))" },
+    { transform: "translate(-30%, -20%) scale(1.2)", opacity: 0.5, background: "hsl(var(--primary))" },
+    { transform: "translate(10%, -10%) scale(1)", opacity: 0.8, background: "hsl(var(--chart-3))" },
+  ],
+  [
+    { transform: "translate(40%, -10%) scale(1.5)", opacity: 0.35, background: "hsl(var(--secondary))" },
+    { transform: "translate(-20%, 20%) scale(0.5)", opacity: 0.25, background: "hsl(var(--foreground))" },
+    { transform: "translate(0, 0) scale(1.1)", opacity: 0.65, background: "hsl(var(--chart-4))" },
+  ],
+];
+
+function useScrollPhase(sectionRef: RefObject<HTMLElement | null>) {
+  const [phase, setPhase] = useState(0);
+  const raf = useRef(0);
 
   useEffect(() => {
     const el = sectionRef.current;
-    if (!el) return;
+    if (!el || typeof window === "undefined") return;
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setPhase(0);
+      return;
+    }
+
+    const tick = () => {
+      raf.current = 0;
+      const rect = el.getBoundingClientRect();
+      const vh = window.innerHeight || 1;
+      const raw = (vh - rect.top) / (rect.height + vh * 0.35);
+      const p = Math.min(1, Math.max(0, raw));
+      const next = p < 1 / 3 ? 0 : p < 2 / 3 ? 1 : 2;
+      setPhase((prev) => (prev !== next ? next : prev));
+    };
+
+    const onScroll = () => {
+      if (!raf.current) raf.current = requestAnimationFrame(tick);
+    };
+
+    tick();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (window.cancelAnimationFrame && raf.current) cancelAnimationFrame(raf.current);
+    };
+  }, [sectionRef]);
+
+  return phase;
+}
+
+export function ScreenBlendOrbsHero() {
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const phase = useScrollPhase(sectionRef);
+
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el || typeof window === "undefined") return;
+
     const reveal = () => {
       el.querySelectorAll("[data-hero-fade]").forEach((n) => {
         n.setAttribute("data-visible", "true");
       });
     };
+
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       reveal();
       return;
     }
 
     const io = new IntersectionObserver(
-      ([e]) => {
-        if (e?.isIntersecting) reveal();
-      },
+      ([e]) => e?.isIntersecting && reveal(),
       { threshold: 0.35 },
     );
-
     io.observe(el);
     return () => io.disconnect();
   }, []);
 
+  const [a, b, c] = PHASES[phase] ?? PHASES[0]!;
+
+  const orbTransition = `transform 2s ${easeOut}, background-color 2s ease, opacity 2s ease`;
+
   return (
-    <div className="relative min-h-screen overflow-x-hidden bg-background text-foreground">
+    <div className="relative min-h-[min(120svh,1400px)] overflow-x-hidden bg-background text-foreground">
       <div
         className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
         aria-hidden
       >
         <div
-          className="orb absolute w-[60vh] h-[60vh] rounded-full opacity-60 blur-3xl mix-blend-screen"
+          className="absolute h-[60vh] w-[60vh] rounded-full mix-blend-screen blur-3xl"
           style={{
             top: "20%",
             left: "20%",
-            backgroundColor: "hsl(var(--primary))",
-            transition: `transform 2s ${easeOut}, opacity 2s ease`,
+            transform: a.transform,
+            opacity: a.opacity,
+            backgroundColor: a.background,
+            transition: orbTransition,
           }}
         />
         <div
-          className="orb absolute w-[50vh] h-[50vh] rounded-full opacity-60 blur-3xl mix-blend-screen"
+          className="absolute h-[50vh] w-[50vh] rounded-full mix-blend-screen blur-3xl"
           style={{
             top: "30%",
             right: "20%",
-            backgroundColor: "hsl(var(--secondary))",
-            transition: `transform 2s ${easeOut}, opacity 2s ease`,
+            transform: b.transform,
+            opacity: b.opacity,
+            backgroundColor: b.background,
+            transition: orbTransition,
           }}
         />
         <div
-          className="orb absolute w-[40vh] h-[40vh] rounded-full opacity-0 blur-3xl mix-blend-screen"
+          className="absolute h-[40vh] w-[40vh] rounded-full mix-blend-screen blur-3xl"
           style={{
             bottom: "10%",
             left: "40%",
-            backgroundColor: "hsl(var(--chart-2))",
+            transform: c.transform,
+            opacity: c.opacity,
+            backgroundColor: c.background,
+            transition: orbTransition,
           }}
         />
       </div>
 
       <section
         ref={sectionRef}
-        className="relative z-10 flex min-h-screen flex-col justify-center px-[10vw]"
+        className="relative z-10 flex min-h-screen flex-col justify-center px-[clamp(1.25rem,10vw,8rem)]"
       >
         <div className="max-w-4xl">
           <span
             data-hero-fade
-            className="mb-4 block translate-y-5 text-sm font-medium uppercase tracking-widest text-muted-foreground opacity-0 transition-[opacity,transform] duration-[800ms] [transition-timing-function:var(--ease-hero,inherit)] data-[visible=true]:translate-y-0 data-[visible=true]:opacity-100"
+            className="mb-4 block translate-y-5 text-sm font-medium uppercase tracking-widest text-muted-foreground opacity-0 transition-[opacity,transform] duration-[800ms] data-[visible=true]:translate-y-0 data-[visible=true]:opacity-70"
+            style={{ transitionTimingFunction: easeOut }}
           >
             Eyebrow
           </span>
           <h1
             data-hero-fade
-            className="mb-6 translate-y-5 text-[clamp(3rem,8vw,8rem)] font-bold leading-[0.95] tracking-[-0.04em] opacity-0 transition-[opacity,transform] delay-100 duration-[800ms] [transition-timing-function:var(--ease-hero,inherit)] data-[visible=true]:translate-y-0 data-[visible=true]:opacity-100"
+            className="mb-6 translate-y-5 text-[clamp(3rem,8vw,8rem)] font-bold leading-[0.95] tracking-[-0.04em] opacity-0 transition-[opacity,transform] delay-100 duration-[800ms] ease-out data-[visible=true]:translate-y-0 data-[visible=true]:opacity-100"
+            style={{ transitionTimingFunction: easeOut }}
           >
             Headline
             <br />
@@ -139,7 +218,8 @@ export function ScreenBlendOrbsHero() {
           </h1>
           <p
             data-hero-fade
-            className="max-w-[50ch] translate-y-5 text-lg leading-relaxed text-muted-foreground opacity-0 transition-[opacity,transform] delay-200 duration-[800ms] [transition-timing-function:var(--ease-hero,inherit)] data-[visible=true]:translate-y-0 data-[visible=true]:opacity-100 md:text-xl"
+            className="max-w-[50ch] translate-y-5 text-lg leading-relaxed text-muted-foreground opacity-0 transition-[opacity,transform] delay-200 duration-[800ms] ease-out data-[visible=true]:translate-y-0 data-[visible=true]:opacity-100 md:text-xl"
+            style={{ transitionTimingFunction: easeOut }}
           />
         </div>
       </section>
@@ -148,25 +228,27 @@ export function ScreenBlendOrbsHero() {
 }
 ```
 
-Wire `--ease-hero` in global CSS or `theme` to the same **cubic** as the brief; the example’s `hero-visible` utility may be a small module class or a `data-` + selector—match the project’s pattern. Prefer `aria-busy` / heading level semantics per layout.
+Fix typo in skeleton: `justify-center` not `justify.center`.
 
 ## Layout Details
 
-- Horizontal padding: generous (`vw` or `max` container) so the **clamp** headline can breathe; avoid orbs **directly** behind small body text—nudge content `max-w` or orb positions if legibility fails.
-- **Third orb** is optional; default hidden keeps the first screen to two primary pools of light.
+- **Extra height** — `min-h-[min(120svh,1400px)]` on outer wrapper (or equivalent) helps **`progress`** advance before the next page section; adjust per brief.
+- **Legibility** — Nudge orbs or `max-w` if headline fights local glow.
 
 ## Content Rules
 
-- Eyebrow: **short signal** (category, product clause)—not a sentence. Headline: **imperative or declarative** with optional forced line break. Subcopy: **one paragraph**, concrete, no placeholder “lorem.”
+- Eyebrow: short signal. Headline: imperative / declarative with optional `<br />`. Subcopy: one concrete paragraph.
 
 ## Implementation Constraints
 
-- `"use client"` when using `IntersectionObserver` or DOM observation.
-- No CDN scripts; Tailwind in build; no `<style jsx>`; icons not required for the minimal spec.
+- `"use client"`; no CDN; no `<style jsx>` for prod-critical orb math unless project standard.
 
 ## Accessibility + Performance
 
-- Decorative orbs: `aria-hidden` on the background wrapper.
-- Single `IntersectionObserver` per instance; disconnect on unmount; **no** continuous `requestAnimationFrame` loop for orbs in the default hero path.
+- Orb wrapper `aria-hidden`.
+- **One** scroll listener (passive) + **rAF coalescing**; **no** per-frame recolor without rAF.
+- Disconnect IO on unmount.
 
-If the implementation adds **WebGL, Three.js, or a canvas-based** background, the output does **not** match this `id`—use a WebGL hero skill instead.
+**Relation to `scroll-morph-screen-orbs-hero`:** that skill is a **lighter** variant (often **two** recipes + simpler story). **`screen-blend-orbs-hero`** is the **default Retune-class** recipe: **three phases**, **three orbs**, **long blend transitions**.
+
+If the output uses **WebGL / canvas** for the background, it does **not** match this `id`.

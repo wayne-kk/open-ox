@@ -10,8 +10,12 @@ import {
   formatScopedTypecheckDetail,
 } from "./shared/tsxDiagnostics";
 import { createArtifactLogger, createStepLogger } from "./shared/logging";
-import { buildSectionFilePath } from "./shared/paths";
+import { buildSectionFilePath, slugToPagePath } from "./shared/paths";
 import { stepAnalyzeProjectRequirement } from "./steps/analyzeProjectRequirement";
+import {
+  buildEffectiveUserPromptForGeneration,
+  stepProjectIntentGuide,
+} from "./steps/projectIntentGuide";
 import { stepApplyProjectDesignTokens } from "./steps/applyProjectDesignTokens";
 import { stepComposeLayout } from "./steps/composeLayout";
 import { stepComposePage } from "./steps/composePage";
@@ -21,6 +25,7 @@ import { stepGenerateSection } from "./steps/generateSection";
 import { stepInstallDependencies } from "./steps/installDependencies";
 import { stepInferDesignIntent, type DesignIntentResult } from "./steps/inferDesignIntent";
 import { stepPlanProject } from "./steps/planProject";
+import { runPageImplementAgent } from "./steps/pageImplementAgent";
 import { stepRepairBuild } from "./steps/repairBuild";
 import { stepRunBuild } from "./steps/runBuild";
 import { stepDescribePageSections } from "./steps/describePageSections";
@@ -34,7 +39,7 @@ import {
 import type {
   BuildStep,
   GenerateProjectResult,
-  LayoutMode,
+  PageCodegenMode,
   PlannedProjectBlueprint,
   PlannedSectionSpec,
   ProjectBlueprint,
@@ -106,8 +111,6 @@ interface SectionBatchItem {
   outputFileRelative: string;
   pageContext?: GenerateSectionParams["pageContext"];
   sectionDesignBrief?: string;
-  /** Passed to `stepGenerateSection`; defaults to split-style base prompt when omitted. */
-  layoutMode?: LayoutMode;
 }
 
 const SECTION_PARALLELISM = Math.max(
@@ -172,6 +175,17 @@ function getComposePageStepName(slug: string): string {
   return `compose_page:${slug}`;
 }
 
+function getPageImplementAgentStepName(slug: string): string {
+  return `page_implement_agent:${slug}`;
+}
+
+function resolvePageCodegenMode(explicit?: PageCodegenMode): PageCodegenMode {
+  if (explicit) return explicit;
+  const env = process.env.GENERATE_PROJECT_PAGE_CODEGEN?.toLowerCase();
+  if (env === "sections" || env === "legacy") return "sections";
+  return "agent";
+}
+
 function getDescribePageSectionsStepName(slug: string): string {
   return `describe_page_sections:${slug}`;
 }
@@ -188,7 +202,7 @@ function getInstallDependenciesStepName(scope: string): string {
   return `install_dependencies:${scope}`;
 }
 
-function buildWholePageMinimalLayout(blueprint: PlannedProjectBlueprint): string {
+function buildMinimalRootLayout(blueprint: PlannedProjectBlueprint): string {
   const lang = (blueprint.brief.language?.trim() || "en");
   const title = JSON.stringify(blueprint.brief.projectTitle);
   const description = JSON.stringify(blueprint.brief.projectDescription);
@@ -217,18 +231,18 @@ export default function RootLayout({
 `;
 }
 
-async function ensureWholePageMinimalLayout(params: {
+async function ensureMinimalRootLayout(params: {
   blueprint: PlannedProjectBlueprint;
   artifactLogger: ArtifactLogger;
 }): Promise<string> {
   const { blueprint, artifactLogger } = params;
   const layoutPath = "app/layout.tsx";
-  const content = buildWholePageMinimalLayout(blueprint);
+  const content = buildMinimalRootLayout(blueprint);
   await writeSiteFile(layoutPath, content);
   await formatSiteFile(layoutPath);
   await persistJsonArtifact(artifactLogger, "compose_layout", "output", {
     layoutPath,
-    mode: "whole-page-minimal",
+    mode: "minimal-root-layout",
     language: blueprint.brief.language,
   });
   await persistSiteFileArtifact(artifactLogger, "compose_layout", layoutPath, "layout");
@@ -340,7 +354,6 @@ async function runSectionBatch(params: {
       outputFileRelative: item.outputFileRelative,
       pageContext: item.pageContext,
       sectionDesignBrief: item.sectionDesignBrief ?? "",
-      layoutMode: item.layoutMode,
       onMessage,
     });
   }
@@ -414,7 +427,7 @@ async function generateSharedLayoutSections(params: {
   if (blueprint.site.layoutSections.length === 0) {
     const layoutPath = await logger.timed(
       "compose_layout",
-      () => ensureWholePageMinimalLayout({ blueprint, artifactLogger }),
+      () => ensureMinimalRootLayout({ blueprint, artifactLogger }),
       (p) => p
     );
     collectedFiles.push(layoutPath);
@@ -445,7 +458,6 @@ async function generateSharedLayoutSections(params: {
         scopeKey: "layout",
         section,
         outputFileRelative: buildSectionFilePath("layout", section.fileName),
-        layoutMode: blueprint.brief.productScope.layoutMode,
       })),
       designSystem,
       runtimeContext,
@@ -484,6 +496,8 @@ async function generatePages(params: {
   skipSections?: Set<string>;
   skipPages?: Set<string>;
   trajectoryCollector?: import("./trajectoryCollector").GenerateTrajectoryCollector;
+  pageCodegenMode: PageCodegenMode;
+  onStep?: (step: BuildStep) => void;
 }): Promise<{ files: string[]; pendingImages: PendingImage[] }> {
   const {
     blueprint,
@@ -494,6 +508,7 @@ async function generatePages(params: {
     skipSections,
     skipPages,
     trajectoryCollector,
+    pageCodegenMode,
   } = params;
   const collectedFiles: string[] = [];
   const collectedPendingImages: PendingImage[] = [];
@@ -501,6 +516,40 @@ async function generatePages(params: {
   // Pages are independent (distinct output paths per slug); run in parallel for wall-clock time.
   const pageOutcomes = await Promise.all(
     blueprint.site.pages.map(async (page) => {
+      if (pageCodegenMode === "agent") {
+        const agentStepName = getPageImplementAgentStepName(page.slug);
+        if (skipPages?.has(page.slug)) {
+          const pagePathResume = slugToPagePath(page.slug);
+          logger.logStep(agentStepName, "ok", "resumed from checkpoint");
+          return { files: [pagePathResume], pendingImages: [] };
+        }
+
+        const onMessage = trajectoryCollector?.createEpisodeCollector(agentStepName);
+        const outcome = await logger.timed(
+          agentStepName,
+          () =>
+            runPageImplementAgent({
+              page,
+              designSystem,
+              projectContext: runtimeContext,
+              hasLayoutChrome: blueprint.site.layoutSections.length > 0,
+              onMessage,
+              onStep: params.onStep,
+            }),
+          (r) => ({ detail: r.summary.slice(0, 260), trace: r.trace })
+        );
+
+        await persistJsonArtifact(artifactLogger, agentStepName, "output", {
+          pagePath: outcome.pagePath,
+          summary: outcome.summary,
+          toolInvocations: outcome.toolCallRecords,
+          pendingImagesCount: outcome.pendingImages.length,
+        });
+        await persistSiteFileArtifact(artifactLogger, agentStepName, outcome.pagePath, "page");
+
+        return { files: [outcome.pagePath], pendingImages: outcome.pendingImages };
+      }
+
       // Deduplicate page sections by fileName to prevent duplicate generation
       const seenFileNames = new Set<string>();
       const dedupedSections = page.sections.filter((s) => {
@@ -521,7 +570,6 @@ async function generatePages(params: {
           stepDescribePageSections({
             designSystem,
             language: runtimeContext.language,
-            layoutMode: blueprint.brief.productScope.layoutMode,
             page,
             sections: dedupedSections,
           }),
@@ -589,7 +637,6 @@ async function generatePages(params: {
               description: page.description,
               journeyStage: page.journeyStage,
             },
-            layoutMode: blueprint.brief.productScope.layoutMode,
           })),
           designSystem,
           runtimeContext,
@@ -612,9 +659,7 @@ async function generatePages(params: {
       const pageCompose = await logger.timed(
         getComposePageStepName(page.slug),
         () =>
-            stepComposePage(page, designSystem, dedupedSections, {
-              wholePage: blueprint.brief.productScope.layoutMode === "whole-page",
-            }),
+            stepComposePage(page, designSystem, dedupedSections),
         (r) => ({ detail: r.pagePath, trace: r.trace })
       );
       const pagePath = pageCompose.pagePath;
@@ -737,6 +782,13 @@ export async function runGenerateProject(
     enableSkills?: boolean;
     useDatabasePrompts?: boolean;
     checkpoint?: CheckpointResult;
+    /** When true, run `project_intent_guide` before analyze; may defer generation for user dialogue. */
+    enableIntentGuide?: boolean;
+    /**
+     * Per-route implementation strategy after `plan_project`.
+     * Default: `agent` (tool loop). Set `sections` or env `GENERATE_PROJECT_PAGE_CODEGEN=sections` for legacy.
+     */
+    pageCodegenMode?: PageCodegenMode;
   }
 ): Promise<GenerateProjectResult> {
   const flowStart = Date.now();
@@ -762,6 +814,7 @@ export async function runGenerateProject(
   }
 
   const cp = options?.checkpoint;
+  const pageCodegenMode = resolvePageCodegenMode(options?.pageCodegenMode);
 
   try {
     // Always validate skill files (skills are enabled by default)
@@ -777,6 +830,8 @@ export async function runGenerateProject(
 
     await persistJsonArtifact(artifactLogger, "run", "input", {
       userInput,
+      enableIntentGuide: options?.enableIntentGuide === true,
+      pageCodegenMode,
       checkpoint: cp ? { hasCheckpoint: cp.hasCheckpoint, summary: cp.summary } : null,
     });
 
@@ -799,6 +854,46 @@ export async function runGenerateProject(
       await persistJsonArtifact(artifactLogger, "clear_template", "output", clearResult);
     }
 
+    let effectiveUserInput = userInput;
+
+    if (options?.enableIntentGuide !== false && !cp?.skipAnalyze) {
+      logger.startStep("project_intent_guide");
+      const intentResult = await stepProjectIntentGuide(userInput);
+      logger.logStep(
+        "project_intent_guide",
+        "ok",
+        intentResult.outcome === "guide_user"
+          ? `deferred:${intentResult.phase}`
+          : `continue:${intentResult.phase}`,
+        undefined,
+        intentResult.trace
+      );
+      await persistJsonArtifact(artifactLogger, "project_intent_guide", "output", {
+        outcome: intentResult.outcome,
+        phase: intentResult.phase,
+        assistantMessage: intentResult.assistantMessage,
+        suggestedReplies: intentResult.suggestedReplies,
+        choiceOptions: intentResult.choiceOptions,
+        buildPromptAppendix: intentResult.buildPromptAppendix,
+      });
+
+      if (intentResult.outcome === "guide_user") {
+        result.intentGuideDeferred = true;
+        result.intentGuide = intentResult;
+        result.error = "INTENT_GUIDE_DEFERRED";
+        result.success = false;
+        result.totalDuration = Date.now() - flowStart;
+        await persistJsonArtifact(artifactLogger, "run", "result", result);
+        resetSectionTscCache();
+        return result;
+      }
+
+      effectiveUserInput = buildEffectiveUserPromptForGeneration(
+        userInput,
+        intentResult.buildPromptAppendix
+      );
+    }
+
     // ── Step: analyze_project_requirement ─────────────────────────────────
     let rawBlueprint: ProjectBlueprint;
     let inferredDesignIntent: DesignIntentResult | null = null;
@@ -812,7 +907,7 @@ export async function runGenerateProject(
       } else {
         inferredDesignIntent = await logger.timed(
           "infer_design_intent",
-          () => stepInferDesignIntent(userInput),
+          () => stepInferDesignIntent(effectiveUserInput),
           (r) => ({ detail: r.text.slice(0, 80), trace: r.trace })
         );
         await persistTextArtifact(artifactLogger, "infer_design_intent", "output", inferredDesignIntent.text, "md");
@@ -821,7 +916,7 @@ export async function runGenerateProject(
       logger.startStep("analyze_project_requirement");
       logger.startStep("infer_design_intent");
       const [analyzeResult, inferResult] = await Promise.all([
-        stepAnalyzeProjectRequirement(userInput, (name, args, result) => {
+        stepAnalyzeProjectRequirement(effectiveUserInput, (name, args, result) => {
           onStep?.({
             step: `tool_call:${name}`,
             status: "ok",
@@ -830,7 +925,7 @@ export async function runGenerateProject(
             duration: 0,
           });
         }),
-        stepInferDesignIntent(userInput),
+        stepInferDesignIntent(effectiveUserInput),
       ]);
       logger.logStep(
         "analyze_project_requirement",
@@ -888,14 +983,14 @@ export async function runGenerateProject(
       // Phase 1: plan_project + (optionally) skill matching run in parallel
       const skillMatchingEnabled = options?.enableSkills !== false;
 
-      const planPromise = stepPlanProject(normalizedBlueprint).then((out) => {
+      const planPromise = stepPlanProject(normalizedBlueprint, { pageCodegenMode }).then((out) => {
         logger.logStep("plan_project", "ok", "section generation plans prepared", undefined, out.trace);
         return out;
       });
 
       const matchPromise: Promise<DesignSystemMatchResult> = skillMatchingEnabled
         ? stepMatchDesignSystemSkill({
-          userInput,
+          userInput: effectiveUserInput,
         }).then((result) => {
           logger.logStep(
             "match_design_system_skill",
@@ -995,7 +1090,7 @@ export async function runGenerateProject(
 
     result.blueprint = blueprint;
     const runtimeContext = buildProjectRuntimeContext(blueprint);
-    runtimeContext.rawUserInput = userInput;
+    runtimeContext.rawUserInput = effectiveUserInput;
     appendGeneratedFiles(result, ["design-system.md", "project-plan.json"]);
 
     // ── Step: apply_project_design_tokens + UI generation (parallel) ──
@@ -1052,6 +1147,8 @@ export async function runGenerateProject(
           skipSections: cp?.generatedSections,
           skipPages: cp?.composedPages,
           trajectoryCollector,
+          pageCodegenMode,
+          onStep,
         }),
       ]);
       appendGeneratedFiles(result, layoutResult.files);

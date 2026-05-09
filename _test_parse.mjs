@@ -2,12 +2,14 @@ import matter from 'gray-matter';
 import { readFileSync, readdirSync, existsSync } from 'fs';
 import { join } from 'path';
 
-// Test 1: Parse YAML file
-const yamlContent = readFileSync('ai/flows/generate_project/prompts/skills/section/hero/lighting.yaml', 'utf-8');
+// Test 1: Parse bundled hero skills.yaml (top-level skills:)
+const yamlContent = readFileSync('ai/flows/generate_project/prompts/skills/section/hero/skills.yaml', 'utf-8');
 const wrapped = '---\n' + yamlContent + '\n---\n';
 try {
     const parsed = matter(wrapped);
-    console.log('YAML parse OK:', JSON.stringify({ id: parsed.data.id, sectionTypes: parsed.data.sectionTypes }));
+    const skills = parsed.data.skills;
+    const first = Array.isArray(skills) ? skills[0] : null;
+    console.log('Bundled YAML parse OK:', JSON.stringify({ firstName: first?.name, sectionTypes: first?.sectionTypes }));
 } catch (e) {
     console.error('YAML parse FAIL:', e.message);
 }

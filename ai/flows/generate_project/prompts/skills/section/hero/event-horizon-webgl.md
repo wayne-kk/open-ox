@@ -22,7 +22,8 @@ Build a full-viewport hero with:
 ## Structure Requirements
 
 - **Background Layer**
-  - fixed canvas (`absolute/fixed inset-0`) behind all content.
+  - canvas **`absolute inset-0`** (or `fixed` only if it truly must pin to the viewport) behind all content — **same box you measure for Three.js**.
+  - give the canvas **`block h-full w-full`** (inline canvases get a baseline gap and can look vertically offset).
   - radial and gradient overlays to control readability and depth.
 - **Frame Layer**
   - perimeter border, 4 corner brackets, and tiny alignment guide marks.
@@ -52,6 +53,16 @@ Three.js scene should include:
 - smooth camera parallax based on mouse position.
 - slow disk rotation for ambient motion.
 
+### Visual centering (CRITICAL — “disk looks off-center” fixes)
+
+The accretion disk **must stay geometrically centered in the hero plane** the user sees. Common mistakes:
+
+1. **`camera.aspect` / `renderer.setSize` use `window.innerWidth/Height` while the WebGL `<canvas>` only covers the `<section>`** — any width/height mismatch stretches the framebuffer horizontally or vertically and the void reads as shifted. **Always derive width & height from the hero root** (the element wrapping the canvas), e.g. `rootRef.current.getBoundingClientRect()` or a **`ResizeObserver`** on that root.
+2. **`setSize(w, h, false)` without matching CSS** — drawing buffer aspect ≠ displayed canvas box causes uneven scaling. Prefer **`renderer.setSize(w, h, true)`** after measuring the hero box, or keep buffer and CSS explicitly in sync.
+3. **Mouse parallax normalized with `window`** — when the hero is not full-bleed or after layout shift, drift pivots around the wrong center. Normalize pointer position against **the hero bounding rect**: `(clientX - left) / width - 0.5` (and same for Y).
+4. **Disk centroid** — keep particle positions symmetric around **world origin `(0, 0, 0)`** and **`camera.lookAt(0, 0, 0)`**. Parallax should interpolate toward fixed **base camera position** (e.g. `(0, 4, 12)` ± mouse delta), not accumulate drift.
+5. Optional polish: `particlesGeometry.computeBoundingSphere()` after filling positions helps sanity-check symmetry; avoid translating the `Points` mesh for “centering” unless there is a deliberate offset.
+
 ## Required Implementation Blueprint (Do Not Skip)
 
 When this skill is selected, generated output MUST include:
@@ -64,12 +75,15 @@ When this skill is selected, generated output MUST include:
 6. **MUST NOT** include `<nav>`, top link rows, or site header chrome inside this section.
 7. complete cleanup:
    - cancel RAF,
-   - remove mouse/resize listeners,
+   - disconnect **`ResizeObserver`** (preferred over window resize-only hacks),
+   - remove mouse/listeners (**including hero `mouseleave`** if used),
    - dispose geometry/material/renderer.
 
 If any item above is missing, this is not a valid `event-horizon-webgl` implementation.
 
 ## Reference TSX Skeleton (Adapt, Do Not Copy Blindly)
+
+Skeleton below keeps the disk **centered** by: measuring **the hero root** (not `window`), syncing **`camera.aspect`** with that box, using **`setSize(..., true)`**, normalizing **mouse against the hero rect**, and easing the camera toward a **fixed base position** + parallax offset.
 
 ```tsx
 "use client";
@@ -84,20 +98,24 @@ export default function HeroSection() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
-    if (!rootRef.current || !canvasRef.current) return;
+    const root = rootRef.current;
+    const canvas = canvasRef.current;
+    if (!root || !canvas) return;
     gsap.registerPlugin(ScrollTrigger);
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
-    camera.position.set(0, 4, 12);
+    const baseCam = new THREE.Vector3(0, 4, 12);
+    camera.position.copy(baseCam);
     camera.lookAt(0, 0, 0);
 
     const renderer = new THREE.WebGLRenderer({
-      canvas: canvasRef.current,
+      canvas,
       alpha: true,
       antialias: true,
     });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    const maxDpr = Math.min(window.devicePixelRatio, 2);
+    renderer.setPixelRatio(maxDpr);
 
     const particlesGeometry = new THREE.BufferGeometry();
     const particlesCount = 25000;
@@ -123,6 +141,7 @@ export default function HeroSection() {
 
     particlesGeometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     particlesGeometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    particlesGeometry.computeBoundingSphere();
 
     const particlesMaterial = new THREE.PointsMaterial({
       size: 0.04,
@@ -137,31 +156,55 @@ export default function HeroSection() {
     disk.rotation.x = Math.PI * 0.15;
     scene.add(disk);
 
-    const onResize = () => {
-      const w = window.innerWidth;
-      const h = window.innerHeight;
+    const resize = () => {
+      const { width, height } = root.getBoundingClientRect();
+      const w = Math.floor(width);
+      const h = Math.floor(height);
       if (w === 0 || h === 0) return;
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
-      renderer.setSize(w, h, false);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(w, h, true);
     };
-    onResize();
-    window.addEventListener("resize", onResize);
+
+    resize();
+    const ro = new ResizeObserver(() => resize());
+    ro.observe(root);
 
     let mouseX = 0;
     let mouseY = 0;
+    const parallax = 3;
+
     const onMouseMove = (event: MouseEvent) => {
-      mouseX = event.clientX / window.innerWidth - 0.5;
-      mouseY = event.clientY / window.innerHeight - 0.5;
+      const b = root.getBoundingClientRect();
+      if (b.width === 0 || b.height === 0) return;
+      mouseX = (event.clientX - b.left) / b.width - 0.5;
+      mouseY = (event.clientY - b.top) / b.height - 0.5;
     };
+
+    const onMouseLeave = () => {
+      mouseX = 0;
+      mouseY = 0;
+    };
+
     window.addEventListener("mousemove", onMouseMove);
+    root.addEventListener("mouseleave", onMouseLeave);
 
     let rafId: number | null = null;
+    const smooth = 0.05;
+
     const animate = () => {
       disk.rotation.y -= 0.0015;
-      camera.position.x += (mouseX * 3 - camera.position.x) * 0.05;
-      camera.position.y += (-mouseY * 3 + 4 - camera.position.y) * 0.05;
+
+      const targetX = baseCam.x + mouseX * parallax;
+      const targetY = baseCam.y - mouseY * parallax;
+      const targetZ = baseCam.z;
+
+      camera.position.x += (targetX - camera.position.x) * smooth;
+      camera.position.y += (targetY - camera.position.y) * smooth;
+      camera.position.z += (targetZ - camera.position.z) * smooth;
       camera.lookAt(0, 0, 0);
+
       renderer.render(scene, camera);
       rafId = window.requestAnimationFrame(animate);
     };
@@ -179,21 +222,27 @@ export default function HeroSection() {
 
     return () => {
       if (rafId !== null) window.cancelAnimationFrame(rafId);
-      window.removeEventListener("resize", onResize);
+      ro.disconnect();
       window.removeEventListener("mousemove", onMouseMove);
+      root.removeEventListener("mouseleave", onMouseLeave);
       particlesGeometry.dispose();
       particlesMaterial.dispose();
       renderer.dispose();
     };
   }, []);
 
-  return <section ref={rootRef} className="relative min-h-screen">{/* ... */}</section>;
+  return (
+    <section ref={rootRef} className="relative min-h-screen min-h-[100dvh] overflow-hidden">
+      <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 block h-full w-full" />
+      {/* overlays + frame + content */}
+    </section>
+  );
 }
 ```
 
 ## Layout Details
 
-- keep hero as `min-h-screen` with layered fixed background.
+- keep hero as `min-h-screen` / `min-h-[100dvh]` with layered background; **`overflow-hidden`** avoids scrollbar width changing mid-layout (which would throw off centering vs first paint).
 - use subtle frame border and corner elements only; avoid noisy decoration.
 - preserve text readability using radial dark overlays above canvas.
 - keep foreground interactions crisp with small motion and low visual latency.

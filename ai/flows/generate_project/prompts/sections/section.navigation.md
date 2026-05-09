@@ -30,6 +30,9 @@
 - 不要给兄弟元素添加 `padding-top` 或 `margin-top` 补偿——`sticky` 不需要。
 - 确保导航根元素的父级没有 `overflow: hidden` 或 `overflow: auto`（会破坏 sticky）。导航应作为 layout shell 的直接子元素。
 
+## Sticky 顶栏
+- 总高永不超过 60px；滚动只改背景/边框/模糊，禁止 py 变化与 transition-all；移动端菜单的 top/calc 与栏高一致。
+
 ## 导航链接 — 严格规则
 
 - **只能使用提示上下文中 "Known Routes" 列出的路由。** 不得新增、臆造或假设任何其他页面、分区或目标地址。

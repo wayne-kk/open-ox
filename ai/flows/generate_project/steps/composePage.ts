@@ -12,11 +12,6 @@ import { getModelForStep } from "@/lib/config/models";
 import { buildSectionImportPath, slugToPagePath } from "../shared/paths";
 import type { PlannedPageBlueprint, PlannedSectionSpec, StepTrace } from "../types";
 
-export interface ComposePageOptions {
-  /** Web whole-page: root layout has no global nav/footer; one section contains the full shell. */
-  wholePage?: boolean;
-}
-
 export interface ComposePageResult {
   pagePath: string;
   /** Present when the page body was produced by an LLM call */
@@ -26,14 +21,13 @@ export interface ComposePageResult {
 export async function stepComposePage(
   blueprint: PlannedPageBlueprint,
   designSystem: string,
-  pageSections: PlannedSectionSpec[],
-  options?: ComposePageOptions
+  pageSections: PlannedSectionSpec[]
 ): Promise<ComposePageResult> {
   const targetPagePath = slugToPagePath(blueprint.slug);
 
   const systemPrompt = composePromptBlocks([
     loadSystem("frontend"),
-    loadStepPrompt(options?.wholePage ? "composePage.wholePage" : "composePage"),
+    loadStepPrompt("composePage"),
     loadGuardrail("outputTsx"),
     loadGuardrail("framerMotionVariants"),
   ]);
@@ -61,11 +55,9 @@ ${blueprint.description}
 ${importStatements}
 
 ## Content Sections to Compose (in order)
-${
-  options?.wholePage
-    ? "Whole-page: the listed section(s) include the in-page shell; root layout has no global nav/footer components."
-    : "Navigation and footer are in `app/layout.tsx` — do NOT duplicate them in `page.tsx`."
-}
+
+Navigation and footer (when present as layout sections) are in \`app/layout.tsx\` — do NOT duplicate global chrome in \`page.tsx\` unless the design plan explicitly requires an in-page chrome variant.
+
 ${pageSections.map((section, index) => `${index + 1}. ${section.fileName}`).join("\n")}
 
 ## Design System (tokens and tone — not a mandate for overlays)

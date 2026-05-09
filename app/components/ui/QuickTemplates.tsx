@@ -1,6 +1,6 @@
 "use client";
 
-/** 快速模板：文案刻意对齐 `ai/flows/.../hero/*.yaml` 的 designKeywords，便于触发不同 hero skill 做联调。 */
+/** 快速模板：文案刻意对齐 `hero/skills.yaml` 中各条目的 keywords，便于触发不同 hero skill 做联调。 */
 const TEMPLATES = [
   {
     label: "深空 fintech 星场",

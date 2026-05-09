@@ -82,8 +82,6 @@ export async function stepApplyProjectDesignTokens(
   onProgress?: (msg: string) => void
 ): Promise<{ files: string[]; trace: StepTrace }> {
   const currentGlobalsCss = readSiteFile("app/globals.css");
-  const currentTheme = extractThemeBlock(currentGlobalsCss);
-  const currentRoot = extractRootVars(currentGlobalsCss);
 
   onProgress?.("reading design system + current tokens...");
 
@@ -91,16 +89,6 @@ export async function stepApplyProjectDesignTokens(
 
   const userMessage = `## Design System
 ${designSystem}
-
-## Current @theme block
-\`\`\`css
-${currentTheme || "/* empty — no @theme block yet */"}
-\`\`\`
-
-## Current :root variables
-\`\`\`css
-${currentRoot || "/* empty */"}
-\`\`\`
 
 ## Current globals.css structure (for reference — preserve imports, base styles, scrollbar styles)
 \`\`\`css

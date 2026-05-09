@@ -1,10 +1,10 @@
 /**
  * Generic skill discovery — 任何 agent 均可调用
  *
- * 支持两种 skill 格式：
- *   1. 新格式（推荐）：独立 .yaml（metadata）+ .md（prompt 正文），文件名相同
- *      例如 particle.yaml + particle.md
- *   2. 旧格式（兼容）：单个 .md 文件，metadata 写在 YAML frontmatter 中
+ * 支持三种 skill 格式：
+ *   1. 新格式：独立 .yaml（metadata）+ .md（prompt 正文），文件名相同
+ *   2. 旧格式：单个 .md 文件，metadata 写在 YAML frontmatter 中
+ *   3. 聚合：`section/<类型>/skills.yaml`，根键 `skills:`，每项 `name` 作 id，`keywords` / `exclude_keywords` 映射到 `when.designKeywords`（`design-system/skills.yaml` 仍为目录特例，忽略）
  *
  * rootPath 由调用方传入，例如：
  *   - generate_project flow: ai/flows/generate_project/prompts/skills/
@@ -107,13 +107,78 @@ function parseYamlFile(content: string): Record<string, unknown> {
   return parsed.data as Record<string, unknown>;
 }
 
+/** `design-system/skills.yaml` uses a catalog format for matchDesignSystemSkill, not SkillMetadata. */
+function isDesignSystemSkillsYamlPath(fullPath: string): boolean {
+  const normalized = fullPath.replace(/\\/g, "/");
+  return normalized.endsWith("/design-system/skills.yaml");
+}
+
+/**
+ * Section bundles: `prompts/skills/section/<section>/skills.yaml` with top-level `skills:` array.
+ * Each item uses `name` as id and `keywords` / `exclude_keywords` → `when.designKeywords`.
+ */
+function parseBundledSectionSkillsYaml(content: string, sourceLabel: string): SkillMetadata[] {
+  let data: Record<string, unknown>;
+  try {
+    data = parseYamlFile(content);
+  } catch (error) {
+    console.warn(
+      `[skill-discovery] Invalid YAML in bundled ${sourceLabel}: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+    return [];
+  }
+
+  const list = data.skills;
+  if (!Array.isArray(list)) {
+    console.warn(`[skill-discovery] bundled skills.yaml missing skills[] (${sourceLabel})`);
+    return [];
+  }
+
+  const out: SkillMetadata[] = [];
+  for (const raw of list) {
+    if (!raw || typeof raw !== "object") continue;
+    const item = raw as Record<string, unknown>;
+    const skillName = item.name;
+    if (typeof skillName !== "string" || !skillName.trim()) continue;
+    const id = skillName.trim();
+    if (item.disabled === true) continue;
+
+    let when: SkillWhenCondition | undefined;
+    if (item.when && typeof item.when === "object") {
+      when = item.when as SkillWhenCondition;
+    } else if (Array.isArray(item.keywords) || Array.isArray(item.exclude_keywords)) {
+      const anyKw = Array.isArray(item.keywords)
+        ? item.keywords.filter((x): x is string => typeof x === "string")
+        : [];
+      const noneKw = Array.isArray(item.exclude_keywords)
+        ? item.exclude_keywords.filter((x): x is string => typeof x === "string")
+        : [];
+      when = { designKeywords: { any: anyKw, none: noneKw } };
+    }
+
+    const record: Record<string, unknown> = {
+      id,
+      kind: item.kind,
+      sectionTypes: item.sectionTypes,
+      priority: item.priority,
+      fallback: item.fallback,
+      notes: item.notes,
+      when,
+    };
+    out.push(parseSkillMetadata(record, id));
+  }
+  return out;
+}
+
 // ── Discovery ────────────────────────────────────────────────────────────
 
 /**
  * 扫描目录下所有 skill（含子目录），返回 SkillMetadata[]
  *
  * 优先读取 .yaml 文件（新格式），同时兼容旧格式（.md with frontmatter）。
- * 如果同一个 id 同时存在 .yaml 和 .md frontmatter，.yaml 优先。
+ * 如果同一个 id 同时存在 .yaml 和 .md frontmatter，.yaml 优先；聚合 skills.yaml 与 per-skill .yaml 冲突时，以先收集到的为准（同目录应避免重复 id）。
  */
 export function discoverSkills(rootPath: string): SkillMetadata[] {
   const cached = _skillDiscoveryCache.get(rootPath);
@@ -131,13 +196,22 @@ export function discoverSkills(rootPath: string): SkillMetadata[] {
   // ── Pass 1: .yaml files (new format) ──
   const yamlFiles = collectYamlFiles(rootPath);
   for (const { fullPath, name } of yamlFiles) {
-    // Skip design-system skills.yaml (different format, handled by matchDesignSystemSkill)
-    if (name === "skills.yaml") continue;
-
     let content: string;
     try {
       content = readFileSync(fullPath, "utf-8");
     } catch {
+      continue;
+    }
+
+    if (name === "skills.yaml") {
+      if (isDesignSystemSkillsYamlPath(fullPath)) {
+        continue;
+      }
+      for (const meta of parseBundledSectionSkillsYaml(content, fullPath)) {
+        if (seenIds.has(meta.id)) continue;
+        seenIds.add(meta.id);
+        result.push(meta);
+      }
       continue;
     }
 
@@ -213,7 +287,9 @@ export function validateSkillFrontmatter(rootPath: string): SkillFrontmatterErro
   // Validate .yaml files
   const yamlFiles = collectYamlFiles(rootPath);
   for (const { fullPath, name } of yamlFiles) {
-    if (name === "skills.yaml") continue;
+    if (name === "skills.yaml" && isDesignSystemSkillsYamlPath(fullPath)) {
+      continue;
+    }
 
     let content: string;
     try {
@@ -223,6 +299,17 @@ export function validateSkillFrontmatter(rootPath: string): SkillFrontmatterErro
         fileName: name,
         message: error instanceof Error ? error.message : String(error),
       });
+      continue;
+    }
+
+    if (name === "skills.yaml") {
+      const bundled = parseBundledSectionSkillsYaml(content, fullPath);
+      if (bundled.length === 0) {
+        errors.push({
+          fileName: name,
+          message: `bundled skills.yaml produced no valid skill entries (${fullPath})`,
+        });
+      }
       continue;
     }
 
