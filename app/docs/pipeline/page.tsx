@@ -42,18 +42,32 @@ function Callout({ type = "info", children }: { type?: "info" | "warn"; children
 
 const STEPS = [
   { n: "01", name: "clear_template", type: "fs", desc: "清理上次生成的文件。当提供了 projectId 时跳过（项目目录已初始化）。" },
-  { n: "02", name: "analyze_project_requirement", type: "llm+tool", desc: "将用户 prompt 解析为结构化的 ProjectBlueprint。配备 web_search 工具 — 遇到未知品牌名或专业术语时自动搜索。最多 4 次工具调用迭代。" },
-  { n: "03", name: "infer_design_intent", type: "llm", desc: "独立风格推理节点。与步骤 02 并行，输出 designIntent（mood/colorDirection/style/keywords）。" },
-  { n: "04", name: "plan_project", type: "llm", desc: "将蓝图细化为页面与 section 规划。与步骤 05 并行执行。" },
-  { n: "05", name: "generate_project_design_system", type: "llm", desc: "基于 designIntent 生成 design-system.md（颜色、字体、间距、组件风格）。支持 /skill 注入 styleGuide。" },
-  { n: "06", name: "apply_project_design_tokens", type: "llm", desc: "读取 globals.css，提取已有 @theme tokens，写入新的 CSS 变量。与步骤 08 并行执行。" },
-  { n: "07", name: "describe_page_sections", type: "llm×M", desc: "按页面先生成整体结构描述，再拆分每个 section 的布局/背景/层次 brief。" },
-  { n: "08", name: "generate_section ×N", type: "llm×N", desc: "并行生成 section，优先消费页面级 section brief；每个 section 运行时自发现 skill。" },
-  { n: "09", name: "compose_layout", type: "llm", desc: "从生成的 layout sections（navigation/footer）组装 layout.tsx。" },
-  { n: "10", name: "compose_page ×M", type: "llm×M", desc: "并行页面组装。每个 page.tsx 导入其 sections 并组合在一起。import 去重 + 重复渲染检测 + 自动 rebuild。" },
-  { n: "11", name: "install_dependencies", type: "npm", desc: "扫描所有生成文件的 import 语句，与 package.json 对比，只安装缺失的包。" },
-  { n: "12", name: "run_build", type: "build", desc: "本地执行 next build。失败则进入修复流程。" },
-  { n: "13", name: "repair_build ×0-2", type: "llm+tool", desc: "Agent 工具循环：使用 read_file / edit_file / write_file / run_build 工具修复构建错误。每轮最多修复 3 个文件。最多 2 轮。" },
+  { n: "02", name: "analyze_project_requirement", type: "llm+tool", desc: "将用户 prompt 解析为结构化的 ProjectBlueprint。配备 web_search。与步骤 03 并行。" },
+  { n: "03", name: "infer_design_intent", type: "llm", desc: "独立风格推理。与步骤 02 并行。" },
+  { n: "04", name: "plan_project", type: "llm", desc: "将蓝图细化为页面与 pageDesignPlan。与步骤 05 并行。" },
+  {
+    n: "05",
+    name: "match_design_system_skill · generate_project_design_system",
+    type: "llm",
+    desc: "内置 design-system skill 匹配命中则落盘 design-system.md；否则 LLM 生成 design-system.md。与步骤 04 并行。",
+  },
+  { n: "06", name: "apply_project_design_tokens", type: "llm", desc: "设计系统 Markdown + 当前 globals → LLM 写出完整 globals.css。必须先于步骤 07–08，避免 Agent 覆盖。" },
+  { n: "07", name: "architect_agent", type: "llm+tool", desc: "Architect：app/layout.tsx + components/chrome/**。与步骤 08 并行。" },
+  { n: "08", name: "page_implement_agent ×M", type: "llm×M", desc: "多页并行落地 page.tsx / 页面组件；禁止写 layout/chrome/globals。可与步骤 07 并行。" },
+  {
+    n: "09",
+    name: "install_dependencies",
+    type: "npm",
+    desc: "等待异步图片就绪后安装缺失依赖；与其它生成文件的 import 扫描并行收尾。",
+  },
+  {
+    n: "10",
+    name: "typecheck_generated",
+    type: "verify",
+    desc: "对本次生成涉及的 TS/TSX 做范围类型检查（非全仓 tsc）。失败可走 repair_build 前的修复链路。",
+  },
+  { n: "11", name: "run_build", type: "build", desc: "本地 next build。" },
+  { n: "12", name: "repair_build ×0-2", type: "llm+tool", desc: "构建失败时的 Agent 工具循环（read/edit/write + 增量验证）。" },
 ];
 
 const TOC = [
@@ -73,8 +87,8 @@ export default function PipelinePage() {
         </p>
         <h1 className="text-3xl font-bold tracking-tight">AI 生成流水线</h1>
         <p className="mt-3 text-[15px] leading-7 text-muted-foreground">
-          确定性的 13 步编排（其中 8 个核心生成节点）。每个步骤都有明确的输入、输出和失败处理。
-          生成阶段没有开放式 Agent 循环 — 只有修改阶段和构建修复才使用。
+          当前为主路径约 12 步的编排（按项目与 checkpoint 略有增减）；LLM Page Agent 仍为开放式工具闭环。
+          修改阶段沿用独立 Modify Agent。
         </p>
 
         <section id="steps" className="scroll-mt-24">
@@ -89,6 +103,7 @@ export default function PipelinePage() {
                     <span className={`rounded px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${type.startsWith("llm") ? "bg-primary/15 text-primary/80" :
                       type === "build" ? "bg-green-500/15 text-green-400/80" :
                         type === "npm" ? "bg-blue-500/15 text-blue-400/80" :
+                          type === "verify" ? "bg-violet-500/15 text-violet-300/80" :
                           "bg-white/8 text-muted-foreground/60"
                       }`}>{type}</span>
                   </div>
@@ -101,27 +116,33 @@ export default function PipelinePage() {
 
         <section id="parallel" className="scroll-mt-24">
           <H2>并行策略</H2>
-          <P>当前并行策略包含三层：</P>
-          <Pre>{`// 第一层：plan + design system 并行执行
-const [rawBlueprint, inferredDesignIntent] = await Promise.all([
+          <P>当前编排里与耗时相关的并行阶段大致如下：</P>
+          <Pre>{`// 第一层：analyze + infer_design_intent（当前实现）
+await Promise.all([
   stepAnalyzeProjectRequirement(userInput),
   stepInferDesignIntent(userInput),
 ]);
 
-// 第二层：plan + design system 并行执行
-const [blueprint, designSystem] = await Promise.all([
-  stepPlanProject(normalizedBlueprint),
-  stepGenerateProjectDesignSystem(normalizedBlueprint, styleGuide),
-]);
+// 第二层：plan_project + match/generate design system（当前实现）
+const [planOutcome, matchResult] = await Promise.all([...]);
 
-// 第三层：所有页面的所有 section 并行生成
-const results = await Promise.allSettled(
-  items.map((item) => stepGenerateSection({ ... }))
-);
+// 第三层：apply_project_design_tokens 必须单独先完成（写 globals.css，避免与 Agent 写文件竞态）
+
+// 第四层：Architect 与 generatePages（多 page agent）并行；实现为 Promise.allSettled：
+// 任一侧失败仍会等另一侧 settle 后再抛错，避免未 await 的异步任务悬挂。
+const [archSettled, pagesSettled] = await Promise.allSettled([
+  runArchitectStep({ blueprint, designSystem }),
+  generatePages({ blueprint, designSystem, runtimeContext, ... }),
+]);
+if (archSettled.status === "rejected") throw archSettled.reason;
+if (pagesSettled.status === "rejected") throw pagesSettled.reason;
+const { files, pendingImages } = pagesSettled.value;
 `}</Pre>
           <Callout>
-            对于一个有 2 个页面、8 个 section 的网站，section 生成步骤会同时发起 8 次 LLM 调用。
-            该步骤的耗时等于最慢的单次调用，而非所有调用的总和。
+            Architect 仍是 chrome 的「单一拟定者」（layout + components/chrome/**）；Page Agent 不得修改这些路径。
+            与 Page Agent 并行时，第一轮 prompt 里的 layout 快照可能比磁盘略旧；必要时允许单次 read_file(app/layout.tsx) 校准。
+            墙钟时间上，这一段约等于 <code className="font-mono text-[11px]">max</code>(Architect,
+            最慢的 Page)，而不是两者相加。
           </Callout>
         </section>
 

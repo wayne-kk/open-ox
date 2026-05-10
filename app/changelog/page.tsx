@@ -12,6 +12,23 @@ interface ChangeEntry {
 
 const CHANGELOG: ChangeEntry[] = [
   {
+    version: "v1.4",
+    date: "2026-05-10",
+    tag: "fix",
+    title: "生成流水线 · globals 竞态修复与编排调整",
+    body: "修复「日志里 apply_project_design_tokens 看似正确，磁盘上 globals.css 却不像 LLM 产出」的问题；统一由设计系统 Markdown + 当前 globals 走 LLM，并收紧 Agent 对全局样式文件的写入。",
+    items: [
+      "apply_project_design_tokens 与 Architect / Page Agent 不再并行：token 步骤先落盘 app/globals.css，避免带 write_file 的代理在之后覆盖",
+      "apply_project_design_tokens 仅消费设计系统正文与站点当前 globals，不再读取或复制 skills 下的 *.globals.css",
+      "Architect 与多页 page_implement_agent 在 token 完成后并行；实现为 Promise.allSettled，任一侧失败仍等待另一侧结束后再抛错",
+      "checkpoint skipArchitect 恢复时：generatedFiles 计入磁盘上已有的 app/layout.tsx 与 components/chrome/**",
+      "apply_project_design_tokens：提高 LLM 输出 token 上限（8k），降低超长 globals.css 截断风险",
+      "architect_agent 提示词去掉「须先跑 format_code」的误导，与 write_file 自动 Prettier 一致",
+      "docs/pipeline：移除已废弃 section 流水线步骤，补充 typecheck_generated，步骤编号与主路径对齐",
+      "移除 scripts/codegen-skill-globals.mjs、根目录 _test_parse.mjs，删除 package.json 中的 codegen:skill-globals 脚本",
+    ],
+  },
+  {
     version: "v1.3",
     date: "2026-04-12",
     tag: "major",

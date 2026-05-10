@@ -1,34 +1,38 @@
-import { clearTemplate } from "@/lib/clearTemplate";
+import { existsSync, readdirSync } from "fs";
+import { join, relative } from "path";
 import { getSiteRoot as projectManagerGetSiteRoot } from "@/lib/projectManager";
-import { setSiteRoot, getSiteRoot } from "@/ai/tools/system/common";
+import { getSiteRoot, runWithSiteRoot } from "@/ai/tools/system/common";
+import { clearFileTracking } from "@/ai/tools";
 import { getModelId } from "@/lib/config/models";
 import { validateSkillFrontmatter } from "@/ai/shared/skillDiscovery";
-import { formatSiteFile, syncSiteValidationMarkers, readSiteFile, writeSiteFile, getSkillPromptsRoot } from "./shared/files";
+import { syncSiteValidationMarkers, readSiteFile, getSkillPromptsRoot } from "./shared/files";
 import {
   buildScopedTypecheckStepTrace,
   checkGeneratedTypeScriptFiles,
   formatScopedTypecheckDetail,
 } from "./shared/tsxDiagnostics";
 import { createArtifactLogger, createStepLogger } from "./shared/logging";
-import { buildSectionFilePath, slugToPagePath } from "./shared/paths";
+import { slugToPagePath } from "./shared/paths";
 import { stepAnalyzeProjectRequirement } from "./steps/analyzeProjectRequirement";
 import {
   buildEffectiveUserPromptForGeneration,
   stepProjectIntentGuide,
 } from "./steps/projectIntentGuide";
 import { stepApplyProjectDesignTokens } from "./steps/applyProjectDesignTokens";
-import { stepComposeLayout } from "./steps/composeLayout";
-import { stepComposePage } from "./steps/composePage";
+import { runArchitectAgent, ARCHITECT_AGENT_STEP } from "./steps/architectAgent";
 import { stepGenerateProjectDesignSystem } from "./steps/generateProjectDesignSystem";
 import { stepMatchDesignSystemSkill, type DesignSystemMatchResult } from "./steps/matchDesignSystemSkill";
-import { stepGenerateSection } from "./steps/generateSection";
 import { stepInstallDependencies } from "./steps/installDependencies";
 import { stepInferDesignIntent, type DesignIntentResult } from "./steps/inferDesignIntent";
 import { stepPlanProject } from "./steps/planProject";
 import { runPageImplementAgent } from "./steps/pageImplementAgent";
+import { discoverAndSelectSkill } from "./steps/heroSkillSelection";
+import {
+  buildVirtualHeroSectionForSkillSelection,
+  shouldOfferHeroSkillForAgentPage,
+} from "./shared/agentHeroOpening";
 import { stepRepairBuild } from "./steps/repairBuild";
 import { stepRunBuild } from "./steps/runBuild";
-import { stepDescribePageSections } from "./steps/describePageSections";
 import { normalizeBlueprint } from "./normalization/blueprintNormalizer";
 import {
   appendDependencyInstallFailures,
@@ -39,22 +43,15 @@ import {
 import type {
   BuildStep,
   GenerateProjectResult,
-  PageCodegenMode,
+  PageAgentProjectContext,
   PlannedProjectBlueprint,
-  PlannedSectionSpec,
   ProjectBlueprint,
 } from "./types";
 import type { ArtifactLogger, StepLogger } from "./shared/logging";
-import type { GenerateSectionParams } from "./steps/generateSection";
 import type { PendingImage } from "../../tools/system/generateImageTool";
 import { awaitPendingImages } from "../../tools/system/generateImageTool";
 import type { CheckpointResult } from "./shared/checkpoint";
 import { resetSectionTscCache } from "./shared/tsxDiagnostics";
-
-function summarizeFailures(prefix: string, failures: Array<{ name: string; message: string }>): string {
-  const detail = failures.map((failure) => `${failure.name}: ${failure.message}`).join("; ");
-  return `${prefix}: ${detail}`;
-}
 
 function getFileExtension(path: string, fallback = "txt"): string {
   const match = path.match(/\.([a-zA-Z0-9]+)$/);
@@ -103,51 +100,7 @@ async function persistSiteFileArtifact(
   );
 }
 
-type ProjectRuntimeContext = GenerateSectionParams["projectContext"];
-
-interface SectionBatchItem {
-  scopeKey: string;
-  section: PlannedSectionSpec;
-  outputFileRelative: string;
-  pageContext?: GenerateSectionParams["pageContext"];
-  sectionDesignBrief?: string;
-}
-
-const SECTION_PARALLELISM = Math.max(
-  1,
-  Number(process.env.GENERATE_SECTION_PARALLELISM ?? 2)
-);
-
-async function mapWithConcurrency<T, R>(
-  items: T[],
-  concurrency: number,
-  worker: (item: T, index: number) => Promise<R>
-): Promise<Array<PromiseSettledResult<R>>> {
-  const results: Array<PromiseSettledResult<R>> = new Array(items.length);
-  let cursor = 0;
-
-  const runWorker = async () => {
-    while (true) {
-      const current = cursor;
-      cursor += 1;
-      if (current >= items.length) {
-        return;
-      }
-      try {
-        const value = await worker(items[current], current);
-        results[current] = { status: "fulfilled", value };
-      } catch (error) {
-        results[current] = { status: "rejected", reason: error };
-      }
-    }
-  };
-
-  const runners = Array.from({ length: Math.min(concurrency, items.length) }, () =>
-    runWorker()
-  );
-  await Promise.all(runners);
-  return results;
-}
+type ProjectRuntimeContext = PageAgentProjectContext;
 
 
 function buildProjectRuntimeContext(blueprint: PlannedProjectBlueprint): ProjectRuntimeContext {
@@ -167,28 +120,10 @@ function buildProjectRuntimeContext(blueprint: PlannedProjectBlueprint): Project
 }
 
 
-function getSectionStepName(scopeKey: string, fileName: string): string {
-  return `generate_section:${scopeKey}:${fileName}`;
-}
-
-function getComposePageStepName(slug: string): string {
-  return `compose_page:${slug}`;
-}
-
 function getPageImplementAgentStepName(slug: string): string {
   return `page_implement_agent:${slug}`;
 }
 
-function resolvePageCodegenMode(explicit?: PageCodegenMode): PageCodegenMode {
-  if (explicit) return explicit;
-  const env = process.env.GENERATE_PROJECT_PAGE_CODEGEN?.toLowerCase();
-  if (env === "sections" || env === "legacy") return "sections";
-  return "agent";
-}
-
-function getDescribePageSectionsStepName(slug: string): string {
-  return `describe_page_sections:${slug}`;
-}
 
 function getBuildStepName(attempt: number): string {
   return attempt === 0 ? "run_build" : `run_build:retry_${attempt}`;
@@ -200,53 +135,6 @@ function getRepairStepName(attempt: number): string {
 
 function getInstallDependenciesStepName(scope: string): string {
   return `install_dependencies:${scope}`;
-}
-
-function buildMinimalRootLayout(blueprint: PlannedProjectBlueprint): string {
-  const lang = (blueprint.brief.language?.trim() || "en");
-  const title = JSON.stringify(blueprint.brief.projectTitle);
-  const description = JSON.stringify(blueprint.brief.projectDescription);
-  return `import type { Metadata } from "next";
-import { Inter } from "next/font/google";
-import "./globals.css";
-
-const inter = Inter({ subsets: ["latin"] });
-
-export const metadata: Metadata = {
-  title: ${title},
-  description: ${description},
-};
-
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
-  return (
-    <html lang="${lang}">
-      <body className={inter.className}>{children}</body>
-    </html>
-  );
-}
-`;
-}
-
-async function ensureMinimalRootLayout(params: {
-  blueprint: PlannedProjectBlueprint;
-  artifactLogger: ArtifactLogger;
-}): Promise<string> {
-  const { blueprint, artifactLogger } = params;
-  const layoutPath = "app/layout.tsx";
-  const content = buildMinimalRootLayout(blueprint);
-  await writeSiteFile(layoutPath, content);
-  await formatSiteFile(layoutPath);
-  await persistJsonArtifact(artifactLogger, "compose_layout", "output", {
-    layoutPath,
-    mode: "minimal-root-layout",
-    language: blueprint.brief.language,
-  });
-  await persistSiteFileArtifact(artifactLogger, "compose_layout", layoutPath, "layout");
-  return layoutPath;
 }
 
 async function autoInstallDependenciesForFiles(params: {
@@ -322,169 +210,83 @@ async function autoInstallDependenciesForFiles(params: {
   }
 }
 
+/**
+ * On checkpoint resume we skip `architect_agent` but must still list chrome files
+ * that already exist under `components/chrome/**` so dependency install / traces
+ * see the full contract (not just `app/layout.tsx`).
+ */
+function collectExistingArchitectOwnedRelativePaths(): string[] {
+  const siteRoot = getSiteRoot();
+  const norm = (p: string) => p.replace(/\\/g, "/");
+  const paths = new Set<string>(["app/layout.tsx"]);
+  const chromeRoot = join(siteRoot, "components", "chrome");
+  if (!existsSync(chromeRoot)) {
+    return Array.from(paths).sort((a, b) => a.localeCompare(b));
+  }
+  const walk = (absDir: string): void => {
+    for (const ent of readdirSync(absDir, { withFileTypes: true })) {
+      const abs = join(absDir, ent.name);
+      if (ent.isDirectory()) {
+        walk(abs);
+      } else if (ent.isFile()) {
+        paths.add(norm(relative(siteRoot, abs)));
+      }
+    }
+  };
+  walk(chromeRoot);
+  return Array.from(paths).sort((a, b) => a.localeCompare(b));
+}
+
 interface BuildLifecycleResult {
   verificationStatus: GenerateProjectResult["verificationStatus"];
   verificationOutput: string;
 }
 
-async function runSectionBatch(params: {
-  batchLabel: string;
-  items: SectionBatchItem[];
-  designSystem: string;
-  runtimeContext: ProjectRuntimeContext;
-  artifactLogger: ArtifactLogger;
-  logger: StepLogger;
-  trajectoryCollector?: import("./trajectoryCollector").GenerateTrajectoryCollector;
-}): Promise<{ generatedFiles: string[]; pendingImages: PendingImage[] }> {
-  const { batchLabel, items, designSystem, runtimeContext, artifactLogger, logger, trajectoryCollector } = params;
-  if (items.length === 0) {
-    return { generatedFiles: [], pendingImages: [] };
-  }
-
-  const results = await mapWithConcurrency(items, SECTION_PARALLELISM, (item) => {
-    const stepName = getSectionStepName(item.scopeKey, item.section.fileName);
-    logger.startStep(stepName);
-    const onMessage = trajectoryCollector
-      ? trajectoryCollector.createEpisodeCollector(`generate_section:${item.section.fileName}`)
-      : undefined;
-    return stepGenerateSection({
-      designSystem,
-      projectContext: runtimeContext,
-      section: item.section,
-      outputFileRelative: item.outputFileRelative,
-      pageContext: item.pageContext,
-      sectionDesignBrief: item.sectionDesignBrief ?? "",
-      onMessage,
-    });
-  }
-  );
-
-  const generatedFiles: string[] = [];
-  const allPendingImages: PendingImage[] = [];
-  const failures: Array<{ name: string; message: string }> = [];
-
-  for (let index = 0; index < items.length; index += 1) {
-    const item = items[index];
-    const result = results[index];
-    const stepName = getSectionStepName(item.scopeKey, item.section.fileName);
-
-    if (result.status === "fulfilled") {
-      const { filePath, skillId, technicalSkillIds, componentSkillScores, trace, pendingImages } = result.value;
-      generatedFiles.push(filePath);
-      allPendingImages.push(...pendingImages);
-      logger.logStep(stepName, "ok", filePath, skillId);
-      logger.attachTrace(stepName, trace);
-      await persistJsonArtifact(artifactLogger, stepName, "output", {
-        outputFileRelative: item.outputFileRelative,
-        generatedFile: result.value.filePath,
-        skillId: result.value.skillId,
-        technicalSkillIds,
-        componentSkillScores,
-        section: item.section,
-        pageContext: item.pageContext ?? null,
-      });
-      await persistSiteFileArtifact(
-        artifactLogger,
-        stepName,
-        item.outputFileRelative,
-        "generated-file"
-      );
-      continue;
-    }
-
-    const message =
-      result.reason instanceof Error ? result.reason.message : String(result.reason);
-    failures.push({ name: item.section.fileName, message });
-    logger.logStep(stepName, "error", message);
-    await persistJsonArtifact(artifactLogger, stepName, "error", {
-      message,
-      outputFileRelative: item.outputFileRelative,
-      section: item.section,
-      pageContext: item.pageContext ?? null,
-    });
-  }
-
-  if (failures.length > 0) {
-    throw new Error(summarizeFailures(`${batchLabel} section generation failed`, failures));
-  }
-
-  return { generatedFiles, pendingImages: allPendingImages };
-}
-
-async function generateSharedLayoutSections(params: {
+/**
+ * Run the Architect Agent — decides global chrome form and lands it as
+ * `app/layout.tsx` + `components/chrome/**`. Page agents subsequently read
+ * the layout as a chrome contract and never modify it.
+ */
+async function runArchitectStep(params: {
   blueprint: PlannedProjectBlueprint;
   designSystem: string;
-  runtimeContext: ProjectRuntimeContext;
   artifactLogger: ArtifactLogger;
   logger: StepLogger;
-  skipSections?: Set<string>;
   trajectoryCollector?: import("./trajectoryCollector").GenerateTrajectoryCollector;
-}): Promise<{ files: string[]; pendingImages: PendingImage[] }> {
-  const { blueprint, designSystem, runtimeContext, artifactLogger, logger, skipSections, trajectoryCollector } = params;
-  const collectedFiles: string[] = [];
-  const collectedPendingImages: PendingImage[] = [];
+  onStep?: (step: BuildStep) => void;
+}): Promise<{ files: string[] }> {
+  const { blueprint, designSystem, artifactLogger, logger, trajectoryCollector, onStep } = params;
+  const onMessage = trajectoryCollector?.createEpisodeCollector(ARCHITECT_AGENT_STEP);
 
-  if (blueprint.site.layoutSections.length === 0) {
-    const layoutPath = await logger.timed(
-      "compose_layout",
-      () => ensureMinimalRootLayout({ blueprint, artifactLogger }),
-      (p) => p
-    );
-    collectedFiles.push(layoutPath);
-    return { files: collectedFiles, pendingImages: collectedPendingImages };
-  }
-
-  // Filter out already-generated sections
-  const sectionsToGenerate = skipSections
-    ? blueprint.site.layoutSections.filter((s) => !skipSections.has(`layout:${s.fileName}`))
-    : blueprint.site.layoutSections;
-
-  // Log skipped sections
-  const skippedCount = blueprint.site.layoutSections.length - sectionsToGenerate.length;
-  if (skippedCount > 0) {
-    logger.logStep("checkpoint_skip_layout", "ok", `${skippedCount} layout section(s) resumed from checkpoint`);
-    // Add already-generated files to result
-    for (const section of blueprint.site.layoutSections) {
-      if (skipSections?.has(`layout:${section.fileName}`)) {
-        collectedFiles.push(buildSectionFilePath("layout", section.fileName));
-      }
-    }
-  }
-
-  if (sectionsToGenerate.length > 0) {
-    const batchResult = await runSectionBatch({
-      batchLabel: "layout",
-      items: sectionsToGenerate.map((section) => ({
-        scopeKey: "layout",
-        section,
-        outputFileRelative: buildSectionFilePath("layout", section.fileName),
-      })),
-      designSystem,
-      runtimeContext,
-      artifactLogger,
-      logger,
-      trajectoryCollector,
-    });
-    collectedFiles.push(...batchResult.generatedFiles);
-    collectedPendingImages.push(...batchResult.pendingImages);
-  }
-
-  const layoutOutcome = await logger.timed(
-    "compose_layout",
-    () => stepComposeLayout(blueprint.site.layoutSections, blueprint),
-    (r) => ({ detail: r.layoutPath ?? "layout unchanged", trace: r.trace })
+  const outcome = await logger.timed(
+    ARCHITECT_AGENT_STEP,
+    () =>
+      runArchitectAgent({
+        blueprint,
+        designSystem,
+        onMessage,
+        onStep,
+      }),
+    (r) => ({
+      detail:
+        `chrome=${r.chromeForm}` +
+        (r.fellBackToMinimal ? " (fallback)" : "") +
+        ` · files=${r.files.length}`,
+      trace: r.trace,
+    })
   );
-  const layoutPath = layoutOutcome.layoutPath;
-  if (layoutPath) {
-    collectedFiles.push(layoutPath);
-    await persistJsonArtifact(artifactLogger, "compose_layout", "output", {
-      layoutPath,
-      layoutSections: blueprint.site.layoutSections.map((section) => section.fileName),
-    });
-    await persistSiteFileArtifact(artifactLogger, "compose_layout", layoutPath, "layout");
-  }
 
-  return { files: collectedFiles, pendingImages: collectedPendingImages };
+  await persistJsonArtifact(artifactLogger, ARCHITECT_AGENT_STEP, "output", {
+    layoutPath: outcome.layoutPath,
+    chromeForm: outcome.chromeForm,
+    fellBackToMinimal: outcome.fellBackToMinimal,
+    files: outcome.files,
+    summary: outcome.summary,
+    toolInvocations: outcome.toolCallRecords,
+  });
+  await persistSiteFileArtifact(artifactLogger, ARCHITECT_AGENT_STEP, outcome.layoutPath, "layout");
+
+  return { files: outcome.files };
 }
 
 async function generatePages(params: {
@@ -493,10 +295,8 @@ async function generatePages(params: {
   runtimeContext: ProjectRuntimeContext;
   artifactLogger: ArtifactLogger;
   logger: StepLogger;
-  skipSections?: Set<string>;
-  skipPages?: Set<string>;
+  skipImplementedPages?: Set<string>;
   trajectoryCollector?: import("./trajectoryCollector").GenerateTrajectoryCollector;
-  pageCodegenMode: PageCodegenMode;
   onStep?: (step: BuildStep) => void;
 }): Promise<{ files: string[]; pendingImages: PendingImage[] }> {
   const {
@@ -505,181 +305,65 @@ async function generatePages(params: {
     runtimeContext,
     artifactLogger,
     logger,
-    skipSections,
-    skipPages,
+    skipImplementedPages,
     trajectoryCollector,
-    pageCodegenMode,
   } = params;
   const collectedFiles: string[] = [];
   const collectedPendingImages: PendingImage[] = [];
 
-  // Pages are independent (distinct output paths per slug); run in parallel for wall-clock time.
   const pageOutcomes = await Promise.all(
     blueprint.site.pages.map(async (page) => {
-      if (pageCodegenMode === "agent") {
-        const agentStepName = getPageImplementAgentStepName(page.slug);
-        if (skipPages?.has(page.slug)) {
-          const pagePathResume = slugToPagePath(page.slug);
-          logger.logStep(agentStepName, "ok", "resumed from checkpoint");
-          return { files: [pagePathResume], pendingImages: [] };
-        }
-
-        const onMessage = trajectoryCollector?.createEpisodeCollector(agentStepName);
-        const outcome = await logger.timed(
-          agentStepName,
-          () =>
-            runPageImplementAgent({
-              page,
-              designSystem,
-              projectContext: runtimeContext,
-              hasLayoutChrome: blueprint.site.layoutSections.length > 0,
-              onMessage,
-              onStep: params.onStep,
-            }),
-          (r) => ({ detail: r.summary.slice(0, 260), trace: r.trace })
-        );
-
-        await persistJsonArtifact(artifactLogger, agentStepName, "output", {
-          pagePath: outcome.pagePath,
-          summary: outcome.summary,
-          toolInvocations: outcome.toolCallRecords,
-          pendingImagesCount: outcome.pendingImages.length,
-        });
-        await persistSiteFileArtifact(artifactLogger, agentStepName, outcome.pagePath, "page");
-
-        return { files: [outcome.pagePath], pendingImages: outcome.pendingImages };
+      const agentStepName = getPageImplementAgentStepName(page.slug);
+      if (skipImplementedPages?.has(page.slug)) {
+        const pagePathResume = slugToPagePath(page.slug);
+        logger.logStep(agentStepName, "ok", "resumed from checkpoint");
+        return { files: [pagePathResume], pendingImages: [] };
       }
 
-      // Deduplicate page sections by fileName to prevent duplicate generation
-      const seenFileNames = new Set<string>();
-      const dedupedSections = page.sections.filter((s) => {
-        if (seenFileNames.has(s.fileName)) return false;
-        seenFileNames.add(s.fileName);
-        return true;
-      });
+      let heroSkillId: string | null = null;
+      let heroSkillPrompt: string | undefined;
+      if (shouldOfferHeroSkillForAgentPage(page, runtimeContext.rawUserInput)) {
+        const virtualHero = buildVirtualHeroSectionForSkillSelection(page);
+        const sel = await discoverAndSelectSkill(
+          virtualHero,
+          runtimeContext.designKeywords,
+          runtimeContext.rawUserInput,
+        );
+        heroSkillId = sel.componentSkillId;
+        heroSkillPrompt = sel.componentSkillPrompt || undefined;
+      }
 
-      // Filter out already-generated sections for this page
-      const sectionsToGenerate = skipSections
-        ? dedupedSections.filter((s) => !skipSections.has(`${page.slug}:${s.fileName}`))
-        : dedupedSections;
-
-      const describeStepName = getDescribePageSectionsStepName(page.slug);
-      const pageDesign = await logger.timed(
-        describeStepName,
+      const onMessage = trajectoryCollector?.createEpisodeCollector(agentStepName);
+      const outcome = await logger.timed(
+        agentStepName,
         () =>
-          stepDescribePageSections({
-            designSystem,
-            language: runtimeContext.language,
+          runPageImplementAgent({
             page,
-            sections: dedupedSections,
+            designSystem,
+            projectContext: runtimeContext,
+            heroSkillPrompt,
+            heroSkillId,
+            onMessage,
+            onStep: params.onStep,
           }),
         (r) => ({
-          detail: `${dedupedSections.length} section brief(s)`,
+          detail: r.summary.slice(0, 260),
           trace: r.trace,
-        })
-      );
-      const sectionBriefByFile = new Map(
-        pageDesign.sectionDesigns.map((design) => [design.fileName, design.sectionDesignBrief])
+          skillId: r.heroSkillId,
+        }),
       );
 
-      // Persist page design brief for topology inspection
-      const pageDesignDoc = [
-        `# ${page.title} (/${page.slug})`,
-        "",
-        "## 页面整体结构",
-        pageDesign.pageStructure,
-        "",
-        ...pageDesign.sectionDesigns.map((d) => [
-          `## ${d.fileName} (${d.sectionType})`,
-          d.sectionDesignBrief,
-          "",
-        ]).flat(),
-      ].join("\n");
-      await persistTextArtifact(
-        artifactLogger,
-        describeStepName,
-        "output",
-        pageDesignDoc,
-        "md"
-      );
-
-      // Log skipped sections
-      const skippedCount = dedupedSections.length - sectionsToGenerate.length;
-      if (skippedCount > 0) {
-        logger.logStep(
-          `checkpoint_skip_${page.slug}`,
-          "ok",
-          `${skippedCount} section(s) resumed from checkpoint`
-        );
-      }
-
-      // Collect files that were already generated (from checkpoint)
-      const resumedFiles: string[] = [];
-      for (const section of dedupedSections) {
-        if (skipSections?.has(`${page.slug}:${section.fileName}`)) {
-          resumedFiles.push(buildSectionFilePath(page.slug, section.fileName));
-        }
-      }
-
-      let generatedFiles: string[] = [];
-      let pagePendingImages: PendingImage[] = [];
-      if (sectionsToGenerate.length > 0) {
-        const batchResult = await runSectionBatch({
-          batchLabel: `page ${page.slug}`,
-          items: sectionsToGenerate.map((section) => ({
-            scopeKey: page.slug,
-            section,
-            outputFileRelative: buildSectionFilePath(page.slug, section.fileName),
-            sectionDesignBrief: sectionBriefByFile.get(section.fileName) ?? "",
-            pageContext: {
-              title: page.title,
-              slug: page.slug,
-              description: page.description,
-              journeyStage: page.journeyStage,
-            },
-          })),
-          designSystem,
-          runtimeContext,
-          artifactLogger,
-          logger,
-          trajectoryCollector,
-        });
-        generatedFiles = batchResult.generatedFiles;
-        pagePendingImages = batchResult.pendingImages;
-      }
-
-      // Skip compose_page if already done
-      if (skipPages?.has(page.slug)) {
-        const pagePath = page.slug === "home" ? "app/page.tsx" : `app/${page.slug}/page.tsx`;
-        logger.logStep(getComposePageStepName(page.slug), "ok", "resumed from checkpoint");
-        return { files: [...resumedFiles, ...generatedFiles, pagePath], pendingImages: pagePendingImages };
-      }
-
-      // Deduplicate sections by fileName before composing the page
-      const pageCompose = await logger.timed(
-        getComposePageStepName(page.slug),
-        () =>
-            stepComposePage(page, designSystem, dedupedSections),
-        (r) => ({ detail: r.pagePath, trace: r.trace })
-      );
-      const pagePath = pageCompose.pagePath;
-
-      await persistJsonArtifact(artifactLogger, getComposePageStepName(page.slug), "output", {
-        pagePath,
-        slug: page.slug,
-        title: page.title,
-        pageStructure: pageDesign.pageStructure,
-        sections: dedupedSections.map((section) => section.fileName),
+      await persistJsonArtifact(artifactLogger, agentStepName, "output", {
+        pagePath: outcome.pagePath,
+        summary: outcome.summary,
+        toolInvocations: outcome.toolCallRecords,
+        pendingImagesCount: outcome.pendingImages.length,
+        heroSkillId: outcome.heroSkillId,
       });
-      await persistSiteFileArtifact(
-        artifactLogger,
-        getComposePageStepName(page.slug),
-        pagePath,
-        "page"
-      );
+      await persistSiteFileArtifact(artifactLogger, agentStepName, outcome.pagePath, "page");
 
-      return { files: [...resumedFiles, ...generatedFiles, pagePath], pendingImages: pagePendingImages };
-    })
+      return { files: [outcome.pagePath], pendingImages: outcome.pendingImages };
+    }),
   );
 
   for (const { files, pendingImages } of pageOutcomes) {
@@ -773,24 +457,48 @@ async function runBuildWithRepair(params: {
   };
 }
 
+export interface RunGenerateProjectOptions {
+  /** Required — drives sites/<projectId>/ scoping via runWithSiteRoot. */
+  projectId: string;
+  styleGuide?: string;
+  enableSkills?: boolean;
+  useDatabasePrompts?: boolean;
+  checkpoint?: CheckpointResult;
+  /** When true, run `project_intent_guide` before analyze; may defer generation for user dialogue. */
+  enableIntentGuide?: boolean;
+}
+
+/**
+ * Public entry point. Binds the project's `sites/<projectId>/` directory as
+ * the active site root for the entire async chain via AsyncLocalStorage so
+ * concurrent runs cannot corrupt each other's working directory or leak into
+ * `sites/template/`.
+ */
 export async function runGenerateProject(
   userInput: string,
   onStep?: (step: BuildStep) => void,
-  options?: {
-    projectId?: string;
-    styleGuide?: string;
-    enableSkills?: boolean;
-    useDatabasePrompts?: boolean;
-    checkpoint?: CheckpointResult;
-    /** When true, run `project_intent_guide` before analyze; may defer generation for user dialogue. */
-    enableIntentGuide?: boolean;
-    /**
-     * Per-route implementation strategy after `plan_project`.
-     * Default: `agent` (tool loop). Set `sections` or env `GENERATE_PROJECT_PAGE_CODEGEN=sections` for legacy.
-     */
-    pageCodegenMode?: PageCodegenMode;
-  }
+  options?: Partial<RunGenerateProjectOptions>
 ): Promise<GenerateProjectResult> {
+  if (!options?.projectId || typeof options.projectId !== "string") {
+    throw new Error(
+      "runGenerateProject: `options.projectId` is required. " +
+        "Call initProjectDir(db, projectId) to scaffold sites/<projectId>/ before invoking the flow."
+    );
+  }
+  const siteRoot = projectManagerGetSiteRoot(options.projectId);
+  return runWithSiteRoot(siteRoot, () =>
+    runGenerateProjectInner(userInput, onStep, options as RunGenerateProjectOptions)
+  );
+}
+
+async function runGenerateProjectInner(
+  userInput: string,
+  onStep: ((step: BuildStep) => void) | undefined,
+  options: RunGenerateProjectOptions
+): Promise<GenerateProjectResult> {
+  // Reset module-level read/write trackers so a previous run's bookkeeping
+  // can't leak into this one (e.g. read_lints picking up stale paths).
+  clearFileTracking();
   const flowStart = Date.now();
   const logger = createStepLogger({ onStep, prefix: "generate_project" });
   const artifactLogger = createArtifactLogger("generate_project");
@@ -800,21 +508,12 @@ export async function runGenerateProject(
   // Trajectory collector — records conversation history from agent steps
   const { GenerateTrajectoryCollector } = await import("./trajectoryCollector");
   const trajectoryCollector = new GenerateTrajectoryCollector(
-    options?.projectId ?? "unknown",
+    options.projectId,
     userInput,
     getModelId()
   );
 
-  // When a projectId is provided, point SITE_ROOT at the project directory and
-  // skip clearing the template (the project dir was already initialised by the
-  // Project_Manager).  Without a projectId we fall back to the existing
-  // SITE_ROOT env-var behaviour and run clearTemplate() as before.
-  if (options?.projectId) {
-    setSiteRoot(projectManagerGetSiteRoot(options.projectId));
-  }
-
-  const cp = options?.checkpoint;
-  const pageCodegenMode = resolvePageCodegenMode(options?.pageCodegenMode);
+  const cp = options.checkpoint;
 
   try {
     // Always validate skill files (skills are enabled by default)
@@ -830,8 +529,7 @@ export async function runGenerateProject(
 
     await persistJsonArtifact(artifactLogger, "run", "input", {
       userInput,
-      enableIntentGuide: options?.enableIntentGuide === true,
-      pageCodegenMode,
+      enableIntentGuide: options.enableIntentGuide === true,
       checkpoint: cp ? { hasCheckpoint: cp.hasCheckpoint, summary: cp.summary } : null,
     });
 
@@ -839,24 +537,9 @@ export async function runGenerateProject(
       logger.logStep("checkpoint_resume", "ok", cp.summary);
     }
 
-    if (!options?.projectId) {
-      logger.startStep("clear_template");
-      const clearResult = clearTemplate();
-      if (clearResult.error) {
-        logger.logStep("clear_template", "error", clearResult.error);
-      } else {
-        logger.logStep(
-          "clear_template",
-          "ok",
-          clearResult.removed.length > 0 ? `${clearResult.removed.length} files removed` : "nothing to clear"
-        );
-      }
-      await persistJsonArtifact(artifactLogger, "clear_template", "output", clearResult);
-    }
-
     let effectiveUserInput = userInput;
 
-    if (options?.enableIntentGuide !== false && !cp?.skipAnalyze) {
+    if (options.enableIntentGuide !== false && !cp?.skipAnalyze) {
       logger.startStep("project_intent_guide");
       const intentResult = await stepProjectIntentGuide(userInput);
       logger.logStep(
@@ -981,10 +664,10 @@ export async function runGenerateProject(
       })();
 
       // Phase 1: plan_project + (optionally) skill matching run in parallel
-      const skillMatchingEnabled = options?.enableSkills !== false;
+      const skillMatchingEnabled = options.enableSkills !== false;
 
-      const planPromise = stepPlanProject(normalizedBlueprint, { pageCodegenMode }).then((out) => {
-        logger.logStep("plan_project", "ok", "section generation plans prepared", undefined, out.trace);
+      const planPromise = stepPlanProject(normalizedBlueprint).then((out) => {
+        logger.logStep("plan_project", "ok", "page-level blueprints prepared", undefined, out.trace);
         return out;
       });
 
@@ -1038,7 +721,7 @@ export async function runGenerateProject(
         logger.startStep("generate_project_design_system");
         const dsOutcome = await stepGenerateProjectDesignSystem(
           designIntentForSystem,
-          options?.styleGuide
+          options.styleGuide
         );
         designSystem = dsOutcome.designSystem;
         logger.logStep(
@@ -1050,8 +733,7 @@ export async function runGenerateProject(
         );
       }
 
-      // Merge infer_design_intent technical keywords only after style matching,
-      // so section/technical skill selection can still benefit from them.
+      // Merge infer_design_intent technical keywords after style matching for hero skill routing.
       if (inferredDesignIntent?.technicalKeywords?.length) {
         const existing = blueprint.experience.designIntent.keywords;
         const merged = [...new Set([...existing, ...inferredDesignIntent.technicalKeywords])];
@@ -1063,10 +745,6 @@ export async function runGenerateProject(
       // final run/result artifacts.
       await persistJsonArtifact(artifactLogger, "plan_project", "output", {
         site: {
-          layoutSections: blueprint.site.layoutSections.map((section) => ({
-            type: section.type,
-            fileName: section.fileName,
-          })),
           pages: blueprint.site.pages.map((page) => ({
             slug: page.slug,
             pageDesignPlan: page.pageDesignPlan,
@@ -1093,22 +771,25 @@ export async function runGenerateProject(
     runtimeContext.rawUserInput = effectiveUserInput;
     appendGeneratedFiles(result, ["design-system.md", "project-plan.json"]);
 
-    // ── Step: apply_project_design_tokens + UI generation (parallel) ──
-    const designTokensPromise = (async () => {
-      if (cp?.skipDesignTokens) {
-        logger.logStep("apply_project_design_tokens", "ok", "resumed from checkpoint");
-        return;
-      }
+    // ── Step: apply_project_design_tokens, then UI generation (sequential) ──
+    // Must not run architects / page agents in parallel with token application:
+    // they have write_file and could overwrite app/globals.css after the LLM
+    // writes it (or read a stale template snapshot before tokens land).
+    if (cp?.skipDesignTokens) {
+      logger.logStep("apply_project_design_tokens", "ok", "resumed from checkpoint");
+    } else {
       const tokenResult = await logger.timed(
         "apply_project_design_tokens",
-        () => stepApplyProjectDesignTokens(designSystem, (msg) => {
-          onStep?.({
-            step: "apply_project_design_tokens",
-            status: "active",
-            detail: msg,
-            timestamp: Date.now(),
-            duration: 0,
-          });
+        () => stepApplyProjectDesignTokens(designSystem, {
+          onProgress: (msg) => {
+            onStep?.({
+              step: "apply_project_design_tokens",
+              status: "active",
+              detail: msg,
+              timestamp: Date.now(),
+              duration: 0,
+            });
+          },
         }),
         (r) => ({ detail: r.files.join(", "), trace: r.trace })
       );
@@ -1125,39 +806,63 @@ export async function runGenerateProject(
         );
       }
       appendGeneratedFiles(result, tokenFiles);
-    })();
+    }
 
-    const uiGenerationPromise = (async () => {
-      const [layoutResult, pageResult] = await Promise.all([
-        generateSharedLayoutSections({
-          blueprint,
-          designSystem,
-          runtimeContext,
-          artifactLogger,
-          logger,
-          skipSections: cp?.generatedSections,
-          trajectoryCollector,
-        }),
-        generatePages({
-          blueprint,
-          designSystem,
-          runtimeContext,
-          artifactLogger,
-          logger,
-          skipSections: cp?.generatedSections,
-          skipPages: cp?.composedPages,
-          trajectoryCollector,
-          pageCodegenMode,
-          onStep,
-        }),
-      ]);
-      appendGeneratedFiles(result, layoutResult.files);
-      appendGeneratedFiles(result, pageResult.files);
-      return [...layoutResult.pendingImages, ...pageResult.pendingImages];
-    })();
+    const [archSettled, pagesSettled] = await Promise.allSettled([
+      (async (): Promise<void> => {
+        // Runs in parallel with page agents below. Globals are already finalized
+        // (apply_project_design_tokens finished above), avoiding write races on
+        // app/globals.css. Layout/chrome may still be in flight when a page agent
+        // starts — each agent gets a snapshot at invocation; prompts forbid
+        // editing layout/chrome and allow read_file if genuinely needed.
+        if (!cp?.skipArchitect) {
+          const architectResult = await runArchitectStep({
+            blueprint,
+            designSystem,
+            artifactLogger,
+            logger,
+            trajectoryCollector,
+            onStep,
+          });
+          appendGeneratedFiles(result, architectResult.files);
+          return;
+        }
+        appendGeneratedFiles(result, collectExistingArchitectOwnedRelativePaths());
+      })(),
+      generatePages({
+        blueprint,
+        designSystem,
+        runtimeContext,
+        artifactLogger,
+        logger,
+        skipImplementedPages: cp?.implementedPages,
+        trajectoryCollector,
+        onStep,
+      }),
+    ]);
 
-    const [, allPendingImages] = await Promise.all([designTokensPromise, uiGenerationPromise]);
+    if (archSettled.status === "rejected") {
+      if (pagesSettled.status === "rejected") {
+        const p = pagesSettled.reason;
+        const a = archSettled.reason;
+        throw new Error(
+          `architect_agent failed: ${a instanceof Error ? a.message : String(a)}; ` +
+            `page_implement_agent failed: ${p instanceof Error ? p.message : String(p)}`
+        );
+      }
+      throw archSettled.reason instanceof Error
+        ? archSettled.reason
+        : new Error(String(archSettled.reason));
+    }
+    if (pagesSettled.status === "rejected") {
+      throw pagesSettled.reason instanceof Error
+        ? pagesSettled.reason
+        : new Error(String(pagesSettled.reason));
+    }
 
+    const pageOutcome = pagesSettled.value;
+    appendGeneratedFiles(result, pageOutcome.files);
+    const allPendingImages = pageOutcome.pendingImages;
     // Await all background image generation before build — images must be on
     // disk for Next.js to bundle them. This runs in parallel with dependency
     // installation since they don't conflict.
@@ -1206,8 +911,10 @@ export async function runGenerateProject(
     // ── Optional pre-build typecheck (generated .tsx only) ───────────────────
     // In-process `checkTsxFile` per file (same engine as section validation), not
     // `npx tsc` on the whole site. On errors, `stepRepairBuild` uses edit_file
-    // (small patches), same style as the modify flow's patch tools. Opt-in.
-    const enablePrebuildTypecheck = process.env.ENABLE_PREBUILD_TSC === "1";
+    // (small patches), same style as the modify flow's patch tools.
+    // Default ON — opt-out via DISABLE_PREBUILD_TSC=1 (or DISABLE_SECTION_TSC=1
+    // for the lower-level checker that this step calls into).
+    const enablePrebuildTypecheck = process.env.DISABLE_PREBUILD_TSC !== "1";
     if (enablePrebuildTypecheck) {
       const tscStepName = "typecheck_generated";
       logger.startStep(tscStepName);
@@ -1295,9 +1002,9 @@ export async function runGenerateProject(
       logger.logStep(
         "typecheck_generated",
         "ok",
-        "skipped (ENABLE_PREBUILD_TSC is not 1; set ENABLE_PREBUILD_TSC=1 to run)",
+        "skipped (DISABLE_PREBUILD_TSC=1)",
         undefined,
-        { output: { scopedTypecheck: { skipped: "enable_prebuild_tsc" } } }
+        { output: { scopedTypecheck: { skipped: "disable_prebuild_tsc" } } }
       );
     }
 

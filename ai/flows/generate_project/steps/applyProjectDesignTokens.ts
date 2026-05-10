@@ -42,28 +42,6 @@ function parseDesignTokensResponse(raw: string): string {
   );
 }
 
-/**
- * Extract only the @theme block from globals.css (the part the model needs to see).
- * This dramatically reduces prompt size and output size.
- */
-function extractThemeBlock(css: string): string {
-  const themeMatch = css.match(/@theme\s*(inline\s*)?\{/);
-  if (!themeMatch) return "";
-  const start = themeMatch.index!;
-  let depth = 0;
-  let end = start;
-  for (let i = start; i < css.length; i++) {
-    if (css[i] === "{") depth++;
-    if (css[i] === "}") { depth--; if (depth === 0) { end = i + 1; break; } }
-  }
-  return css.slice(start, end);
-}
-
-function extractRootVars(css: string): string {
-  const rootMatch = css.match(/:root\s*\{[^}]*\}/);
-  return rootMatch ? rootMatch[0] : "";
-}
-
 function truncateForPrompt(text: string, maxChars = 12_000): string {
   if (text.length <= maxChars) return text;
   const headChars = Math.floor(maxChars * 0.7);
@@ -77,10 +55,21 @@ function truncateForPrompt(text: string, maxChars = 12_000): string {
   ].join("\n");
 }
 
+export interface ApplyDesignTokensOptions {
+  onProgress?: (msg: string) => void;
+}
+
+/**
+ * Apply the design-system markdown to the site by asking the model to produce
+ * a full `app/globals.css`. Inputs are only the design-system text and the
+ * current template globals (structure to preserve); no other skill files are read.
+ */
 export async function stepApplyProjectDesignTokens(
   designSystem: string,
-  onProgress?: (msg: string) => void
+  options: ApplyDesignTokensOptions = {},
 ): Promise<{ files: string[]; trace: StepTrace }> {
+  const { onProgress } = options;
+
   const currentGlobalsCss = readSiteFile("app/globals.css");
 
   onProgress?.("reading design system + current tokens...");
@@ -113,7 +102,7 @@ Generate the complete updated globals.css. Be concise — output only the CSS co
       systemPrompt,
       userMessage,
       0.3,
-      4_000,
+      8_000,
       stepModel
     );
     llmResultForTrace = llmResult;

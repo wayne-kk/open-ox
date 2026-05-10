@@ -36,5 +36,4 @@ coverage
 .DS_Store
 tsconfig.tsbuildinfo
 vitest.config.ts
-_test_parse.mjs
 wayne.conf
