@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readFileSync } from "fs";
-import { dirname, join } from "path";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "fs";
+import { dirname, join, relative } from "path";
 import { executeSystemTool } from "../../../tools";
 import { getSiteRoot } from "../../../tools/system/common";
 import { hasPrompt, loadPrompt, resolvePromptPath, composePrompt, resolveGeneratePromptsRoot } from "@/ai/prompts/core";
@@ -130,6 +130,87 @@ export function readSiteFile(relativePath: string): string {
   }
 
   return readFileSync(fullPath, "utf-8");
+}
+
+const SITE_TREE_IGNORED = new Set([
+  "node_modules",
+  ".next",
+  ".turbo",
+  ".vercel",
+  ".git",
+  "out",
+  "dist",
+]);
+
+/**
+ * Produce a compact, deterministic listing of a directory tree under SITE_ROOT.
+ * Used to pre-warm agents with "what files exist" so they can skip a list_dir
+ * round-trip.  Output looks like:
+ *
+ *   components/
+ *     ui/
+ *       button.tsx
+ *       card.tsx
+ *     home/
+ *       Hero.tsx
+ *
+ * Designed for prompt injection — keep it short and grep-friendly.
+ */
+export function listSiteTree(
+  relativePath: string,
+  options: { maxDepth?: number; maxEntries?: number } = {}
+): string {
+  const { maxDepth = 3, maxEntries = 200 } = options;
+  const root = getSiteRoot();
+  const baseFull = join(root, relativePath);
+  if (!existsSync(baseFull)) {
+    return `(${relativePath} does not exist)`;
+  }
+
+  const lines: string[] = [];
+  let entriesCount = 0;
+  let truncated = false;
+
+  function walk(absDir: string, depth: number): void {
+    if (depth > maxDepth) return;
+    if (truncated) return;
+    let names: string[];
+    try {
+      names = readdirSync(absDir).sort((a, b) => a.localeCompare(b));
+    } catch {
+      return;
+    }
+    for (const name of names) {
+      if (entriesCount >= maxEntries) {
+        truncated = true;
+        lines.push(`${"  ".repeat(depth)}… (truncated at ${maxEntries} entries)`);
+        return;
+      }
+      if (SITE_TREE_IGNORED.has(name) || name.startsWith(".")) continue;
+      const abs = join(absDir, name);
+      let stat;
+      try {
+        stat = statSync(abs);
+      } catch {
+        continue;
+      }
+      const indent = "  ".repeat(depth);
+      const rel = relative(root, abs);
+      if (stat.isDirectory()) {
+        lines.push(`${indent}${name}/`);
+        entriesCount += 1;
+        walk(abs, depth + 1);
+      } else {
+        lines.push(`${indent}${name}`);
+        entriesCount += 1;
+      }
+      void rel;
+    }
+  }
+
+  lines.push(`${relativePath}/`);
+  walk(baseFull, 1);
+  return lines.join("\n");
 }
 
 export function ensureSiteDir(relativeDir: string): void {

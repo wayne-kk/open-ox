@@ -1,7 +1,0 @@
-src/
-examples/
-scripts/
-tsconfig.json
-tsup.config.ts
-.sdk-test-tmp/
-.sdk-e2e-test-output/

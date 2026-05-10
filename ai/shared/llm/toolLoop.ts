@@ -82,29 +82,13 @@ export async function callLLMWithTools(params: {
       return { content: message.content?.trim() ?? "", toolCalls };
     }
 
-    for (const toolCall of message.tool_calls) {
-      const rawArgs = toolCall.function.arguments ?? "{}";
-      let parsedArgs: Record<string, unknown>;
-      try {
-        parsedArgs = JSON.parse(rawArgs) as Record<string, unknown>;
-      } catch {
-        parsedArgs = {};
-      }
-
-      const overrideFn = executeToolOverrides[toolCall.function.name];
-      const result = overrideFn
-        ? await overrideFn(parsedArgs)
-        : await executeSystemTool(toolCall.function.name, parsedArgs);
-
-      toolCalls.push({ name: toolCall.function.name, args: parsedArgs, result });
-      const toolMsg: ChatMessage = {
-        role: "tool",
-        tool_call_id: toolCall.id,
-        content: typeof result === "string" ? result : JSON.stringify(result),
-      };
-      messages.push(toolMsg);
-      emit?.(toolMsg);
-    }
+    await dispatchToolCalls({
+      toolCalls,
+      messages,
+      message,
+      executeToolOverrides,
+      emit,
+    });
   }
 
   console.warn(
@@ -238,30 +222,16 @@ export async function callLLMWithToolsFromMessages(params: {
       return { content: message.content?.trim() ?? lastAssistantContent, toolCalls };
     }
 
-    for (const toolCall of message.tool_calls) {
-      const rawArgs = toolCall.function.arguments ?? "{}";
-      let parsedArgs: Record<string, unknown>;
-      try {
-        parsedArgs = JSON.parse(rawArgs) as Record<string, unknown>;
-      } catch {
-        parsedArgs = {};
-      }
-
-      const overrideFn = executeToolOverrides[toolCall.function.name];
-      const result = overrideFn
-        ? await overrideFn(parsedArgs)
-        : await executeSystemTool(toolCall.function.name, parsedArgs);
-
-      toolCalls.push({ name: toolCall.function.name, args: parsedArgs, result });
-      params.onToolCall?.({ name: toolCall.function.name, args: parsedArgs, iteration });
-      const toolMsg: ChatMessage = {
-        role: "tool",
-        tool_call_id: toolCall.id,
-        content: typeof result === "string" ? result : JSON.stringify(result),
-      };
-      messages.push(toolMsg);
-      emit?.(toolMsg);
-    }
+    await dispatchToolCalls({
+      toolCalls,
+      messages,
+      message,
+      executeToolOverrides,
+      emit,
+      onToolCall: params.onToolCall
+        ? (info) => params.onToolCall?.({ ...info, iteration })
+        : undefined,
+    });
 
     if (shouldAbortAfterToolResults?.()) {
       return { content: lastAssistantContent, toolCalls };
@@ -273,4 +243,122 @@ export async function callLLMWithToolsFromMessages(params: {
       `without a final assistant message. model=${model}, toolCalls=${toolCalls.length}`
   );
   return { content: lastAssistantContent, toolCalls };
+}
+
+/**
+ * Tools that **must** run serially within a round because they mutate
+ * shared global state (npm registry / package.json / lockfile, the
+ * site-root pointer, etc.). When any of these appear in a single
+ * `tool_calls` batch, the whole batch falls back to serial execution
+ * to preserve the previous safe semantics.
+ */
+const SERIAL_ONLY_TOOLS = new Set<string>([
+  "install_package",
+  "exec_shell",
+]);
+
+interface ParsedToolCall {
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
+}
+
+function parseToolCall(toolCall: {
+  id: string;
+  function: { name: string; arguments?: string };
+}): ParsedToolCall {
+  const rawArgs = toolCall.function.arguments ?? "{}";
+  let parsedArgs: Record<string, unknown>;
+  try {
+    parsedArgs = JSON.parse(rawArgs) as Record<string, unknown>;
+  } catch {
+    parsedArgs = {};
+  }
+  return { id: toolCall.id, name: toolCall.function.name, args: parsedArgs };
+}
+
+async function executeOne(
+  call: ParsedToolCall,
+  executeToolOverrides: Record<
+    string,
+    (args: Record<string, unknown>) => Promise<ToolResult | string>
+  >
+): Promise<ToolResult | string> {
+  const overrideFn = executeToolOverrides[call.name];
+  return overrideFn
+    ? await overrideFn(call.args)
+    : await executeSystemTool(call.name, call.args);
+}
+
+/**
+ * Execute every tool_call in an assistant message and append matching tool
+ * messages to the conversation. Calls are run **in parallel** when the batch
+ * has no SERIAL_ONLY_TOOLS, since most tools (read_file, write_file with
+ * distinct paths, list_dir, search_code, format_code, think) are independent
+ * I/O. The tool messages are appended in the original `tool_calls` order so
+ * the model still sees the deterministic correlation it expects.
+ */
+async function dispatchToolCalls(params: {
+  toolCalls: AgentToolCallRecord[];
+  messages: ChatMessage[];
+  message: { tool_calls?: Array<{ id: string; function: { name: string; arguments?: string } }> };
+  executeToolOverrides: Record<
+    string,
+    (args: Record<string, unknown>) => Promise<ToolResult | string>
+  >;
+  emit?: (msg: ChatMessage) => void;
+  onToolCall?: (info: { name: string; args: Record<string, unknown> }) => void;
+}): Promise<void> {
+  const { toolCalls, messages, message, executeToolOverrides, emit, onToolCall } = params;
+  const calls = (message.tool_calls ?? []).map(parseToolCall);
+  if (calls.length === 0) return;
+
+  const requiresSerial =
+    calls.length === 1 || calls.some((c) => SERIAL_ONLY_TOOLS.has(c.name));
+
+  if (requiresSerial) {
+    for (const call of calls) {
+      const result = await executeOne(call, executeToolOverrides);
+      toolCalls.push({ name: call.name, args: call.args, result });
+      onToolCall?.({ name: call.name, args: call.args });
+      const toolMsg: ChatMessage = {
+        role: "tool",
+        tool_call_id: call.id,
+        content: typeof result === "string" ? result : JSON.stringify(result),
+      };
+      messages.push(toolMsg);
+      emit?.(toolMsg);
+    }
+    return;
+  }
+
+  // Parallel path: kick off every tool call, then commit results in the
+  // original order so message ordering remains deterministic regardless
+  // of which tool finishes first.
+  const settled = await Promise.all(
+    calls.map(async (call) => {
+      try {
+        const result = await executeOne(call, executeToolOverrides);
+        return { call, result };
+      } catch (err) {
+        const errorResult: ToolResult = {
+          success: false,
+          error: err instanceof Error ? err.message : String(err),
+        };
+        return { call, result: errorResult };
+      }
+    })
+  );
+
+  for (const { call, result } of settled) {
+    toolCalls.push({ name: call.name, args: call.args, result });
+    onToolCall?.({ name: call.name, args: call.args });
+    const toolMsg: ChatMessage = {
+      role: "tool",
+      tool_call_id: call.id,
+      content: typeof result === "string" ? result : JSON.stringify(result),
+    };
+    messages.push(toolMsg);
+    emit?.(toolMsg);
+  }
 }

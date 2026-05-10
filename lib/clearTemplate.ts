@@ -1,19 +1,22 @@
 /**
- * Clear generated content in SITE_ROOT.
- * Only removes files that the generate_project flow overwrites.
+ * Clear generated content in `sites/template/`.
+ *
+ * This is the developer-facing dev-tool used by `/api/clear-template`. It is
+ * deliberately decoupled from the per-request site-root context (which now
+ * refuses to point at `sites/template/`). The flow is:
+ *   - Operate strictly on `WORKSPACE_ROOT/sites/template/`.
+ *   - Only remove files that the generate flow is allowed to overwrite.
  */
 
 import { existsSync, readdirSync, rmSync } from "fs";
 import { join } from "path";
-import { getSiteRoot } from "@/ai/tools/system/common";
+import { WORKSPACE_ROOT } from "@/ai/tools/system/common";
 
-/**
- * Opaque path join that prevents Turbopack / webpack from statically analysing
- * the resulting path and pulling thousands of files into the bundle graph.
- */
 function runtimeJoin(...segments: string[]): string {
   return join(...segments);
 }
+
+const TEMPLATE_ROOT = runtimeJoin(WORKSPACE_ROOT, "sites", "template");
 
 export interface ClearTemplateResult {
   removed: string[];
@@ -24,8 +27,7 @@ export function clearTemplate(): ClearTemplateResult {
   const removed: string[] = [];
 
   try {
-    // 1. Section components
-    const sectionsDir = runtimeJoin(getSiteRoot(), "components", "sections");
+    const sectionsDir = runtimeJoin(TEMPLATE_ROOT, "components", "sections");
     if (existsSync(sectionsDir)) {
       for (const f of readdirSync(sectionsDir)) {
         if (f.endsWith(".tsx") || f.endsWith(".ts")) {
@@ -35,17 +37,15 @@ export function clearTemplate(): ClearTemplateResult {
       }
     }
 
-    // 2. Single files
     for (const rel of ["app/page.tsx", "app/layout.tsx", "app/globals.css", "design-system.md"]) {
-      const abs = runtimeJoin(getSiteRoot(), rel);
+      const abs = runtimeJoin(TEMPLATE_ROOT, rel);
       if (existsSync(abs)) {
         rmSync(abs);
         removed.push(rel);
       }
     }
 
-    // 3. Generated images
-    const imagesDir = runtimeJoin(getSiteRoot(), "public", "images");
+    const imagesDir = runtimeJoin(TEMPLATE_ROOT, "public", "images");
     if (existsSync(imagesDir)) {
       for (const f of readdirSync(imagesDir)) {
         if (f.endsWith(".png") || f.endsWith(".jpg") || f.endsWith(".webp")) {
@@ -55,8 +55,7 @@ export function clearTemplate(): ClearTemplateResult {
       }
     }
 
-    // 3. app/[slug]/page.tsx (non-home pages)
-    const appDir = runtimeJoin(getSiteRoot(), "app");
+    const appDir = runtimeJoin(TEMPLATE_ROOT, "app");
     if (existsSync(appDir)) {
       for (const e of readdirSync(appDir, { withFileTypes: true })) {
         if (e.isDirectory() && e.name !== "api") {

@@ -16,7 +16,6 @@ export type {
   ProjectIntentGuideResult,
   InformationArchitecture,
   PageBlueprint,
-  PageCodegenMode,
   PageDesignPlan,
   PageMapEntry,
   PlannedPageBlueprint,

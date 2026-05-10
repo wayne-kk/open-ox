@@ -11,6 +11,7 @@ import { writeFileTool } from "./system/writeFileTool";
 import { thinkTool } from "./system/thinkTool";
 import { revertFileTool } from "./system/revertFileTool";
 import { generateImageTool } from "./system/generateImageTool";
+import { readLintsTool } from "./system/readLintsTool";
 
 const toolDefinitions: Record<string, ChatCompletionTool> = {
   write_file: writeFileTool,
@@ -25,6 +26,7 @@ const toolDefinitions: Record<string, ChatCompletionTool> = {
   think: thinkTool,
   revert_file: revertFileTool,
   generate_image: generateImageTool,
+  read_lints: readLintsTool,
 };
 
 export function getSystemToolDefinitions(names: string[]): ChatCompletionTool[] {

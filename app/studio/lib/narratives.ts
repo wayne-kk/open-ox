@@ -19,9 +19,9 @@ export function getStepNarrative(step: BuildStep): {
     }
     if (s === "plan_project") {
         return {
-            what: "基于简报进行全站规划，确定页面结构、各区块的设计意图和交互策略。",
+            what: "基于简报进行全站规划，确定页面地图与各页的设计纲要（不再输出固定 section 文件清单）。",
             output: ok
-                ? "已生成完整蓝图（Blueprint），包含页面地图、布局区块、设计计划和约束条件。"
+                ? "已生成完整蓝图（Blueprint），包含页面地图、各页 pageDesignPlan 与约束条件。"
                 : "规划阶段失败，蓝图未能生成。",
             note: step.detail ?? undefined,
         };
@@ -51,45 +51,19 @@ export function getStepNarrative(step: BuildStep): {
             note: step.detail ?? undefined,
         };
     }
-    if (s === "compose_layout") {
+    if (s === "architect_agent") {
         return {
-            what: "生成全局布局文件（layout.tsx），将共享 Shell 区块（如导航 HUD）组合进来。",
+            what: "Architect Agent 根据产品形态决定全局 chrome（顶栏 / 侧栏 / 工具栏 / HUD / 极简 等），并把 app/layout.tsx 与 components/chrome/** 真实落盘，作为页面 Agent 必须遵守的 chrome 契约。",
             output: ok
-                ? "layout.tsx 已生成，全局导航和共享 Shell 已挂载。"
-                : "布局文件生成失败，全局 Shell 可能缺失。",
+                ? "Architect 已写出根布局与 chrome 组件；页面 Agent 将以此为只读契约填充内容。"
+                : "Architect Agent 失败，根布局可能未就位。",
             note: step.detail ?? undefined,
         };
     }
-    if (s.startsWith("compose_page_")) {
-        const pageName = s.replace("compose_page_", "");
+    if (s.startsWith("architect_agent_tool:")) {
         return {
-            what: `组合「${pageName}」页面，将该页面下的所有区块按顺序拼装成完整的 page.tsx。`,
-            output: ok
-                ? `${pageName}/page.tsx 已生成，页面区块已按规划顺序组合完毕。`
-                : `${pageName} 页面组合失败，该页面可能无法正常渲染。`,
-            note: step.detail ?? undefined,
-        };
-    }
-    if (s.startsWith("generate_section:") || s.startsWith("generate_section_")) {
-        const sectionName = s
-            .replace("generate_section:", "")
-            .replace(/^generate_section_[^_]+_/, "");
-        return {
-            what: `生成「${sectionName}」区块组件，依据设计计划实现布局、样式和交互逻辑。`,
-            output: ok
-                ? `${sectionName}.tsx 已生成${step.skillId ? `，使用了 ${step.skillId} 能力模板` : ""}。`
-                : `${sectionName} 区块生成失败，该区块将缺失或显示异常。`,
-            note: step.detail ?? undefined,
-        };
-    }
-    if (s.startsWith("generate_section_layout_")) {
-        const sectionName = s.replace("generate_section_layout_", "");
-        return {
-            what: `生成全局布局区块「${sectionName}」，这是跨页面共享的 Shell 组件。`,
-            output: ok
-                ? `${sectionName}.tsx 已生成并挂载到全局布局。`
-                : `${sectionName} 布局区块生成失败。`,
-            note: step.detail ?? undefined,
+            what: "Architect Agent 工具调用",
+            output: step.detail ?? "tool executed",
         };
     }
     if (s === "install_dependencies_generated") {

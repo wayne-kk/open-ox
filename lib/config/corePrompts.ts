@@ -34,7 +34,7 @@ const CORE_STEP_PROMPTS: CorePromptDefinition[] = [
     label: "建站意向 Task Agent",
   },
   { profile: "web", stepId: "infer_design_intent", kind: "step", promptId: "inferDesignIntent", label: "设计意图推断" },
-  { profile: "web", stepId: "plan_project", kind: "step", promptId: "planProject", label: "项目规划" },
+  { profile: "web", stepId: "plan_project", kind: "step", promptId: "planProject.agent", label: "项目规划" },
   {
     profile: "web",
     stepId: "generate_project_design_system",
@@ -49,22 +49,7 @@ const CORE_STEP_PROMPTS: CorePromptDefinition[] = [
     promptId: "applyProjectDesignTokens",
     label: "设计 Token 生成",
   },
-  {
-    profile: "web",
-    stepId: "describe_page_sections",
-    kind: "step",
-    promptId: "describePageSections",
-    label: "页面分段设计描述",
-  },
-  {
-    profile: "web",
-    stepId: "generate_section_default",
-    kind: "section",
-    promptId: "section.default",
-    label: "Section 默认 Prompt",
-  },
-  { profile: "web", stepId: "compose_layout", kind: "step", promptId: "composeLayout", label: "布局组合" },
-  { profile: "web", stepId: "compose_page", kind: "step", promptId: "composePage", label: "页面组合" },
+  { profile: "web", stepId: "architect_agent", kind: "step", promptId: "architectAgent", label: "站点架构 Agent" },
   { profile: "web", stepId: "dependency_resolver", kind: "step", promptId: "dependencyResolver", label: "依赖修复" },
   { profile: "web", stepId: "repair_build", kind: "step", promptId: "repairBuild", label: "构建修复" },
 ];

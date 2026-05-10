@@ -13,10 +13,7 @@ const STAGE_MAP: Record<string, StageId> = {
   generate_project_design_system: "design",
   match_design_system_skill: "design",
   apply_project_design_tokens: "design",
-  compose_layout: "compose",
-  compose_page: "compose",
-  describe_page_sections: "compose",
-  generate_section: "generate",
+  architect_agent: "compose",
   install_dependencies: "verify",
   /** Scoped in-process tsc on generated .tsx (ENABLE_PREBUILD_TSC), before `run_build` */
   typecheck_generated: "verify",
@@ -38,17 +35,19 @@ const STAGE_LABELS: Record<StageId, string> = {
 };
 
 function inferStage(stepName: string): StageId {
-  if (stepName.startsWith("describe_page_sections:")) return "compose";
-  if (stepName.startsWith("generate_section:")) return "generate";
   if (stepName.startsWith("page_implement_agent:")) return "generate";
   if (stepName.startsWith("page_agent_tool:")) return "generate";
+  if (stepName.startsWith("architect_agent_tool:") || stepName === "architect_agent") return "compose";
   if (stepName.startsWith("intent_agent")) return "intent";
-  if (stepName.startsWith("compose_page:")) return "compose";
   if (stepName.startsWith("install_dependencies:")) return "verify";
   if (stepName.startsWith("typecheck_generated")) return "verify";
   if (stepName.startsWith("run_build")) return "verify";
   if (stepName.startsWith("repair_build")) return "repair";
   if (stepName.startsWith("mark_unvalidated") || stepName.startsWith("clear_validation")) return "verify";
+  // Legacy section-mode steps (historical build logs)
+  if (stepName.startsWith("describe_page_sections:")) return "compose";
+  if (stepName.startsWith("generate_section:")) return "generate";
+  if (stepName.startsWith("compose_page:")) return "compose";
   return STAGE_MAP[stepName] ?? "generate";
 }
 
@@ -58,12 +57,18 @@ function inferKind(stepName: string, stage: StageId): GraphNode["kind"] {
   if (stepName === "match_design_system_skill") return "decision";
   if (stepName.startsWith("typecheck_generated")) return "verification";
   if (stepName.startsWith("run_build") || stepName.startsWith("install_dependencies")) return "verification";
-  if (stepName.startsWith("generate_section") || stepName.startsWith("compose_page")) return "generation";
-  if (stepName.startsWith("page_implement_agent:") || stepName.startsWith("page_agent_tool:")) return "generation";
+  if (
+    stepName.startsWith("generate_section") ||
+    stepName.startsWith("compose_page") ||
+    stepName.startsWith("page_implement_agent:") ||
+    stepName.startsWith("page_agent_tool:")
+  ) {
+    return "generation";
+  }
   if (stepName.startsWith("describe_page_sections")) return "transform";
   if (stepName.startsWith("analyze_") || stepName.startsWith("plan_")) return "transform";
   if (stepName.startsWith("generate_project_design") || stepName.startsWith("apply_project")) return "transform";
-  if (stepName.startsWith("compose_layout")) return "transform";
+  if (stepName === "architect_agent" || stepName.startsWith("architect_agent_tool:")) return "generation";
   return "transform";
 }
 
@@ -87,6 +92,14 @@ function formatStepLabel(step: string): string {
   }
   if (step.startsWith("page_implement_agent:")) {
     return `page agent:${step.replace("page_implement_agent:", "")}`;
+  }
+  if (step.startsWith("architect_agent_tool:")) {
+    const parts = step.replace("architect_agent_tool:", "").split(":");
+    const toolName = parts[0]?.replace(/_/g, " ") ?? "tool";
+    return `architect ${toolName}`;
+  }
+  if (step === "architect_agent") {
+    return "architect agent";
   }
   if (step.startsWith("intent_agent")) {
     return "intent agent";
@@ -112,15 +125,6 @@ function extractSkillHints(step: BuildStep): string[] {
   const hints = new Set<string>();
   if (typeof step.skillId === "string" && step.skillId.trim().length > 0) {
     hints.add(step.skillId.trim());
-  }
-  const traceInput = step.trace?.input as Record<string, unknown> | undefined;
-  const technical = traceInput?.technicalSkillIds;
-  if (Array.isArray(technical)) {
-    for (const id of technical) {
-      if (typeof id === "string" && id.trim().length > 0) {
-        hints.add(id.trim());
-      }
-    }
   }
   return Array.from(hints);
 }

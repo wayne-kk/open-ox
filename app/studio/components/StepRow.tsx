@@ -19,16 +19,13 @@ function formatTimestamp(epochMs: number, flowStartMs: number): string {
 
 export function StepRow({ step, flowStart }: { step: BuildStep; flowStart: number }) {
   const [open, setOpen] = useState(false);
-  const isSection = step.step.startsWith("generate_section:");
   const isToolCall = step.step.startsWith("tool_call:");
   const isAgentTool = step.step.startsWith("page_agent_tool:");
-  const stepLabel = isSection
-    ? step.step.replace("generate_section:", "section:")
-    : isToolCall
-      ? step.step.replace("tool_call:", "🔍 tool:")
-      : isAgentTool
-        ? (step.detail ?? step.step)
-        : step.step;
+  const stepLabel = isToolCall
+    ? step.step.replace("tool_call:", "🔍 tool:")
+    : isAgentTool
+      ? (step.detail ?? step.step)
+      : step.step;
   const narrative = getStepNarrative(step);
   const hasTrace = step.trace != null;
 
@@ -42,15 +39,6 @@ export function StepRow({ step, flowStart }: { step: BuildStep; flowStart: numbe
     const hints = new Set<string>();
     if (typeof step.skillId === "string" && step.skillId.trim().length > 0) {
       hints.add(step.skillId.trim());
-    }
-    const traceInput = step.trace?.input as Record<string, unknown> | undefined;
-    const technical = traceInput?.technicalSkillIds;
-    if (Array.isArray(technical)) {
-      for (const id of technical) {
-        if (typeof id === "string" && id.trim().length > 0) {
-          hints.add(id.trim());
-        }
-      }
     }
     return Array.from(hints);
   })();
@@ -70,7 +58,7 @@ export function StepRow({ step, flowStart }: { step: BuildStep; flowStart: numbe
           ) : "✗"}
         </span>
         <div className="min-w-0 flex-1 overflow-hidden">
-          <div className={`break-all font-mono text-[11px] ${isSection ? "text-accent-tertiary" : isToolCall ? "text-blue-300" : isAgentTool ? "text-emerald-300" : "text-foreground"}`}>
+          <div className={`break-all font-mono text-[11px] ${isToolCall ? "text-blue-300" : isAgentTool ? "text-emerald-300" : "text-foreground"}`}>
             {stepLabel}
             {stepSkillHints.length > 0 ? (
               <span className="ml-1.5 text-[10px] text-accent-tertiary/80">[{stepSkillHints.join(", ")}]</span>

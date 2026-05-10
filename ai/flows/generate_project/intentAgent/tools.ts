@@ -3,7 +3,7 @@ import type { ChatCompletionTool } from "openai/resources/chat/completions";
 export const PIPELINE_CONSTRAINTS_TEXT = `## open-ox 生成流水线（硬约束）
 
 - 产出为 Next.js **web** profile；MVP 约束为**单首页**：站点只有 **一个顶层页面**，slug 必须为 \`home\`（路由 \`/\`）。
-- **不再有 \`layoutMode\` / whole-page 分支**：统一流程。需求分析用 \`site\` 表达是否要有**全局壳层**（\`navigation\`+\`footer\` → 写入 \`app/layout.tsx\`）或 \`layoutSections: []\`（极简根布局，主路由 Agent 自组织含壳层的完整 UI）。
+- 布局形态（是否有顶 nav、是否有 sidebar、是否有 footer、是否使用 nested layout 等）由下游实现 Agent 根据产品形态决定，**不在需求分析阶段表态**。
 - 忠实用户已述需求：不擅自添加未提及的产品机制。`;
 
 export function buildIntentAgentTools(): ChatCompletionTool[] {

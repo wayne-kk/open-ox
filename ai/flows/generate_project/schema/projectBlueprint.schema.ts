@@ -9,7 +9,6 @@ export function detectBlueprintInputShape(value: unknown): BlueprintInputShape {
     typeof v.projectTitle === "string" &&
     typeof v.projectDescription === "string" &&
     v.designIntent &&
-    (Array.isArray(v.layoutSections) || v.navigation || v.footer) &&
     Array.isArray(v.pages)
   ) {
     return "flat";

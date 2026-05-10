@@ -83,19 +83,11 @@ export default function SectionGenerationPage() {
           <P>
             <Code>plan_project</Code>（提示词见 <Code>ai/flows/generate_project/prompts/steps/planProject.md</Code>）把「仅有页面、尚无 section」的蓝图，
             扩展为 <Code>PlannedProjectBlueprint</Code>：为每个页面推导 <Code>sections[]</Code>，并为每个 section 挂上{" "}
-            <Code>designPlan</Code>。同时区分全局壳层与页面内容：
+            <Code>designPlan</Code>。
           </P>
-          <ul className="mt-3 list-disc pl-5 text-[14px] leading-7 text-muted-foreground space-y-1">
-            <li>
-              <Code>layoutSections</Code> 只应包含全站共享壳（如 <Code>navigation</Code>、<Code>footer</Code>）。
-            </li>
-            <li>
-              其余 hero、定价、FAQ 等必须落在各页的 <Code>pages[].sections</Code>。
-            </li>
-          </ul>
           <Callout>
-            <Code>runGenerateProject</Code> 里有一段安全校正：若误把非布局类 section 放进{" "}
-            <Code>layoutSections</Code>，会将其挪回首页（或第一页）的 <Code>sections</Code>，保证后续路径与文件布局一致。
+            布局形态（顶 nav / sidebar / 工具栏 / 页脚 / 无 chrome 等）由下游页面实现 Agent 自行决定，
+            <Code>plan_project</Code> 与 <Code>analyze_project_requirement</Code> 都不负责预先指定全局 chrome。
           </Callout>
         </section>
 
@@ -177,9 +169,10 @@ const results = await Promise.allSettled(
         <section id="downstream" className="scroll-mt-24">
           <H2>下游组装</H2>
           <P>
-            Section 文件生成完毕后，<Code>compose_layout</Code> 用已生成的 layout sections 拼出根{" "}
-            <Code>layout.tsx</Code>；<Code>compose_page</Code> 按页并行，把该页各 section 组件 import 并组合进{" "}
-            <Code>page.tsx</Code>。因此 section 生成步骤只负责「单文件正确导出 + JSX」，不负责页面级胶水逻辑（由后续 LLM 步骤完成）。
+            Section 文件生成完毕后，<Code>compose_page</Code> 按页并行，把该页各 section 组件 import 并组合进{" "}
+            <Code>page.tsx</Code>。根 <Code>app/layout.tsx</Code> 与 <Code>components/chrome/**</Code>{" "}
+            由 <Code>architect_agent</Code> 在 page agent 启动前一次性决定并落盘（read-only 契约），
+            page agent 只读不改。因此 section 生成步骤只负责「单文件正确导出 + JSX」，不负责页面级胶水逻辑（由后续 LLM 步骤完成）。
           </P>
           <P>
             更完整的步骤序号与并行关系见{" "}

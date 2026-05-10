@@ -44,10 +44,6 @@ export interface PlannedProjectBlueprint {
                 journeyStage: string;
             }>;
         };
-        layoutSections: Array<{
-            fileName: string;
-            type: string;
-        }>;
         pages: Array<{
             slug: string;
             title: string;

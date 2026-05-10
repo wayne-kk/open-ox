@@ -1,9 +1,12 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
-import { dirname } from "path";
+import { dirname, extname } from "path";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import type { ToolResult, ToolExecutor } from "../types";
 import { resolvePath } from "./common";
 import { hasFileBeenRead } from "./fileReadTracker";
+import { trackFileWrite } from "./fileWriteTracker";
+import { tryFormatSource } from "./prettierFormat";
+import { verifyWrittenSourceFile } from "../../flows/generate_project/shared/tsxDiagnostics";
 
 export const editFileTool: ChatCompletionTool = {
     type: "function",
@@ -13,7 +16,11 @@ export const editFileTool: ChatCompletionTool = {
             "Make a precise edit to a file by replacing an exact string match. " +
             "Use old_string to match existing content and new_string to replace it. " +
             "For creating new files, use write_file instead. " +
-            "old_string must match EXACTLY one location in the file (including whitespace and indentation).",
+            "old_string must match EXACTLY one location in the file (including whitespace and indentation). " +
+            "The file is auto-formatted with Prettier after the edit when its extension is supported — " +
+            "no need to call format_code afterwards. " +
+            "After editing TS/TSX/JS/JSX, the tool runs a single-file type-check and surfaces any " +
+            "errors directly in the result so you can fix them in this same turn.",
         parameters: {
             type: "object",
             properties: {
@@ -94,14 +101,28 @@ export const executeEditFile: ToolExecutor = async (
     const newContent = content.replace(oldStr, newStr);
     const dir = dirname(fullPath);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    writeFileSync(fullPath, newContent, "utf-8");
+    const formatted = await tryFormatSource(newContent, fullPath, extname(fullPath));
+    writeFileSync(fullPath, formatted.content, "utf-8");
+    trackFileWrite(filePath);
 
     const addedLines = newStr.split("\n").length;
     const removedLines = oldStr.split("\n").length;
+    const note = formatted.formatted ? " (auto-formatted)" : "";
+    const verification = await verifyWrittenSourceFile(filePath);
+    const baseOutput = `Edited ${filePath}: replaced ${removedLines} line(s) with ${addedLines} line(s)${note}`;
+    const output = verification.inline ? `${baseOutput}\n\n${verification.inline}` : baseOutput;
 
     return {
         success: true,
-        output: `Edited ${filePath}: replaced ${removedLines} line(s) with ${addedLines} line(s)`,
-        meta: { path: filePath, addedLines, removedLines },
+        output,
+        meta: {
+            path: filePath,
+            addedLines,
+            removedLines,
+            autoFormatted: formatted.formatted,
+            verifyErrorCount: verification.errorCount,
+            verifyWarningCount: verification.warningCount,
+        },
+        ...(verification.diagnostics.length > 0 ? { diagnostics: verification.diagnostics } : {}),
     };
 };

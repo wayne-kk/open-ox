@@ -231,20 +231,6 @@ function normalizeSectionSpec(value: unknown, index: number): SectionSpec {
   };
 }
 
-function normalizeShellSection(
-  value: unknown,
-  defaultType: "navigation" | "footer",
-  defaultFileName: string
-): SectionSpec {
-  const raw = (value && typeof value === "object" ? value : {}) as Partial<SectionSpec>;
-  const normalized = normalizeSectionSpec(value, 0);
-  return {
-    ...normalized,
-    type: defaultType,
-    fileName: typeof raw.fileName === "string" && raw.fileName.trim() ? raw.fileName : defaultFileName,
-  };
-}
-
 function normalizePageBlueprint(value: unknown, index: number): PageBlueprint {
   const candidate = (value && typeof value === "object" ? value : {}) as Partial<PageBlueprint>;
   const title = typeof candidate.title === "string" ? candidate.title : `Page ${index + 1}`;
@@ -383,10 +369,7 @@ function normalizeSite(value: unknown): ProjectSiteBlueprint {
     throw new Error("analyze_project_requirement: site is missing");
   }
 
-  const candidate = value as Partial<ProjectSiteBlueprint> & {
-    navigation?: unknown;
-    footer?: unknown;
-  };
+  const candidate = value as Partial<ProjectSiteBlueprint>;
   if (!Array.isArray(candidate.pages)) {
     throw new Error("analyze_project_requirement: site must include pages");
   }
@@ -405,13 +388,6 @@ function normalizeSite(value: unknown): ProjectSiteBlueprint {
     journeyStage: page.journeyStage,
   }));
 
-  const layoutSections: SectionSpec[] = isSectionSpecArray(candidate.layoutSections)
-    ? candidate.layoutSections.map((section, index) => normalizeSectionSpec(section, index))
-    : [
-      normalizeShellSection(candidate.navigation, "navigation", "NavigationSection"),
-      normalizeShellSection(candidate.footer, "footer", "FooterSection"),
-    ];
-
   return {
     informationArchitecture: {
       ...baseIa,
@@ -420,7 +396,6 @@ function normalizeSite(value: unknown): ProjectSiteBlueprint {
         ? "Single-page site: all content on `/` (home). Primary navigation MUST use in-page anchor links (#section-id), not separate routes."
         : baseIa.navigationModel,
     },
-    layoutSections,
     pages,
   };
 }
@@ -471,18 +446,12 @@ export function asProjectBlueprint(value: unknown): ProjectBlueprint {
     capabilities?: unknown;
     informationArchitecture?: unknown;
     designIntent?: unknown;
-    layoutSections?: unknown;
-    navigation?: unknown;
-    footer?: unknown;
     pages?: unknown;
   };
   if (
     typeof flatCandidate.projectTitle === "string" &&
     typeof flatCandidate.projectDescription === "string" &&
     flatCandidate.designIntent &&
-    (isSectionSpecArray(flatCandidate.layoutSections) ||
-      flatCandidate.navigation !== undefined ||
-      flatCandidate.footer !== undefined) &&
     Array.isArray(flatCandidate.pages)
   ) {
     return {
@@ -499,9 +468,6 @@ export function asProjectBlueprint(value: unknown): ProjectBlueprint {
       }),
       site: normalizeSite({
         informationArchitecture: flatCandidate.informationArchitecture,
-        layoutSections: flatCandidate.layoutSections,
-        navigation: flatCandidate.navigation,
-        footer: flatCandidate.footer,
         pages: flatCandidate.pages,
       }),
     };
@@ -514,13 +480,6 @@ export function asProjectBlueprint(value: unknown): ProjectBlueprint {
     singlePage.designIntent &&
     isSectionSpecArray(singlePage.sections)
   ) {
-    const layoutSections = singlePage.sections.filter(
-      (section) => section.type === "navigation" || section.type === "footer"
-    );
-    const pageSections = singlePage.sections.filter(
-      (section) => section.type !== "navigation" && section.type !== "footer"
-    );
-
     const normalizedRoles = normalizeRoles(undefined);
     const normalizedPages = [
       normalizePageBlueprint(
@@ -528,7 +487,7 @@ export function asProjectBlueprint(value: unknown): ProjectBlueprint {
           title: singlePage.title,
           slug: singlePage.slug || "home",
           description: singlePage.description,
-          sections: pageSections,
+          sections: singlePage.sections,
         },
         0
       ),
@@ -549,7 +508,6 @@ export function asProjectBlueprint(value: unknown): ProjectBlueprint {
       },
       site: {
         informationArchitecture: normalizeInformationArchitecture(undefined, normalizedPages),
-        layoutSections: layoutSections.map((section, index) => normalizeSectionSpec(section, index)),
         pages: normalizedPages,
       },
     };

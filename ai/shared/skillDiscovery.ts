@@ -1,7 +1,11 @@
 /**
  * Generic skill discovery — 任何 agent 均可调用
  *
- * 支持三种 skill 格式：
+ * 当前生成流水线只用两类 skill：
+ *   - `design-system/`：通过 `matchDesignSystemSkill` 走整文件加载（不经过此模块）
+ *   - `section/<sectionType>/`：通过 `discoverSkillsBySectionType` + `discoverAndSelectSkill` 选择
+ *
+ * 支持的 skill 文件格式（均为 section skill）：
  *   1. 新格式：独立 .yaml（metadata）+ .md（prompt 正文），文件名相同
  *   2. 旧格式：单个 .md 文件，metadata 写在 YAML frontmatter 中
  *   3. 聚合：`section/<类型>/skills.yaml`，根键 `skills:`，每项 `name` 作 id，`keywords` / `exclude_keywords` 映射到 `when.designKeywords`（`design-system/skills.yaml` 仍为目录特例，忽略）
@@ -12,7 +16,7 @@
  */
 
 import { existsSync, readFileSync, readdirSync } from "fs";
-import { join, basename } from "path";
+import { join } from "path";
 import matter from "gray-matter";
 
 const NOTES_MAX_LENGTH = 80;
@@ -364,16 +368,6 @@ export function discoverSkillsBySectionType(
   const all = discoverSkills(rootPath);
   return all
     .filter((s) => s.sectionTypes.includes(sectionType))
-    .sort((a, b) => b.priority - a.priority);
-}
-
-/**
- * Skills with `kind: "technical-spec-skill"` (3D/shaders, etc.), sorted by priority desc.
- * Uses the same `discoverSkills` cache as full discovery.
- */
-export function discoverTechnicalSpecSkills(rootPath: string): SkillMetadata[] {
-  return discoverSkills(rootPath)
-    .filter((c) => c.kind === "technical-spec-skill")
     .sort((a, b) => b.priority - a.priority);
 }
 

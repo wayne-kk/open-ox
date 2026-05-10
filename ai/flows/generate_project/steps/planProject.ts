@@ -3,10 +3,8 @@ import { callLLMWithMeta, extractJSON } from "../shared/llm";
 import { stepTraceFromLlmCompletion } from "../shared/llmTrace";
 import type {
   PageDesignPlan,
-  PageCodegenMode,
   PlannedProjectBlueprint,
   PlannedPageBlueprint,
-  PlannedSectionSpec,
   ProjectBlueprint,
   StepTrace,
 } from "../types";
@@ -38,37 +36,17 @@ function isPageDesignPlan(value: unknown): value is PageDesignPlan {
   );
 }
 
-function mapToPlannedSections(raw: unknown): PlannedSectionSpec[] {
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .filter((section): section is Record<string, unknown> => isObjectRecord(section))
-    .map((s, index) => ({
-      type: typeof s.type === "string" ? s.type : "Feature",
-      intent: typeof s.intent === "string" ? s.intent : "",
-      contentHints: asString(s.contentHints) ?? "",
-      fileName: typeof s.fileName === "string" ? s.fileName : `Section${index + 1}`,
-    }));
-}
+export async function stepPlanProject(blueprint: ProjectBlueprint): Promise<{
+  blueprint: PlannedProjectBlueprint;
+  trace: StepTrace;
+}> {
+  const systemPrompt = composePromptBlocks([
+    loadStepPrompt("planProject.agent"),
+    loadGuardrail("outputJson"),
+  ]);
 
-// ── Main Step ────────────────────────────────────────────────────────────
-
-export async function stepPlanProject(
-  blueprint: ProjectBlueprint,
-  options?: { pageCodegenMode?: PageCodegenMode }
-): Promise<{ blueprint: PlannedProjectBlueprint; trace: StepTrace }> {
-  const agentMode = options?.pageCodegenMode === "agent";
-
-  const planPromptId = agentMode ? "planProject.agent" : "planProject";
-  const systemPrompt = composePromptBlocks([loadStepPrompt(planPromptId), loadGuardrail("outputJson")]);
-
-  const pageListHeading = agentMode
-    ? "## 需要制定页面级纲要的页面（本步骤不列举 section 文件）"
-    : "## 需要规划 section 的页面";
-
-  const layoutHint =
-    blueprint.site.layoutSections.length > 0
-      ? "## 站点壳层（来自需求分析）\n已规划全局 layout 片段（如导航/页脚），将写入 `app/layout.tsx`；主路由实现阶段**不要**再在 `page.tsx` 里复制一套全局主导航/页脚。"
-      : "## 站点壳层（来自需求分析）\n未规划独立全局导航/页脚；根布局将为极简模式，**主路由**负责完整产品界面（含你判断需要的顶栏、侧栏等）。";
+  const pageListHeading =
+    "## 需要制定页面级纲要的页面（本步骤不列举 section 文件）";
 
   const userMessage = `## 项目：${blueprint.brief.projectTitle}
 ${blueprint.brief.projectDescription}
@@ -79,16 +57,16 @@ ${blueprint.brief.projectDescription}
 - 核心结果：${blueprint.brief.productScope.coreOutcome}
 - 设计关键词：${blueprint.experience.designIntent.keywords.join(", ")}
 
-${layoutHint}
+> 布局形态（顶 nav / sidebar / footer / 工具栏 / 无 chrome 等）由下游实现 Agent 根据产品形态决定。本步骤**不要**预先指定 chrome。
 
 ${pageListHeading}
 ${blueprint.site.pages
-      .map(
-        (page) =>
-          `### ${page.title} (/${page.slug}) — ${page.journeyStage}
+    .map(
+      (page) =>
+        `### ${page.title} (/${page.slug}) — ${page.journeyStage}
 - 描述：${page.description}`
-      )
-      .join("\n\n")}
+    )
+    .join("\n\n")}
 `;
 
   const model = getModelForStep("plan_project");
@@ -111,19 +89,9 @@ ${blueprint.site.pages
     throw new Error("plan_project: invalid JSON — missing pages or empty pages array");
   }
 
-  const parsedLayoutSections =
-    isObjectRecord(parsed) && isObjectRecord(parsed.site) && Array.isArray(parsed.site.layoutSections)
-      ? parsed.site.layoutSections
-      : undefined;
-
   const pages: PlannedPageBlueprint[] = parsedPages
     .filter((candidate): candidate is Record<string, unknown> => isObjectRecord(candidate))
     .map((page, pageIndex) => {
-      const rawSections = Array.isArray(page.sections) ? page.sections : [];
-      const sections: PlannedSectionSpec[] = agentMode
-        ? []
-        : mapToPlannedSections(rawSections);
-
       const description = asString(page.description) ?? "";
       const journeyStage = asString(page.journeyStage) ?? "";
 
@@ -140,7 +108,7 @@ ${blueprint.site.pages
         journeyStage,
         primaryRoleIds: asStringArray(page.primaryRoleIds),
         supportingCapabilityIds: asStringArray(page.supportingCapabilityIds),
-        sections,
+        sections: [],
         pageDesignPlan: page.pageDesignPlan,
       };
     });
@@ -150,10 +118,6 @@ ${blueprint.site.pages
     experience: blueprint.experience,
     site: {
       informationArchitecture: blueprint.site.informationArchitecture,
-      layoutSections:
-        parsedLayoutSections !== undefined
-          ? mapToPlannedSections(parsedLayoutSections)
-          : blueprint.site.layoutSections,
       pages,
     },
   };

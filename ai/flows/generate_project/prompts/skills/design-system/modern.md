@@ -4,28 +4,6 @@ created: '2026-04-16T07:23:53.433Z'
 modified: '2026-04-17T07:03:11.383Z'
 ---
 
-# modern
-
-<implementation-rules>
-# Strict Implementation Rules
-
-## 1. No Invention Policy
-Only implement UI elements, components, sections, and content explicitly described in this specification. 
-
-
-## 2. Section Completeness
-Each section description is an **exhaustive list** of its contents.
-- "Contains X, Y, Z" means it contains X, Y, Z and **nothing else**
-- Visual richness must come from the design system's own tools (typography, color, spacing, gradients, shadows, motion) — not from invented assets
-
-## 3. Ambiguity Protocol
-If the spec is unclear or incomplete about a section's contents:
-- Implement the minimum interpretation
-- Do NOT fill gaps with assumed content
-
-
-</implementation-rules>
-
 <design-system>
 # modern
 

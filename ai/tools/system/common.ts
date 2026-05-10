@@ -1,4 +1,5 @@
-import { join } from "path";
+import { AsyncLocalStorage } from "async_hooks";
+import { join, sep } from "path";
 
 /** 当前 open-ox 仓库根目录（AI 引擎所在项目） */
 export const WORKSPACE_ROOT = process.cwd();
@@ -13,62 +14,128 @@ function runtimeJoin(...segments: string[]): string {
 }
 
 /**
- * 目标站点根目录（用于写入生成的网站代码）
- * - 通过环境变量 SITE_ROOT 指定相对 open-ox 的路径，例如：SITE_ROOT=sites/template
- * - 如果未配置，则默认等于 WORKSPACE_ROOT（向后兼容）
- *
- * This is a mutable variable — use getSiteRoot() / setSiteRoot() to read/write it.
- * The SITE_ROOT named export is kept for backward compatibility and reflects the
- * current value via a module-level getter (Object.defineProperty below).
+ * Site root context — bound per-request via AsyncLocalStorage so concurrent
+ * generate / modify flows on the same Node process never trample
+ * each other's working directory. There is no module-level fallback: callers
+ * MUST wrap their flow with {@link runWithSiteRoot}, otherwise reads/writes
+ * throw a hard error rather than silently falling back to `process.cwd()` or
+ * `sites/template`.
  */
-let _siteRoot: string = process.env.SITE_ROOT
-  ? runtimeJoin(WORKSPACE_ROOT, process.env.SITE_ROOT)
-  : WORKSPACE_ROOT;
-
-/** Returns the current dynamic site root directory. */
-export function getSiteRoot(): string {
-  return _siteRoot;
+interface SiteRootContext {
+  /** Mutable so that {@link setSiteRoot} can refine it during a flow. */
+  siteRoot: string;
 }
 
+const siteRootStore = new AsyncLocalStorage<SiteRootContext>();
+
+const SITES_DIR = runtimeJoin(WORKSPACE_ROOT, "sites");
+const TEMPLATE_DIR = runtimeJoin(SITES_DIR, "template");
+
 /**
- * Override the site root at runtime (e.g. before running a generate flow for a
- * specific project).  Throws if `path` is outside `WORKSPACE_ROOT/sites/`.
+ * Reject paths that would let an agent flow write into the canonical template
+ * directory. The only legitimate writer of `sites/template/` is a developer
+ * editing the source tree by hand.
  */
-export function setSiteRoot(path: string): void {
-  const sitesDir = join(WORKSPACE_ROOT, "sites");
-  // Normalise to remove trailing separators before comparison
+function assertNotTemplate(path: string): void {
   const normalised = path.replace(/[/\\]+$/, "");
-  if (!normalised.startsWith(sitesDir + "/") && !normalised.startsWith(sitesDir + "\\")) {
+  if (normalised === TEMPLATE_DIR) {
     throw new Error(
-      `setSiteRoot: path "${path}" is outside WORKSPACE_ROOT/sites/ ("${sitesDir}")`
+      `setSiteRoot: refusing to point site root at sites/template. ` +
+        `Generated content must live in sites/<projectId>/.`
     );
   }
-  _siteRoot = path;
 }
 
 /**
- * Reset the site root back to the value derived from the SITE_ROOT env var
- * (or WORKSPACE_ROOT if unset).  Call this in a finally block after any flow
- * that calls setSiteRoot() to prevent state leaking between requests.
+ * Validate `path` is inside `WORKSPACE_ROOT/sites/` and is not the template.
  */
-export function clearSiteRoot(): void {
-  _siteRoot = process.env.SITE_ROOT
-    ? runtimeJoin(WORKSPACE_ROOT, process.env.SITE_ROOT)
-    : WORKSPACE_ROOT;
+function assertSiteRootShape(path: string): void {
+  const normalised = path.replace(/[/\\]+$/, "");
+  if (
+    !normalised.startsWith(SITES_DIR + sep) &&
+    !normalised.startsWith(SITES_DIR + "/") &&
+    !normalised.startsWith(SITES_DIR + "\\")
+  ) {
+    throw new Error(
+      `setSiteRoot: path "${path}" is outside WORKSPACE_ROOT/sites/ ("${SITES_DIR}")`
+    );
+  }
+  assertNotTemplate(normalised);
 }
 
 /**
- * 安全路径：不允许跳出当前 SITE_ROOT
- * Uses the current dynamic _siteRoot so it always reflects the latest setSiteRoot() call.
+ * Run `fn` with `siteRoot` bound for the duration of the async chain. All
+ * downstream `getSiteRoot()` / `resolvePath()` calls observe this value and it
+ * cannot be mutated by sibling flows running concurrently.
+ */
+export function runWithSiteRoot<T>(siteRoot: string, fn: () => Promise<T>): Promise<T> {
+  assertSiteRootShape(siteRoot);
+  return siteRootStore.run({ siteRoot }, fn);
+}
+
+/**
+ * Returns the active site root for the current async context. Throws if the
+ * caller forgot to wrap the flow with {@link runWithSiteRoot}.
+ */
+export function getSiteRoot(): string {
+  const ctx = siteRootStore.getStore();
+  if (!ctx) {
+    throw new Error(
+      "getSiteRoot called outside of a runWithSiteRoot scope — refusing to fall back to a default. " +
+        "Wrap your flow with runWithSiteRoot(getSiteRoot(projectId), () => ...) at the entry point."
+    );
+  }
+  return ctx.siteRoot;
+}
+
+/**
+ * Replace the site root for the current async context. Mostly used by flows
+ * that need to refine the root partway through (e.g. after resolving a
+ * project record). Calls outside of a {@link runWithSiteRoot} scope throw.
+ */
+export function setSiteRoot(path: string): void {
+  assertSiteRootShape(path);
+  const ctx = siteRootStore.getStore();
+  if (!ctx) {
+    throw new Error(
+      `setSiteRoot called outside of a runWithSiteRoot scope. ` +
+        `Wrap your flow with runWithSiteRoot(${JSON.stringify(path)}, ...) instead.`
+    );
+  }
+  ctx.siteRoot = path;
+}
+
+/**
+ * Try to read the active site root without throwing. Returns `null` when no
+ * context is bound. Use this only in best-effort logging / diagnostic paths;
+ * production code paths must use {@link getSiteRoot} so the missing-context
+ * bug surfaces loudly.
+ */
+export function tryGetSiteRoot(): string | null {
+  return siteRootStore.getStore()?.siteRoot ?? null;
+}
+
+/**
+ * 安全路径：不允许跳出当前 SITE_ROOT，也不允许解析到 sites/template/。
+ * Resolves relative to the active async-local site root. The template-dir
+ * check is a depth-defence belt so misbehaving tools that bypass setSiteRoot
+ * still cannot corrupt the canonical template tree.
  */
 export function resolvePath(relativePath: string): string {
-  const root = _siteRoot;
-  const resolved = join(root, relativePath);
-  const real = resolved.replace(/\/+/g, "/");
-  if (!real.startsWith(root)) {
+  const root = getSiteRoot();
+  const resolved = runtimeJoin(root, relativePath);
+  if (!resolved.startsWith(root)) {
     throw new Error(`Path outside SITE_ROOT: ${relativePath}`);
   }
-  return real;
+  if (
+    resolved === TEMPLATE_DIR ||
+    resolved.startsWith(TEMPLATE_DIR + sep) ||
+    resolved.startsWith(TEMPLATE_DIR + "/")
+  ) {
+    throw new Error(
+      `resolvePath: refusing to operate on sites/template/ ("${relativePath}"). ` +
+        `Generated content must live under sites/<projectId>/.`
+    );
+  }
+  return resolved;
 }
-
-

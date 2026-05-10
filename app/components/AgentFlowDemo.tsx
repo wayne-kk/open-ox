@@ -141,7 +141,7 @@ function Node({
                 </span>
             </div>
 
-            {/* Parallel split indicators for generate_sections */}
+            {/* Parallel split indicators (e.g. multiple page agents) */}
             {isParallel && state === "active" && (
                 <div className="flex items-center gap-1 -mt-1">
                     {[0, 1, 2, 3].map((j) => (
@@ -405,14 +405,14 @@ export function AgentFlowDemo({ steps }: Props) {
             if (cancelled) return;
             setActiveIndex(i); setProgress(0);
 
-          // Repair step (index 5): show repair loop briefly
-          if (i === 5) {
+          // Demo: optional “repair” edge highlight on the final repair step
+          if (i === 7) {
               setRepairActive(true);
               await sleep(600);
               if (cancelled) return;
           }
 
-          const duration = i === 3 ? STEP_MS * 1.5 : STEP_MS; // generate_sections takes longer
+          const duration = i === 5 ? STEP_MS * 1.5 : STEP_MS; // parallel page_agents ×N
           const t0 = performance.now();
           await new Promise<void>((res) => {
               (function tick() {
@@ -439,7 +439,7 @@ export function AgentFlowDemo({ steps }: Props) {
               setDoneSet((s) => new Set([...s, i]));
               triggerFx(i, "success");
           }
-          if (i === 5) setRepairActive(false);
+          if (i === 7) setRepairActive(false);
           }
           setActiveIndex(steps.length);
           await sleep(PAUSE_MS);

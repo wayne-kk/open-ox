@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
+import matter from "gray-matter";
 import { composePromptBlocks, loadStepPrompt, writeSiteFile, loadGuardrail } from "../shared/files";
 import { callLLMWithMeta, extractJSON } from "../shared/llm";
 import { getModelForStep } from "@/lib/config/models";
@@ -10,6 +11,11 @@ import type { StepTrace } from "../types";
 export interface DesignSystemMatchResult {
   matched: boolean;
   skillId: string | null;
+  /**
+   * Full markdown body of the matched skill (frontmatter stripped). Includes any
+   * `<implementation-rules>` and `<design-system>` blocks, which are passed
+   * verbatim to downstream agents — no per-block extraction is performed here.
+   */
   designSystem?: string;
   reason: string;
   trace: StepTrace;
@@ -25,24 +31,32 @@ interface MatchLLMResponse {
 const SKILLS_YAML_FILENAME = "skills.yaml";
 const DESIGN_SYSTEM_SKILL_DIR = "design-system";
 
-function getDesignSystemSkillDir(): string {
+export function getDesignSystemSkillDir(): string {
   const root = process.cwd();
   return join(root, "ai", "flows", "generate_project", "prompts", "skills", DESIGN_SYSTEM_SKILL_DIR);
 }
 
-function stripOptionalFrontmatter(raw: string): string {
-  if (!raw.startsWith("---")) {
-    return raw;
+/**
+ * Strip optional YAML frontmatter (`---\n...\n---`) at the top of a markdown
+ * file. Frontmatter is metadata for tooling (title/created/modified) and has
+ * no value for the LLM — everything else is preserved verbatim.
+ */
+function stripFrontmatter(raw: string): string {
+  if (!raw.trimStart().startsWith("---")) {
+    return raw.trim();
   }
-
-  const normalized = raw.replace(/\r\n/g, "\n");
-  const closingIndex = normalized.indexOf("\n---\n", 4);
-  if (closingIndex !== -1) {
-    return normalized.slice(closingIndex + 5);
+  try {
+    return matter(raw).content.trim();
+  } catch {
+    // Malformed frontmatter — fall back to a permissive stripper so we never
+    // break the pipeline over a metadata typo.
+    const normalized = raw.replace(/\r\n/g, "\n");
+    const closingIndex = normalized.indexOf("\n---\n", 4);
+    if (closingIndex !== -1) {
+      return normalized.slice(closingIndex + 5).trim();
+    }
+    return normalized.replace(/^---/, "").trim();
   }
-
-  // Some files accidentally start with a lone --- without valid closing frontmatter.
-  return normalized.slice(3).replace(/^\n+/, "");
 }
 
 function loadSkillsYamlRaw(): string {
@@ -50,9 +64,8 @@ function loadSkillsYamlRaw(): string {
   if (!existsSync(filePath)) {
     return "";
   }
-
   const raw = readFileSync(filePath, "utf-8");
-  return stripOptionalFrontmatter(raw).trim();
+  return stripFrontmatter(raw);
 }
 
 function extractSkillNamesFromYaml(rawYaml: string): string[] {
@@ -65,36 +78,19 @@ function extractSkillNamesFromYaml(rawYaml: string): string[] {
 }
 
 /**
- * Read a skill .md file and extract the content inside <design-system>...</design-system> tags.
- * Returns the full design-system markdown content, or null if not found.
+ * Load a design-system skill `.md` file and return its full body (frontmatter
+ * stripped). The entire markdown — including any `<implementation-rules>`,
+ * `<design-system>`, prose, examples — is returned as a single string so the
+ * downstream agent prompt always sees the complete skill spec.
  */
-function loadSkillDesignSystemContent(skillId: string): string | null {
+export function loadSkillContent(skillId: string): string | null {
   const filePath = join(getDesignSystemSkillDir(), `${skillId}.md`);
   if (!existsSync(filePath)) {
     return null;
   }
-
   const raw = readFileSync(filePath, "utf-8");
-  const content = stripOptionalFrontmatter(raw);
-
-  // Extract content between <design-system> and </design-system> tags
-  const openTag = "<design-system>";
-  const closeTag = "</design-system>";
-  const startIdx = content.indexOf(openTag);
-  const endIdx = content.indexOf(closeTag);
-
-  if (startIdx === -1) {
-    const firstHeadingIndex = content.search(/^#\s+/m);
-    const fallbackContent =
-      firstHeadingIndex >= 0 ? content.slice(firstHeadingIndex).trim() : content.trim();
-    return fallbackContent || null;
-  }
-
-  const inner = content.slice(
-    startIdx + openTag.length,
-    endIdx === -1 ? undefined : endIdx
-  );
-  return inner.trim() || null;
+  const content = stripFrontmatter(raw);
+  return content.length > 0 ? content : null;
 }
 
 // ── Main Step ────────────────────────────────────────────────────────────
@@ -180,23 +176,26 @@ export async function stepMatchDesignSystemSkill(params: {
     return { matched: false, skillId: null, reason: fallbackReason, trace };
   }
 
-  // 5. Load the design system content from the skill .md file
-  const designSystemContent = loadSkillDesignSystemContent(skillId);
-  if (!designSystemContent) {
+  // 5. Load the full skill .md content (frontmatter stripped). No per-block
+  //    extraction — the entire spec (implementation-rules + design-system +
+  //    any prose/examples) is passed through to downstream agents as-is.
+  const skillContent = loadSkillContent(skillId);
+  if (!skillContent) {
     const fallbackReason = `Skill "${skillId}" matched but .md file content is empty, falling back to generation`;
     trace.output = { matched: false, skillId, reason: fallbackReason };
     return { matched: false, skillId, reason: fallbackReason, trace };
   }
 
-  // 6. Write to design-system.md
-  await writeSiteFile("design-system.md", designSystemContent);
+  // 6. Persist the verbatim skill content to design-system.md so downstream
+  //    agents (and humans inspecting the project) see exactly what was used.
+  await writeSiteFile("design-system.md", skillContent);
 
   trace.output = { matched: true, skillId, reason };
 
   return {
     matched: true,
     skillId,
-    designSystem: designSystemContent,
+    designSystem: skillContent,
     reason,
     trace,
   };

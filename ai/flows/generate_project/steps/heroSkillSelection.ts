@@ -1,13 +1,11 @@
-import { callLLM, extractJSON } from "../../shared/llm";
-import { getSkillPromptsRoot, loadSkillPrompt } from "../../shared/files";
+import { callLLM, extractJSON } from "../shared/llm";
+import { getSkillPromptsRoot, loadSkillPrompt } from "../shared/files";
 import {
   discoverSkillsBySectionType,
-  discoverTechnicalSpecSkills,
   type SkillMetadata,
-} from "../../../../shared/skillDiscovery";
+} from "../../../shared/skillDiscovery";
 import { getModelForStep } from "@/lib/config/models";
-import type { PlannedSectionSpec } from "../../types";
-import type { ComponentSkillScore } from "./types";
+import type { PlannedSectionSpec, ComponentSkillScore } from "../types";
 
 export function buildSectionSearchableText(
   section: PlannedSectionSpec,
@@ -143,64 +141,6 @@ ${skillList}`;
   }
 }
 
-async function llmSelectTechnicalSkills(
-  candidates: SkillMetadata[],
-  section: PlannedSectionSpec,
-  designKeywords: string[],
-  rawUserInput?: string,
-  selectedComponentSkillId?: string | null,
-): Promise<string[]> {
-  if (candidates.length === 0) return [];
-
-  const searchableText = buildSectionSearchableText(section, designKeywords, rawUserInput);
-
-  // Hard gate for 3D/WebGL technical stack to avoid accidental matches on generic "animation" requests.
-  const hasExplicit3DSignal = /(three(\.js|\s*js)?|webgl|shader|3d|三维|着色器)/i.test(
-    searchableText,
-  );
-  if (!hasExplicit3DSignal) return [];
-
-  const skillList = formatSkillCandidateListForLlm(candidates);
-
-  const systemPrompt = `Select technical guidance skills that can be layered ON TOP OF component skills.
-
-Rules:
-1. Technical skills are complementary implementation guidance; they can co-exist with a component skill.
-2. Select only skills that are strongly justified by user intent or section visual intent.
-3. If no technical skill is clearly needed, return {"skillIds": []}.
-4. Prefer precision and keep selection minimal (0-2 skills).
-5. Do NOT select three-animation unless there are explicit 3D/WebGL/Three.js/shader signals.
-
-Return JSON only: {"skillIds":["<id>", "..."]}`;
-
-  const userMessage = `Original user request (highest priority): ${rawUserInput ?? "N/A"}
-
-Section type: ${section.type}
-Section intent: ${section.intent}
-Section content hints: ${section.contentHints}
-Design keywords: ${designKeywords.join(", ")}
-Selected component skill: ${selectedComponentSkillId ?? "none"}
-
-Candidate technical skills:
-${skillList}`;
-
-  try {
-    const raw = await callLLM(systemPrompt, userMessage, 0, 256, getModelForStep("preselect_skills"));
-    const parsed = JSON.parse(extractJSON(raw)) as { skillIds?: unknown };
-    const skillIds = Array.isArray(parsed.skillIds) ? parsed.skillIds : [];
-    const candidateIds = new Set(candidates.map((c) => c.id));
-    return skillIds
-      .filter((id): id is string => typeof id === "string")
-      .map((id) => id.trim())
-      .filter((id) => id.length > 0 && candidateIds.has(id));
-  } catch (err) {
-    console.warn(
-      `[skill-select] llmSelectTechnicalSkills failed: ${err instanceof Error ? err.message : String(err)}`
-    );
-    return [];
-  }
-}
-
 export async function discoverAndSelectSkill(
   section: PlannedSectionSpec,
   designKeywords: string[],
@@ -209,28 +149,21 @@ export async function discoverAndSelectSkill(
   componentSkillId: string | null;
   componentSkillPrompt: string;
   componentSkillMetadataBlock: string;
-  technicalSkillIds: string[];
-  technicalSkillPrompts: string[];
-  technicalSkillMetadataBlock: string;
   componentSkillScores: ComponentSkillScore[];
 }> {
   const sectionType = section.type.trim().toLowerCase();
   const root = getSkillPromptsRoot();
   const sectionCandidates = discoverSkillsBySectionType(root, sectionType);
-  const technicalCandidates = discoverTechnicalSpecSkills(root);
 
   console.log(
-    `[skill-select] sectionType="${sectionType}" root="${root}" sectionCandidates=${sectionCandidates.length} technicalCandidates=${technicalCandidates.length}`
+    `[skill-select] sectionType="${sectionType}" root="${root}" sectionCandidates=${sectionCandidates.length}`
   );
 
-  if (sectionCandidates.length === 0 && technicalCandidates.length === 0) {
+  if (sectionCandidates.length === 0) {
     return {
       componentSkillId: null,
       componentSkillPrompt: "",
       componentSkillMetadataBlock: "",
-      technicalSkillIds: [],
-      technicalSkillPrompts: [],
-      technicalSkillMetadataBlock: "",
       componentSkillScores: [],
     };
   }
@@ -244,47 +177,23 @@ export async function discoverAndSelectSkill(
     .map((candidate) => scoreComponentCandidate(candidate, section, designKeywords, rawUserInput))
     .sort((a, b) => b.score - a.score);
 
-  const technicalMetadataBlock = technicalCandidates.map(formatSkillMetadataLine).join("\n");
-
   const llmChoice = await llmSelectSkill(componentCandidates, section, designKeywords, rawUserInput);
-  const technicalChoices = await llmSelectTechnicalSkills(
-    technicalCandidates,
-    section,
-    designKeywords,
-    rawUserInput,
-    llmChoice,
-  );
-
-  const technicalSkillPrompts = technicalChoices.map((id) => loadSkillPrompt(id));
 
   if (llmChoice) {
     console.log(`[skill-select] llm component choice "${llmChoice}" for ${sectionType}`);
-    if (technicalChoices.length > 0) {
-      console.log(`[skill-select] llm technical choices [${technicalChoices.join(",")}] for ${sectionType}`);
-    }
     return {
       componentSkillId: llmChoice,
       componentSkillPrompt: loadSkillPrompt(llmChoice),
       componentSkillMetadataBlock: componentMetadataBlock,
-      technicalSkillIds: technicalChoices,
-      technicalSkillPrompts,
-      technicalSkillMetadataBlock: technicalMetadataBlock,
       componentSkillScores,
     };
   }
 
-  if (technicalChoices.length > 0) {
-    console.log(`[skill-select] no component skill; technical choices [${technicalChoices.join(",")}] for ${sectionType}`);
-  } else {
-    console.log(`[skill-select] No component/technical skill selected for ${sectionType}`);
-  }
+  console.log(`[skill-select] No component skill selected for ${sectionType}`);
   return {
     componentSkillId: null,
     componentSkillPrompt: "",
     componentSkillMetadataBlock: componentMetadataBlock,
-    technicalSkillIds: technicalChoices,
-    technicalSkillPrompts,
-    technicalSkillMetadataBlock: technicalMetadataBlock,
     componentSkillScores,
   };
 }

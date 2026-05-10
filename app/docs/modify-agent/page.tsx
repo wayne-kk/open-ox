@@ -113,8 +113,8 @@ export default function ModifyAgentPage() {
           <P>用户描述的是他们看到的东西，而非代码结构。Agent 负责翻译：</P>
           <Pre>{`"那个极致性能的区块"  →  search "性能" → search "performance"
 "首页那个大标题"      →  home_HeroSection.tsx heading element
-"导航栏颜色不对"      →  layout_NavSection.tsx or app/layout.tsx
-"底部版权信息"        →  layout_FooterSection.tsx`}</Pre>
+"导航栏颜色不对"      →  app/layout.tsx 或 page agent 写出的 chrome 组件
+"底部版权信息"        →  app/layout.tsx 或 page 内的 footer 组件`}</Pre>
           <Callout>
             Agent 总是先尝试中文关键词搜索，然后再试英文等价词。
             如果找到多个候选项，会向用户确认而非猜测。

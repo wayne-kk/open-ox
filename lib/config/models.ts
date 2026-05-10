@@ -104,10 +104,8 @@ export const GENERATION_STEPS = [
     { id: "generate_project_design_system", label: "设计系统" },
     { id: "match_design_system_skill", label: "设计风格匹配" },
     { id: "apply_project_design_tokens", label: "设计 Token" },
-    { id: "describe_page_sections", label: "页面分段设计" },
     { id: "preselect_skills", label: "技能匹配" },
-    { id: "generate_section", label: "组件生成" },
-    { id: "compose_page", label: "页面组合" },
+    { id: "architect_agent", label: "站点架构 Agent" },
     { id: "page_implement_agent", label: "页面实现 Agent" },
     { id: "repair_build", label: "构建修复" },
 ] as const;
@@ -132,7 +130,7 @@ export async function loadStepModelsFromDB(): Promise<void> {
             .select("step_name, model_id, thinking_level");
 
         // Backward compatibility: if DB hasn't run the thinking_level migration yet,
-        // fall back to loading step->model mapping so generate_section override still works.
+        // fall back to loading step→model mapping only.
         if (error) {
             const needsFallback = error.message?.toLowerCase().includes("thinking_level");
             if (!needsFallback) throw error;

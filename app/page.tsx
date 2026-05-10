@@ -1,4 +1,4 @@
- "use client";
+"use client";
 
 import { Suspense } from "react";
 import Link from "next/link";
@@ -11,10 +11,10 @@ import { SparkleHoverButton } from "@/components/ui/sparkle-hover-button";
 const AGENT_STEPS = [
   { id: "analyze", label: "analyze_project_requirement", detail: "解析需求 · 输出最小蓝图（brief/site）", color: "text-primary" },
   { id: "infer", label: "infer_design_intent", detail: "独立推理 · 视觉风格意图", color: "text-accent-tertiary" },
-  { id: "plan", label: "plan_project", detail: "蓝图细化 · section 规划", color: "text-primary" },
-  { id: "design", label: "generate_design_system", detail: "色彩 · 字体 · 动效", color: "text-primary" },
-  { id: "page-design", label: "describe_page_sections", detail: "先整页布局再拆分 section 设计", color: "text-accent-tertiary" },
-  { id: "sections", label: "generate_sections ×N", detail: "并行生成 · 按 section brief 落地", color: "text-primary" },
+  { id: "plan", label: "plan_project", detail: "蓝图细化 · 页面级纲要（无固定 section 清单）", color: "text-primary" },
+  { id: "design", label: "generate_design_system", detail: "色彩 · 字体 · 动效 · Token", color: "text-primary" },
+  { id: "architect", label: "architect_agent", detail: "全局 chrome 与 layout 契约", color: "text-accent-tertiary" },
+  { id: "pages", label: "page_implement_agent ×N", detail: "每路由工具循环实现页面与组件", color: "text-primary" },
   { id: "build", label: "run_build", detail: "构建 · 类型检查 · 验证", color: "text-green-400" },
   { id: "repair", label: "repair_build", detail: "自动修复 · 最多 2 轮", color: "text-orange-400" },
 ];
@@ -22,7 +22,7 @@ const AGENT_STEPS = [
 const STATS = [
   { value: "2.5m", label: "平均生成时间", sub: "从描述到可运行站点" },
   { value: "8", label: "核心节点", sub: "每步有明确输入输出" },
-  { value: "100+", label: "skill 发现", sub: "每个 section 运行时自发现 skill" },
+  { value: "100+", label: "skill 发现", sub: "设计与 hero 技能运行时匹配" },
   { value: "∞", label: "迭代修改", sub: "对话式持续优化" },
 ];
 
@@ -31,7 +31,7 @@ const FEATURES = [
     icon: Cpu,
     tag: "Engineering System",
     title: "不是聊天机器人",
-    body: "固定 8 个核心节点（含独立风格推理与页面级设计拆分），每步有明确输入输出定义。",
+    body: "固定 8 个核心节点（需求→风格→规划→设计系统→架构 Agent→页面 Agent→构建→修复），每步有明确输入输出定义。",
     accent: "primary" as const,
     metric: "8 nodes",
     metricLabel: "pipeline",

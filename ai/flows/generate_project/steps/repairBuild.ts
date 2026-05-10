@@ -62,8 +62,8 @@ function selectRepairTargets(buildOutput: string, generatedFiles: string[]): str
   return unique(preferred.length > 0 ? preferred : generatedFiles).slice(-3);
 }
 
-/** Repair tools: read → edit only; outer flow performs build verification. */
-const REPAIR_TOOLS = ["read_file", "edit_file", "write_file"];
+/** Repair tools: read → edit; read_lints lets the agent verify each patch. */
+const REPAIR_TOOLS = ["read_file", "edit_file", "write_file", "read_lints"];
 
 export async function stepRepairBuild({
   blueprint,

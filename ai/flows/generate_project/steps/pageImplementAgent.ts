@@ -5,6 +5,7 @@ import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import {
   composePromptBlocks,
   formatSiteFile,
+  listSiteTree,
   loadGuardrail,
   loadStepPrompt,
   loadSystem,
@@ -18,8 +19,7 @@ import { createImageExecutor } from "@/ai/tools/system/generateImageTool";
 import type { PendingImage } from "@/ai/tools/system/generateImageTool";
 import { getModelForStep, getThinkingLevelForStep } from "@/lib/config/models";
 import { slugToPagePath } from "../shared/paths";
-import type { BuildStep, PlannedPageBlueprint, StepTrace } from "../types";
-import type { GenerateSectionProjectContext } from "./generateSection/types";
+import type { PlannedPageBlueprint, StepTrace, PageAgentProjectContext, BuildStep } from "../types";
 
 export const PAGE_IMPLEMENTATION_COMPLETE = "page_implementation_complete";
 
@@ -30,6 +30,7 @@ const TOOL_NAMES = [
   "list_dir",
   "search_code",
   "format_code",
+  "read_lints",
   "think",
   "generate_image",
   "exec_shell",
@@ -78,9 +79,15 @@ const VISIBLE_TOOL_NAMES = new Set(["write_file", "edit_file", "install_package"
 export interface RunPageImplementAgentParams {
   page: PlannedPageBlueprint;
   designSystem: string;
-  projectContext: GenerateSectionProjectContext;
-  /** True when blueprint has layout shell sections composed into `app/layout.tsx`. */
-  hasLayoutChrome: boolean;
+  projectContext: PageAgentProjectContext;
+  /**
+   * Pre-selected hero/opening-section skill prompt body (already loaded from
+   * `prompts/skills/section/<sectionType>/<skillId>.md`). When provided, the
+   * agent treats it as the canonical recipe for the hero section.
+   */
+  heroSkillPrompt?: string;
+  /** Skill id for tracing/UI display alongside the agent step record. */
+  heroSkillId?: string | null;
   onMessage?: (msg: ChatMessage) => void;
   /** Emit build sub-steps for UI progress visibility (topology + conversation). */
   onStep?: (step: BuildStep) => void;
@@ -88,6 +95,8 @@ export interface RunPageImplementAgentParams {
 
 export interface PageImplementAgentResult {
   pagePath: string;
+  /** Echoed back from input for logger / UI / artifact persistence. */
+  heroSkillId: string | null;
   trace: StepTrace;
   pendingImages: PendingImage[];
   summary: string;
@@ -97,15 +106,19 @@ export interface PageImplementAgentResult {
 export async function runPageImplementAgent(
   params: RunPageImplementAgentParams
 ): Promise<PageImplementAgentResult> {
-  const { page, designSystem, projectContext, hasLayoutChrome, onMessage, onStep } = params;
+  const {
+    page,
+    designSystem,
+    projectContext,
+    heroSkillPrompt,
+    heroSkillId,
+    onMessage,
+    onStep,
+  } = params;
   const targetPath = slugToPagePath(page.slug);
   const model = getModelForStep("page_implement_agent");
   const thinking = getThinkingLevelForStep("page_implement_agent");
   const agentStepName = `page_implement_agent:${page.slug}`;
-
-  const shellHint = hasLayoutChrome
-    ? "Global Navigation/Footer (or other layout sections) exist in app/layout.tsx — do not duplicate the global chrome inside this page route."
-    : "Root layout is minimal — implement the complete product UI in this route and colocated components (including chrome such as headers/sidebars if the product requires them).";
 
   const planJson = JSON.stringify(
     {
@@ -118,6 +131,14 @@ export async function runPageImplementAgent(
     null,
     2
   );
+
+  // Pre-warm context: read the chrome contract + globals + components tree
+  // up front so the agent does NOT need to spend round-trips on read_file /
+  // list_dir for the obvious things.
+  const layoutTsx = readSiteFile("app/layout.tsx") || "(missing — fallback to minimal layout)";
+  const globalsCss = readSiteFile("app/globals.css");
+  const componentsTree = listSiteTree("components", { maxDepth: 3, maxEntries: 160 });
+  const appTree = listSiteTree("app", { maxDepth: 2, maxEntries: 80 });
 
   const userMessage = `## Implement this Next.js route (App Router)
 
@@ -134,8 +155,34 @@ ${page.journeyStage}
 ## Page design plan (canonical)
 ${planJson}
 
-## Shell / layout mode
-${shellHint}
+## Pre-read context (already loaded for you — do NOT re-read these files)
+
+### \`app/layout.tsx\` — chrome contract (read-only, authored by Architect Agent)
+\`\`\`tsx
+${layoutTsx}
+\`\`\`
+
+### \`app/globals.css\` (truncated)
+\`\`\`css
+${truncate(globalsCss || "(empty)", 6_000)}
+\`\`\`
+
+### Existing \`app/\` tree (for context — only \`page.tsx\` files matter)
+\`\`\`
+${appTree}
+\`\`\`
+
+### Existing \`components/\` tree
+\`\`\`
+${componentsTree}
+\`\`\`
+
+## Layout contract (read-only)
+\`app/layout.tsx\` above is the **single source of truth** for global chrome. \`components/chrome/**\` (or wherever the architect placed shared chrome components) is owned by the Architect Agent and is **read-only** for you.
+
+- If layout.tsx already mounts global chrome (top nav, sidebar, topbar, footer, HUD, etc.), do **not** duplicate, replace, or remove that chrome inside this page route.
+- If it is intentionally minimal (only \`<html>\`/\`<body>\` with \`{children}\`), the architect decided this product is fullscreen / single-canvas / minimal — the page owns any chrome it needs.
+- **Do not edit** \`app/layout.tsx\` or any file under \`components/chrome/**\`. If something is genuinely missing for your page (rare), add a page-local solution inside this route's own subtree instead.
 
 ## Project
 - Title: ${projectContext.projectTitle}
@@ -143,16 +190,25 @@ ${shellHint}
 - Language (bcp47): ${projectContext.language}
 - Design keywords: ${projectContext.designKeywords.join(", ")}
 
-## Design system (reference)
-${truncate(designSystem, 14_000)}
+## Design system (reference — already loaded; \`design-system.md\` need not be re-read)
+${truncate(designSystem, 12_000)}
+${
+  heroSkillPrompt
+    ? `
+
+## Hero / opening-section skill (canonical recipe — must follow when implementing the hero)
+> Skill id: \`${heroSkillId ?? "(unknown)"}\` — the design system above sets the global token palette; the recipe below sets the hero section's structure, motion, and component layout. Treat the recipe as the source of truth for the hero; never invent a different hero pattern when this skill is provided.
+
+${truncate(heroSkillPrompt, 12_000)}`
+    : ""
+}
 
 ## Instructions (follow in order)
-1. **Explore first**: \`list_dir\` + \`read_file\` to inspect \`app/layout.tsx\`, \`app/globals.css\`, \`design-system.md\`, and existing \`components/\`.
-2. **Implement**: \`write_file\` / \`edit_file\` to create \`${targetPath}\` and extract meaningful components under \`components/\`. Respect design tokens.
-3. **Format**: run \`format_code\` on every .tsx file you wrote or edited.
-4. **Complete**: call **\`${PAGE_IMPLEMENTATION_COMPLETE}\`** with a summary of files and layout approach.
+1. **Decide structure**: review the pre-read context above; you can skip read_file for layout.tsx / globals.css / design-system / app tree / components tree. If you genuinely need a specific component file's contents, then \`read_file\` it.
+2. **Implement**: \`write_file\` / \`edit_file\` to create \`${targetPath}\` and extract page-local components under \`components/\` (your own subtree, e.g. \`components/<page-feature>/**\`). Respect design tokens. **Do not modify** \`app/layout.tsx\` or any file under \`components/chrome/**\`. Files are auto-formatted with Prettier on write — you do **not** need to call \`format_code\` afterwards.
+3. **Complete**: call **\`${PAGE_IMPLEMENTATION_COMPLETE}\`** with a summary of files and layout approach.
 
-⚠️ Step 4 is mandatory. The pipeline fails if you do not call \`${PAGE_IMPLEMENTATION_COMPLETE}\`.
+⚠️ Step 3 is mandatory. The pipeline fails if you do not call \`${PAGE_IMPLEMENTATION_COMPLETE}\`.
 
 Do not invent extra top-level routes beyond this page.`;
 
@@ -238,8 +294,8 @@ Do not invent extra top-level routes beyond this page.`;
           `[Iteration Budget] You have used most of your available tool-calling rounds. ` +
           `Wrap up now:\n` +
           `1. Ensure \`${targetPath}\` exists and has a \`export default\` component.\n` +
-          `2. Run \`format_code\` on every .tsx file you wrote or edited.\n` +
-          `3. Call \`${PAGE_IMPLEMENTATION_COMPLETE}\` with a brief summary.\n` +
+          `2. Call \`${PAGE_IMPLEMENTATION_COMPLETE}\` with a brief summary.\n` +
+          `Files are auto-formatted on write — no need to call format_code. ` +
           `Do NOT start new files or features — finalize what you have and call the completion tool.`,
       };
       msgs.push(nudge);
@@ -292,8 +348,8 @@ Do not invent extra top-level routes beyond this page.`;
     input: {
       slug: page.slug,
       targetPath,
-      hasLayoutChrome,
       pageDesignPlan: page.pageDesignPlan,
+      heroSkillId: heroSkillId ?? null,
     },
     output: {
       completeSummary,
@@ -311,6 +367,7 @@ Do not invent extra top-level routes beyond this page.`;
 
   return {
     pagePath: targetPath,
+    heroSkillId: heroSkillId ?? null,
     trace,
     pendingImages,
     summary: completeSummary || content.slice(0, 500) || "ok",

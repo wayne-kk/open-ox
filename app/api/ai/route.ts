@@ -5,8 +5,6 @@
  *   data: {"type":"step", ...BuildStep}\n\n
  *   data: {"type":"done", "result": ProcessResult}\n\n
  *   data: {"type":"error", "message": string}\n\n
- *
- * Optional body: pageCodegenMode `"agent"` | `"sections"` — overrides per-route codegen (default agent + env GENERATE_PROJECT_PAGE_CODEGEN).
  */
 
 import { runGenerateProject } from "@/ai/flows";
@@ -29,7 +27,7 @@ import {
   normalizePromptProfile,
   withCorePromptRuntime,
 } from "@/lib/config/corePrompts";
-import type { BuildStep, PageCodegenMode } from "@/ai/flows";
+import type { BuildStep } from "@/ai/flows";
 import { redactBuildStepForTransport } from "@/ai/flows/generate_project/shared/buildStepPayload";
 import { SSE_RESPONSE_HEADERS } from "@/lib/sse-headers";
 import { NextResponse } from "next/server";
@@ -52,12 +50,13 @@ export async function POST(req: Request) {
     const retryProjectId: string | undefined = body.retryProjectId;
     const preCreatedProjectId: string | undefined = body.projectId;
     const styleGuide: string | undefined = body.styleGuide;
-    const enableSkills: boolean = body.enableSkills === true;
+    // Default ON. The runGenerateProject pipeline gates skill matching on
+    // `options.enableSkills !== false`; align the route layer with that
+    // contract so callers (HeroPrompt, build-studio resume) get skill
+    // matching unless they explicitly opt out with `enableSkills: false`.
+    const enableSkills: boolean = body.enableSkills !== false;
     /** Defaults on: run `project_intent_guide` before analyze; callers may pass false to bypass. */
     const enableIntentGuide: boolean = body.enableIntentGuide !== false;
-    const rawPageCodegen: unknown = body.pageCodegenMode;
-    const pageCodegenMode: PageCodegenMode | undefined =
-      rawPageCodegen === "agent" || rawPageCodegen === "sections" ? rawPageCodegen : undefined;
     // Temporarily force local prompt files only.
     // Ignore remote/database prompt toggle from client requests.
     const useDatabasePrompts = false;
@@ -376,7 +375,6 @@ export async function POST(req: Request) {
                   useDatabasePrompts,
                   checkpoint,
                   enableIntentGuide,
-                  pageCodegenMode,
                 }
               )
           );

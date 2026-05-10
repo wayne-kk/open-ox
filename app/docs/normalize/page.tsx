@@ -102,7 +102,6 @@ export default function NormalizePage() {
   if (
     typeof flatCandidate.projectTitle === "string" &&
     flatCandidate.designIntent &&
-    isSectionSpecArray(flatCandidate.layoutSections) &&
     Array.isArray(flatCandidate.pages)
   ) {
     return { brief: ..., experience: ..., site: ... }; // 重新组装
@@ -114,13 +113,6 @@ export default function NormalizePage() {
     singlePage.designIntent &&
     isSectionSpecArray(singlePage.sections)
   ) {
-    // 自动分离 layout sections（nav/footer）和 page sections
-    const layoutSections = singlePage.sections.filter(
-      s => s.type === "navigation" || s.type === "footer"
-    );
-    const pageSections = singlePage.sections.filter(
-      s => s.type !== "navigation" && s.type !== "footer"
-    );
     return { brief: ..., experience: ..., site: ... };
   }
 
@@ -225,7 +217,6 @@ If so, use the web_search tool to look them up first."
                   ["capabilities", "空数组（不强制要求）"],
                   ["productScope", "从 projectDescription 推导"],
                   ["informationArchitecture", "从 pages 数组自动构建"],
-                  ["sharedShells", '["Global navigation", "Global footer"]'],
                   ["language", '"en"'],
                   ["fileName", "从 type 字段 PascalCase 转换"],
                   ["priority (role)", '"primary"'],

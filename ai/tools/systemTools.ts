@@ -14,7 +14,9 @@ import { executeFormatCode } from "./system/formatCodeTool";
 import { executeRunBuild } from "./system/runBuildTool";
 import { executeThink } from "./system/thinkTool";
 import { executeRevertFile } from "./system/revertFileTool";
+import { executeReadLints } from "./system/readLintsTool";
 import { trackFileRead, clearFileReadTracking } from "./system/fileReadTracker";
+import { clearFileWriteTracking } from "./system/fileWriteTracker";
 
 const executors: Record<string, ToolExecutor> = {
   write_file: executeWriteFile,
@@ -28,10 +30,18 @@ const executors: Record<string, ToolExecutor> = {
   run_build: executeRunBuild,
   think: executeThink,
   revert_file: executeRevertFile,
+  read_lints: executeReadLints,
 };
 
 // Re-export for external consumers
 export { clearFileReadTracking } from "./system/fileReadTracker";
+export { clearFileWriteTracking } from "./system/fileWriteTracker";
+
+/** Reset both read- and write-tracking. Call at the boundary of a flow. */
+export function clearFileTracking(): void {
+  clearFileReadTracking();
+  clearFileWriteTracking();
+}
 
 // ── Tool Result Budget ──────────────────────────────────────────────────────
 // Prevents a single tool result from consuming too much context.

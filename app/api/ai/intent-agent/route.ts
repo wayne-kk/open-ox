@@ -9,7 +9,7 @@
  *   - resetSession?: boolean
  *   - additionalTools?: OpenAI-format function tool array (merged server-side)
  *   - enableIntentAgentWebSearch?: boolean
- *   - styleGuide?, enableSkills?, enableIntentGuide?, pageCodegenMode? ("agent"|"sections"), model? — applied only when committing and running generation
+ *   - styleGuide?, enableSkills?, enableIntentGuide?, model? — applied only when committing and running generation
  *   - runGenerateOnCommit?: boolean (default true)
  */
 
@@ -33,12 +33,11 @@ import {
   normalizePromptProfile,
   withCorePromptRuntime,
 } from "@/lib/config/corePrompts";
-import type { BuildStep, PageCodegenMode } from "@/ai/flows";
-import { redactBuildStepForTransport } from "@/ai/flows/generate_project/shared/buildStepPayload";
+import type { BuildStep } from "@/ai/flows";import { redactBuildStepForTransport } from "@/ai/flows/generate_project/shared/buildStepPayload";
 import { SSE_RESPONSE_HEADERS } from "@/lib/sse-headers";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
-import { setSiteRoot, clearSiteRoot } from "@/ai/tools/system/common";
+import { runWithSiteRoot } from "@/ai/tools/system/common";
 import { appendTrajectoryEvent, createRunEndEvent, createTrajectoryRun } from "@/lib/trajectory/store";
 import { executeWebSearch, webSearchTool } from "@/ai/tools/system/webSearchTool";
 import {
@@ -87,17 +86,16 @@ export async function POST(req: Request) {
     const resetSession: boolean = body.resetSession === true;
     const styleGuide: string | undefined =
       typeof body.styleGuide === "string" ? body.styleGuide : undefined;
-    const enableSkills: boolean = body.enableSkills === true;
+    // Default ON — matches runGenerateProject's `options.enableSkills !== false`
+    // contract so resume / modify flows get skill matching unless they
+    // explicitly opt out with `enableSkills: false`.
+    const enableSkills: boolean = body.enableSkills !== false;
     const enableIntentGuide: boolean = body.enableIntentGuide !== false;
     const runGenerateOnCommit: boolean = body.runGenerateOnCommit !== false;
     const modelOverride: string | undefined = typeof body.model === "string" ? body.model : undefined;
     const enableIntentAgentWebSearch: boolean = body.enableIntentAgentWebSearch === true;
-    const rawPageCodegen: unknown = body.pageCodegenMode;
-    const pageCodegenMode: PageCodegenMode | undefined =
-      rawPageCodegen === "agent" || rawPageCodegen === "sections" ? rawPageCodegen : undefined;
 
     const useDatabasePrompts = false;
-
     if (!projectId || typeof projectId !== "string" || !isSafeProjectId(projectId)) {
       return NextResponse.json({ error: "Missing or invalid projectId" }, { status: 400 });
     }
@@ -164,8 +162,7 @@ export async function POST(req: Request) {
             trajectory = null;
           }
 
-          setSiteRoot(projectManagerGetSiteRoot(projectId));
-
+          await runWithSiteRoot(projectManagerGetSiteRoot(projectId), async () => {
           const additionalParsed = coerceAdditionalToolsFromJson(body.additionalTools);
           const mergedExtraTools = [...additionalParsed];
           if (
@@ -293,7 +290,6 @@ export async function POST(req: Request) {
                   useDatabasePrompts,
                   checkpoint,
                   enableIntentGuide,
-                  pageCodegenMode,
                 }
               )
           );
@@ -366,6 +362,7 @@ export async function POST(req: Request) {
               intentAgent: serializeIntentTurn(intentResult),
             },
           });
+          });
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : String(err);
           send({ type: "error", message: errMsg });
@@ -375,7 +372,6 @@ export async function POST(req: Request) {
             // ignore
           }
         } finally {
-          clearSiteRoot();
           setRuntimeModelId(null);
           controller.close();
         }

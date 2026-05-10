@@ -4,26 +4,6 @@ created: '2026-04-16T07:30:52.056Z'
 modified: '2026-04-17T07:02:55.160Z'
 ---
 
-# newsprint
-
-<implementation-rules>
-# Strict Implementation Rules
-
-## 1. No Invention Policy
-Only implement UI elements, components, sections, and content explicitly described in this specification. 
-If something is not mentioned, it does not exist. Do not add:
-- Images, photos, illustrations, or screenshots unless explicitly specified
-- Decorative assets, mockups, browser frames, or device frames
-
-## 2. Section Completeness
-Each section description is an **exhaustive list** of its contents.
-- "Contains X, Y, Z" means it contains X, Y, Z and **nothing else**
-- Visual richness must come from the design system's own tools (typography, color, spacing, gradients, shadows, motion) — not from invented assets
-
-## 3. Image Rule
-- No `<img>`, `<picture>`, `<video>`, `<svg>` illustrations, or CSS `background-image` (except patterns/noise/gradients defined in the design system) unless the spec explicitly says "include an image/illustration/photo here"
-- Icons (Lucide, Heroicons, etc.) are allowed where the spec mentions icons
-</implementation-rules>
 
 <design-system>
 # Design Style: newsprint

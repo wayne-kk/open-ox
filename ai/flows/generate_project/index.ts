@@ -37,7 +37,6 @@ export type {
   GuardrailId,
   InformationArchitecture,
   PageBlueprint,
-  PageCodegenMode,
   PageDesignPlan,
   PageMapEntry,
   PlannedPageBlueprint,

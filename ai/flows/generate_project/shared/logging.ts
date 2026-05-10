@@ -17,12 +17,22 @@ export interface StepLogger {
   timed: <T>(
     stepName: string,
     fn: () => Promise<T>,
-    onOk?: (value: T) => string | undefined | { detail?: string; trace?: StepTrace }
+    onOk?: (
+      value: T
+    ) =>
+      | string
+      | undefined
+      | { detail?: string; trace?: StepTrace; skillId?: string | null }
   ) => Promise<T>;
   timedWithTrace: <T>(
     stepName: string,
     fn: (addTrace: (trace: StepTrace) => void) => Promise<T>,
-    onOk?: (value: T) => string | undefined | { detail?: string; trace?: StepTrace }
+    onOk?: (
+      value: T
+    ) =>
+      | string
+      | undefined
+      | { detail?: string; trace?: StepTrace; skillId?: string | null }
   ) => Promise<T>;
 }
 
@@ -169,7 +179,12 @@ export function createStepLogger(options?: {
   const timed = async <T>(
     stepName: string,
     fn: () => Promise<T>,
-    onOk?: (value: T) => string | undefined | { detail?: string; trace?: StepTrace }
+    onOk?: (
+      value: T
+    ) =>
+      | string
+      | undefined
+      | { detail?: string; trace?: StepTrace; skillId?: string | null }
   ): Promise<T> => {
     startStep(stepName);
     try {
@@ -177,13 +192,19 @@ export function createStepLogger(options?: {
       const maybe = onOk?.(value);
       let detail: string | undefined;
       let trace: StepTrace | undefined;
-      if (maybe != null && typeof maybe === "object" && ("trace" in maybe || "detail" in maybe)) {
+      let skillId: string | null | undefined;
+      if (
+        maybe != null &&
+        typeof maybe === "object" &&
+        ("trace" in maybe || "detail" in maybe || "skillId" in maybe)
+      ) {
         detail = (maybe as { detail?: string }).detail;
         trace = (maybe as { trace?: StepTrace }).trace;
+        skillId = (maybe as { skillId?: string | null }).skillId;
       } else {
         detail = maybe as string | undefined;
       }
-      logStep(stepName, "ok", detail, undefined, trace);
+      logStep(stepName, "ok", detail, skillId, trace);
       return value;
     } catch (error) {
       logStep(stepName, "error", error instanceof Error ? error.message : String(error));
@@ -194,7 +215,12 @@ export function createStepLogger(options?: {
   const timedWithTrace = async <T>(
     stepName: string,
     fn: (addTrace: (trace: StepTrace) => void) => Promise<T>,
-    onOk?: (value: T) => string | undefined | { detail?: string; trace?: StepTrace }
+    onOk?: (
+      value: T
+    ) =>
+      | string
+      | undefined
+      | { detail?: string; trace?: StepTrace; skillId?: string | null }
   ): Promise<T> => {
     startStep(stepName);
     let pendingTrace: StepTrace = {};
@@ -206,9 +232,15 @@ export function createStepLogger(options?: {
       const maybe = onOk?.(value);
       let detail: string | undefined;
       let traceFromOk: StepTrace | undefined;
-      if (maybe != null && typeof maybe === "object" && ("trace" in maybe || "detail" in maybe)) {
+      let skillId: string | null | undefined;
+      if (
+        maybe != null &&
+        typeof maybe === "object" &&
+        ("trace" in maybe || "detail" in maybe || "skillId" in maybe)
+      ) {
         detail = (maybe as { detail?: string }).detail;
         traceFromOk = (maybe as { trace?: StepTrace }).trace;
+        skillId = (maybe as { skillId?: string | null }).skillId;
       } else {
         detail = maybe as string | undefined;
       }
@@ -216,7 +248,7 @@ export function createStepLogger(options?: {
         Object.keys(pendingTrace).length > 0 || (traceFromOk && Object.keys(traceFromOk).length > 0)
           ? { ...pendingTrace, ...traceFromOk }
           : undefined;
-      const entry = logStep(stepName, "ok", detail, undefined, mergedTrace);
+      const entry = logStep(stepName, "ok", detail, skillId, mergedTrace);
       if (mergedTrace && Object.keys(mergedTrace).length > 0) {
         options?.onStep?.(entry);
       }

@@ -4,15 +4,14 @@ created: '2026-04-17T09:31:50.062Z'
 modified: '2026-04-17T09:32:16.536Z'
 ---
 
-# sketch
-
-<design-system>
 # Style Name: Hand-Drawn / Sketch
-# Design Philosophy
+
+## Design Philosophy
 
 The Hand-Drawn design style celebrates authentic imperfection and human touch in a digital world. It rejects the clinical precision of modern UI design in favor of organic, playful irregularity that evokes sketches on paper, sticky notes on a wall, and napkin diagrams from a brainstorming session.
 
 **Core Principles:**
+
 - **No Straight Lines**: Every border, shape, and container uses irregular border-radius values to create wobbly, hand-drawn edges that reject geometric perfection
 - **Authentic Texture**: The design layer paper grain, dot patterns, and subtle background textures to simulate physical media (notebook paper, post-its, sketch pads)
 - **Playful Rotation**: Elements are deliberately tilted using small rotation transforms (-2deg to 2deg) to break rigid grid alignment and create casual energy
@@ -28,6 +27,7 @@ This style should feel approachable, creative, human-centered, and fun. It lower
 # Design Token System
 
 ## Colors (Single Palette - Light Mode)
+
 - **Background**: `#fdfbf7` (Warm Paper)
 - **Foreground**: `#2d2d2d` (Soft Pencil Black - never pure black)
 - **Muted**: `#e5e0d8` (Old Paper / Erased Pencil)
@@ -36,12 +36,14 @@ This style should feel approachable, creative, human-centered, and fun. It lower
 - **Secondary Accent**: `#2d5da1` (Blue Ballpoint Pen)
 
 ## Typography
+
 - **Headings**: `Kalam` (wght 700) - Looks like a thick felt-tip marker.
 - **Body**: `Patrick Hand` (wght 400) - Legible but distinctly handwritten.
 - **Scale**: Large and readable. Headings should vary in size dramatically to look like emphasized notes.
 
 ## Radius & Border
-- **Wobbly Borders**: CRITICAL. Do NOT use standard `rounded-*` classes alone.
+
+- **Wobbly Borders**: CRITICAL. Do NOT use standard `rounded-`* classes alone.
 - **Technique**: Use inline `style={{ borderRadius: ... }}` with multiple values to create irregular organic ellipses.
   - Example: `border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;`
   - Store reusable radius values in config as `wobbly` and `wobblyMd`
@@ -49,6 +51,7 @@ This style should feel approachable, creative, human-centered, and fun. It lower
 - **Style**: `border-solid` is default for most elements. Use `border-dashed` for secondary elements, dividers, and sketchy overlays.
 
 ## Shadows/Effects
+
 - **Hard Offset Shadows**: No blur. Just a solid offset to create a cut-paper, layered collage aesthetic.
   - Standard: `box-shadow: 4px 4px 0px 0px #2d2d2d;`
   - Emphasized: `box-shadow: 8px 8px 0px 0px #2d2d2d;`
@@ -61,6 +64,7 @@ This style should feel approachable, creative, human-centered, and fun. It lower
 # Component Stylings
 
 ## Buttons
+
 - **Shape**: Irregular wobbly oval using custom border-radius from config
 - **Normal State**:
   - White background, `border-[3px]` black border, black text
@@ -76,6 +80,7 @@ This style should feel approachable, creative, human-centered, and fun. It lower
 - **Secondary Variant**: Uses muted background `#e5e0d8`, hovers to blue `#2d5da1`
 
 ## Cards/Containers
+
 - **Base Style**: White background (`#ffffff`) with wobbly black border (`border-2`)
 - **Border Radius**: Use `wobblyMd` radius from config for medium containers
 - **Shadow**: Subtle `3px 3px 0px 0px rgba(45, 45, 45, 0.1)` for depth
@@ -89,6 +94,7 @@ This style should feel approachable, creative, human-centered, and fun. It lower
   - Sticky-note tags for section labels
 
 ## Inputs
+
 - **Style**: Full box with wobbly borders (not just underline)
 - **Border**: `border-2` with wobbly radius matching button aesthetic
 - **Font**: Patrick Hand (body font) for authentic hand-written feel
@@ -99,6 +105,7 @@ This style should feel approachable, creative, human-centered, and fun. It lower
   - No standard outline, maintains wobbly aesthetic
 
 # Layout Strategy
+
 - **Grid System**: Use Tailwind's responsive grid (`md:grid-cols-2`, `md:grid-cols-3`) but add visual irregularity
 - **Rotation**: Apply small rotations (`rotate-1`, `-rotate-2`) to cards, images, and decorative elements
 - **Breaking Alignment**:
@@ -118,6 +125,7 @@ This style should feel approachable, creative, human-centered, and fun. It lower
 # Non-Genericness (Bold Choices)
 
 **Unique Visual Signatures:**
+
 - **NO STRAIGHT LINES**: Every container, button, card, and frame uses irregular border-radius values—never standard Tailwind rounded classes
 - **Hand-Drawn SVG Decorations**:
   - Arrow pointing to hero CTA with dashed path
@@ -145,10 +153,12 @@ This style should feel approachable, creative, human-centered, and fun. It lower
   - Grayscale-to-color transition on blog images (removed in final implementation for simplicity)
 
 # Effects & Animation
+
 - **Hover**: "Jiggle" effect. `hover:rotate-1` or `hover:-rotate-2`.
 - **Transition**: `transition-transform duration-100` (Fast and snappy).
 
 # Spacing, Layout & Iconography
+
 - **Max Width**: `max-w-5xl` (Keep it contained like a sketchbook).
 - **Icons**: `lucide-react` icons with `stroke-width={2.5}` or `3`.
 - **Icon Style**: Enclose key icons in rough circles.
@@ -156,6 +166,7 @@ This style should feel approachable, creative, human-centered, and fun. It lower
 # Responsive Strategy
 
 **Mobile-First Approach:**
+
 - **Typography Scaling**:
   - Headings: `text-4xl md:text-5xl` or `text-5xl md:text-6xl`
   - Body text: `text-lg md:text-xl` or `text-base md:text-xl`
@@ -182,4 +193,3 @@ This style should feel approachable, creative, human-centered, and fun. It lower
   - Reduce horizontal padding when needed: `px-6`
   - Stats scale down: `h-24 w-24 md:h-32 md:w-32`
   - Pricing cards: `p-6 md:p-8` for better mobile fit
-</design-system>

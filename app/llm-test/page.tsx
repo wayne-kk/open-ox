@@ -52,7 +52,7 @@ function ModelManagement() {
     const [models, setModels] = useState<ModelInfo[]>([]);
     const [steps, setSteps] = useState<StepInfo[]>([]);
     const [stepModels, setStepModels] = useState<Record<string, string>>({});
-    /** Per-step `thinking_level` for chat/completions (used by generate_section when set) */
+    /** Per-step `thinking_level` for chat/completions (page_implement_agent when set for Gemini) */
     const [stepThinkingLevels, setStepThinkingLevels] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(true);
 
@@ -107,7 +107,7 @@ function ModelManagement() {
     const handleStepModelChange = async (stepName: string, modelId: string) => {
         setSavingStep(stepName);
         setStepModels((prev) => ({ ...prev, [stepName]: modelId }));
-        const canUseThinkingLevel = stepName === "generate_section" && !!modelId && isGeminiModelId(modelId);
+        const canUseThinkingLevel = stepName === "page_implement_agent" && !!modelId && isGeminiModelId(modelId);
         if (!modelId) {
             setStepThinkingLevels((prev) => {
                 const next = { ...prev };
@@ -237,17 +237,15 @@ function ModelManagement() {
             <div>
                 <h3 className="font-mono text-[10px] uppercase tracking-[0.3em] text-primary mb-4">步骤模型配置</h3>
                 <p className="font-mono text-[10px] text-muted-foreground/70 mb-4">
-                    为不同的生成步骤指定模型。留空则使用项目默认模型。组件生成步骤可额外设置{" "}
-                    <code className="text-muted-foreground/80">thinking_level</code>（会随 LLM 请求透传）。
+                    为不同的生成步骤指定模型。留空则使用项目默认模型。当步骤分配的是 Gemini 模型时，可以额外设置{" "}
+                    <code className="text-muted-foreground/80">thinking_level</code>（minimal / low / medium / high，会随 LLM 请求透传）。
                 </p>
                 <div className="space-y-2">
                     {steps.map((step) => (
                         (() => {
                             const selectedModelId = stepModels[step.id] ?? "";
                             const showThinkingLevel =
-                                step.id === "generate_section" &&
-                                !!selectedModelId &&
-                                isGeminiModelId(selectedModelId);
+                                !!selectedModelId && isGeminiModelId(selectedModelId);
                             return (
                         <div key={step.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/8 bg-white/[0.02] px-4 py-3">
                             <div className="flex items-center gap-3">

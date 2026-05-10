@@ -54,13 +54,11 @@ export async function processInput(
   userInput: string,
   options: ProcessInputOptions & {
     enableIntentGuide?: boolean;
-    pageCodegenMode?: import("./flows").PageCodegenMode;
   } = {}
 ): Promise<ProcessResult> {
-  const { enableIntentGuide, pageCodegenMode, ...rest } = options;
+  const { enableIntentGuide, ...rest } = options;
   const result = await runGenerateProject(userInput, rest.onStep, {
     enableIntentGuide,
-    pageCodegenMode,
   });
 
   return {
@@ -114,7 +112,6 @@ export type {
   IntentAgentYieldPayload,
   InformationArchitecture,
   PageBlueprint,
-  PageCodegenMode,
   PageDesignPlan,
   PageMapEntry,
   PlannedProjectBlueprint,

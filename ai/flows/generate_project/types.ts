@@ -14,13 +14,6 @@ export type ShellPlacement = "beforePageContent" | "afterPageContent";
 export type RolePriority = "primary" | "secondary" | "supporting";
 export type CapabilityPriority = "must-have" | "should-have" | "nice-to-have";
 
-/**
- * How each route’s UI is produced after `plan_project`.
- * - `agent`: multi-turn tool loop implements the page (Cursor-style); no fixed section stack.
- * - `sections`: legacy — describe sections → one file per planned section → compose page.
- */
-export type PageCodegenMode = "agent" | "sections";
-
 export interface ProductScope {
   productType: string;
   mvpDefinition: string;
@@ -80,6 +73,38 @@ export interface InformationArchitecture {
 /** PlannedSectionSpec is now identical to SectionSpec — kept as alias for downstream compat. */
 export type PlannedSectionSpec = SectionSpec;
 
+/** Scoring metadata for hero/component skill picker (LLM-assisted selection). */
+export type ComponentSkillScore = {
+  id: string;
+  priority: number;
+  score: number;
+  reasons: string[];
+  matchedKeywords: string[];
+  excludedKeywords: string[];
+};
+
+/** Project context forwarded to page implement agent and hero skill routing. */
+export type PageAgentProjectContext = {
+  projectTitle: string;
+  projectDescription: string;
+  language: string;
+  rawUserInput?: string;
+  pages: Array<{
+    slug: string;
+    title: string;
+    description: string;
+    journeyStage: string;
+  }>;
+  designKeywords: string[];
+};
+
+export type PageAgentPageContext = {
+  title: string;
+  slug: string;
+  description: string;
+  journeyStage: string;
+};
+
 export interface DesignIntent {
   mood: string[];
   colorDirection: string;
@@ -126,7 +151,6 @@ export interface ProjectExperience {
 
 export interface ProjectSiteBlueprint {
   informationArchitecture: InformationArchitecture;
-  layoutSections: SectionSpec[];
   pages: PageBlueprint[];
 }
 
@@ -137,8 +161,7 @@ export interface ProjectBlueprint {
 }
 
 export interface PlannedProjectSiteBlueprint
-  extends Omit<ProjectSiteBlueprint, "layoutSections" | "pages"> {
-  layoutSections: PlannedSectionSpec[];
+  extends Omit<ProjectSiteBlueprint, "pages"> {
   pages: PlannedPageBlueprint[];
 }
 

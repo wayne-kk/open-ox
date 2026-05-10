@@ -6,15 +6,23 @@ import {
 } from "./tsxDiagnostics";
 
 describe("isGeneratedTypeScriptPath", () => {
-  it("accepts tsx only", () => {
+  it("accepts every TS / JS source extension that participates in the import graph", () => {
     expect(isGeneratedTypeScriptPath("components/Foo.tsx")).toBe(true);
     expect(isGeneratedTypeScriptPath("app/page.tsx")).toBe(true);
+    expect(isGeneratedTypeScriptPath("lib/bar.ts")).toBe(true);
+    expect(isGeneratedTypeScriptPath("types/x.d.ts")).toBe(true);
+    expect(isGeneratedTypeScriptPath("scripts/foo.js")).toBe(true);
+    expect(isGeneratedTypeScriptPath("scripts/foo.jsx")).toBe(true);
+    expect(isGeneratedTypeScriptPath("config.mjs")).toBe(true);
+    expect(isGeneratedTypeScriptPath("config.cjs")).toBe(true);
   });
 
-  it("rejects plain ts and other files", () => {
-    expect(isGeneratedTypeScriptPath("lib/bar.ts")).toBe(false);
-    expect(isGeneratedTypeScriptPath("types/x.d.ts")).toBe(false);
+  it("rejects non-source files (markdown, css, json, images)", () => {
     expect(isGeneratedTypeScriptPath("README.md")).toBe(false);
+    expect(isGeneratedTypeScriptPath("app/globals.css")).toBe(false);
+    expect(isGeneratedTypeScriptPath("data.json")).toBe(false);
+    expect(isGeneratedTypeScriptPath("logo.png")).toBe(false);
+    expect(isGeneratedTypeScriptPath("no-extension")).toBe(false);
   });
 });
 

@@ -20,6 +20,7 @@ import fs from "fs";
 import path from "path";
 import { getSiteRoot } from "../../../tools/system/common";
 import type { StepTrace } from "../types";
+import type { ToolDiagnostic } from "../../../tools/types";
 
 export interface TsxIssue {
   file: string;
@@ -47,6 +48,16 @@ interface LanguageServiceCache {
   service: ts.LanguageService;
   files: Map<string, { version: number; content: string }>;
 }
+
+/**
+ * Process-wide document registry. Shared across every per-site
+ * `ts.LanguageService` instance so that the TypeScript stdlib (`lib.dom.d.ts`,
+ * `lib.es*.d.ts`) and any `node_modules/@types/*` declaration files only get
+ * parsed once per Node process. With this in place, the second site that asks
+ * for diagnostics pays ~100-300 ms instead of the 1-2 s cold start it would
+ * otherwise pay.
+ */
+const GLOBAL_DOCUMENT_REGISTRY = ts.createDocumentRegistry();
 
 let cache: LanguageServiceCache | null = null;
 
@@ -154,7 +165,7 @@ function getService(siteRoot: string): LanguageServiceCache {
     realpath: ts.sys.realpath,
   };
 
-  const service = ts.createLanguageService(host, ts.createDocumentRegistry());
+  const service = ts.createLanguageService(host, GLOBAL_DOCUMENT_REGISTRY);
   cache = { siteRoot, compilerOptions, service, files };
   return cache;
 }
@@ -285,6 +296,96 @@ export async function checkTsxFile(relativePath: string): Promise<CheckTsxFileRe
   }
 }
 
+const VERIFIABLE_EXTENSIONS = new Set([".tsx", ".ts", ".jsx", ".js", ".mjs", ".cjs"]);
+
+/**
+ * Whether the path is one of the source extensions the in-process LanguageService
+ * can usefully type-check. CSS / JSON / images are not.
+ */
+export function isVerifiableSourcePath(relativePath: string): boolean {
+  const dot = relativePath.lastIndexOf(".");
+  if (dot === -1) return false;
+  return VERIFIABLE_EXTENSIONS.has(relativePath.slice(dot).toLowerCase());
+}
+
+/** Convert internal {@link TsxIssue} to the public {@link ToolDiagnostic} shape. */
+function toToolDiagnostic(issue: TsxIssue): ToolDiagnostic {
+  const severity: ToolDiagnostic["severity"] = issue.category === "error" ? "error" : "warning";
+  return {
+    file: issue.file,
+    line: issue.line,
+    column: issue.column,
+    severity,
+    source: "ts",
+    code: issue.code === 0 ? "PARSE" : `TS${issue.code}`,
+    message: issue.message,
+  };
+}
+
+export interface VerifyForToolResult {
+  /** A short, agent-readable summary appended to the tool output. */
+  inline: string;
+  /** Structured diagnostics for the tool result. */
+  diagnostics: ToolDiagnostic[];
+  errorCount: number;
+  warningCount: number;
+}
+
+/**
+ * Run a single-file diagnostic pass on a freshly-written source file and
+ * return both an agent-readable inline summary and structured diagnostics.
+ *
+ * Intended for write_file / edit_file: writes their content to disk first,
+ * then call this so the LanguageService picks up the new bytes from `fs`.
+ *
+ * Returns `{ inline: "", diagnostics: [], errorCount: 0, warningCount: 0 }`
+ * when the path is not source code (e.g. JSON / CSS / image), the file is
+ * missing, or the in-process tsc opt-out is set.
+ */
+export async function verifyWrittenSourceFile(
+  relativePath: string,
+  options?: { hintLimit?: number }
+): Promise<VerifyForToolResult> {
+  if (!isVerifiableSourcePath(relativePath)) {
+    return { inline: "", diagnostics: [], errorCount: 0, warningCount: 0 };
+  }
+
+  const result = await checkTsxFile(relativePath);
+  if (result.skipped === "disabled" || result.skipped === "exception") {
+    return { inline: "", diagnostics: [], errorCount: 0, warningCount: 0 };
+  }
+
+  if (result.errorCount === 0 && result.warningCount === 0) {
+    return { inline: "", diagnostics: [], errorCount: 0, warningCount: 0 };
+  }
+
+  const limit = options?.hintLimit ?? 6;
+  const diagnostics = result.issues.map(toToolDiagnostic);
+  const errors = diagnostics.filter((d) => d.severity === "error");
+  const warnings = diagnostics.filter((d) => d.severity === "warning");
+  const shown = errors.slice(0, limit);
+  const lines: string[] = [];
+  if (errors.length > 0) {
+    lines.push(`⚠️  Type-check found ${errors.length} error(s) in ${relativePath} — fix before continuing:`);
+    shown.forEach((d) => {
+      lines.push(`  ${d.file}:${d.line}:${d.column}  ${d.code}  ${d.message}`);
+    });
+    const remaining = errors.length - shown.length;
+    if (remaining > 0) {
+      lines.push(`  … and ${remaining} more error(s) — call read_lints to see all.`);
+    }
+  } else if (warnings.length > 0) {
+    lines.push(`ℹ️  Type-check produced ${warnings.length} warning(s) in ${relativePath}.`);
+  }
+
+  return {
+    inline: lines.join("\n"),
+    diagnostics,
+    errorCount: errors.length,
+    warningCount: warnings.length,
+  };
+}
+
 /**
  * Format the first N issues as a short hint suitable for an LLM retry prompt.
  */
@@ -305,11 +406,13 @@ export function isSectionTscCheckEnabled(): boolean {
 }
 
 /**
- * Whether a path is included in the scoped pre-build pass. Currently **.tsx
- * only** (per product requirement: new generated TSX, not a full `tsc` run).
+ * Whether a path is included in the scoped pre-build pass. Covers any
+ * TypeScript / JavaScript source file the generator may have produced — TSX
+ * components, plain TS modules, and JS shims — since they all participate in
+ * the same import graph.
  */
 export function isGeneratedTypeScriptPath(relativePath: string): boolean {
-  return relativePath.toLowerCase().endsWith(".tsx");
+  return isVerifiableSourcePath(relativePath);
 }
 
 /**

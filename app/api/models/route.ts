@@ -118,13 +118,16 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  const supportsStepThinking = stepName === "generate_section" && isGeminiModelId(modelId);
+  // thinking_level is supported on any step when the assigned model is a
+  // Gemini model that exposes thinking. Server gates only on the model side
+  // (Gemini routing) — the step is the user's choice.
+  const supportsStepThinking = isGeminiModelId(modelId);
 
   let resolvedThinking: StepThinkingLevel | null = null;
   if (thinkingLevel !== undefined) {
     if (!supportsStepThinking && thinkingLevel !== null && thinkingLevel !== "") {
       return NextResponse.json(
-        { error: "thinkingLevel is only supported for generate_section with Gemini models" },
+        { error: "thinkingLevel is only supported when the step is assigned to a Gemini model" },
         { status: 400 }
       );
     }

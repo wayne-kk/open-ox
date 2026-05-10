@@ -117,8 +117,7 @@ export default function BlueprintPage() {
     notes: string[]
   }
 
-  layoutSections: SectionSpec[]  // nav、footer 等共享组件
-  pages: PageBlueprint[]         // 每个页面及其 sections
+  pages: PageBlueprint[]         // 每个页面及其 sections（layout chrome 由实现 Agent 决定）
 }`}</Pre>
           <H3>SectionSpec</H3>
           <P>每个 section 的规格：</P>

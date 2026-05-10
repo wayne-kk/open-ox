@@ -21,7 +21,7 @@ describe("asProjectBlueprint", () => {
         },
       },
       experience: { designIntent: { style: "minimal", colorDirection: "light", mood: [], keywords: [] } },
-      site: { informationArchitecture: { navigationModel: "nav", pageMap: [], sharedShells: [], notes: [] }, layoutSections: [], pages: [] },
+      site: { informationArchitecture: { navigationModel: "nav", pageMap: [], sharedShells: [], notes: [] }, pages: [] },
     });
     expect(result.site.pages[0]?.slug ?? "home").toBe("home");
   });
@@ -31,7 +31,6 @@ describe("asProjectBlueprint", () => {
       projectTitle: "Flat",
       projectDescription: "Flat desc",
       designIntent: { style: "clean", colorDirection: "neutral", mood: [], keywords: [] },
-      layoutSections: [],
       pages: [],
     });
     expect(result.brief.projectTitle).toBe("Flat");

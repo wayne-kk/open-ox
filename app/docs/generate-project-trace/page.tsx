@@ -32,7 +32,8 @@ const PHASE_ROWS: [string, string, string][] = [
   ["apply_project_design_tokens", "frontend + steps/applyProjectDesignTokens.md", "globals + 设计系统"],
   ["preselect_skills（内联 selector）", "短 system", "各 section 的 skill metadata（无正文）"],
   ["generate_section", "见 §3", "见 §4"],
-  ["compose_layout / compose_page", "frontend + steps/compose*.md + outputTsx", "已生成文件 + 蓝图"],
+  ["architect_agent", "frontend + steps/architectAgent.md + 工具循环", "蓝图 + design-system + 现有文件"],
+  ["page_implement_agent / compose_page", "frontend + steps/pageImplementAgent.md / steps/composePage.md", "已生成文件 + chrome 契约（layout.tsx）"],
   ["repair_build", "frontend + steps/repairBuild.md + outputJson", "构建日志 + 相关文件"],
 ];
 

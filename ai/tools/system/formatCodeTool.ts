@@ -8,7 +8,10 @@ export const formatCodeTool: ChatCompletionTool = {
   function: {
     name: "format_code",
     description:
-      "Format code file with Prettier. Use after writing to ensure style consistency.",
+      "Format an existing file on disk with Prettier. " +
+      "NOTE: write_file and edit_file already auto-format on save — you normally do NOT need to call this. " +
+      "Only use it when you suspect a file on disk is unformatted (e.g. produced by another process) " +
+      "or when format-on-write was skipped due to an unsupported extension.",
     parameters: {
       type: "object",
       properties: {

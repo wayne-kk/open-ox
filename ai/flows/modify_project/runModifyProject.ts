@@ -1,9 +1,9 @@
 import path from "path";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { setSiteRoot, clearSiteRoot } from "@/ai/tools/system/common";
+import { runWithSiteRoot } from "@/ai/tools/system/common";
 import { getProject, getSiteRoot as pmGetSiteRoot, updateProjectStatus } from "@/lib/projectManager";
 import type { ModificationRecord } from "@/lib/projectManager";
-import { clearFileReadTracking } from "@/ai/tools";
+import { clearFileTracking } from "@/ai/tools";
 import { createArtifactLogger } from "@/ai/flows/generate_project/shared/logging";
 import { setRevertSnapshots, clearRevertSnapshots } from "@/ai/tools/system/revertFileTool";
 import { buildFileTree, buildHistoryContext, buildInitialMessages, tryReadFile } from "./context/buildContext";
@@ -42,7 +42,35 @@ export async function runModifyProject(
   const project = await getProject(db, projectId);
   if (!project) throw new Error(`Project not found: ${projectId}`);
   const projectDir = pmGetSiteRoot(projectId);
-  setSiteRoot(projectDir);
+  return runWithSiteRoot(projectDir, () => runModifyProjectInner(
+    db,
+    project,
+    projectId,
+    userInstruction,
+    onEvent,
+    conversationHistory,
+    clearContext,
+    imageBase64,
+    modelOverride,
+    artifactLogger,
+  ));
+}
+
+type ModifyArtifactLogger = ReturnType<typeof createArtifactLogger>;
+
+async function runModifyProjectInner(
+  db: SupabaseClient,
+  project: NonNullable<Awaited<ReturnType<typeof getProject>>>,
+  projectId: string,
+  userInstruction: string,
+  onEvent: (event: ModifySSEEvent) => void,
+  conversationHistory: Array<{ instruction: string; summary: string }> | undefined,
+  clearContext: boolean,
+  imageBase64: string | undefined,
+  modelOverride: string | undefined,
+  artifactLogger: ModifyArtifactLogger,
+): Promise<void> {
+  const projectDir = pmGetSiteRoot(projectId);
   onEvent({ type: "step", name: "resolve_project", status: "done" });
   const taskId = `modify:${projectId}`;
   let trajectory: { runId: string; taskId: string } | null = null;
@@ -470,7 +498,6 @@ export async function runModifyProject(
     }
   } finally {
     clearRevertSnapshots();
-    clearFileReadTracking();
-    clearSiteRoot();
+    clearFileTracking();
   }
 }
