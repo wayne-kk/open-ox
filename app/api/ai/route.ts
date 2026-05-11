@@ -5,7 +5,8 @@
  *   data: {"type":"step", ...BuildStep}\n\n
  *   data: {"type":"done", "result": ProcessResult}\n\n
  *   data: {"type":"error", "message": string}\n\n
- */
+ *
+ * Body 可选字段 `langfuseSessionId`：与 intent-agent / modify 传同一字符串时，Langfuse 会归到同一 Session。
 
 import { runGenerateProject } from "@/ai/flows";
 import {
@@ -29,11 +30,19 @@ import {
 } from "@/lib/config/corePrompts";
 import type { BuildStep } from "@/ai/flows";
 import { redactBuildStepForTransport } from "@/ai/flows/generate_project/shared/buildStepPayload";
+import { shouldSkipNamingFromBlueprintTitle } from "@/ai/flows/generate_project/intentAgent/commitMergeBrief";
 import { SSE_RESPONSE_HEADERS } from "@/lib/sse-headers";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
 import { getUserDisplayName } from "@/lib/auth/display-name";
 import { appendTrajectoryEvent, createRunEndEvent, createTrajectoryRun } from "@/lib/trajectory/store";
+import {
+  flushLangfuse,
+  resolveLangfuseSessionId,
+  runWithLangfuseTraceRoot,
+} from "@/lib/observability/langfuseTracing";
+
+export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
@@ -216,17 +225,37 @@ export async function POST(req: Request) {
             }
           }
 
+          const langfuseSessionKey = resolveLangfuseSessionId({
+            projectId,
+            clientSessionId:
+              typeof body.langfuseSessionId === "string" ? body.langfuseSessionId : undefined,
+            trajectoryRunId: trajectory?.runId,
+          });
+
           // Step 3: Run generation, writing files into sites/{projectId}/
-          const result = await withCorePromptRuntime(
+          const result = await runWithLangfuseTraceRoot(
             {
-              promptProfile,
-              useDatabasePrompts,
-              dbPromptByStepId: corePromptOverrides,
+              name: "generate_project",
+              userId: user.id,
+              sessionId: langfuseSessionKey,
+              tags: ["flow:generate_project", "route:api_ai"],
+              metadata: {
+                retry: retryProjectId != null,
+                preCreatedProjectId: preCreatedProjectId != null,
+              },
+              input: { userPrompt: effectivePrompt },
             },
             () =>
-              runGenerateProject(
-                effectivePrompt,
-                (step: BuildStep) => {
+              withCorePromptRuntime(
+                {
+                  promptProfile,
+                  useDatabasePrompts,
+                  dbPromptByStepId: corePromptOverrides,
+                },
+                () =>
+                  runGenerateProject(
+                    effectivePrompt,
+                    (step: BuildStep) => {
               // SSE is the sole real-time channel — no DB writes during generation.
               // Final buildSteps are persisted once via updateProjectStatus below.
               send({ type: "step", ...redactBuildStepForTransport(step) });
@@ -375,7 +404,10 @@ export async function POST(req: Request) {
                   useDatabasePrompts,
                   checkpoint,
                   enableIntentGuide,
+                  langfuseUserId: user.id,
+                  langfuseSessionId: langfuseSessionKey,
                 }
+                  )
               )
           );
 
@@ -393,7 +425,11 @@ export async function POST(req: Request) {
 
             // Step 5: Update project name from blueprint's projectTitle
             const projectTitle = (result.blueprint as { brief?: { projectTitle?: string } })?.brief?.projectTitle;
-            if (projectTitle && projectTitle.trim()) {
+            if (
+              projectTitle &&
+              projectTitle.trim() &&
+              !shouldSkipNamingFromBlueprintTitle(projectTitle)
+            ) {
               await renameProject(db, projectId, projectTitle.trim());
             }
 
@@ -525,6 +561,7 @@ export async function POST(req: Request) {
             }).catch(() => null);
           }
         } finally {
+          await flushLangfuse();
           setRuntimeModelId(null);
           controller.close();
         }

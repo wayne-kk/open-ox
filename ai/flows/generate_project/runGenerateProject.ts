@@ -11,6 +11,13 @@ import {
   checkGeneratedTypeScriptFiles,
   formatScopedTypecheckDetail,
 } from "./shared/tsxDiagnostics";
+import {
+  getLangfuse,
+  getLangfuseRunContext,
+  runWithLangfuseSpanBranch,
+  runWithLangfuseTraceRoot,
+  withLangfuseSpan,
+} from "@/lib/observability/langfuseTracing";
 import { createArtifactLogger, createStepLogger } from "./shared/logging";
 import { slugToPagePath } from "./shared/paths";
 import { stepAnalyzeProjectRequirement } from "./steps/analyzeProjectRequirement";
@@ -161,10 +168,14 @@ async function autoInstallDependenciesForFiles(params: {
       return;
     }
 
-    const installResult = await stepInstallDependencies({
-      files: uniqueFiles,
-      buildOutput,
-    });
+    const installResult = await withLangfuseSpan(
+      `install_dependencies_${scope.replace(/[^a-zA-Z0-9_-]+/g, "_")}`,
+      () => stepInstallDependencies({
+        files: uniqueFiles,
+        buildOutput,
+      }),
+      { metadata: { scope } }
+    );
     appendInstalledDependencies(result, installResult.installed);
     appendDependencyInstallFailures(result, installResult.failed);
 
@@ -320,32 +331,37 @@ async function generatePages(params: {
         return { files: [pagePathResume], pendingImages: [] };
       }
 
-      let heroSkillId: string | null = null;
-      let heroSkillPrompt: string | undefined;
-      if (shouldOfferHeroSkillForAgentPage(page, runtimeContext.rawUserInput)) {
-        const virtualHero = buildVirtualHeroSectionForSkillSelection(page);
-        const sel = await discoverAndSelectSkill(
-          virtualHero,
-          runtimeContext.designKeywords,
-          runtimeContext.rawUserInput,
-        );
-        heroSkillId = sel.componentSkillId;
-        heroSkillPrompt = sel.componentSkillPrompt || undefined;
-      }
-
       const onMessage = trajectoryCollector?.createEpisodeCollector(agentStepName);
       const outcome = await logger.timed(
         agentStepName,
-        () =>
-          runPageImplementAgent({
-            page,
-            designSystem,
-            projectContext: runtimeContext,
-            heroSkillPrompt,
-            heroSkillId,
-            onMessage,
-            onStep: params.onStep,
-          }),
+        async () =>
+          runWithLangfuseSpanBranch(
+            `page:${page.slug.replace(/[^a-zA-Z0-9_.-]+/g, "_")}`,
+            async () => {
+              let heroSkillIdInner: string | null = null;
+              let heroSkillPromptInner: string | undefined;
+              if (shouldOfferHeroSkillForAgentPage(page, runtimeContext.rawUserInput)) {
+                const virtualHero = buildVirtualHeroSectionForSkillSelection(page);
+                const sel = await discoverAndSelectSkill(
+                  virtualHero,
+                  runtimeContext.designKeywords,
+                  runtimeContext.rawUserInput,
+                );
+                heroSkillIdInner = sel.componentSkillId;
+                heroSkillPromptInner = sel.componentSkillPrompt || undefined;
+              }
+              return runPageImplementAgent({
+                page,
+                designSystem,
+                projectContext: runtimeContext,
+                heroSkillPrompt: heroSkillPromptInner,
+                heroSkillId: heroSkillIdInner,
+                onMessage,
+                onStep: params.onStep,
+              });
+            },
+            { metadata: { slug: page.slug, step: agentStepName } }
+          ),
         (r) => ({
           detail: r.summary.slice(0, 260),
           trace: r.trace,
@@ -392,7 +408,7 @@ async function runBuildWithRepair(params: {
     logger.logStep(
       buildStepName,
       buildResult.success ? "ok" : "error",
-      buildResult.output.slice(0, 200)
+      buildResult.output
     );
     await persistTextArtifact(
       artifactLogger,
@@ -466,6 +482,38 @@ export interface RunGenerateProjectOptions {
   checkpoint?: CheckpointResult;
   /** When true, run `project_intent_guide` before analyze; may defer generation for user dialogue. */
   enableIntentGuide?: boolean;
+  /** Maps to Langfuse `userId` when a trace root is opened for this run. */
+  langfuseUserId?: string;
+  /**
+   * Langfuse `sessionId` when this flow opens its own trace (no parent trace).
+   * Routes should pass the same id as HTTP-level {@link resolveLangfuseSessionId}.
+   */
+  langfuseSessionId?: string;
+}
+
+async function ensureLangfuseGenerateTrace<T>(
+  options: RunGenerateProjectOptions,
+  userInput: string,
+  fn: () => Promise<T>
+): Promise<T> {
+  if (!getLangfuse() || getLangfuseRunContext()) {
+    return fn();
+  }
+  return runWithLangfuseTraceRoot(
+    {
+      name: "generate_project",
+      userId: options.langfuseUserId,
+      sessionId: options.langfuseSessionId ?? options.projectId,
+      tags: ["flow:generate_project"],
+      metadata: { projectId: options.projectId },
+      input: {
+        userInput,
+        enableIntentGuide: options.enableIntentGuide,
+        enableSkills: options.enableSkills,
+      },
+    },
+    fn
+  );
 }
 
 /**
@@ -487,7 +535,9 @@ export async function runGenerateProject(
   }
   const siteRoot = projectManagerGetSiteRoot(options.projectId);
   return runWithSiteRoot(siteRoot, () =>
-    runGenerateProjectInner(userInput, onStep, options as RunGenerateProjectOptions)
+    ensureLangfuseGenerateTrace(options as RunGenerateProjectOptions, userInput, () =>
+      runGenerateProjectInner(userInput, onStep, options as RunGenerateProjectOptions)
+    )
   );
 }
 
@@ -541,7 +591,9 @@ async function runGenerateProjectInner(
 
     if (options.enableIntentGuide !== false && !cp?.skipAnalyze) {
       logger.startStep("project_intent_guide");
-      const intentResult = await stepProjectIntentGuide(userInput);
+      const intentResult = await withLangfuseSpan("project_intent_guide", () =>
+        stepProjectIntentGuide(userInput)
+      );
       logger.logStep(
         "project_intent_guide",
         "ok",
@@ -578,7 +630,7 @@ async function runGenerateProjectInner(
     }
 
     // ── Step: analyze_project_requirement ─────────────────────────────────
-    let rawBlueprint: ProjectBlueprint;
+    let rawBlueprint!: ProjectBlueprint;
     let inferredDesignIntent: DesignIntentResult | null = null;
 
     if (cp?.skipAnalyze && cp.cachedBlueprint) {
@@ -596,38 +648,40 @@ async function runGenerateProjectInner(
         await persistTextArtifact(artifactLogger, "infer_design_intent", "output", inferredDesignIntent.text, "md");
       }
     } else {
-      logger.startStep("analyze_project_requirement");
-      logger.startStep("infer_design_intent");
-      const [analyzeResult, inferResult] = await Promise.all([
-        stepAnalyzeProjectRequirement(effectiveUserInput, (name, args, result) => {
-          onStep?.({
-            step: `tool_call:${name}`,
-            status: "ok",
-            detail: JSON.stringify({ tool: name, args, result: result.slice(0, 500) }),
-            timestamp: Date.now(),
-            duration: 0,
-          });
-        }),
-        stepInferDesignIntent(effectiveUserInput),
-      ]);
-      logger.logStep(
-        "analyze_project_requirement",
-        "ok",
-        `${analyzeResult.blueprint.brief.roles.length} roles, ${analyzeResult.blueprint.site.pages.length} pages planned`,
-        undefined,
-        analyzeResult.trace
-      );
-      logger.logStep(
-        "infer_design_intent",
-        "ok",
-        inferResult.text.slice(0, 80),
-        undefined,
-        inferResult.trace
-      );
-      rawBlueprint = analyzeResult.blueprint;
-      inferredDesignIntent = inferResult;
-      await persistJsonArtifact(artifactLogger, "analyze_project_requirement", "output", rawBlueprint);
-      await persistTextArtifact(artifactLogger, "infer_design_intent", "output", inferredDesignIntent.text, "md");
+      await withLangfuseSpan("analyze_blueprint_parallel", async () => {
+        logger.startStep("analyze_project_requirement");
+        logger.startStep("infer_design_intent");
+        const [analyzeResult, inferResult] = await Promise.all([
+          stepAnalyzeProjectRequirement(effectiveUserInput, (name, args, result) => {
+            onStep?.({
+              step: `tool_call:${name}`,
+              status: "ok",
+              detail: JSON.stringify({ tool: name, args, result: result.slice(0, 500) }),
+              timestamp: Date.now(),
+              duration: 0,
+            });
+          }),
+          stepInferDesignIntent(effectiveUserInput),
+        ]);
+        logger.logStep(
+          "analyze_project_requirement",
+          "ok",
+          `${analyzeResult.blueprint.brief.roles.length} roles, ${analyzeResult.blueprint.site.pages.length} pages planned`,
+          undefined,
+          analyzeResult.trace
+        );
+        logger.logStep(
+          "infer_design_intent",
+          "ok",
+          inferResult.text.slice(0, 80),
+          undefined,
+          inferResult.trace
+        );
+        rawBlueprint = analyzeResult.blueprint;
+        inferredDesignIntent = inferResult;
+        await persistJsonArtifact(artifactLogger, "analyze_project_requirement", "output", rawBlueprint);
+        await persistTextArtifact(artifactLogger, "infer_design_intent", "output", inferredDesignIntent.text, "md");
+      });
     }
 
     if (!rawBlueprint.experience) {
@@ -644,8 +698,8 @@ async function runGenerateProjectInner(
     const normalizedBlueprint = normalizeBlueprint(rawBlueprint);
 
     // ── Steps: plan_project + match/generate design system ──
-    let blueprint: PlannedProjectBlueprint;
-    let designSystem: string;
+    let blueprint!: PlannedProjectBlueprint;
+    let designSystem!: string;
 
     if (cp?.skipPlanAndDesign && cp.cachedBlueprint && cp.cachedDesignSystem) {
       blueprint = cp.cachedBlueprint;
@@ -653,117 +707,119 @@ async function runGenerateProjectInner(
       logger.logStep("plan_project", "ok", "resumed from checkpoint");
       logger.logStep("generate_project_design_system", "ok", "resumed from checkpoint");
     } else {
-      logger.startStep("plan_project");
-      logger.startStep("match_design_system_skill");
+      await withLangfuseSpan("plan_and_design_system", async () => {
+        logger.startStep("plan_project");
+        logger.startStep("match_design_system_skill");
 
-      // Build a fallback markdown text from blueprint's designIntent if inferDesignIntent returned empty
-      const designIntentForSystem = inferredDesignIntent?.text || (() => {
-        const di = rawBlueprint.experience?.designIntent;
-        if (!di) return "";
-        return `## Design Intent\n- Mood: ${di.mood.join(", ")}\n- Color Direction: ${di.colorDirection}\n- Style: ${di.style}\n- Keywords: ${di.keywords.join(", ")}`;
-      })();
+        // Build a fallback markdown text from blueprint's designIntent if inferDesignIntent returned empty
+        const designIntentForSystem = inferredDesignIntent?.text || (() => {
+          const di = rawBlueprint.experience?.designIntent;
+          if (!di) return "";
+          return `## Design Intent\n- Mood: ${di.mood.join(", ")}\n- Color Direction: ${di.colorDirection}\n- Style: ${di.style}\n- Keywords: ${di.keywords.join(", ")}`;
+        })();
 
-      // Phase 1: plan_project + (optionally) skill matching run in parallel
-      const skillMatchingEnabled = options.enableSkills !== false;
+        // Phase 1: plan_project + (optionally) skill matching run in parallel
+        const skillMatchingEnabled = options.enableSkills !== false;
 
-      const planPromise = stepPlanProject(normalizedBlueprint).then((out) => {
-        logger.logStep("plan_project", "ok", "page-level blueprints prepared", undefined, out.trace);
-        return out;
-      });
-
-      const matchPromise: Promise<DesignSystemMatchResult> = skillMatchingEnabled
-        ? stepMatchDesignSystemSkill({
-          userInput: effectiveUserInput,
-        }).then((result) => {
-          logger.logStep(
-            "match_design_system_skill",
-            "ok",
-            result.matched
-              ? `matched built-in skill: ${result.skillId} — ${result.reason}`
-              : `no match — ${result.reason}`,
-            result.matched ? result.skillId : undefined
-          );
-          // Attach trace so the topology detail drawer shows LLM call, input/output
-          if (result.trace && Object.keys(result.trace).length > 0) {
-            logger.attachTrace("match_design_system_skill", result.trace);
-          }
-          return result;
-          })
-        : Promise.resolve<DesignSystemMatchResult>({
-          matched: false,
-          skillId: null,
-          reason: "skill matching disabled by user",
-          trace: {},
-        }).then((result) => {
-          logger.logStep("match_design_system_skill", "ok", "skipped — disabled by user");
-          return result;
+        const planPromise = stepPlanProject(normalizedBlueprint).then((out) => {
+          logger.logStep("plan_project", "ok", "page-level blueprints prepared", undefined, out.trace);
+          return out;
         });
 
-      const [planOutcome, matchResult] = await Promise.all([planPromise, matchPromise]);
+        const matchPromise: Promise<DesignSystemMatchResult> = skillMatchingEnabled
+          ? stepMatchDesignSystemSkill({
+            userInput: effectiveUserInput,
+          }).then((result) => {
+            logger.logStep(
+              "match_design_system_skill",
+              "ok",
+              result.matched
+                ? `matched built-in skill: ${result.skillId} — ${result.reason}`
+                : `no match — ${result.reason}`,
+              result.matched ? result.skillId : undefined
+            );
+            // Attach trace so the topology detail drawer shows LLM call, input/output
+            if (result.trace && Object.keys(result.trace).length > 0) {
+              logger.attachTrace("match_design_system_skill", result.trace);
+            }
+            return result;
+            })
+          : Promise.resolve<DesignSystemMatchResult>({
+            matched: false,
+            skillId: null,
+            reason: "skill matching disabled by user",
+            trace: {},
+          }).then((result) => {
+            logger.logStep("match_design_system_skill", "ok", "skipped — disabled by user");
+            return result;
+          });
 
-      blueprint = planOutcome.blueprint;
+        const [planOutcome, matchResult] = await Promise.all([planPromise, matchPromise]);
 
-      await persistJsonArtifact(artifactLogger, "match_design_system_skill", "output", {
-        matched: matchResult.matched,
-        skillId: matchResult.skillId,
-        reason: matchResult.reason,
-      });
+        blueprint = planOutcome.blueprint;
 
-      // Phase 2: use matched skill or fall back to LLM generation
-      if (matchResult.matched && matchResult.designSystem) {
-        designSystem = matchResult.designSystem;
-        logger.logStep(
-          "generate_project_design_system",
-          "ok",
-          `using built-in skill: ${matchResult.skillId}`
-        );
-      } else {
-        logger.startStep("generate_project_design_system");
-        const dsOutcome = await stepGenerateProjectDesignSystem(
-          designIntentForSystem,
-          options.styleGuide
-        );
-        designSystem = dsOutcome.designSystem;
-        logger.logStep(
-          "generate_project_design_system",
-          "ok",
-          "design-system.md written",
-          undefined,
-          dsOutcome.trace
-        );
-      }
+        await persistJsonArtifact(artifactLogger, "match_design_system_skill", "output", {
+          matched: matchResult.matched,
+          skillId: matchResult.skillId,
+          reason: matchResult.reason,
+        });
 
-      // Merge infer_design_intent technical keywords after style matching for hero skill routing.
-      if (inferredDesignIntent?.technicalKeywords?.length) {
-        const existing = blueprint.experience.designIntent.keywords;
-        const merged = [...new Set([...existing, ...inferredDesignIntent.technicalKeywords])];
-        blueprint.experience.designIntent.keywords = merged;
-      }
+        // Phase 2: use matched skill or fall back to LLM generation
+        if (matchResult.matched && matchResult.designSystem) {
+          designSystem = matchResult.designSystem;
+          logger.logStep(
+            "generate_project_design_system",
+            "ok",
+            `using built-in skill: ${matchResult.skillId}`
+          );
+        } else {
+          logger.startStep("generate_project_design_system");
+          const dsOutcome = await stepGenerateProjectDesignSystem(
+            designIntentForSystem,
+            options.styleGuide
+          );
+          designSystem = dsOutcome.designSystem;
+          logger.logStep(
+            "generate_project_design_system",
+            "ok",
+            "design-system.md written",
+            undefined,
+            dsOutcome.trace
+          );
+        }
 
-      // Keep plan_project artifact focused on fields that are actually produced by
-      // this step and consumed downstream. Full blueprint is still persisted in
-      // final run/result artifacts.
-      await persistJsonArtifact(artifactLogger, "plan_project", "output", {
-        site: {
-          pages: blueprint.site.pages.map((page) => ({
-            slug: page.slug,
-            pageDesignPlan: page.pageDesignPlan,
-            sections: page.sections.map((section) => ({
-              type: section.type,
-              fileName: section.fileName,
-              intent: section.intent,
-              contentHints: section.contentHints,
+        // Merge infer_design_intent technical keywords after style matching for hero skill routing.
+        if (inferredDesignIntent?.technicalKeywords?.length) {
+          const existing = blueprint.experience.designIntent.keywords;
+          const merged = [...new Set([...existing, ...inferredDesignIntent.technicalKeywords])];
+          blueprint.experience.designIntent.keywords = merged;
+        }
+
+        // Keep plan_project artifact focused on fields that are actually produced by
+        // this step and consumed downstream. Full blueprint is still persisted in
+        // final run/result artifacts.
+        await persistJsonArtifact(artifactLogger, "plan_project", "output", {
+          site: {
+            pages: blueprint.site.pages.map((page) => ({
+              slug: page.slug,
+              pageDesignPlan: page.pageDesignPlan,
+              sections: page.sections.map((section) => ({
+                type: section.type,
+                fileName: section.fileName,
+                intent: section.intent,
+                contentHints: section.contentHints,
+              })),
             })),
-          })),
-        },
+          },
+        });
+        await persistTextArtifact(
+          artifactLogger,
+          "generate_project_design_system",
+          "design-system",
+          designSystem,
+          "md"
+        );
       });
-      await persistTextArtifact(
-        artifactLogger,
-        "generate_project_design_system",
-        "design-system",
-        designSystem,
-        "md"
-      );
     }
 
     result.blueprint = blueprint;
@@ -778,20 +834,23 @@ async function runGenerateProjectInner(
     if (cp?.skipDesignTokens) {
       logger.logStep("apply_project_design_tokens", "ok", "resumed from checkpoint");
     } else {
-      const tokenResult = await logger.timed(
-        "apply_project_design_tokens",
-        () => stepApplyProjectDesignTokens(designSystem, {
-          onProgress: (msg) => {
-            onStep?.({
-              step: "apply_project_design_tokens",
-              status: "active",
-              detail: msg,
-              timestamp: Date.now(),
-              duration: 0,
-            });
-          },
-        }),
-        (r) => ({ detail: r.files.join(", "), trace: r.trace })
+      const tokenResult = await withLangfuseSpan("apply_project_design_tokens", () =>
+        logger.timed(
+          "apply_project_design_tokens",
+          () =>
+            stepApplyProjectDesignTokens(designSystem, {
+              onProgress: (msg) => {
+                onStep?.({
+                  step: "apply_project_design_tokens",
+                  status: "active",
+                  detail: msg,
+                  timestamp: Date.now(),
+                  duration: 0,
+                });
+              },
+            }),
+          (r) => ({ detail: r.files.join(", "), trace: r.trace })
+        )
       );
       const tokenFiles = tokenResult.files;
       await persistJsonArtifact(artifactLogger, "apply_project_design_tokens", "output", {
@@ -808,27 +867,28 @@ async function runGenerateProjectInner(
       appendGeneratedFiles(result, tokenFiles);
     }
 
-    const [archSettled, pagesSettled] = await Promise.allSettled([
-      (async (): Promise<void> => {
-        // Runs in parallel with page agents below. Globals are already finalized
-        // (apply_project_design_tokens finished above), avoiding write races on
-        // app/globals.css. Layout/chrome may still be in flight when a page agent
-        // starts — each agent gets a snapshot at invocation; prompts forbid
-        // editing layout/chrome and allow read_file if genuinely needed.
-        if (!cp?.skipArchitect) {
-          const architectResult = await runArchitectStep({
-            blueprint,
-            designSystem,
-            artifactLogger,
-            logger,
-            trajectoryCollector,
-            onStep,
-          });
-          appendGeneratedFiles(result, architectResult.files);
-          return;
-        }
-        appendGeneratedFiles(result, collectExistingArchitectOwnedRelativePaths());
-      })(),
+    // ── Architect before page agents (sequential) ─────────────────────────────
+    // Globals are already finalized (`apply_project_design_tokens` finished above).
+    // Run architect_agent to completion first so each page_implement_agent reads an
+    // up-to-date `app/layout.tsx` snapshot and finalized `components/chrome/**`,
+    // avoiding duplicate in-page chrome from stale/minimal interim layouts.
+    if (!cp?.skipArchitect) {
+      const architectResult = await withLangfuseSpan("architect_agent", () =>
+        runArchitectStep({
+          blueprint,
+          designSystem,
+          artifactLogger,
+          logger,
+          trajectoryCollector,
+          onStep,
+        })
+      );
+      appendGeneratedFiles(result, architectResult.files);
+    } else {
+      appendGeneratedFiles(result, collectExistingArchitectOwnedRelativePaths());
+    }
+
+    const pageOutcome = await withLangfuseSpan("implement_pages", () =>
       generatePages({
         blueprint,
         designSystem,
@@ -838,29 +898,8 @@ async function runGenerateProjectInner(
         skipImplementedPages: cp?.implementedPages,
         trajectoryCollector,
         onStep,
-      }),
-    ]);
-
-    if (archSettled.status === "rejected") {
-      if (pagesSettled.status === "rejected") {
-        const p = pagesSettled.reason;
-        const a = archSettled.reason;
-        throw new Error(
-          `architect_agent failed: ${a instanceof Error ? a.message : String(a)}; ` +
-            `page_implement_agent failed: ${p instanceof Error ? p.message : String(p)}`
-        );
-      }
-      throw archSettled.reason instanceof Error
-        ? archSettled.reason
-        : new Error(String(archSettled.reason));
-    }
-    if (pagesSettled.status === "rejected") {
-      throw pagesSettled.reason instanceof Error
-        ? pagesSettled.reason
-        : new Error(String(pagesSettled.reason));
-    }
-
-    const pageOutcome = pagesSettled.value;
+      })
+    );
     appendGeneratedFiles(result, pageOutcome.files);
     const allPendingImages = pageOutcome.pendingImages;
     // Await all background image generation before build — images must be on
@@ -868,13 +907,15 @@ async function runGenerateProjectInner(
     // installation since they don't conflict.
     const [imageStats] = await Promise.all([
       awaitPendingImages(allPendingImages),
-      autoInstallDependenciesForFiles({
-        scope: "generated",
-        files: result.generatedFiles,
-        artifactLogger,
-        result,
-        logger,
-      }),
+      runWithLangfuseSpanBranch("install_dependencies_after_implement", () =>
+        autoInstallDependenciesForFiles({
+          scope: "generated",
+          files: result.generatedFiles,
+          artifactLogger,
+          result,
+          logger,
+        })
+      ),
     ]);
 
     if (imageStats.total > 0) {
@@ -957,11 +998,15 @@ async function runGenerateProjectInner(
         console.warn(
           `[typecheck] scoped: ${errorCount} error(s) in ${scoped.fileCount} file(s), attempting repair...`
         );
-        const repairResult = await stepRepairBuild({
-          blueprint,
-          buildOutput: scoped.tscStyleLog,
-          generatedFiles: result.generatedFiles,
-        });
+        const repairResult = await withLangfuseSpan(
+          "typescript_repair_after_typecheck",
+          () =>
+            stepRepairBuild({
+              blueprint,
+              buildOutput: scoped.tscStyleLog,
+              generatedFiles: result.generatedFiles,
+            })
+        );
         if (repairResult.success) {
           appendGeneratedFiles(result, repairResult.touchedFiles);
           logger.logStep(
@@ -1008,7 +1053,9 @@ async function runGenerateProjectInner(
       );
     }
 
-    const buildLifecycle = await runBuildWithRepair({ blueprint, artifactLogger, result, logger });
+    const buildLifecycle = await withLangfuseSpan("next_js_build_and_repair", () =>
+      runBuildWithRepair({ blueprint, artifactLogger, result, logger })
+    );
     result.verificationStatus = buildLifecycle.verificationStatus;
     result.verificationOutput = buildLifecycle.verificationOutput;
 

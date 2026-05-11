@@ -1,4 +1,5 @@
 import { callLLM, extractJSON } from "../shared/llm";
+import { lfPlain, LfPlain } from "@/lib/observability/langfuseGenerationCatalog";
 import { getSkillPromptsRoot, loadSkillPrompt } from "../shared/files";
 import {
   discoverSkillsBySectionType,
@@ -128,7 +129,9 @@ Candidate skills:
 ${skillList}`;
 
   try {
-    const raw = await callLLM(systemPrompt, userMessage, 0, 128, getModelForStep("preselect_skills"));
+    const raw = await callLLM(systemPrompt, userMessage, 0, 128, getModelForStep("preselect_skills"), {
+      langfuseName: lfPlain(LfPlain.heroComponentSkillPick),
+    });
     const parsed = JSON.parse(extractJSON(raw)) as { skillId?: string | null };
     const id = typeof parsed.skillId === "string" ? parsed.skillId.trim() : "";
     if (!id) return null;

@@ -3,6 +3,7 @@ import { join } from "path";
 import matter from "gray-matter";
 import { composePromptBlocks, loadStepPrompt, writeSiteFile, loadGuardrail } from "../shared/files";
 import { callLLMWithMeta, extractJSON } from "../shared/llm";
+import { lfPlain, LfPlain } from "@/lib/observability/langfuseGenerationCatalog";
 import { getModelForStep } from "@/lib/config/models";
 import type { StepTrace } from "../types";
 
@@ -132,7 +133,8 @@ export async function stepMatchDesignSystemSkill(params: {
       userMessage,
       0.2,
       undefined,
-      getModelForStep("match_design_system_skill")
+      getModelForStep("match_design_system_skill"),
+      { langfuseName: lfPlain(LfPlain.matchDesignSystemSkill) }
     );
 
     trace = {

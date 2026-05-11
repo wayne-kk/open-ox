@@ -23,7 +23,7 @@
    - 若 layout 已挂全局 chrome（顶 nav / sidebar / 工具栏 / footer / HUD 等），**不要**在 page 中复制一套等价壳层；只在 layout 给出的 `{children}` 区域填内容。
    - 若根布局是极简的（仅 `<html>`/`<body>` + `{children}`），说明 Architect 判定本产品是全屏 / 单画布 / 极简形态，由你在 page 内组织主要界面。
 6. **质量习惯**：写入文件已自动 Prettier，无需手动 `format_code`；缺依赖时用 `install_package`；只在需要某个具体已有文件源码时才 `read_file`，目录树用预读上下文足矣。
-7. **图片**：需要占位图时用 `generate_image`，并按工具说明落盘到 `public/`。
+7. **配图（与占位图无关）**：你是落**整页**，常见站点需要**至少一张主视觉**（Hero 背景/大图、产品/案例摄影、功能配图等）。**凡页面描述、Page design plan 或 Hero skill 暗示营销/产品/品牌感**，应在写引用 `<img>` / `Image` 的 TSX **之前**，先按需调用 **`generate_image`**（可多次）；仅用工具返回的**真实** `public/` 路径，**禁止**手写臆造路径。仅当纲要明确「无图、纯排版、极简数据/控制台」时才可全程不用生图。
 
 ### 禁止
 

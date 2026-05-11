@@ -12,6 +12,17 @@ interface ChangeEntry {
 
 const CHANGELOG: ChangeEntry[] = [
   {
+    version: "v1.5",
+    date: "2026-05-11",
+    tag: "perf",
+    title: "生成流水线 · Architect 先于 Page Agent",
+    body: "`architect_agent` 在全部 `page_implement_agent` 之前串行结束，各页预读到的 `app/layout.tsx` 与最终 chrome 落盘一致，降低重复导航/页脚等壳层风险。多页实现仍彼此并行。",
+    items: [
+      "apply_project_design_tokens 之后：先 `runArchitectStep`，再 `generatePages`（移除与 Page Agent 的 Promise.allSettled 并行）",
+      "内部文档 `docs/architecture.md` 与 `app/docs/pipeline` 步骤说明已同步",
+    ],
+  },
+  {
     version: "v1.4",
     date: "2026-05-10",
     tag: "fix",
@@ -20,7 +31,7 @@ const CHANGELOG: ChangeEntry[] = [
     items: [
       "apply_project_design_tokens 与 Architect / Page Agent 不再并行：token 步骤先落盘 app/globals.css，避免带 write_file 的代理在之后覆盖",
       "apply_project_design_tokens 仅消费设计系统正文与站点当前 globals，不再读取或复制 skills 下的 *.globals.css",
-      "Architect 与多页 page_implement_agent 在 token 完成后并行；实现为 Promise.allSettled，任一侧失败仍等待另一侧结束后再抛错",
+      "Architect 与多页 page_implement_agent 曾在 token 完成后并行（v1.5 起改为 Architect 先完成，再启动各页）",
       "checkpoint skipArchitect 恢复时：generatedFiles 计入磁盘上已有的 app/layout.tsx 与 components/chrome/**",
       "apply_project_design_tokens：提高 LLM 输出 token 上限（8k），降低超长 globals.css 截断风险",
       "architect_agent 提示词去掉「须先跑 format_code」的误导，与 write_file 自动 Prettier 一致",

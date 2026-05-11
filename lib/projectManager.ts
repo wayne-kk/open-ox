@@ -1,3 +1,4 @@
+import { execSync } from "child_process";
 import fs from "fs/promises";
 import path from "path";
 import { Dirent } from "fs";
@@ -316,19 +317,26 @@ export async function createProject(
   } = args;
   const now = new Date();
   const timestamp = now.toISOString().replace(/:/g, "-").replace(/\./g, "-");
-  const slug = userPrompt
-    .trim()
-    .split(/\s+/)
-    .slice(0, 5)
-    .join(" ")
+  const promptTrimmed = userPrompt.trim();
+  const displayName =
+    promptTrimmed.length > 0
+      ? promptTrimmed.replace(/\s+/g, " ").slice(0, 120)
+      : "未命名项目";
+
+  const latinSlug = promptTrimmed
+    .slice(0, 200)
     .toLowerCase()
+    .split(/\s+/)
+    .slice(0, 8)
+    .join(" ")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-  const id = `${timestamp}_${slug}`;
+  const slugSegment = latinSlug.length >= 2 ? latinSlug.slice(0, 80) : "project";
+  const id = `${timestamp}_${slugSegment}`;
   const createdAt = now.toISOString();
   const row = {
     id,
-    name: slug,
+    name: displayName,
     user_prompt: userPrompt,
     status: "generating" as const,
     created_at: createdAt,
@@ -438,6 +446,137 @@ const TEMPLATE_EXCLUDE = new Set([
 ]);
 
 /**
+ * Deps kept on generated sites even when the monorepo root already lists them.
+ * Without these, we'd rely entirely on symlinked `sites/template/node_modules`.
+ * When that symlink breaks or templates were never installed, `pnpm run build`
+ * must still resolve `next` locally from this package.json via `pnpm install`.
+ */
+const SITE_PACKAGE_JSON_KEEP = new Set([
+  "next",
+  "react",
+  "react-dom",
+  "typescript",
+  "@types/node",
+  "@types/react",
+  "@types/react-dom",
+  "tailwindcss",
+  "@tailwindcss/postcss",
+  "eslint",
+  "eslint-config-next",
+]);
+
+const SITE_NEXT_CLI_REL = ["node_modules", "next", "dist", "bin", "next"] as const;
+
+/**
+ * Ensures `sites/<project>/node_modules/next` exists before `pnpm run build`.
+ * Prefer symlink to `sites/template/node_modules`; otherwise run `pnpm install` in-site.
+ */
+export async function ensureProjectNodeModules(projectDir: string): Promise<void> {
+  const nextCli = path.join(projectDir, ...SITE_NEXT_CLI_REL);
+  async function nextResolved(): Promise<boolean> {
+    try {
+      await fs.access(nextCli);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  if (await nextResolved()) return;
+
+  const projectNm = path.join(projectDir, "node_modules");
+  const templateNm = path.join(WORKSPACE_ROOT, "sites", "template", "node_modules");
+  const templateNextCli = path.join(templateNm, ...SITE_NEXT_CLI_REL);
+
+  try {
+    await fs.rm(projectNm, { recursive: true, force: true });
+  } catch {
+    /* ignore */
+  }
+
+  async function templateHasNext(): Promise<boolean> {
+    try {
+      await fs.access(templateNextCli);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  if (await templateHasNext()) {
+    try {
+      await fs.symlink(templateNm, projectNm, "dir");
+      if (await nextResolved()) return;
+    } catch (err: unknown) {
+      const code = (err as NodeJS.ErrnoException)?.code;
+      if (code !== "EEXIST") {
+        console.warn(
+          `[ensureProjectNodeModules] Could not symlink template node_modules into ${projectDir}:`,
+          err instanceof Error ? err.message : String(err)
+        );
+      }
+      try {
+        await fs.rm(projectNm, { recursive: true, force: true });
+      } catch {
+        /* ignore */
+      }
+    }
+  } else {
+    console.warn(
+      "[ensureProjectNodeModules] sites/template/node_modules/next missing — attempting `pnpm install` in sites/template (one-time)."
+    );
+    try {
+      execSync("pnpm install", {
+        cwd: path.join(WORKSPACE_ROOT, "sites", "template"),
+        encoding: "utf-8",
+        maxBuffer: 16 * 1024 * 1024,
+        stdio: ["ignore", "pipe", "pipe"],
+        env: process.env,
+      });
+    } catch (err: unknown) {
+      console.warn(
+        "[ensureProjectNodeModules] template pnpm install failed:",
+        err instanceof Error ? err.message : String(err)
+      );
+    }
+    if (await templateHasNext()) {
+      try {
+        await fs.symlink(templateNm, projectNm, "dir");
+        if (await nextResolved()) return;
+      } catch {
+        try {
+          await fs.rm(projectNm, { recursive: true, force: true });
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  }
+
+  try {
+    execSync("pnpm install", {
+      cwd: projectDir,
+      encoding: "utf-8",
+      maxBuffer: 16 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: process.env,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `[ensureProjectNodeModules] Could not provision node_modules under ${projectDir}: ${msg}. ` +
+        "Install template deps (`cd sites/template && pnpm install`) or run `pnpm install` in this site folder."
+    );
+  }
+
+  if (!(await nextResolved())) {
+    throw new Error(
+      `[ensureProjectNodeModules] After pnpm install, still missing Next.js under ${projectDir}. ` +
+        "Check sites/template/package.json and that sites/<projectId>/package.json keeps a `next` dependency."
+    );
+  }
+}
+
+/**
  * Minimal `app/layout.tsx` written into a fresh project directory. It does NOT
  * import any chrome components — the Architect Agent will overwrite this file
  * with the project's real chrome. Having a valid baseline here means the
@@ -543,13 +682,17 @@ export async function initProjectDir(db: SupabaseClient, projectId: string): Pro
 
     if (projPkg.dependencies) {
       for (const dep of Object.keys(projPkg.dependencies)) {
-        if (sharedDeps.has(dep)) delete projPkg.dependencies[dep];
+        if (sharedDeps.has(dep) && !SITE_PACKAGE_JSON_KEEP.has(dep)) {
+          delete projPkg.dependencies[dep];
+        }
       }
       if (Object.keys(projPkg.dependencies).length === 0) delete projPkg.dependencies;
     }
     if (projPkg.devDependencies) {
       for (const dep of Object.keys(projPkg.devDependencies)) {
-        if (sharedDeps.has(dep)) delete projPkg.devDependencies[dep];
+        if (sharedDeps.has(dep) && !SITE_PACKAGE_JSON_KEEP.has(dep)) {
+          delete projPkg.devDependencies[dep];
+        }
       }
       if (Object.keys(projPkg.devDependencies).length === 0) delete projPkg.devDependencies;
     }
@@ -558,16 +701,7 @@ export async function initProjectDir(db: SupabaseClient, projectId: string): Pro
 
     await writeDefaultRootLayout(projectDir);
 
-    const templateNodeModules = path.join(templateDir, "node_modules");
-    const projectNodeModules = path.join(projectDir, "node_modules");
-    try {
-      await fs.access(templateNodeModules);
-      await fs.symlink(templateNodeModules, projectNodeModules, "dir");
-    } catch (symlinkErr: unknown) {
-      console.warn(
-        `[initProjectDir] Could not create node_modules symlink: ${symlinkErr instanceof Error ? symlinkErr.message : String(symlinkErr)}`
-      );
-    }
+    await ensureProjectNodeModules(projectDir);
   } catch (err: unknown) {
     await fs.rm(projectDir, { recursive: true, force: true });
     const message = err instanceof Error ? err.message : String(err);

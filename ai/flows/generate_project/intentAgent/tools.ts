@@ -77,7 +77,8 @@ export function buildIntentAgentTools(): ChatCompletionTool[] {
           properties: {
             merged_brief: {
               type: "string",
-              description: "合并对话事实后的完整 brief，供 analyze 步骤使用；勿添加用户未确认的功能。",
+              description:
+                "合并后的**完整**建站说明（品牌/目标/内容/风格等），供 analyze 使用；勿臆造未确认功能。**禁止**仅填「就这样」「开始生成吧」等口语确认；宁可重复 `confirm_brief` 中的 `brief_draft_markdown` 全文。",
             },
           },
           required: ["merged_brief"],

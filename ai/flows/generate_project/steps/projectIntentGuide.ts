@@ -1,5 +1,6 @@
 import { composePromptBlocks, loadGuardrail, loadStepPrompt } from "../shared/files";
 import { callLLMWithMeta, extractJSON } from "../shared/llm";
+import { lfPlain, LfPlain } from "@/lib/observability/langfuseGenerationCatalog";
 import { stepTraceFromLlmCompletion } from "../shared/llmTrace";
 import type { ProjectIntentGuideResult, StepTrace } from "../types";
 import { getModelForStep } from "@/lib/config/models";
@@ -92,7 +93,9 @@ export async function stepProjectIntentGuide(
     loadGuardrail("outputJson"),
   ]);
 
-  const meta = await callLLMWithMeta(systemPrompt, userInput, 0.45, undefined, model);
+  const meta = await callLLMWithMeta(systemPrompt, userInput, 0.45, undefined, model, {
+    langfuseName: lfPlain(LfPlain.projectIntentGuide),
+  });
   const raw = meta.content;
   const trace: StepTrace = stepTraceFromLlmCompletion(systemPrompt, userInput, meta);
 

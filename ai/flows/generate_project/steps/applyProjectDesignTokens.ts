@@ -4,6 +4,7 @@ import {
   writeSiteFile,
 } from "../shared/files";
 import { callLLMWithMeta, extractContent, extractJSON } from "../shared/llm";
+import { lfPlain, LfPlain } from "@/lib/observability/langfuseGenerationCatalog";
 import { stepTraceFromLlmCompletion } from "../shared/llmTrace";
 import type { StepTrace } from "../types";
 import { getModelForStep } from "@/lib/config/models";
@@ -103,7 +104,8 @@ Generate the complete updated globals.css. Be concise — output only the CSS co
       userMessage,
       0.3,
       8_000,
-      stepModel
+      stepModel,
+      { langfuseName: lfPlain(LfPlain.applyDesignTokens) }
     );
     llmResultForTrace = llmResult;
     raw = llmResult.content;

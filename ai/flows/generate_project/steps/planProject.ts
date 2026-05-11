@@ -1,5 +1,6 @@
 import { composePromptBlocks, loadGuardrail, loadStepPrompt, writeSiteFile } from "../shared/files";
 import { callLLMWithMeta, extractJSON } from "../shared/llm";
+import { lfPlain, LfPlain } from "@/lib/observability/langfuseGenerationCatalog";
 import { stepTraceFromLlmCompletion } from "../shared/llmTrace";
 import type {
   PageDesignPlan,
@@ -71,7 +72,9 @@ ${blueprint.site.pages
 
   const model = getModelForStep("plan_project");
 
-  const meta = await callLLMWithMeta(systemPrompt, userMessage, 0.4, undefined, model);
+  const meta = await callLLMWithMeta(systemPrompt, userMessage, 0.4, undefined, model, {
+    langfuseName: lfPlain(LfPlain.planProject),
+  });
   const raw = meta.content;
   const trace = stepTraceFromLlmCompletion(systemPrompt, userMessage, meta);
   const parsed = JSON.parse(extractJSON(raw)) as unknown;

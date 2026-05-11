@@ -11,7 +11,7 @@ import { supabase } from "./supabase";
 import { getSiteRoot, WORKSPACE_ROOT } from "./projectManager";
 
 const BUCKET = "project-files";
-const STORAGE_UPLOAD_EXCLUDE = new Set(["node_modules", ".next", ".git", "out"]);
+const STORAGE_UPLOAD_EXCLUDE = new Set(["node_modules", ".next", ".git", "out", ".open-ox"]);
 const STORAGE_UPLOAD_EXCLUDE_PREFIXES = ["components/ui/"];
 const STORAGE_UPLOAD_CONCURRENCY = 20;
 const STORAGE_UPLOAD_MAX_RETRIES = 4;

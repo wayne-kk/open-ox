@@ -6,7 +6,7 @@ import type { PromptKind } from "./types";
 const cache = new Map<string, string>();
 
 function withFrontmatterStripped(kind: PromptKind, raw: string): string {
-  if (kind === "guardrail") {
+  if (kind === "guardrail" || kind === "section") {
     return matter(raw).content.trimStart();
   }
   return raw;

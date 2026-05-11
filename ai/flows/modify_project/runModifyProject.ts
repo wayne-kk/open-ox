@@ -12,6 +12,7 @@ import { runAgentLoop } from "./engine/loopEngine";
 import { SYSTEM_PROMPT } from "./prompt/systemPrompt";
 import { appendTrajectoryEvent, findOrCreateTrajectoryRun } from "@/lib/trajectory/store";
 import type { TrajectoryData } from "./trajectory";
+import { withLangfuseSpan } from "@/lib/observability/langfuseTracing";
 
 type TrajectoryToolCall = NonNullable<TrajectoryData["messages"][number]["tool_calls"]>[number];
 const ALL_TOOLS_FOR_TRAJECTORY = ["read_file", "search_code", "list_dir", "edit_file", "write_file", "run_build", "exec_shell", "think", "revert_file"];
@@ -287,12 +288,17 @@ async function runModifyProjectInner(
       imageBase64,
     });
 
-    const { loopState, iterations } = await runAgentLoop(
-      messages,
-      tracker,
-      collectingOnEvent as (event: { type: "step" | "plan" | "diff" | "tool_call" | "thinking" | "done" | "error";[key: string]: unknown }) => void,
-      userInstruction,
-      modelOverride
+    const { loopState, iterations } = await withLangfuseSpan(
+      "modify_agent_loop",
+      () =>
+        runAgentLoop(
+          messages,
+          tracker,
+          collectingOnEvent as (event: { type: "step" | "plan" | "diff" | "tool_call" | "thinking" | "done" | "error";[key: string]: unknown }) => void,
+          userInstruction,
+          modelOverride
+        ),
+      { metadata: { projectId } }
     );
     collectingOnEvent({
       type: "step",

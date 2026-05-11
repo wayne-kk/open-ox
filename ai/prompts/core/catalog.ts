@@ -40,7 +40,8 @@ function resolvePromptPathInRoot(generateRoot: string, kind: PromptKind, id: str
     case "guardrail":
       return join(generateRoot, "rules", `${id}.md`);
     case "section":
-      return join(generateRoot, "sections", `${id}.md`);
+      // Section-specific prompts live alongside other guardrails under prompts/rules/.
+      return join(generateRoot, "rules", `${id}.md`);
     case "skill": {
       const skillsDir = join(generateRoot, "skills");
       return findFileRecursive(skillsDir, `${id}.md`) ?? join(skillsDir, `${id}.md`);

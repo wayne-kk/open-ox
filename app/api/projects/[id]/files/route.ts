@@ -161,7 +161,7 @@ export async function PUT(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ uploaded: files, count: files.length });
 }
 
-const EXCLUDE = new Set(["node_modules", ".next", ".git", "out"]);
+const EXCLUDE = new Set(["node_modules", ".next", ".git", "out", ".open-ox"]);
 
 async function collectFiles(dir: string, base: string): Promise<string[]> {
     const entries = await fs.readdir(dir, { withFileTypes: true });

@@ -1,5 +1,6 @@
 import { composePromptBlocks, loadStepPrompt } from "../shared/files";
 import { callLLMWithMeta } from "../shared/llm";
+import { lfPlain, LfPlain } from "@/lib/observability/langfuseGenerationCatalog";
 import { stepTraceFromLlmCompletion } from "../shared/llmTrace";
 import { writeSiteFile } from "../shared/files";
 import type { StepTrace } from "../types";
@@ -53,7 +54,9 @@ ${userInput}`;
   const model = getModelForStep("infer_design_intent");
 
   try {
-    const meta = await callLLMWithMeta(systemPrompt, userMessage, 0.4, undefined, model);
+    const meta = await callLLMWithMeta(systemPrompt, userMessage, 0.4, undefined, model, {
+      langfuseName: lfPlain(LfPlain.inferDesignIntent),
+    });
     const text = meta.content.trim();
     const trace = stepTraceFromLlmCompletion(systemPrompt, userMessage, meta);
     if (text) {

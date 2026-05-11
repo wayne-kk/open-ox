@@ -1,6 +1,7 @@
 import { getSystemToolDefinitions } from "@/ai/tools/systemToolCatalog";
 import { executeSystemTool } from "@/ai/tools";
 import { chatCompletion, type ChatMessage } from "@/ai/flows/generate_project/shared/llm";
+import { lfModifyAgentRound } from "@/lib/observability/langfuseGenerationCatalog";
 import { getModifyModelId } from "@/lib/config/models";
 import type { FileSnapshotTracker } from "../tracking/fileSnapshotTracker";
 import { runStopHook, type LoopState } from "./stopHooks";
@@ -58,6 +59,11 @@ export async function runAgentLoop(
           tools,
           tool_choice: toolChoice,
           parallel_tool_calls: true,
+          langfuseGenerationName: lfModifyAgentRound(iterations, attempt),
+          langfuseGenerationMetadata: {
+            modifyLoopIteration: iterations,
+            llmAttempt: attempt,
+          },
         });
         break;
       } catch (err) {

@@ -39,7 +39,7 @@ const PHASE_ROWS: [string, string, string][] = [
 
 const PROMPT_PLACEMENT_ROWS: [string, string][] = [
   ["全局写代码约定", "ai/prompts/systems/frontend.md"],
-  ["某 section.type 通用结构", "prompts/sections/section.{type}.md"],
+  ["红线 / section 共用规则", "prompts/rules/*.md（清单见 agentRuleBundles.ts；含 section.default、project.*）"],
   ["组件气质 skill", "prompts/skills/*.md + frontmatter"],
   ["版式 pattern", "prompts/layouts/*.md 或 prompts/capabilities/pattern.*.md"],
   ["动效", "prompts/motions/motion.*.md + effect.motion.* id"],
@@ -67,9 +67,9 @@ export default function GenerateProjectTracePage() {
         </p>
         <h1 className="text-3xl font-bold tracking-tight">Generate Project：Skill 与 Prompt 拼装 Trace</h1>
         <p className="mt-3 text-[15px] leading-7 text-muted-foreground">
-          <Code>runGenerateProject</Code> 流水线里组件 skill 如何选出、每个 section 的 system/user 如何拼接，以及日志里能看到什么。
-          对照代码：<Code>runGenerateProject.ts</Code>、<Code>steps/generateSection</Code>、
-          <Code>steps/selectComponentSkills.ts</Code>、<Code>shared/files.ts</Code>（<Code>getCapabilityAssistPath</Code>）。
+          <Code>runGenerateProject</Code> 流水线里组件 skill 如何选出、各 Agent 的 system/user 如何拼接，以及日志里能看到什么。
+          对照代码：<Code>runGenerateProject.ts</Code>、<Code>steps/pageImplementAgent.ts</Code>、
+          <Code>shared/agentRuleBundles.ts</Code>、<Code>shared/files.ts</Code>。
         </p>
 
         <Callout>
@@ -127,32 +127,21 @@ export default function GenerateProjectTracePage() {
         </section>
 
         <section id="system" className="scroll-mt-24">
-          <H2>3. generate_section：System 拼接顺序（与代码一致）</H2>
+          <H2>3. page_implement_agent：System 拼接（与代码一致）</H2>
           <P>
-            <Code>steps/generateSection</Code> → <Code>buildSystemPrompt</Code>，自上而下 <Code>{"\\n\\n"}</Code> 连接：
+            <Code>steps/pageImplementAgent.ts</Code>： <Code>composePromptBlocks([&quot;frontend&quot;, pageImplementAgent 步, …rules])</Code>，
+            其中 <Code>…rules</Code> = <Code>resolvePageImplementAgentRuleIds().map(loadGuardrail)</Code>，id 列表见{" "}
+            <Code>shared/agentRuleBundles.ts</Code>。各 id 映射到{" "}
+            <Code>prompts/rules/&lt;id&gt;.md</Code>（如 <Code>section.default.md</Code>）。可选追加环境变量{" "}
+            <Code>PAGE_IMPLEMENT_AGENT_EXTRA_RULES</Code>（逗号分隔 id）。
           </P>
-          <ol className="mt-3 list-decimal pl-5 text-[14px] leading-7 text-muted-foreground space-y-2">
-            <li>
-              <Code>loadSystem(&quot;frontend&quot;)</Code> → <Code>ai/prompts/systems/frontend.md</Code>
-            </li>
-            <li>本次构建的设计系统正文（注入 Markdown）</li>
-            <li>
-              <Code>loadGuardrail(&quot;tailwindMappingGuide&quot;)</Code>、
-              <Code>section.default.md</Code> + 若有则 <Code>section.&#123;type&#125;.md</Code>、
-              <Code>loadGuardrail(&quot;skillIntegrationContract&quot;)</Code>
-            </li>
-            <li>组件 / 技术 skill 全文（若有）</li>
-            <li>
-              <Code>loadGuardrail(&quot;project.consistency&quot;)</Code> 与 <Code>loadGuardrail(&quot;project.accessibility&quot;)</Code>（显式固定）
-            </li>
-            <li>
-              <Code>loadGuardrail(&quot;outputTsx&quot;)</Code> 与 <Code>loadGuardrail(&quot;framerMotionVariants&quot;)</Code>
-            </li>
-            <li>
-              （若流程启用）<Code>designPlan.capabilityAssistIds</Code> → <Code>loadCapabilityAssist</Code> — 与上表独立，解析见 §5
-            </li>
-          </ol>
-          <P>重试时在整段 system 末尾追加 <Code>retryHint</Code>。</P>
+          <P>
+            Design system 在用户消息正文；预选 Hero skill 在用户消息末尾块；不在此 system 列表中。
+          </P>
+          <P>
+            Architect Agent 的规则栈：<Code>resolveArchitectAgentRuleIds()</Code>（默认含{" "}
+            <Code>section.navigation</Code>、<Code>outputTsx</Code>、<Code>framerMotionVariants</Code>）。
+          </P>
         </section>
 
         <section id="user" className="scroll-mt-24">

@@ -43,6 +43,10 @@ export interface ChatCompletionParams {
   parallel_tool_calls?: boolean;
   /** Forwarded to upstream chat/completions when set (e.g. Gemini-compatible gateways). */
   thinking_level?: string;
+  /** Langfuse observation name; use {@link import("@/lib/observability/langfuseGenerationCatalog")} */
+  langfuseGenerationName?: string;
+  /** Extra Langfuse generation metadata (merged with internal attempt/tools flags). */
+  langfuseGenerationMetadata?: Record<string, unknown>;
 }
 
 export interface AgentToolCallRecord {

@@ -12,6 +12,7 @@ import {
   readSiteFile,
 } from "../shared/files";
 import { callLLMWithToolsFromMessages } from "@/ai/shared/llm/toolLoop";
+import { lfPageImplementPhaseSlug } from "@/lib/observability/langfuseGenerationCatalog";
 import type { ChatMessage } from "@/ai/shared/llm/types";
 import type { ToolResult } from "@/ai/tools";
 import { getSystemToolDefinitions } from "@/ai/tools/systemToolCatalog";
@@ -20,6 +21,7 @@ import type { PendingImage } from "@/ai/tools/system/generateImageTool";
 import { getModelForStep, getThinkingLevelForStep } from "@/lib/config/models";
 import { slugToPagePath } from "../shared/paths";
 import type { PlannedPageBlueprint, StepTrace, PageAgentProjectContext, BuildStep } from "../types";
+import { resolvePageImplementAgentRuleIds } from "../shared/agentRuleBundles";
 
 export const PAGE_IMPLEMENTATION_COMPLETE = "page_implementation_complete";
 
@@ -191,7 +193,7 @@ ${componentsTree}
 - Design keywords: ${projectContext.designKeywords.join(", ")}
 
 ## Design system (reference — already loaded; \`design-system.md\` need not be re-read)
-${truncate(designSystem, 12_000)}
+${designSystem}
 ${
   heroSkillPrompt
     ? `
@@ -199,23 +201,24 @@ ${
 ## Hero / opening-section skill (canonical recipe — must follow when implementing the hero)
 > Skill id: \`${heroSkillId ?? "(unknown)"}\` — the design system above sets the global token palette; the recipe below sets the hero section's structure, motion, and component layout. Treat the recipe as the source of truth for the hero; never invent a different hero pattern when this skill is provided.
 
-${truncate(heroSkillPrompt, 12_000)}`
+${heroSkillPrompt}`
     : ""
 }
 
 ## Instructions (follow in order)
 1. **Decide structure**: review the pre-read context above; you can skip read_file for layout.tsx / globals.css / design-system / app tree / components tree. If you genuinely need a specific component file's contents, then \`read_file\` it.
-2. **Implement**: \`write_file\` / \`edit_file\` to create \`${targetPath}\` and extract page-local components under \`components/\` (your own subtree, e.g. \`components/<page-feature>/**\`). Respect design tokens. **Do not modify** \`app/layout.tsx\` or any file under \`components/chrome/**\`. Files are auto-formatted with Prettier on write — you do **not** need to call \`format_code\` afterwards.
-3. **Complete**: call **\`${PAGE_IMPLEMENTATION_COMPLETE}\`** with a summary of files and layout approach.
+2. **Images first when needed**: If this page should show photography/illustrations (typical marketing/product site: hero visual, feature art, case study photo), call \`generate_image\` **before** writing TSX that references those assets — use only paths returned by the tool. Skip only if the brief/plan clearly implies a no-imagery / data-only UI.
+3. **Implement**: \`write_file\` / \`edit_file\` to create \`${targetPath}\` and extract page-local components under \`components/\` (your own subtree, e.g. \`components/<page-feature>/**\`). Respect design tokens. **Do not modify** \`app/layout.tsx\` or any file under \`components/chrome/**\`. Files are auto-formatted with Prettier on write — you do **not** need to call \`format_code\` afterwards.
+4. **Complete**: call **\`${PAGE_IMPLEMENTATION_COMPLETE}\`** with a summary of files and layout approach.
 
-⚠️ Step 3 is mandatory. The pipeline fails if you do not call \`${PAGE_IMPLEMENTATION_COMPLETE}\`.
+⚠️ Step 4 is mandatory. The pipeline fails if you do not call \`${PAGE_IMPLEMENTATION_COMPLETE}\`.
 
 Do not invent extra top-level routes beyond this page.`;
 
   const systemPrompt = composePromptBlocks([
     loadSystem("frontend"),
     loadStepPrompt("pageImplementAgent"),
-    loadGuardrail("framerMotionVariants"),
+    ...resolvePageImplementAgentRuleIds().map(loadGuardrail),
   ]);
 
   const messages: ChatMessage[] = [
@@ -301,6 +304,7 @@ Do not invent extra top-level routes beyond this page.`;
       msgs.push(nudge);
       onMessage?.(nudge);
     },
+    langfusePhase: lfPageImplementPhaseSlug(page.slug),
   });
 
   // ── Completion validation ────────────────────────────────────────────────

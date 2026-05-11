@@ -17,11 +17,13 @@ import {
   writeSiteFile,
 } from "../shared/files";
 import { callLLMWithToolsFromMessages } from "@/ai/shared/llm/toolLoop";
+import { LfToolPhase } from "@/lib/observability/langfuseGenerationCatalog";
 import type { ChatMessage } from "@/ai/shared/llm/types";
 import type { ToolResult } from "@/ai/tools";
 import { getSystemToolDefinitions } from "@/ai/tools/systemToolCatalog";
 import { getModelForStep, getThinkingLevelForStep } from "@/lib/config/models";
 import type { BuildStep, PlannedProjectBlueprint, StepTrace } from "../types";
+import { resolveArchitectAgentRuleIds } from "../shared/agentRuleBundles";
 
 export const ARCHITECT_AGENT_STEP = "architect_agent";
 export const ARCHITECT_COMPLETE = "architect_complete";
@@ -219,7 +221,7 @@ Hard rules:
   const systemPrompt = composePromptBlocks([
     loadSystem("frontend"),
     loadStepPrompt("architectAgent"),
-    loadGuardrail("framerMotionVariants"),
+    ...resolveArchitectAgentRuleIds().map(loadGuardrail),
   ]);
 
   const messages: ChatMessage[] = [
@@ -303,6 +305,7 @@ Hard rules:
       msgs.push(nudge);
       onMessage?.(nudge);
     },
+    langfusePhase: LfToolPhase.architect,
   });
 
   // Fallback safety net: if the agent failed to leave a usable layout, write a

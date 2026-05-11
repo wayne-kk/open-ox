@@ -11,6 +11,8 @@
  *   - enableIntentAgentWebSearch?: boolean
  *   - styleGuide?, enableSkills?, enableIntentGuide?, model? — applied only when committing and running generation
  *   - runGenerateOnCommit?: boolean (default true)
+ *   - langfuseSessionId?: string — same value across intent turns + /api/ai + modify
+ *     groups Langfuse **Sessions** (otherwise each request uses `projectId:run:<trajectoryRunId>`).
  */
 
 import { runGenerateProject } from "@/ai/flows";
@@ -33,12 +35,20 @@ import {
   normalizePromptProfile,
   withCorePromptRuntime,
 } from "@/lib/config/corePrompts";
-import type { BuildStep } from "@/ai/flows";import { redactBuildStepForTransport } from "@/ai/flows/generate_project/shared/buildStepPayload";
+import type { BuildStep } from "@/ai/flows";
+import { redactBuildStepForTransport } from "@/ai/flows/generate_project/shared/buildStepPayload";
+import { shouldSkipNamingFromBlueprintTitle } from "@/ai/flows/generate_project/intentAgent/commitMergeBrief";
 import { SSE_RESPONSE_HEADERS } from "@/lib/sse-headers";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
 import { runWithSiteRoot } from "@/ai/tools/system/common";
 import { appendTrajectoryEvent, createRunEndEvent, createTrajectoryRun } from "@/lib/trajectory/store";
+import {
+  flushLangfuse,
+  resolveLangfuseSessionId,
+  runWithLangfuseTraceRoot,
+  withLangfuseSpan,
+} from "@/lib/observability/langfuseTracing";
 import { executeWebSearch, webSearchTool } from "@/ai/tools/system/webSearchTool";
 import {
   coerceAdditionalToolsFromJson,
@@ -49,6 +59,8 @@ import {
 } from "@/ai/flows/generate_project/intentAgent";
 import fs from "fs/promises";
 import path from "path";
+
+export const runtime = "nodejs";
 
 function serializeIntentTurn(
   turn: Awaited<ReturnType<typeof runIntentAgentTurn>>
@@ -162,7 +174,24 @@ export async function POST(req: Request) {
             trajectory = null;
           }
 
-          await runWithSiteRoot(projectManagerGetSiteRoot(projectId), async () => {
+          const langfuseSessionKey = resolveLangfuseSessionId({
+            projectId,
+            clientSessionId:
+              typeof body.langfuseSessionId === "string" ? body.langfuseSessionId : undefined,
+            trajectoryRunId: trajectory?.runId,
+          });
+
+          await runWithLangfuseTraceRoot(
+            {
+              name: "intent_agent_pipeline",
+              userId: user.id,
+              sessionId: langfuseSessionKey,
+              tags: ["flow:intent_agent", "route:api_intent_agent"],
+              metadata: { resetSession, runGenerateOnCommit },
+              input: { message: message.trim() },
+            },
+            () =>
+              runWithSiteRoot(projectManagerGetSiteRoot(projectId), async () => {
           const additionalParsed = coerceAdditionalToolsFromJson(body.additionalTools);
           const mergedExtraTools = [...additionalParsed];
           if (
@@ -185,12 +214,15 @@ export async function POST(req: Request) {
                 }
               : undefined;
 
-          const intentResult = await runIntentAgentTurn({
-            projectId,
-            userMessage: message.trim(),
-            resetSession,
-            toolExtensions: intentToolExtensions,
-          });
+          const intentResult = await withLangfuseSpan("intent_agent_turn", () =>
+            runIntentAgentTurn({
+              projectId,
+              userMessage: message.trim(),
+              bootstrapUserPrompt: meta.userPrompt ?? null,
+              resetSession,
+              toolExtensions: intentToolExtensions,
+            })
+          );
 
           send({ type: "intent_agent_turn", turn: serializeIntentTurn(intentResult) });
 
@@ -290,6 +322,8 @@ export async function POST(req: Request) {
                   useDatabasePrompts,
                   checkpoint,
                   enableIntentGuide,
+                  langfuseUserId: user.id,
+                  langfuseSessionId: langfuseSessionKey,
                 }
               )
           );
@@ -316,7 +350,11 @@ export async function POST(req: Request) {
             });
             const projectTitle = (genResult.blueprint as { brief?: { projectTitle?: string } })?.brief
               ?.projectTitle;
-            if (projectTitle && projectTitle.trim()) {
+            if (
+              projectTitle &&
+              projectTitle.trim() &&
+              !shouldSkipNamingFromBlueprintTitle(projectTitle)
+            ) {
               await renameProject(db, projectId, projectTitle.trim());
             }
             scheduleUploadFullProject(projectId);
@@ -362,7 +400,8 @@ export async function POST(req: Request) {
               intentAgent: serializeIntentTurn(intentResult),
             },
           });
-          });
+          })
+        );
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : String(err);
           send({ type: "error", message: errMsg });
@@ -372,6 +411,7 @@ export async function POST(req: Request) {
             // ignore
           }
         } finally {
+          await flushLangfuse();
           setRuntimeModelId(null);
           controller.close();
         }

@@ -5,6 +5,8 @@ import { getModelForStep } from "@/lib/config/models";
 import { clearIntentAgentSession, loadIntentAgentSession, saveIntentAgentSession } from "./sessionStore";
 import { buildIntentAgentTools, PIPELINE_CONSTRAINTS_TEXT } from "./tools";
 import { mergeIntentAgentTools, INTENT_AGENT_RESERVED_TOOL_NAMES } from "./toolSurface";
+import { resolveCommitMergedBrief } from "./commitMergeBrief";
+import { LfToolPhase } from "@/lib/observability/langfuseGenerationCatalog";
 import type { ToolResult } from "@/ai/tools/types";
 import type {
   IntentAgentOption,
@@ -54,6 +56,11 @@ export function parseYieldArgs(args: Record<string, unknown>): IntentAgentYieldP
 export interface RunIntentAgentTurnParams {
   projectId: string;
   userMessage: string;
+  /**
+   * First prompt stored on `POST /api/projects` (hero flow). Used when intent `commit_generate`
+   * omits substantive `merged_brief` — do not substitute the trailing「就这样」「开始生成吧」alone.
+   */
+  bootstrapUserPrompt?: string | null;
   /** When true, drop persisted session and start fresh (system + this user message). */
   resetSession?: boolean;
   onMessage?: (msg: ChatMessage) => void;
@@ -66,10 +73,11 @@ export interface RunIntentAgentTurnParams {
 
 /**
  * One user turn: append message, run tool loop until yield/commit or plain assistant text.
- * Persists OpenAI-shaped history under `sites/{projectId}/.open-ox/intent-agent-session.json`.
+ * Persists OpenAI-shaped history under `.open-ox/intent-agent/{projectId}/intent-agent-session.json`.
  */
 export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Promise<IntentAgentTurnResult> {
-  const { projectId, userMessage, resetSession, onMessage, toolExtensions } = params;
+  const { projectId, userMessage, bootstrapUserPrompt, resetSession, onMessage, toolExtensions } =
+    params;
   const model = getModelForStep("intent_agent");
   const systemPrompt = composePromptBlocks([loadStepPrompt("projectIntentAgent")]);
   const tools = mergeIntentAgentTools({
@@ -111,7 +119,15 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
     },
     commit_generate: async (args: Record<string, unknown>) => {
       const raw = typeof args.merged_brief === "string" ? args.merged_brief.trim() : "";
-      box.resolution = { type: "commit", mergedBrief: raw.length > 0 ? raw : userMessage.trim() };
+      box.resolution = {
+        type: "commit",
+        mergedBrief: resolveCommitMergedBrief({
+          mergedBriefRaw: raw,
+          messages,
+          tailUserMessage: userMessage.trim(),
+          bootstrapUserPrompt,
+        }).trim(),
+      };
       return JSON.stringify({ ok: true, halted: true, action: "commit_generate" });
     },
   };
@@ -130,6 +146,7 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
     executeToolOverrides,
     onMessage,
     shouldAbortAfterToolResults: () => box.resolution !== null,
+    langfusePhase: LfToolPhase.intentAgent,
   });
 
   for (const c of calls) {

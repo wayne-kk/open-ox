@@ -122,7 +122,10 @@ function StudioInner({ projectId }: { projectId: string }) {
                     <div className="flex items-center gap-1.5 rounded-full border border-green-400/25 bg-green-400/8 px-3 py-1">
                       <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
                       <span className="font-mono text-[10px] text-green-400 tracking-[0.15em]">
-                        {response.buildTotalDuration ? `DONE · ${formatMs(response.buildTotalDuration)}` : "DONE"}
+                        {typeof response.buildTotalDuration === "number" &&
+                        Number.isFinite(response.buildTotalDuration)
+                          ? `DONE · ${formatMs(response.buildTotalDuration)}`
+                          : "DONE"}
                       </span>
                     </div>
                   ) : (

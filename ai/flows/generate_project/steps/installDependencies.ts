@@ -8,6 +8,7 @@ import {
   readSiteFile,
 } from "../shared/files";
 import { callLLMWithTools, extractJSON } from "../shared/llm";
+import { LfToolPhase } from "@/lib/observability/langfuseGenerationCatalog";
 import { WORKSPACE_ROOT } from "../../../tools/system/common";
 import type {
   AutoInstalledDependency,
@@ -240,6 +241,7 @@ Remember: this step may inspect and install packages, but must not rewrite sourc
     ]),
     temperature: 0.1,
     maxIterations: 5,
+    langfusePhase: LfToolPhase.installDeps,
   });
 
   let parsed: DependencyAgentOutput = {};

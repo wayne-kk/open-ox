@@ -6,6 +6,9 @@
  *   rawResponse, and step.detail (default 12000). Set to `-1` to disable truncation.
  * - `BUILD_STEP_TRACE_UNLIMITED=1` — send full traces (dev only; high memory use).
  *
+ * Build / install / typecheck **step.detail** is kept uncapped by default (see
+ * {@link isFullBuildLogStep}) so compiler errors are not cut off in the Studio UI.
+ *
  * Full prompts remain in `.open-ox/logs/generate_project/...` artifacts and in the
  * in-memory `GenerateProjectResult.steps` inside a single API request until it ends.
  */
@@ -57,6 +60,19 @@ function redactTrace(trace: StepTrace | undefined, max: number): StepTrace | und
   return next;
 }
 
+/** Steps whose `detail` is CLI/build output — never truncate so errors stay readable. */
+export function isFullBuildLogStep(step: BuildStep): boolean {
+  const s = step.step;
+  return (
+    s === "run_build" ||
+    s.startsWith("run_build:") ||
+    s.startsWith("repair_build") ||
+    s.startsWith("install_dependencies") ||
+    s.startsWith("typecheck_generated") ||
+    s === "typescript_repair_after_typecheck"
+  );
+}
+
 /**
  * Clone a build step for SSE / DB / API clients: drops huge strings so the browser
  * and Supabase rows do not retain multi‑MB copies of every LLM call.
@@ -68,7 +84,9 @@ export function redactBuildStepForTransport(step: BuildStep): BuildStep {
     return { ...step };
   }
   const detail =
-    step.detail !== undefined && step.detail.length > max
+    !isFullBuildLogStep(step) &&
+    step.detail !== undefined &&
+    step.detail.length > max
       ? truncateText(step.detail, max, "see server logs / artifacts for full output")
       : step.detail;
 

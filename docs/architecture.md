@@ -118,8 +118,8 @@ Step 4:  generate_project_design_system ← LLM ─┘ 节省一个 round-trip
 Step 5:  apply_project_design_tokens  ← LLM（读 globals.css，写 @theme tokens）
 Step 6:  preselect_skills             ← 单次批量 LLM（为所有 section 选 skill）
 Step 7:  generate_section × N         ← 并行 LLM（每个 section 独立，仅当走非 agent 路径时）
-Step 8:  architect_agent              ← 单一 Agent 决定全局 chrome 形态并落盘 app/layout.tsx + components/chrome/**（顺序执行，仅一次）
-Step 9:  page_implement_agent × M     ← 并行 LLM（每个页面读 layout.tsx 作为 chrome 契约，只填 page 内容）
+Step 8:  architect_agent              ← 单一 Agent 决定全局 chrome 形态并落盘 app/layout.tsx + components/chrome/**（顺序执行，仅一次；须先于 Step 9 完成）
+Step 9:  page_implement_agent × M     ← 并行 LLM（在 Step 8 完成后启动；每个页面读已定稿的 layout.tsx 作为 chrome 契约，只填 page 内容）
 Step 9:  install_dependencies         ← 扫描生成文件，自动安装缺失 npm 包
 Step 10: run_build                    ← next build（本地执行）
 Step 11: repair_build × 0-2           ← LLM（构建失败时自动修复，最多 2 轮）
@@ -239,27 +239,13 @@ public/skills/
 
 Skill 选择的 fallback 机制：如果 LLM 返回的 skill id 不在合法列表中，或 LLM 调用失败，会自动降级到每个 section 类型的默认 fallback skill。
 
-4.5 Step 7：Section 并行生成
+4.5 Architect + Page Agent（版面与页面落地）
 
-每个 section 的 system prompt 由多层叠加构成：
+Chrome 由 **Architect Agent** 先落盘（`app/layout.tsx`、`components/chrome/**`），随后各 **Page Implement Agent** 在只读 layout 契约下写 `page.tsx` 与页面组件。
 
-```
-system prompt =
-  frontend.md              (Next.js/React 基础规范)
-  + section.default.md     (通用 section 规则)
-  + section.{type}.md      (类型特定规则，如 hero.md, pricing.md)
-  + skill prompt           (选定的组件风格指导)
-  + guardrail blocks       (约束规则，如 accessibility, above-fold)
-  + traits block           (结构化特征提示，如 layout.split, motion.ambient)
-  + outputTsx.md           (输出格式要求)
+页面 Agent 的 system 由 `frontend`、`steps/pageImplementAgent.md` 以及 `shared/agentRuleBundles.ts` 定义的 **有序 `loadGuardrail(id)` 列表** 叠加（`tailwindMappingGuide`、`section.default`、`skillIntegrationContract`、`project.*`、`outputTsx`、`framerMotionVariants` 等，均位于 `prompts/rules/`）。Architect Agent 使用另一组规则 id（含 `section.navigation`）。可选通过环境变量 `PAGE_IMPLEMENT_AGENT_EXTRA_RULES` / `ARCHITECT_AGENT_EXTRA_RULES` 追加规则 id。
 
-user message =
-  design-system.md         (设计系统)
-  + globals.css            (已有的 CSS，避免重复定义)
-  + project context        (roles, taskLoops, capabilities)
-  + page context           (slug, journeyStage, designPlan)
-  + section spec           (type, intent, contentHints, designPlan)
-```
+User 消息侧注入设计系统、预读的 `layout.tsx` / `globals.css` / 目录树、页级 `pageDesignPlan`，以及（若存在）预选 **Hero skill** 全文。
 
 生成后验证：每个 TSX 文件经过静态检查：
 

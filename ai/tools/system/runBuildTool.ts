@@ -1,6 +1,7 @@
 import { execSync } from "child_process";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import type { ToolResult, ToolExecutor } from "../types";
+import { ensureProjectNodeModules } from "@/lib/projectManager";
 import { getSiteRoot } from "./common";
 
 export const runBuildTool: ChatCompletionTool = {
@@ -27,6 +28,7 @@ export const executeRunBuild: ToolExecutor = async (
 ): Promise<ToolResult | string> => {
   const script = (args.script as string) || "build";
   try {
+    await ensureProjectNodeModules(getSiteRoot());
     const output = execSync(`pnpm run ${script}`, {
       cwd: getSiteRoot(),
       encoding: "utf-8",

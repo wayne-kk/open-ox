@@ -52,8 +52,18 @@ const STEPS = [
     desc: "内置 design-system skill 匹配命中则落盘 design-system.md；否则 LLM 生成 design-system.md。与步骤 04 并行。",
   },
   { n: "06", name: "apply_project_design_tokens", type: "llm", desc: "设计系统 Markdown + 当前 globals → LLM 写出完整 globals.css。必须先于步骤 07–08，避免 Agent 覆盖。" },
-  { n: "07", name: "architect_agent", type: "llm+tool", desc: "Architect：app/layout.tsx + components/chrome/**。与步骤 08 并行。" },
-  { n: "08", name: "page_implement_agent ×M", type: "llm×M", desc: "多页并行落地 page.tsx / 页面组件；禁止写 layout/chrome/globals。可与步骤 07 并行。" },
+  {
+    n: "07",
+    name: "architect_agent",
+    type: "llm+tool",
+    desc: "Architect：app/layout.tsx + components/chrome/**。先于步骤 08 串行完成，便于 Page Agent 读到定稿 chrome。",
+  },
+  {
+    n: "08",
+    name: "page_implement_agent ×M",
+    type: "llm×M",
+    desc: "在步骤 07 完成之后多页并行落地 page.tsx / 页面组件；禁止写 layout/chrome/globals。",
+  },
   {
     n: "09",
     name: "install_dependencies",
@@ -128,21 +138,20 @@ const [planOutcome, matchResult] = await Promise.all([...]);
 
 // 第三层：apply_project_design_tokens 必须单独先完成（写 globals.css，避免与 Agent 写文件竞态）
 
-// 第四层：Architect 与 generatePages（多 page agent）并行；实现为 Promise.allSettled：
-// 任一侧失败仍会等另一侧 settle 后再抛错，避免未 await 的异步任务悬挂。
-const [archSettled, pagesSettled] = await Promise.allSettled([
-  runArchitectStep({ blueprint, designSystem }),
-  generatePages({ blueprint, designSystem, runtimeContext, ... }),
-]);
-if (archSettled.status === "rejected") throw archSettled.reason;
-if (pagesSettled.status === "rejected") throw pagesSettled.reason;
-const { files, pendingImages } = pagesSettled.value;
+// 第四层：Architect 先于 generatePages —— layout/chrome 落盘后再启动各 page_implement_agent，
+//        第一轮 prompt 中的 layout.tsx 快照与磁盘一致。
+await runArchitectStep({ blueprint, designSystem, ... });
+const { files, pendingImages } = await generatePages({
+  blueprint,
+  designSystem,
+  runtimeContext,
+  ...,
+});
 `}</Pre>
           <Callout>
             Architect 仍是 chrome 的「单一拟定者」（layout + components/chrome/**）；Page Agent 不得修改这些路径。
-            与 Page Agent 并行时，第一轮 prompt 里的 layout 快照可能比磁盘略旧；必要时允许单次 read_file(app/layout.tsx) 校准。
-            墙钟时间上，这一段约等于 <code className="font-mono text-[11px]">max</code>(Architect,
-            最慢的 Page)，而不是两者相加。
+            Page Agent 在 Architect 完成之后启动，第一轮预读上下文中的 layout 与落盘版本对齐；墙钟时间上该段约等于 Architect
+            耗时加上与「最慢的 Page Agent」并行段之和。
           </Callout>
         </section>
 
@@ -171,22 +180,24 @@ const skillPrompt = loadSelectedSkillPrompt(selectedSkillId);`}</Pre>
 
         <section id="prompts" className="scroll-mt-24">
           <H2>Prompt 分层</H2>
-          <P>每次 section 生成调用的 system prompt 由多层组装而成：</P>
+          <P>
+            <Code>page_implement_agent</Code> 的 system 由{" "}
+            <Code>frontend</Code> + <Code>steps/pageImplementAgent.md</Code> +{" "}
+            <Code>shared/agentRuleBundles.ts</Code>{" "}
+            中列出的 <Code>prompts/rules/*.md</Code>（<Code>loadGuardrail</Code> 按序拼接）组成。
+            <Code>architect_agent</Code> 同理，另含 <Code>section.navigation</Code> 等。
+            可按环境变量 <Code>PAGE_IMPLEMENT_AGENT_EXTRA_RULES</Code> / <Code>ARCHITECT_AGENT_EXTRA_RULES</Code>（逗号分隔 id）追加规则。
+          </P>
           <Pre>{`system prompt =
-  frontend.md           // Next.js / React 基础规范
-  + section.default.md  // 通用 section 规则
-  + section.{type}.md   // 类型特定规则（hero、pricing、faq...）
-  + skill content       // 选定的风格指导
-  + guardrail blocks    // 约束规则（无障碍、首屏...）
-  + traits block          // 结构化特征提示（layout/motion/visual/interaction）
-  + outputTsx.md        // 输出格式要求
+  frontend.md
+  + steps/pageImplementAgent.md
+  + rules from agentRuleBundles (e.g. tailwindMappingGuide, section.default, outputTsx…)
 
-user message =
-  design-system.md      // 项目设计系统
-  + globals.css         // 已有 CSS（避免重复定义）
-  + project context     // 角色、任务流、能力
-  + page context        // slug、旅程阶段、设计计划
-  + section spec        // 类型、意图、内容提示`}</Pre>
+user message (page agent) =
+  design-system.md
+  + pre-read layout.tsx / globals.css / trees
+  + page design plan + project context
+  + optional hero skill body`}</Pre>
         </section>
 
         <section id="repair" className="scroll-mt-24">

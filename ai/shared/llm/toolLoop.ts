@@ -5,6 +5,16 @@ import { chatCompletion } from "./gateway";
 import { throwClassifiedLLMError } from "./errorClassifier";
 import type { AgentToolCallRecord, ChatMessage } from "./types";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
+import { lfToolAgentRound } from "@/lib/observability/langfuseGenerationCatalog";
+
+function resolveToolLoopPhase(
+  explicit: string | undefined,
+  legacyLabel: string | undefined,
+  defaultSlug: string
+): string {
+  const raw = explicit ?? legacyLabel ?? defaultSlug;
+  return raw.replace(/[^a-zA-Z0-9_.-]+/g, "_").replace(/^_+|_+$/g, "") || defaultSlug;
+}
 
 export async function callLLMWithTools(params: {
   systemPrompt: string;
@@ -17,6 +27,14 @@ export async function callLLMWithTools(params: {
   executeToolOverrides?: Record<string, (args: Record<string, unknown>) => Promise<ToolResult | string>>;
   /** Optional: called for every message added to the conversation history. Use to collect full trajectory. */
   onMessage?: (msg: ChatMessage) => void;
+  /**
+   * Langfuse: stable phase slug for {@link lfToolAgentRound}, e.g.
+   * {@link import("@/lib/observability/langfuseGenerationCatalog").LfToolPhase}.
+   */
+  langfusePhase?: string;
+  /** @deprecated Prefer `langfusePhase`; kept for call-site compatibility */
+  langfuseAgentLabel?: string;
+  langfuseGenerationMetadata?: Record<string, unknown>;
 }): Promise<{ content: string; toolCalls: AgentToolCallRecord[] }> {
   const {
     systemPrompt,
@@ -46,6 +64,14 @@ export async function callLLMWithTools(params: {
         tools: activeTools.length > 0 ? activeTools : undefined,
         tool_choice: activeTools.length > 0 ? "auto" : undefined,
         ...(params.thinkingLevel ? { thinking_level: params.thinkingLevel } : {}),
+        langfuseGenerationName: lfToolAgentRound(
+          resolveToolLoopPhase(params.langfusePhase, params.langfuseAgentLabel, "tool_prompt_tools"),
+          iteration
+        ),
+        langfuseGenerationMetadata: {
+          iteration: iteration + 1,
+          ...params.langfuseGenerationMetadata,
+        },
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -134,6 +160,10 @@ export async function callLLMWithToolsFromMessages(params: {
     args: Record<string, unknown>;
     iteration: number;
   }) => void;
+  langfusePhase?: string;
+  /** @deprecated Prefer `langfusePhase` */
+  langfuseAgentLabel?: string;
+  langfuseGenerationMetadata?: Record<string, unknown>;
 }): Promise<{ content: string; toolCalls: AgentToolCallRecord[] }> {
   const {
     messages,
@@ -174,6 +204,14 @@ export async function callLLMWithToolsFromMessages(params: {
         tools: activeTools.length > 0 ? activeTools : undefined,
         tool_choice: activeTools.length > 0 ? "auto" : undefined,
         ...(params.thinkingLevel ? { thinking_level: params.thinkingLevel } : {}),
+        langfuseGenerationName: lfToolAgentRound(
+          resolveToolLoopPhase(params.langfusePhase, params.langfuseAgentLabel, "tool_prompt_messages"),
+          iteration
+        ),
+        langfuseGenerationMetadata: {
+          iteration: iteration + 1,
+          ...params.langfuseGenerationMetadata,
+        },
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

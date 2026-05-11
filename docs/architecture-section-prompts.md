@@ -5,28 +5,47 @@
 
 ---
 
-## 1. `generate_section` 的 System 堆叠顺序（与实现一致）
+## 1. Page / Architect Agent 的 System：规则加载方式
 
-由下而上（`steps/generateSection/index.ts` → `buildSystemPrompt` → `composePromptBlocks`）：
+Section 文案与红线统一放在 **`prompts/rules/*.md`**。`prompts/sections/` 目录已并入 `rules/`（例如 `section.default.md`、`section.navigation.md`）。
+
+**动态拼装**：列表集中在 `ai/flows/generate_project/shared/agentRuleBundles.ts`：
+
+- `PAGE_IMPLEMENT_AGENT_RULE_IDS_BASE` → `resolvePageImplementAgentRuleIds()`，由 `steps/pageImplementAgent.ts` 在 `composePromptBlocks` 里按序 `loadGuardrail(id)`。
+- `ARCHITECT_AGENT_RULE_IDS_BASE` → `resolveArchitectAgentRuleIds()`，由 `steps/architectAgent.ts` 同样拼接。
+
+可选扩展环境变量（逗号分隔追加 id，**不**改代码即可试规则）：
+
+- `PAGE_IMPLEMENT_AGENT_EXTRA_RULES` — 逗号分隔的 rule id（与 `prompts/rules/<id>.md` 文件名一致，不含 `.md`）
+- `ARCHITECT_AGENT_EXTRA_RULES`
+
+**`page_implement_agent` 默认顺序**（在 `frontend` + `steps/pageImplementAgent.md` 之后）：
 
 ```
-1. frontend              ← ai/prompts/systems/frontend.md
-2. Design system 正文      ← 当次 run 的 design-system.md 注入
-3. tailwindMappingGuide  ← prompts/rules/tailwindMappingGuide.md
-4. section.default + section.{type} ← prompts/sections/
-5. skillIntegrationContract ← prompts/rules/skillIntegrationContract.md
-6. 组件 / 技术 skill（可选）← prompts/skills/{id}.md
-7. project.consistency  ← prompts/rules/project.consistency.md（显式固定）
-8. project.accessibility← prompts/rules/project.accessibility.md
-9. outputTsx             ← prompts/rules/outputTsx.md
-10. framerMotionVariants ← prompts/rules/framerMotionVariants.md
+1. tailwindMappingGuide
+2. section.default
+3. skillIntegrationContract
+4. project.consistency
+5. project.accessibility
+6. outputTsx
+7. framerMotionVariants
 ```
 
-不再做运行时「扫描 / 按 section 类型推断」规则 id 列表；`prompts/rules/section.*.md` 若保留，仅作**文档或将来手工并入 section 提示词**之用，**不会**经 `infer*` 自动注入。
+另：用户消息里会注入当次的 **design-system** 正文；**Hero skill** 若有预选，以用户消息块形式追加（不是 rules 文件）。
+
+**`architect_agent` 默认顺序**（在 `frontend` + `steps/architectAgent.md` 之后）：
+
+```
+1. section.navigation
+2. outputTsx
+3. framerMotionVariants
+```
+
+流水线**不会**扫描 `prompts/rules/` 自动注入文件；只有通过 `agentRuleBundles` 基线列表与环境变量追加的 id 才会被 `loadGuardrail` 加载。
 
 ---
 
-## 2. 项目级 `project.*`（与 `generate_section` 对齐）
+## 2. 项目级 `project.*`（与 page agent 规则栈对齐）
 
 | ID | 说明 |
 |----|------|

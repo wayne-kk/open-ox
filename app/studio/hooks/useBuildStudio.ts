@@ -281,6 +281,8 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
   const ensureAliveSeqRef = useRef(0);
   const projectIdFromGenerationRef = useRef<string | null>(null);
   const autoStartedRef = useRef(false);
+  /** Mirrors `startedAt` for use inside SSE callbacks without stale closure gaps. */
+  const startedAtRef = useRef<number | null>(null);
   const modifyStepsRef = useRef<ModifyStep[]>([]);
   const modifyPlanRef = useRef<ModifyPlan | null>(null);
   const modifyDiffsRef = useRef<ModifyDiff[]>([]);
@@ -290,6 +292,12 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
   const finishBuildLiveState = useCallback((totalDuration?: number) => {
     if (typeof totalDuration === "number" && Number.isFinite(totalDuration) && totalDuration >= 0) {
       setElapsed(totalDuration);
+    } else {
+      const t0 = startedAtRef.current;
+      if (typeof t0 === "number" && Number.isFinite(t0)) {
+        const approx = Math.max(0, Date.now() - t0);
+        setElapsed(approx);
+      }
     }
     setLoading(false);
   }, []);
@@ -317,6 +325,10 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     if (!projectId || conversationMessages.length === 0) return;
     writeStoredConversationMessages(projectId, conversationMessages);
   }, [projectId, conversationMessages]);
+
+  useEffect(() => {
+    startedAtRef.current = startedAt;
+  }, [startedAt]);
 
   // ── Elapsed timer ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -487,6 +499,13 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
           // Another tab/session is generating this project.
           // Only poll if we don't own the SSE stream.
           if (!sseActiveRef.current) {
+            setStartedAt((prev) => {
+              if (prev != null) return prev;
+              const tWatch = Date.now();
+              startedAtRef.current = tWatch;
+              return tWatch;
+            });
+            setElapsed(0);
             setLoading(true);
             pollingRef.current = setInterval(async () => {
               // If SSE became active while polling, stop immediately
@@ -562,6 +581,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     sseActiveRef.current = true;
 
     const t0 = Date.now();
+    startedAtRef.current = t0;
     setStartedAt(t0);
     setElapsed(0);
     setLoading(true);
@@ -732,6 +752,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     sseActiveRef.current = true;
 
     const t0 = Date.now();
+    startedAtRef.current = t0;
     setStartedAt(t0);
     setElapsed(0);
     setLoading(true);

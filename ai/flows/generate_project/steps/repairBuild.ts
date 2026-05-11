@@ -3,6 +3,7 @@ import {
   loadSystem,
 } from "../shared/files";
 import { callLLMWithTools } from "../shared/llm";
+import { LfToolPhase } from "@/lib/observability/langfuseGenerationCatalog";
 import { getSystemToolDefinitions } from "../../../tools/systemToolCatalog";
 import { getModelForStep } from "@/lib/config/models";
 import type {
@@ -112,6 +113,7 @@ Fix the build error using the smallest possible edits. Start by reading the fail
       temperature: 0.1,
       maxIterations: 10,
       model: getModelForStep("repair_build"),
+      langfusePhase: LfToolPhase.repairBuild,
     });
 
     for (const tc of toolCalls) {

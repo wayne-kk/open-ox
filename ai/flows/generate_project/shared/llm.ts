@@ -2,6 +2,7 @@ import { getModelId } from "../../../../lib/config/models";
 import { chatCompletion } from "@/ai/shared/llm/gateway";
 import { callLLMWithTools, callLLMWithToolsFromMessages } from "@/ai/shared/llm/toolLoop";
 import { throwClassifiedLLMError } from "@/ai/shared/llm/errorClassifier";
+import { lfPlain, LfPlain } from "@/lib/observability/langfuseGenerationCatalog";
 
 export { extractContent, extractJSON } from "@/ai/shared/llm/contentExtractors";
 export type {
@@ -11,6 +12,11 @@ export type {
   AgentToolCallRecord,
 } from "@/ai/shared/llm/types";
 export { chatCompletion, callLLMWithTools, callLLMWithToolsFromMessages };
+
+export type CallLLMObservability = {
+  /** Use {@link lfPlain} + {@link LfPlain} for stable Langfuse names. */
+  langfuseName: string;
+};
 
 export interface LLMCallResult {
   content: string;
@@ -24,9 +30,11 @@ export async function callLLM(
   userMessage: string,
   temperature = 0.7,
   maxTokens?: number,
-  model?: string
+  model?: string,
+  observability?: CallLLMObservability
 ): Promise<string> {
-  return (await callLLMWithMeta(systemPrompt, userMessage, temperature, maxTokens, model)).content;
+  return (await callLLMWithMeta(systemPrompt, userMessage, temperature, maxTokens, model, observability))
+    .content;
 }
 
 export async function callLLMWithMeta(
@@ -34,7 +42,8 @@ export async function callLLMWithMeta(
   userMessage: string,
   temperature = 0.7,
   maxTokens?: number,
-  model?: string
+  model?: string,
+  observability?: CallLLMObservability
 ): Promise<LLMCallResult> {
   const resolvedModel = model || getModelId();
   try {
@@ -46,6 +55,7 @@ export async function callLLMWithMeta(
       ],
       temperature,
       ...(maxTokens != null && maxTokens > 0 ? { max_tokens: maxTokens } : {}),
+      langfuseGenerationName: observability?.langfuseName ?? lfPlain(LfPlain.unspecified),
     });
 
     const content = res.choices[0]?.message?.content?.trim() ?? "";

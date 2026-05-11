@@ -64,12 +64,15 @@ importers:
       input-otp:
         specifier: ^1.4.2
         version: 1.4.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      langfuse:
+        specifier: ^3.38.20
+        version: 3.38.20
       lucide-react:
         specifier: ^0.577.0
         version: 0.577.0(react@19.2.3)
       next:
         specifier: 16.1.6
-        version: 16.1.6(@babel/core@7.29.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+        version: 16.1.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       next-themes:
         specifier: ^0.4.6
         version: 0.4.6(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -145,7 +148,7 @@ importers:
         version: 3.4.4(@babel/core@7.29.0)(react@19.2.3)
       '@vitest/coverage-v8':
         specifier: ^4.1.2
-        version: 4.1.2(vitest@4.1.2(@types/node@20.19.37)(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(vite@8.0.3(@types/node@20.19.37)(jiti@2.6.1)))
+        version: 4.1.2(vitest@4.1.2(@opentelemetry/api@1.9.1)(@types/node@20.19.37)(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(vite@8.0.3(@types/node@20.19.37)(jiti@2.6.1)))
       eslint:
         specifier: ^9
         version: 9.39.4(jiti@2.6.1)
@@ -166,7 +169,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^4.1.2
-        version: 4.1.2(@types/node@20.19.37)(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(vite@8.0.3(@types/node@20.19.37)(jiti@2.6.1))
+        version: 4.1.2(@opentelemetry/api@1.9.1)(@types/node@20.19.37)(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(vite@8.0.3(@types/node@20.19.37)(jiti@2.6.1))
 
 packages:
 
@@ -791,6 +794,10 @@ packages:
 
   '@open-draft/until@2.1.0':
     resolution: {integrity: sha512-U69T3ItWHvLwGg5eJ0n3I62nWuE6ilHlmz7zM0npLBRvPRd7e6NYmg54vvRtP5mZG7kZqZCFVdsTWo7BPtBujg==}
+
+  '@opentelemetry/api@1.9.1':
+    resolution: {integrity: sha512-gLyJlPHPZYdAk1JENA9LeHejZe1Ti77/pTeFm/nMXmQH/HFZlcS/O2XJB+L8fkbrNSqhdtlvjBVjxwUYanNH5Q==}
+    engines: {node: '>=8.0.0'}
 
   '@oxc-project/types@0.122.0':
     resolution: {integrity: sha512-oLAl5kBpV4w69UtFZ9xqcmTi+GENWOcPF7FCrczTiBbmC0ibXxCwyvZGbO39rCVEuLGAZM84DH0pUIyyv/YJzA==}
@@ -3599,6 +3606,14 @@ packages:
     resolution: {integrity: sha512-o+NO+8WrRiQEE4/7nwRJhN1HWpVmJm511pBHUxPLtp0BUISzlBplORYSmTclCnJvQq2tKu/sgl3xVpkc7ZWuQQ==}
     engines: {node: '>=6'}
 
+  langfuse-core@3.38.20:
+    resolution: {integrity: sha512-zBKVmQN/1oT5VWZUBYlWzvokIlkC/6mnpgr/2atMyTeAm+jR3ia7w2iJMjlrF5/oG8ukO1s8+LDRCzJpF1QeEA==}
+    engines: {node: '>=18'}
+
+  langfuse@3.38.20:
+    resolution: {integrity: sha512-MAmBAASSzJtmK1O9HQegA1mFsQhT8Yf+OJRGvE7FXkyv3g/eiBE0glLD0Ohg3pkxhoPdggM5SejK7ue9ctlaMA==}
+    engines: {node: '>=18'}
+
   language-subtag-registry@0.3.23:
     resolution: {integrity: sha512-0K65Lea881pHotoGEa5gDlMxt3pctLi2RplBb7Ezh4rRdLEOtgi7n4EwK9lamnUCkKBqaeKRVebTq6BAxSkpXQ==}
 
@@ -4042,6 +4057,10 @@ packages:
     peerDependenciesMeta:
       typescript:
         optional: true
+
+  mustache@4.2.0:
+    resolution: {integrity: sha512-71ippSywq5Yb7/tVYyGbkBggbU8H3u5Rz56fH60jGFgr8uHwxs+aSKeqmluIVzM0m0kB7xQjKS6qPfd0b2ZoqQ==}
+    hasBin: true
 
   mute-stream@2.0.0:
     resolution: {integrity: sha512-WWdIxpyjEn+FhQJQQv9aQAYlHoNVdzIzUySNV1gHUPDSdZJ3yZn7pAAbQcV7B56Mvu881q9FZV+0Vx2xC44VWA==}
@@ -5930,6 +5949,9 @@ snapshots:
 
   '@open-draft/until@2.1.0': {}
 
+  '@opentelemetry/api@1.9.1':
+    optional: true
+
   '@oxc-project/types@0.122.0': {}
 
   '@pkgjs/parseargs@0.11.0':
@@ -7133,7 +7155,7 @@ snapshots:
   '@unrs/resolver-binding-win32-x64-msvc@1.11.1':
     optional: true
 
-  '@vitest/coverage-v8@4.1.2(vitest@4.1.2(@types/node@20.19.37)(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(vite@8.0.3(@types/node@20.19.37)(jiti@2.6.1)))':
+  '@vitest/coverage-v8@4.1.2(vitest@4.1.2(@opentelemetry/api@1.9.1)(@types/node@20.19.37)(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(vite@8.0.3(@types/node@20.19.37)(jiti@2.6.1)))':
     dependencies:
       '@bcoe/v8-coverage': 1.0.2
       '@vitest/utils': 4.1.2
@@ -7145,7 +7167,7 @@ snapshots:
       obug: 2.1.1
       std-env: 4.0.0
       tinyrainbow: 3.1.0
-      vitest: 4.1.2(@types/node@20.19.37)(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(vite@8.0.3(@types/node@20.19.37)(jiti@2.6.1))
+      vitest: 4.1.2(@opentelemetry/api@1.9.1)(@types/node@20.19.37)(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(vite@8.0.3(@types/node@20.19.37)(jiti@2.6.1))
 
   '@vitest/expect@4.1.2':
     dependencies:
@@ -8868,6 +8890,14 @@ snapshots:
 
   kleur@4.1.5: {}
 
+  langfuse-core@3.38.20:
+    dependencies:
+      mustache: 4.2.0
+
+  langfuse@3.38.20:
+    dependencies:
+      langfuse-core: 3.38.20
+
   language-subtag-registry@0.3.23: {}
 
   language-tags@1.0.9:
@@ -9469,6 +9499,8 @@ snapshots:
     transitivePeerDependencies:
       - '@types/node'
 
+  mustache@4.2.0: {}
+
   mute-stream@2.0.0: {}
 
   nanoid@3.3.11: {}
@@ -9484,7 +9516,7 @@ snapshots:
       react: 19.2.3
       react-dom: 19.2.3(react@19.2.3)
 
-  next@16.1.6(@babel/core@7.29.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3):
+  next@16.1.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(react-dom@19.2.3(react@19.2.3))(react@19.2.3):
     dependencies:
       '@next/env': 16.1.6
       '@swc/helpers': 0.5.15
@@ -9503,6 +9535,7 @@ snapshots:
       '@next/swc-linux-x64-musl': 16.1.6
       '@next/swc-win32-arm64-msvc': 16.1.6
       '@next/swc-win32-x64-msvc': 16.1.6
+      '@opentelemetry/api': 1.9.1
       sharp: 0.34.5
     transitivePeerDependencies:
       - '@babel/core'
@@ -10825,7 +10858,7 @@ snapshots:
       fsevents: 2.3.3
       jiti: 2.6.1
 
-  vitest@4.1.2(@types/node@20.19.37)(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(vite@8.0.3(@types/node@20.19.37)(jiti@2.6.1)):
+  vitest@4.1.2(@opentelemetry/api@1.9.1)(@types/node@20.19.37)(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(vite@8.0.3(@types/node@20.19.37)(jiti@2.6.1)):
     dependencies:
       '@vitest/expect': 4.1.2
       '@vitest/mocker': 4.1.2(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(vite@8.0.3(@types/node@20.19.37)(jiti@2.6.1))
@@ -10848,6 +10881,7 @@ snapshots:
       vite: 8.0.3(@types/node@20.19.37)(jiti@2.6.1)
       why-is-node-running: 2.3.0
     optionalDependencies:
+      '@opentelemetry/api': 1.9.1
       '@types/node': 20.19.37
     transitivePeerDependencies:
       - msw

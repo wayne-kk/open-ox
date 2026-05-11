@@ -1,5 +1,6 @@
 import { composePromptBlocks, loadStepPrompt } from "../shared/files";
 import { callLLMWithTools, extractJSON } from "../shared/llm";
+import { LfToolPhase } from "@/lib/observability/langfuseGenerationCatalog";
 import { webSearchTool, executeWebSearch } from "../../../tools/system/webSearchTool";
 import type { ProjectBlueprint, StepTrace } from "../types";
 import { asProjectBlueprint } from "../schema/normalizeBlueprint";
@@ -23,6 +24,7 @@ export async function stepAnalyzeProjectRequirement(
     maxIterations: 4,
     model,
     executeToolOverrides: { web_search: executeWebSearch },
+    langfusePhase: LfToolPhase.analyzeRequirement,
   });
 
   for (const tc of toolCalls) {
