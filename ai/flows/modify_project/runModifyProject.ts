@@ -13,6 +13,10 @@ import { SYSTEM_PROMPT } from "./prompt/systemPrompt";
 import { appendTrajectoryEvent, findOrCreateTrajectoryRun } from "@/lib/trajectory/store";
 import type { TrajectoryData } from "./trajectory";
 import { withLangfuseSpan } from "@/lib/observability/langfuseTracing";
+import { stepModifyIntentRouter } from "./intent/modifyIntentRouter";
+
+const MODIFY_INTENT_CONVERSATION_FALLBACK =
+  "我是修改助手：负责按你的描述修改当前项目并做构建检查。需要改页面或组件时，请说明要改哪里、改成什么样。";
 
 type TrajectoryToolCall = NonNullable<TrajectoryData["messages"][number]["tool_calls"]>[number];
 const ALL_TOOLS_FOR_TRAJECTORY = ["read_file", "search_code", "list_dir", "edit_file", "write_file", "run_build", "exec_shell", "think", "revert_file"];
@@ -73,6 +77,62 @@ async function runModifyProjectInner(
 ): Promise<void> {
   const projectDir = pmGetSiteRoot(projectId);
   onEvent({ type: "step", name: "resolve_project", status: "done" });
+
+  onEvent({ type: "step", name: "intent_router", status: "running" });
+  let routed: Awaited<ReturnType<typeof stepModifyIntentRouter>> = {
+    category: "code_change",
+    assistantMessage: "",
+  };
+  try {
+    routed = await withLangfuseSpan(
+      "modify_intent_router",
+      () => stepModifyIntentRouter(userInstruction),
+      { metadata: { projectId } }
+    );
+  } catch (err) {
+    console.warn("[modify] intent_router failed, defaulting to code_change:", err);
+  }
+  onEvent({
+    type: "step",
+    name: "intent_router",
+    status: "done",
+    message: routed.category,
+  });
+
+  if (routed.category === "conversation") {
+    const reply = routed.assistantMessage.trim() || MODIFY_INTENT_CONVERSATION_FALLBACK;
+    onEvent({ type: "step", name: "read_context", status: "running" });
+    onEvent({ type: "step", name: "read_context", status: "done", message: "skipped (intent: conversation)" });
+    onEvent({ type: "step", name: "agent_loop", status: "running" });
+    onEvent({ type: "thinking", content: reply });
+    onEvent({
+      type: "step",
+      name: "agent_loop",
+      status: "done",
+      message: "0 iterations (conversation only, no tools)",
+    });
+    onEvent({
+      type: "plan",
+      plan: {
+        analysis: reply,
+        changes: [],
+      },
+    });
+    await artifactLogger.writeJson("run", "result", {
+      projectId,
+      instruction: userInstruction,
+      intent: "conversation",
+      touchedFiles: [],
+      buildPassed: false,
+      iterations: 0,
+    });
+    clearRevertSnapshots();
+    clearFileTracking();
+    return;
+  }
+
+  const modifyStopMode = routed.category === "read_only" ? "read_only" : "code_change";
+
   const taskId = `modify:${projectId}`;
   let trajectory: { runId: string; taskId: string } | null = null;
   let trajectoryQueue: Promise<void> = Promise.resolve();
@@ -296,7 +356,8 @@ async function runModifyProjectInner(
           tracker,
           collectingOnEvent as (event: { type: "step" | "plan" | "diff" | "tool_call" | "thinking" | "done" | "error";[key: string]: unknown }) => void,
           userInstruction,
-          modelOverride
+          modelOverride,
+          modifyStopMode
         ),
       { metadata: { projectId } }
     );
@@ -367,7 +428,7 @@ async function runModifyProjectInner(
     const existingHistory = project.modificationHistory ?? [];
     await updateProjectStatus(db, projectId, "ready", {
       modificationHistory: [...existingHistory, record],
-      verificationStatus: loopState.buildPassed ? "passed" : "failed",
+      verificationStatus: !loopState.hasEdited || loopState.buildPassed ? "passed" : "failed",
     });
     onEvent({
       type: "step",
@@ -446,7 +507,7 @@ async function runModifyProjectInner(
         payload: {
           type: "modify_round_complete",
           success: true,
-          verificationStatus: loopState.buildPassed ? "passed" : "failed",
+          verificationStatus: !loopState.hasEdited || loopState.buildPassed ? "passed" : "failed",
           projectId,
           touchedFiles: touchedFiles.length,
           iterations,

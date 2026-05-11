@@ -4,7 +4,7 @@ import { chatCompletion, type ChatMessage } from "@/ai/flows/generate_project/sh
 import { lfModifyAgentRound } from "@/lib/observability/langfuseGenerationCatalog";
 import { getModifyModelId } from "@/lib/config/models";
 import type { FileSnapshotTracker } from "../tracking/fileSnapshotTracker";
-import { runStopHook, type LoopState } from "./stopHooks";
+import { runStopHook, type LoopState, type ModifyStopMode } from "./stopHooks";
 import { compressContext } from "./contextCompression";
 
 const ALL_TOOLS = ["read_file", "search_code", "list_dir", "edit_file", "write_file", "run_build", "exec_shell", "think", "revert_file"];
@@ -21,7 +21,8 @@ export async function runAgentLoop(
   tracker: FileSnapshotTracker,
   onEvent: OnEvent,
   userInstruction: string,
-  modelOverride?: string
+  modelOverride?: string,
+  modifyStopMode: ModifyStopMode = "code_change"
 ): Promise<{ messages: ChatMessage[]; loopState: LoopState; iterations: number }> {
   const model = modelOverride || getModifyModelId();
   const tools = getSystemToolDefinitions(ALL_TOOLS);
@@ -92,7 +93,7 @@ export async function runAgentLoop(
     }
 
     if (!msg.tool_calls || msg.tool_calls.length === 0) {
-      const blockingError = runStopHook(loopState, userInstruction);
+      const blockingError = runStopHook(loopState, userInstruction, modifyStopMode);
       if (blockingError && stopHookRetries < MAX_STOP_HOOK_RETRIES) {
         stopHookRetries++;
         lastTransition = "stop_hook_retry";

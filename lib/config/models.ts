@@ -98,6 +98,7 @@ export function clearStepConfig(stepName: string): void {
 export const GENERATION_STEPS = [
     { id: "intent_agent", label: "建站意向 Task Agent" },
     { id: "project_intent_guide", label: "建站意向引导" },
+    { id: "modify_intent_router", label: "修改入口意图分类" },
     { id: "analyze_project_requirement", label: "需求分析" },
     { id: "infer_design_intent", label: "设计意图推断" },
     { id: "plan_project", label: "项目规划" },

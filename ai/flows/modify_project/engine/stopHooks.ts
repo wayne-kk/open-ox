@@ -11,11 +11,17 @@ export interface LoopState {
   phase: "orient" | "read" | "edit" | "verify";
 }
 
+export type ModifyStopMode = "code_change" | "read_only";
+
 /**
  * Runs when LLM stops calling tools. Returns null if task is complete,
  * or a blocking error message that gets injected back into the conversation.
  */
-export function runStopHook(loopState: LoopState, userInstruction: string): string | null {
+export function runStopHook(
+  loopState: LoopState,
+  userInstruction: string,
+  modifyMode: ModifyStopMode = "code_change"
+): string | null {
   if (!loopState.hasSearched && !loopState.hasEdited) {
     const keywords = userInstruction
       .replace(/[，。！？、\s]+/g, " ")
@@ -34,6 +40,9 @@ Try these steps NOW:
 3. If Chinese keywords don't match, try English equivalents (e.g. 性能→Performance, 导航→Nav, 标题→title/heading)
 
 Do NOT respond with text only. Use tools.`;
+  }
+  if (modifyMode === "read_only" && loopState.hasSearched && !loopState.hasEdited) {
+    return null;
   }
   if (!loopState.hasEdited) {
     return `You searched but didn't make any changes. The user asked you to modify something.

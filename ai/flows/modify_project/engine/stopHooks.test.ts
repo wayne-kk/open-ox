@@ -23,6 +23,12 @@ describe("runStopHook", () => {
     expect(msg).toContain("list_dir");
   });
 
+  it("allows stop after exploration when modifyMode is read_only", () => {
+    const state = baseState();
+    state.hasSearched = true;
+    expect(runStopHook(state, "解释一下 Hero", "read_only")).toBeNull();
+  });
+
   it("blocks when searched but did not edit", () => {
     const state = baseState();
     state.hasSearched = true;

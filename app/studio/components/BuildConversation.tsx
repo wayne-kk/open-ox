@@ -234,6 +234,41 @@ function DiffBlock({ diff }: { diff: ModifyDiff }) {
     );
 }
 
+function normalizeMessageDedupe(s: string): string {
+    return s.trim().replace(/\s+/g, " ");
+}
+
+/** Drop thinking entries that duplicate the primary assistant summary (same SSE mapped to plan + thinking). */
+function filterThinkingDedupe(thinking: string[], primary: string): string[] {
+    const p = normalizeMessageDedupe(primary);
+    if (!p) return thinking;
+    return thinking.filter((t) => normalizeMessageDedupe(t) !== p);
+}
+
+/** 模型逐步推理内容：默认折叠，避免与主摘要重复占屏。 */
+function CollapsedThinkingBlock({ thinking }: { thinking: string[] }) {
+    if (thinking.length === 0) return null;
+    return (
+        <details className="group rounded-xl border border-white/8 bg-black/25 overflow-hidden">
+            <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 font-mono text-[10px] text-muted-foreground/90 select-none hover:bg-white/[0.04] [&::-webkit-details-marker]:hidden">
+                <span className="inline-block text-primary/50 transition-transform duration-200 group-open:rotate-90">▶</span>
+                <span className="uppercase tracking-wider">思考过程</span>
+                <span className="text-muted-foreground/45">({thinking.length})</span>
+            </summary>
+            <div className="max-h-[min(50vh,360px)] space-y-2 overflow-y-auto border-t border-white/6 px-3 py-2">
+                {thinking.map((t, i) => (
+                    <div
+                        key={`think-${i}`}
+                        className="break-words font-mono text-[10px] leading-4 whitespace-pre-wrap text-foreground/65"
+                    >
+                        {t.length > 12_000 ? `${t.slice(0, 12_000)}…` : t}
+                    </div>
+                ))}
+            </div>
+        </details>
+    );
+}
+
 function ModifyBubble({ record }: { record: ModifyRecord }) {
     return (
         <ChatBubble role="user">
@@ -264,11 +299,16 @@ function ModifyResultBubble({ record }: { record: ModifyRecord }) {
             </ChatBubble>
         );
     }
+
+    const analysisPrimary = (record.plan?.analysis ?? "").trim();
+    const dedupedThinking = filterThinkingDedupe(record.thinking ?? [], analysisPrimary);
+    const toolCalls = record.toolCalls ?? [];
+    const hasTrace = dedupedThinking.length > 0 || toolCalls.length > 0;
+
     return (
         <ChatBubble role="assistant">
             <div className="text-[11px] font-medium text-foreground">修改助手</div>
             <div className="mt-3 space-y-3">
-                {/* AI Analysis */}
                 {record.plan && (
                     <LogSection title="Analysis">
                         <div className="space-y-1 text-[12px] leading-6 text-foreground/90">
@@ -290,20 +330,13 @@ function ModifyResultBubble({ record }: { record: ModifyRecord }) {
                     </LogSection>
                 )}
 
-                {/* Agent execution trace — tool calls + flow logic */}
-                {(record.toolCalls?.length > 0 || record.thinking?.length > 0) && (
-                    <LogSection title="Agent Log">
-                        <div className="space-y-1">
-                            {/* Thinking entries (iter info, stop hooks, errors) */}
-                            {record.thinking.map((t, i) => (
-                                <div key={`t-${i}`} className="font-mono text-[10px] leading-4 text-foreground/60 whitespace-pre-wrap">
-                                    {t.length > 400 ? t.slice(0, 400) + "…" : t}
-                                </div>
-                            ))}
-                            {/* Tool calls */}
-                            {record.toolCalls.length > 0 && (
-                                <div className="mt-2 space-y-1">
-                                    {record.toolCalls.map((tc, i) => (
+                {hasTrace && (
+                    <div className="space-y-2">
+                        <CollapsedThinkingBlock thinking={dedupedThinking} />
+                        {toolCalls.length > 0 && (
+                            <LogSection title="Tool calls">
+                                <div className="space-y-1">
+                                    {toolCalls.map((tc, i) => (
                                         <div key={`tc-${i}`} className="flex items-start gap-2 font-mono text-[10px]">
                                             <span className={
                                                 tc.tool === "edit_file" || tc.tool === "write_file" ? "text-amber-300" :
@@ -312,7 +345,7 @@ function ModifyResultBubble({ record }: { record: ModifyRecord }) {
                                             }>
                                                 {tc.tool}
                                             </span>
-                                            <span className="text-muted-foreground/70 truncate max-w-[280px]">
+                                            <span className="max-w-[280px] truncate text-muted-foreground/70">
                                                 {tc.tool === "read_file" || tc.tool === "edit_file" || tc.tool === "write_file"
                                                     ? (tc.args.path as string ?? "")
                                                     : tc.tool === "search_code"
@@ -324,9 +357,9 @@ function ModifyResultBubble({ record }: { record: ModifyRecord }) {
                                         </div>
                                     ))}
                                 </div>
-                            )}
-                        </div>
-                    </LogSection>
+                            </LogSection>
+                        )}
+                    </div>
                 )}
 
                 {/* Modified files with diffs */}
@@ -751,16 +784,13 @@ export function BuildConversation({
                                     </LogSection>
                                 )}
 
-                                {/* Thinking */}
-                                {modifyThinking.length > 0 && (
-                                    <LogSection title="Agent Thinking">
-                                        <div className="space-y-2 text-[11px] leading-5 text-foreground/80">
-                                            {modifyThinking.map((t, i) => (
-                                                <p key={i} className="whitespace-pre-wrap">{t.length > 500 ? t.slice(0, 500) + "…" : t}</p>
-                                            ))}
-                                        </div>
-                                    </LogSection>
-                                )}
+                                {/* Thinking — collapsed by default */}
+                                <CollapsedThinkingBlock
+                                    thinking={filterThinkingDedupe(
+                                        modifyThinking,
+                                        (modifyPlan?.analysis ?? "").trim()
+                                    )}
+                                />
 
                                 {/* Tool calls */}
                                 {modifyToolCalls.length > 0 && (
