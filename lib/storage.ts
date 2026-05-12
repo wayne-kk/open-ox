@@ -7,6 +7,7 @@
 
 import fs from "fs/promises";
 import path from "path";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import { getSiteRoot, WORKSPACE_ROOT } from "./projectManager";
 
@@ -57,16 +58,19 @@ export async function uploadProjectFile(
 export async function uploadProjectFileContent(
   projectId: string,
   relativeFilePath: string,
-  content: Buffer | string
+  content: Buffer | string,
+  options?: { contentType?: string }
 ): Promise<void> {
   const storagePath = `${projectId}/${relativeFilePath}`;
   const body = typeof content === "string" ? Buffer.from(content, "utf-8") : content;
   let lastErrorMessage = "";
 
   for (let attempt = 0; attempt <= STORAGE_UPLOAD_MAX_RETRIES; attempt += 1) {
-    const { error } = await supabase.storage
-      .from(BUCKET)
-      .upload(storagePath, body, { upsert: true });
+    const uploadOpts: { upsert: boolean; contentType?: string } = { upsert: true };
+    if (options?.contentType) {
+      uploadOpts.contentType = options.contentType;
+    }
+    const { error } = await supabase.storage.from(BUCKET).upload(storagePath, body, uploadOpts);
 
     if (!error) {
       return;
@@ -85,6 +89,40 @@ export async function uploadProjectFileContent(
   }
 
   throw new Error(`[storage] Failed to upload ${storagePath}: ${lastErrorMessage}`);
+}
+
+/** Same bucket as uploads; callers pass a Supabase client (e.g. service role). */
+export async function uploadCoverScreenshot(
+  db: Pick<SupabaseClient, "storage">,
+  projectId: string,
+  jpeg: Buffer,
+  options?: { maxRetries?: number }
+): Promise<string> {
+  const relativePath = ".open-ox-cover/cover.jpg";
+  const storagePath = `${projectId}/${relativePath}`;
+  const maxRetries =
+    typeof options?.maxRetries === "number" && Number.isFinite(options?.maxRetries) && options.maxRetries >= 0
+      ? Math.floor(options.maxRetries)
+      : STORAGE_UPLOAD_MAX_RETRIES;
+  let lastErrorMessage = "";
+
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    const { error } = await db.storage.from(BUCKET).upload(storagePath, jpeg, {
+      upsert: true,
+      contentType: "image/jpeg",
+    });
+
+    if (!error) return relativePath;
+
+    lastErrorMessage = error.message ?? "unknown storage upload error";
+    const shouldRetry = attempt < maxRetries && isRetryableStorageError(lastErrorMessage);
+    if (!shouldRetry) {
+      throw new Error(`[storage] Cover upload failed for ${storagePath}: ${lastErrorMessage}`);
+    }
+    await sleep(250 * 2 ** attempt);
+  }
+
+  throw new Error(`[storage] Cover upload failed for ${storagePath}: ${lastErrorMessage}`);
 }
 
 /** Upload all generated files for a project */

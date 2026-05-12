@@ -32,6 +32,7 @@ interface ProjectMetadata {
   modificationHistory: unknown[];
   ownerUserId?: string;
   ownerUsername?: string | null;
+  coverImageStatus?: "pending" | "ready" | "failed";
 }
 
 interface ProjectFolder {
@@ -214,21 +215,30 @@ function ProjectCard({
         }
       `}
     >
-      {/* Cover image area — text-based */}
-      <div className={`relative h-32 bg-gradient-to-br ${colors.bg} flex items-center justify-center overflow-hidden`}>
-        {/* Background pattern */}
-        <div className="absolute inset-0 opacity-[0.06]" style={{
-          backgroundImage: "radial-gradient(circle, white 1px, transparent 1px)",
-          backgroundSize: "20px 20px",
-        }} />
-
-        {/* Large initials */}
-        <span className={`relative font-heading text-4xl font-bold ${colors.text} opacity-80`}>
-          {initials || "?"}
-        </span>
+      {/* Cover: real site first viewport JPEG when ready; else branded gradient */}
+      <div className={`relative z-0 h-32 bg-gradient-to-br ${colors.bg} flex items-center justify-center overflow-hidden`}>
+        {project.coverImageStatus === "ready" ? (
+          // eslint-disable-next-line @next/next/no-img-element -- API route JPEG with session cookie (no next/image optimizer)
+          <img
+            src={`/api/projects/${project.id}/cover`}
+            alt=""
+            className="absolute inset-0 z-0 h-full w-full object-cover object-top"
+            loading="lazy"
+          />
+        ) : (
+          <>
+            <div className="absolute inset-0 opacity-[0.06]" style={{
+              backgroundImage: "radial-gradient(circle, white 1px, transparent 1px)",
+              backgroundSize: "20px 20px",
+            }} />
+            <span className={`relative font-heading text-4xl font-bold ${colors.text} opacity-80`}>
+              {initials || "?"}
+            </span>
+          </>
+        )}
 
         {/* Status overlay */}
-        <div className="absolute top-3 right-3">
+        <div className="absolute top-3 right-3 z-10">
           {isGenerating ? (
             <div className="flex items-center gap-1.5 rounded-full bg-black/40 backdrop-blur-sm px-2.5 py-1">
               <Loader2 className="h-3 w-3 animate-spin text-primary" />
@@ -248,11 +258,11 @@ function ProjectCard({
         </div>
 
         {/* Globe icon */}
-        <Globe className="absolute bottom-3 left-3 h-4 w-4 text-white/10" />
+        <Globe className="absolute bottom-3 left-3 z-10 h-4 w-4 text-white/10" />
 
         {/* Generating shimmer */}
         {isGenerating && (
-          <div className="absolute inset-0 animate-[shimmer_2s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/[0.04] to-transparent" />
+          <div className="absolute inset-0 z-10 animate-[shimmer_2s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/[0.04] to-transparent" />
         )}
       </div>
 

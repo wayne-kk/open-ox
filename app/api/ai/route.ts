@@ -21,6 +21,7 @@ import {
   renameProject,
 } from "@/lib/projectManager";
 import { scheduleUploadFullProject } from "@/lib/storage";
+import { scheduleCaptureProjectCover } from "@/lib/projectCoverCapture";
 import { setRuntimeModelId, type ModelId } from "@/lib/config/models";
 import { loadStepModelsFromDB } from "@/lib/config/models";
 import {
@@ -437,6 +438,7 @@ export async function POST(req: Request) {
 
             // Step 6: Persist to Storage asynchronously (does not block preview / SSE done).
             scheduleUploadFullProject(projectId);
+            scheduleCaptureProjectCover(projectId);
           } else if (result.intentGuideDeferred && result.intentGuide) {
             await updateProjectStatus(db, projectId, "failed", {
               error:

@@ -1,9 +1,9 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useState, useEffect, useCallback } from "react";
 import { Suspense } from "react";
 import Link from "next/link";
-import { ArrowLeft, GitBranch, Monitor, RefreshCw, ExternalLink, PanelLeftClose, PanelLeftOpen, FileCode2 } from "lucide-react";
+import { ArrowLeft, GitBranch, Monitor, RefreshCw, ExternalLink, PanelLeftClose, PanelLeftOpen, FileCode2, ImagePlus, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HamsterLoader } from "@/components/ui/hamster-loader";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -43,6 +43,45 @@ function StudioInner({ projectId }: { projectId: string }) {
   const canPreview = !!projectId && !loading;
   const canCode = !!projectId && !projectLoading;
   const [conversationCollapsed, setConversationCollapsed] = useState(false);
+  const [coverCaptureBusy, setCoverCaptureBusy] = useState(false);
+  const [coverCaptureHint, setCoverCaptureHint] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!coverCaptureHint) return;
+    const t = setTimeout(() => setCoverCaptureHint(null), 10_000);
+    return () => clearTimeout(t);
+  }, [coverCaptureHint]);
+
+  const requestCoverCapture = useCallback(async () => {
+    if (!projectId || coverCaptureBusy) return;
+    setCoverCaptureBusy(true);
+    setCoverCaptureHint(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/cover/capture`, { method: "POST" });
+      const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
+      if (res.status === 401) {
+        setCoverCaptureHint("请先登录后再更新封面图");
+        return;
+      }
+      if (res.status === 403) {
+        setCoverCaptureHint("仅项目所有者可以更新封面图");
+        return;
+      }
+      if (res.status === 503) {
+        setCoverCaptureHint("服务端未配置封面截图（需要 SUPABASE_SERVICE_ROLE_KEY）");
+        return;
+      }
+      if (!res.ok && res.status !== 202) {
+        setCoverCaptureHint(data.error ?? `更新失败 (${res.status})`);
+        return;
+      }
+      setCoverCaptureHint("已开始截取当前预览首页，完成后请到项目列表查看新封面（约 1～3 分钟）");
+    } catch {
+      setCoverCaptureHint("网络错误，请稍后重试");
+    } finally {
+      setCoverCaptureBusy(false);
+    }
+  }, [projectId, coverCaptureBusy]);
   const previewIframeSrc =
     previewUrl
       ? `${previewUrl}${previewUrl.includes("?") ? "&" : "?"}v=${previewVersion}`
@@ -167,7 +206,8 @@ function StudioInner({ projectId }: { projectId: string }) {
 
           <section className="defi-glass flex min-h-0 flex-1 flex-col overflow-hidden">
             {/* Right panel toolbar */}
-            <div className="flex h-11 items-center border-b border-white/8 px-3 gap-2">
+            <div className="flex shrink-0 flex-col border-b border-white/8">
+              <div className="flex h-11 items-center px-3 gap-2">
               <button
                 onClick={() => setConversationCollapsed((v) => !v)}
                 className="flex items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-2.5 h-7 font-mono text-[10px] text-muted-foreground/70 transition-all hover:border-white/15 hover:text-foreground"
@@ -264,6 +304,20 @@ function StudioInner({ projectId }: { projectId: string }) {
               {rightPanel === "preview" && previewState === "ready" && previewUrl && (
                 <>
                   <button
+                    type="button"
+                    onClick={requestCoverCapture}
+                    disabled={coverCaptureBusy}
+                    className="flex items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-2.5 h-7 font-mono text-[10px] text-muted-foreground/70 transition-all hover:border-white/15 hover:text-foreground disabled:opacity-40"
+                    title="用当前预览首页重新生成项目列表封面图"
+                  >
+                    {coverCaptureBusy ? (
+                      <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                    ) : (
+                      <ImagePlus className="h-3 w-3" aria-hidden />
+                    )}
+                    更新封面
+                  </button>
+                  <button
                     onClick={studio.rebuildPreview}
                     className="flex items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-2.5 h-7 font-mono text-[10px] text-muted-foreground/70 transition-all hover:border-white/15 hover:text-foreground"
                     title="Rebuild preview"
@@ -283,6 +337,12 @@ function StudioInner({ projectId }: { projectId: string }) {
                   </a>
                 </>
               )}
+              </div>
+              {rightPanel === "preview" && coverCaptureHint ? (
+                <div className="border-t border-white/6 px-3 py-1.5 font-mono text-[10px] leading-snug text-primary/80">
+                  {coverCaptureHint}
+                </div>
+              ) : null}
             </div>
 
             <div className="flex-1 min-h-0 overflow-hidden">

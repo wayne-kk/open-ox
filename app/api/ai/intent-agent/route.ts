@@ -29,6 +29,7 @@ import {
   renameProject,
 } from "@/lib/projectManager";
 import { scheduleUploadFullProject } from "@/lib/storage";
+import { scheduleCaptureProjectCover } from "@/lib/projectCoverCapture";
 import { setRuntimeModelId, type ModelId } from "@/lib/config/models";
 import { loadStepModelsFromDB } from "@/lib/config/models";
 import {
@@ -366,6 +367,7 @@ export async function POST(req: Request) {
               await renameProject(db, projectId, projectTitle.trim());
             }
             scheduleUploadFullProject(projectId);
+            scheduleCaptureProjectCover(projectId);
           } else if (genResult.intentGuideDeferred && genResult.intentGuide) {
             await updateProjectStatus(db, projectId, "failed", {
               error: `[intent_guide] ${genResult.intentGuide.assistantMessage.slice(0, 480)}`,

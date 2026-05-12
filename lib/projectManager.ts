@@ -35,6 +35,8 @@ export interface ModificationRecord {
   error?: string;
 }
 
+export type ProjectCoverImageStatus = "pending" | "ready" | "failed";
+
 export interface ProjectMetadata {
   id: string;
   name: string;
@@ -57,6 +59,11 @@ export interface ProjectMetadata {
   /** Set when row includes ownership columns */
   ownerUserId?: string;
   ownerUsername?: string | null;
+  /** Desktop-first-viewport screenshot in Storage (.open-ox-cover/cover.jpg) */
+  coverImageStatus?: ProjectCoverImageStatus;
+  coverImageStoragePath?: string | null;
+  coverImageError?: string | null;
+  coverImageUpdatedAt?: string;
 }
 
 interface ProjectRow {
@@ -80,6 +87,10 @@ interface ProjectRow {
   folder_id: string | null;
   owner_username?: string | null;
   modification_history: ModificationRecord[];
+  cover_image_status: ProjectCoverImageStatus | null;
+  cover_image_storage_path: string | null;
+  cover_image_error: string | null;
+  cover_image_updated_at: string | null;
 }
 
 function rowToMetadata(row: ProjectRow): ProjectMetadata {
@@ -108,6 +119,10 @@ function rowToMetadata(row: ProjectRow): ProjectMetadata {
           ownerUsername: row.owner_username ?? undefined,
         }
       : {}),
+    coverImageStatus: row.cover_image_status ?? undefined,
+    coverImageStoragePath: row.cover_image_storage_path ?? undefined,
+    coverImageError: row.cover_image_error ?? undefined,
+    coverImageUpdatedAt: row.cover_image_updated_at ?? undefined,
   };
 }
 
@@ -135,6 +150,7 @@ interface ProjectListRow {
   folder_id: string | null;
   user_id: string | null;
   owner_username: string | null;
+  cover_image_status: ProjectCoverImageStatus | null;
 }
 
 export type ProjectFolderFilter = "all" | "uncategorized" | string;
@@ -169,7 +185,7 @@ export async function listProjectsSummary(
   let query = db
     .from("projects")
     .select(
-      "id,name,user_prompt,status,created_at,updated_at,completed_at,error,verification_status,model_id,generation_mode,folder_id,user_id,owner_username"
+      "id,name,user_prompt,status,created_at,updated_at,completed_at,error,verification_status,model_id,generation_mode,folder_id,user_id,owner_username,cover_image_status"
     )
     .order("created_at", { ascending: false });
 
@@ -222,6 +238,7 @@ export async function listProjectsSummary(
     modificationHistory: [],
     ownerUserId: row.user_id ?? undefined,
     ownerUsername: row.owner_username ?? undefined,
+    coverImageStatus: row.cover_image_status ?? undefined,
   }));
 }
 
@@ -404,6 +421,34 @@ export async function updateProjectStatus(
   }
 
   throw new Error(`[projectManager] updateProjectStatus failed: ${lastMessage}`);
+}
+
+export async function updateProjectCoverState(
+  db: SupabaseClient,
+  id: string,
+  patch: {
+    status: ProjectCoverImageStatus;
+    /** Relative path under project-files/{id}/ — e.g. `.open-ox-cover/cover.jpg` */
+    storageRelativePath?: string | null;
+    error?: string | null;
+  }
+): Promise<void> {
+  const ts = new Date().toISOString();
+  const update: Record<string, unknown> = {
+    updated_at: ts,
+    cover_image_status: patch.status,
+    cover_image_updated_at: ts,
+  };
+  if (patch.storageRelativePath !== undefined) {
+    update.cover_image_storage_path = patch.storageRelativePath;
+  }
+  if (patch.error !== undefined) {
+    update.cover_image_error = patch.error;
+  }
+  const { error } = await db.from("projects").update(update).eq("id", id);
+  if (error) {
+    throw new Error(`[projectManager] updateProjectCoverState failed: ${error.message}`);
+  }
 }
 
 export async function setProjectFolder(
