@@ -3,7 +3,7 @@
  * Server-only. Requires SUPABASE_SERVICE_ROLE_KEY and Chromium (Playwright).
  */
 
-import { startDevServer } from "@/lib/devServerManager";
+import { startDevServer, getExistingLocalPreviewUrl } from "@/lib/devServerManager";
 import { previewUrlAllowedForScreenshot } from "@/lib/previewScreenshotUrl";
 import { updateProjectCoverState } from "@/lib/projectManager";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -102,7 +102,8 @@ export async function runCaptureProjectCover(
       error: null,
     });
 
-    const { url } = await startDevServer(db, projectId);
+    const reused = await getExistingLocalPreviewUrl(db, projectId);
+    const { url } = reused ?? (await startDevServer(db, projectId));
     previewUrlAllowedForScreenshot(url);
 
     const jpeg = await screenshotHomeViewport(url);

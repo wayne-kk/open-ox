@@ -25,6 +25,8 @@ const SHARED_NODE_MODULES_CANDIDATES = [path.join(SITES_DIR, "node_modules"), pa
 type LocalInstance = { port: number; url: string; dev: ChildProcess | null };
 
 const localRegistry = new Map<string, LocalInstance>();
+/** Serializes concurrent `startLocalDevServer` for the same project (e.g. auto-preview + cover capture). */
+const localStartInFlight = new Map<string, Promise<{ url: string; port: number }>>();
 
 /** True for RFC1918-style private IPv4, link-local 169.254.*, or *.local (mDNS). */
 function isLikelyLanDevHostname(hostname: string): boolean {
@@ -259,15 +261,24 @@ async function runNpmInstall(projectDir: string, extra: string | null): Promise<
 }
 
 async function isLocalServerUp(url: string): Promise<boolean> {
-  const attempts = 3;
+  const attempts = 5;
   for (let i = 0; i < attempts; i += 1) {
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
-      if (res.ok) return true;
+      const res = await fetch(url, {
+        signal: AbortSignal.timeout(8000),
+        redirect: "follow",
+      });
+      // Any completed HTTP response counts as "up" — do not require res.ok (3xx/404/500 still mean a server is bound).
+      try {
+        res.body?.cancel();
+      } catch {
+        /* */
+      }
+      return true;
     } catch {
-      /* */
+      /* ECONNREFUSED, timeout, reset */
     }
-    if (i < attempts - 1) await sleep(500);
+    if (i < attempts - 1) await sleep(400);
   }
   return false;
 }
@@ -380,6 +391,12 @@ export async function startLocalDevServer(
   db: SupabaseClient,
   projectId: string
 ): Promise<{ url: string; port: number }> {
+  const existing = localStartInFlight.get(projectId);
+  if (existing) {
+    return existing;
+  }
+
+  const work = (async (): Promise<{ url: string; port: number }> => {
   const projectDir = await ensureProjectDirExists(projectId);
   const currentHash = await computeProjectFingerprint(projectId);
 
@@ -388,6 +405,16 @@ export async function startLocalDevServer(
     const synced = syncRegistryPublicUrl(projectId, reg);
     await saveFingerprint(db, projectId, currentHash);
     return { url: synced.url, port: synced.port };
+  }
+
+  /** Registry miss or warm-up: avoid killing a live Next dev Turbo is still compiling. */
+  if (reg && !(await isLocalServerUp(previewHealthCheckUrl(reg.port)))) {
+    await sleep(600);
+    if (await isLocalServerUp(previewHealthCheckUrl(reg.port))) {
+      const synced = syncRegistryPublicUrl(projectId, reg);
+      await saveFingerprint(db, projectId, currentHash);
+      return { url: synced.url, port: synced.port };
+    }
   }
 
   stopDevInRegistry(projectId);
@@ -400,6 +427,16 @@ export async function startLocalDevServer(
   localRegistry.set(projectId, { port, url, dev: child });
   await saveFingerprint(db, projectId, currentHash);
   return { url, port };
+  })();
+
+  localStartInFlight.set(projectId, work);
+  try {
+    return await work;
+  } finally {
+    if (localStartInFlight.get(projectId) === work) {
+      localStartInFlight.delete(projectId);
+    }
+  }
 }
 
 export async function stopLocalDevServer(projectId: string): Promise<void> {
@@ -493,4 +530,24 @@ export async function getLocalDevServerStatus(
     return { status: "running", url: synced.url };
   }
   return { status: "stopped" };
+}
+
+/**
+ * If this Node process already holds a healthy local preview for the project, return its URL
+ * without starting another `next dev` (same project dir shares one `.next/dev/lock`).
+ */
+export async function getExistingLocalPreviewUrl(
+  db: SupabaseClient,
+  projectId: string
+): Promise<{ url: string; port: number } | null> {
+  const reg = localRegistry.get(projectId);
+  if (!reg) return null;
+  if (!(await isLocalServerUp(previewHealthCheckUrl(reg.port)))) return null;
+  const synced = syncRegistryPublicUrl(projectId, reg);
+  try {
+    await saveFingerprint(db, projectId, await computeProjectFingerprint(projectId));
+  } catch {
+    /* */
+  }
+  return { url: synced.url, port: synced.port };
 }

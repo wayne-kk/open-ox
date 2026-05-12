@@ -380,6 +380,15 @@ export async function startDevServer(
   return startE2BDevServer(db, projectId);
 }
 
+/** Local only: same-node preview already running (avoid a second `next dev` + `.next/dev/lock` clash). */
+export async function getExistingLocalPreviewUrl(
+  db: SupabaseClient,
+  projectId: string
+): Promise<{ url: string; port: number } | null> {
+  if (isPreviewE2B()) return null;
+  return localPreview.getExistingLocalPreviewUrl(db, projectId);
+}
+
 async function startE2BDevServer(
   db: SupabaseClient,
   projectId: string
