@@ -1,6 +1,6 @@
 # Component Skill: Hero - Flowing Wisps WebGL
 
-Use this skill when generating a hero section with a full-viewport WebGL background made of flowing wave wisps and **centered product copy** (headline, support line, CTA group). **No** site navigation, header bar, or glass pill nav — global chrome belongs in the app shell, not in this section.
+Full-viewport fragment-shader wisps + centered headline/subcopy/CTAs. No in-section navigation chrome.
 
 ## Core Effect
 
@@ -17,7 +17,7 @@ Keep the implementation self-contained in one section component.
 1. Atmosphere: dark technical canvas with soft luminous trails.
 2. Palette strategy: use design-system roles (`background`, `foreground`, `primary`, `muted`) or theme variables; do not hardcode reference palette values.
 3. Surfaces: restrained glassmorphism for CTAs only if the brief calls for it — not for a top nav strip.
-4. Rhythm: smooth, continuous flow motion (ambient, not noisy or chaotic).
+4. Rhythm: smooth ambient shader motion only.
 
 ## Structure Requirements
 

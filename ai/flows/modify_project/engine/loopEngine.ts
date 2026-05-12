@@ -1,13 +1,30 @@
 import { getSystemToolDefinitions } from "@/ai/tools/systemToolCatalog";
 import { executeSystemTool } from "@/ai/tools";
+import type { ToolExecutor } from "@/ai/tools/types";
 import { chatCompletion, type ChatMessage } from "@/ai/flows/generate_project/shared/llm";
 import { lfModifyAgentRound } from "@/lib/observability/langfuseGenerationCatalog";
 import { getModifyModelId } from "@/lib/config/models";
 import type { FileSnapshotTracker } from "../tracking/fileSnapshotTracker";
 import { runStopHook, type LoopState, type ModifyStopMode } from "./stopHooks";
 import { compressContext } from "./contextCompression";
+import { awaitPendingImages, type PendingImage } from "@/ai/tools/system/generateImageTool";
 
-const ALL_TOOLS = ["read_file", "search_code", "list_dir", "edit_file", "write_file", "run_build", "exec_shell", "think", "revert_file"];
+/** Core tools for modify (no image generation). */
+export const MODIFY_AGENT_TOOLS_CORE = [
+  "read_file",
+  "search_code",
+  "list_dir",
+  "edit_file",
+  "write_file",
+  "run_build",
+  "exec_shell",
+  "think",
+  "revert_file",
+] as const;
+
+/** Full tool list when code edits / assets are allowed (includes generate_image). */
+export const MODIFY_AGENT_TOOLS_WITH_IMAGE = [...MODIFY_AGENT_TOOLS_CORE, "generate_image"] as const;
+
 const MAX_ITERATIONS = 100;
 const MAX_STOP_HOOK_RETRIES = 5;
 
@@ -16,16 +33,25 @@ type OnEvent = (event: {
   [key: string]: unknown;
 }) => void;
 
+export type RunAgentLoopOptions = {
+  toolOverrides?: Record<string, ToolExecutor>;
+  pendingImages?: PendingImage[];
+  /** Tool names passed to the model (defaults to WITH_IMAGE when overrides include generate_image logic — caller sets explicitly). */
+  toolNames?: string[];
+};
+
 export async function runAgentLoop(
   messages: ChatMessage[],
   tracker: FileSnapshotTracker,
   onEvent: OnEvent,
   userInstruction: string,
   modelOverride?: string,
-  modifyStopMode: ModifyStopMode = "code_change"
+  modifyStopMode: ModifyStopMode = "code_change",
+  loopOptions?: RunAgentLoopOptions
 ): Promise<{ messages: ChatMessage[]; loopState: LoopState; iterations: number }> {
+  const toolNameList = loopOptions?.toolNames ?? [...MODIFY_AGENT_TOOLS_WITH_IMAGE];
   const model = modelOverride || getModifyModelId();
-  const tools = getSystemToolDefinitions(ALL_TOOLS);
+  const tools = getSystemToolDefinitions(toolNameList);
   const loopState: LoopState = {
     hasEdited: false,
     hasSearched: false,
@@ -116,7 +142,18 @@ export async function runAgentLoop(
         await tracker.capture(args.path as string);
       }
 
-      const result = await executeSystemTool(name, args);
+      if (name === "run_build" && loopOptions?.pendingImages?.length) {
+        await awaitPendingImages(loopOptions.pendingImages);
+      }
+
+      const overrideExec = loopOptions?.toolOverrides?.[name];
+      const result = overrideExec ? await overrideExec(args) : await executeSystemTool(name, args);
+
+      if (name === "generate_image") {
+        if (typeof result === "object" && result && "success" in result && result.success) {
+          loopState.hasEdited = true;
+        }
+      }
 
       if (name === "edit_file" || name === "write_file") {
         if (typeof result === "object" ? result.success : true) loopState.hasEdited = true;

@@ -1,6 +1,6 @@
-# Component Skill: Hero - Adaptive V-Bars
+# Component Skill: Hero — Adaptive V-Bars
 
-Use this skill when generating a hero section that combines dynamic V-shaped luminous background bars and GSAP-driven headline reveals — **without** a Three.js mesh or central 3D object. **No** site `<nav>`, header bar, or glass pill navigation — frame rails + typography + CTAs only; global chrome belongs in the app shell.
+Hero with animated V-shaped gradient bars + GSAP masked headline (no Three.js mesh). Frame rails + copy + CTAs only; no in-section `<nav>`.
 
 ## Core Effect
 
@@ -18,7 +18,7 @@ Keep the implementation self-contained in a single section component.
 1. Base atmosphere: near-black (`#030303`-like) with low-opacity structural lines.
 2. Accent palette: emerald + cyan highlights over white-neutral typography.
 3. Frame vocabulary: rails, corner brackets, micro alignment marks.
-4. Rhythm: minimal but alive — micro motion in the V-bars only.
+4. Rhythm: slow phase-offset motion on bars only.
 
 ## Structure Requirements
 

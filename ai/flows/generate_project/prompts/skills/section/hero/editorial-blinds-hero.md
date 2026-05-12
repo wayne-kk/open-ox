@@ -1,8 +1,8 @@
 # Component Skill: Hero — Editorial Blinds + Scroll Parallax (CSS / DOM)
 
-Use this skill when the brief calls for a **heritage / magazine / outdoor editorial** first screen: **desaturated full-bleed photography** sliced into **vertical blinds (slats)** that **offset on scroll** for a subtle parallax “slit” reading, optional **paper / film grain** overlay, and **centered or offset editorial typography** — **pure HTML/CSS + one full-viewport image**, **no WebGL**, **no canvas shaders**, **no Three.js**.
+First screen: one full-viewport photo, sliced into vertical blinds with small per-strip scroll offset; optional grain; editorial type. **HTML/CSS + one image**—no WebGL or canvas shaders.
 
-**Scope — hero only:** Implement **only** the first-screen block: blind layers + copy/CTAs. **Do not** add site `<nav>`, logo rows, or duplicate global header chrome — **layout owns shell navigation**. **Do not** bundle follow-on sections (feature grids, galleries) unless the page plan explicitly asks for them below this block.
+**Scope — hero only:** Blinds + copy/CTAs. No `<nav>` or header chrome here—layout owns shell. No extra sections below unless the brief says so.
 
 ## Core Effect
 

@@ -1,6 +1,6 @@
 /**
  * Preview backend selection. E2B implementation remains in `devServerManager.ts` (e2b* helpers).
- * Set OPEN_OX_PREVIEW_BACKEND=e2b to use cloud sandboxes; default is local static preview.
+ * Set OPEN_OX_PREVIEW_BACKEND=e2b to use cloud sandboxes; default is local `next dev` (see `localDevServerManager.ts`).
  */
 export type PreviewBackend = "local" | "e2b";
 

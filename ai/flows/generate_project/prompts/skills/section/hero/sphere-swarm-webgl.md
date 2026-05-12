@@ -1,8 +1,8 @@
 # Component Skill: Hero — Sphere Swarm Points (Three.js)
 
-Use this skill when `generateSection` should deliver a **full-viewport dark hero** whose background is a **dense Three.js `Points`** cloud occupying a spherical volume: particles subtly **respond to pointer position** (soft attraction along the view plane), **pulse outward on primary click** near the cursor, then **relax back** to seeded “home” positions with light damping. Stack reads as **live telemetry / neural field** rather than illustration or photographic editorial.
+Full-viewport dark hero: dense Three.js **`Points`** in a spherical shell; pointer **attracts** along the view plane; **primary click** pushes nearby points outward, then springs return to **home** positions.
 
-Do **not** use this skill when the headline must be formed from 2D canvas particles or kinetic typography—that route belongs to `**particle`** (`canvas` text assembly), not WebGL points.
+Not **`particle`**—that skill builds text from Canvas2D particles, not WebGL points.
 
 ## Core Effect
 
@@ -33,11 +33,11 @@ Do **not** use this skill when the headline must be formed from 2D canvas partic
 
 - Idle motion = **gentle breathing** from spring-back + mouse well (if `prefers-reduced-motion` is false).
 - **Entrance**: optional brief opacity fade-in of overlay copy (project motion system); WebGL may start static first frame then enable loop.
-- `**prefers-reduced-motion: reduce`**: **disable** the animation loop after one static `render`, or show a **frozen** particle frame; **do not** run continuous physics.
+- `prefers-reduced-motion: reduce`: **disable** the animation loop after one static `render`, or show a **frozen** particle frame; **do not** run continuous physics.
 
 ## WebGL Requirements (Three.js)
 
-- Import `**three` from the project bundle** (npm). **No** CDN `<script>` tags, **no** global `THREE` from `r128` demo URLs.
+- Import `three` from the project bundle (npm). **No** CDN `<script>` tags, **no** global `THREE` from `r128` demo URLs.
 - **Scene / camera / renderer**:
   - `PerspectiveCamera` (~70–80° FOV reference); place camera on +Z looking at origin; `near`/`far` sane defaults.
   - `WebGLRenderer({ canvas, alpha: true, antialias: true })`; clear alpha so CSS background can show if desired.
@@ -46,7 +46,7 @@ Do **not** use this skill when the headline must be formed from 2D canvas partic
   - `BufferGeometry` with `position` (dynamic) and `color` (static per particle).
   - Initialize positions = home positions; seed **spherical** distribution: random `theta`, `phi`, radius between **inner/outer** shell radii (reference ~4–6 units).
 - **Material**:
-  - `PointsMaterial` with `vertexColors: true`, `transparent: true`, moderate opacity, `**AdditiveBlending`**, small `size` (tune per DPR).
+  - `PointsMaterial` with `vertexColors: true`, `transparent: true`, moderate opacity, `AdditiveBlending`, small `size` (tune per DPR).
 - **Interaction math**:
   - `Raycaster#setFromCamera` with NDC from canvas **bounding rect** (not raw `window` if container-sized).
   - **Plane** for hit test: normal `(0,0,1)`, constant `0` in reference—keep behavior equivalent when camera moves.
@@ -57,12 +57,12 @@ Do **not** use this skill when the headline must be formed from 2D canvas partic
 When this skill is selected, the generated hero MUST include all of the following:
 
 1. **Three.js `Points` field** with **~3.5k–4.5k** particles (same order of magnitude as reference), each with **home** XYZ and **current** position in typed arrays; colors as **vertexColors** from **brief roles** (no mandatory fixed hex from the demo).
-2. `**PointsMaterial`** configured for **additive** blending, transparency, and **per-vertex color**; particle `size` tuned so the field reads as **fine dust**, not oversized disks.
+2. `PointsMaterial` configured for **additive** blending, transparency, and **per-vertex color**; particle `size` tuned so the field reads as **fine dust**, not oversized disks.
 3. **Animation core** per frame: **spring toward home** on all axes; **optional XY attraction** toward pointer-mapped world position within a **finite influence radius**; **velocity integration** + **global friction** on velocities (reference ~0.92).
 4. **Pointer plane mapping** via `Raycaster` + **single plane** (or equivalent) so mouse maps to **stable world XY**; updates on move.
 5. **Click / primary-press impulse**: particles within a **XY distance threshold** of the mapped point receive an **outward radial kick** scaled by proximity (same family as reference `mousedown` logic); guard **division by zero**.
 6. **Resize handling** tied to the **actual canvas host size** (container `clientWidth`/`clientHeight` preferred over bare `window` when the hero is not full-window); update **camera aspect** and **renderer.setSize**; skip when dimensions are zero.
-7. **Render loop** via `requestAnimationFrame` with **cleanup** on unmount: cancel frame, **remove** all listeners, `**dispose()`** geometry and material, dispose renderer if appropriate for the integration pattern used.
+7. **Render loop** via `requestAnimationFrame` with **cleanup** on unmount: cancel frame, **remove** all listeners, `dispose()` geometry and material, dispose renderer if appropriate for the integration pattern used.
 8. **Reduced motion**: respect `prefers-reduced-motion` by **not** running continuous physics (static snapshot acceptable).
 9. **Hero overlay content only**: eyebrow/status chip, headline with **one accent treatment**, body copy, **two CTAs** (primary filled / secondary outline), and **optional** bottom **metrics ribbon**—**no** global navigation or app header.
 10. **Accessibility & input**: decorative canvas does not trap focus; CTAs are real focusable controls/links; if simulating “system status,” keep language **honest** to the product (no fake security claims unless true).
@@ -334,14 +334,14 @@ export function SphereSwarmHero({
 
 ## Implementation Constraints
 
-- `**use client`** for the Three.js subtree in App Router setups.
+- `"use client"` for the Three.js subtree in App Router setups.
 - **No CDN** Three.js or Tailwind loaders; no inline CDN `<script>` tags.
 - Prefer **tailwind classes + CSS variables / theme tokens** over hard-coded marketing hex unless the tokens themselves encode brand.
 - **No `<style jsx>`**; icons only through the project’s icon system when needed.
 
 ## Accessibility + Performance
 
-- Respect `**prefers-reduced-motion**` as specified.
+- Respect `prefers-reduced-motion` as specified.
 - Cap **DPR**; avoid allocating new `Vector3` objects inside the hot loop (reuse instances as in blueprint).
 - **Decorative canvas**: `aria-hidden` on canvas; semantic `h1` in overlay.
 

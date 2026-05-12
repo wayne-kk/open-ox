@@ -1,6 +1,6 @@
 # Component Skill: Hero — Unicorn Studio Full-Bleed Embed (Background)
 
-Use this skill when `generateSection` should place a **Unicorn Studio** runtime-driven **motion/graphic scene** as the **full-bleed background** of the first screen, with **foreground hero content** (headline, CTAs, etc.) layered **above** on **`z-index`**. The reference snippet is **background-only** (absolute **`div`** + **`data-us-project`** + loader)—production output MUST wrap it in a **`relative`** hero shell with **accessible copy** and MUST **not** paste the **inline IIFE** into JSX.
+Unicorn Studio scene as **full-bleed background**; foreground hero (headline, CTAs) above on z-index. Snippet is background-only (`data-us-project` mount)—wrap in **`relative`** section with real copy; **do not** paste inline IIFE into JSX.
 
 **Runtime:** Loads **`unicornStudio.umd.js`** from a **pinned** jsDelivr tag (common exports: **`v2.0.5`**, **`v2.1.1`**—use **exactly** the URL from **your** Unicorn export or **lock** one version team-wide). **Self-host** the UMD in **`public/`** for **CSP** and **supply-chain** control—do not silently float **`@main`**.
 

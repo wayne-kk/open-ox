@@ -1,8 +1,8 @@
 # Component Skill: Hero — Starfield + Planet Horizon (CSS / DOM)
 
-Use this skill when `generateSection` should deliver a full-viewport, space-operatic hero: a dense micro-star field, a large soft “planet at the limb” or horizon glow hugging the bottom or corner, and foreground content in a glass/terminal-inspired layer. The motion is light scroll-driven parallax on the planet layer plus staggered content reveal—**no WebGL**—suitable for fintech, infra, or “autonomous system” briefs that ask for depth without 3D runtime cost.
+Full-viewport hero: dense micro-star field, large soft planet/limb glow (bottom or corner), foreground copy on glassy panels. **CSS/DOM only**—light scroll parallax on the planet layer; staggered text reveal.
 
-**Scope — hero only:** When the user or brief supplies a full one-pager, implement **only** this first-screen block: background layers (starfield + planet) + in-hero copy/CTAs + optional bottom “deck” telemetry. **Do not** pull in follow-on sections (feature grid, bento, logo strip, or footer) unless a separate `generateSection` call explicitly asks for them. **Do not** add a fixed top bar, `<nav>`, or “system access” chrome rows inside this section — keep navigation in the app shell.
+**Scope — hero only:** Starfield + planet + hero copy/CTAs + optional bottom telemetry. No follow-on sections unless another `generateSection` asks. No `<nav>`, fixed top bar, or in-section app chrome—shell owns navigation.
 
 ## Core Effect
 
@@ -14,7 +14,7 @@ Use this skill when `generateSection` should deliver a full-viewport, space-oper
 ## Visual Language
 
 - **Atmosphere** — High contrast between near-black void and one warm “limb” accent band; cool neutrals in starfield. Map **all** concrete colors to the active brief: `background`, `foreground`, `primary` / `accent`, `muted`, `border` (or CSS variables that resolve from the theme), not fixed demo hexes.
-- **Type** — Pair **serif or display** for the hero line with **monospace** for protocol labels, stats, and footer telemetry so the block reads as “console meets editorial.”
+- **Type** — Serif or display for the hero line; monospace for protocol labels, stats, and footer telemetry.
 - **Glass** — Low-opacity fills, 1px hairline borders, light backdrop blur for panels and CTA affordances—tinted from surface tokens, not a pasted rgba from a one-off mock.
 
 ## Structure Requirements

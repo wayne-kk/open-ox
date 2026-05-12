@@ -1,7 +1,7 @@
 /**
  * Dev Server Manager — static export preview
  *
- * Default: local `next build` + `npx serve` (see `localDevServerManager.ts`).
+ * Default: local `next dev` per project (see `localDevServerManager.ts`).
  * E2B: set `OPEN_OX_PREVIEW_BACKEND=e2b`. Flow in cloud:
  *   1. Check Supabase for existing sandboxId → try reconnect
  *   2. Create sandbox from custom template (large memory)

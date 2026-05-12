@@ -1,8 +1,8 @@
 # Component Skill: Hero — Split Metrics + Triple Fanned Phone Mockups
 
-Use this skill when `generateSection` needs a **consumer mobile-product hero**: **two-column split** (stacked on mobile)—**left**: **live status chip**, **display headline** with **muted secondary clause**, **lead copy**, **metric pills** (level, duration, distance, group…), **dual CTAs**, **overlapping avatar** social proof; **right**: **three** layered **phone shells** **fanned** (**~−8° / 0° / +8°**), each a **tall device frame** with **notch**, **dark chrome**, **distinct in-screen UI** (**trail preview card**, **topo/map route**, **live hike tracker**). **CSS/DOM + inline SVG**—**no WebGL**, **no** third-party embed runtime.
+Mobile product hero: **left** status chip, split headline, body, metric chips, CTAs, avatar stack; **right** three fanned phone frames (~**−8° / 0° / +8°**) with notch, dark chrome, three distinct in-screen UIs (card, map/route, live tracker). **CSS/DOM + inline SVG**—no WebGL or embed runtime.
 
-Route away from **`bento-split-marquee-gallery-hero`** (bento + marquee), **`unicorn-studio-embed-hero-bg`** (external canvas), and **`signal-grid-split-hero`** (telemetry/HUD documentary)—this reads as **friendly outdoor / fitness app** marketing with **device showcase**.
+Not **`bento-split-marquee-gallery-hero`**, **`unicorn-studio-embed-hero-bg`**, or **`signal-grid-split-hero`**—consumer device showcase, not bento/gallery or HUD.
 
 ## Core Effect
 

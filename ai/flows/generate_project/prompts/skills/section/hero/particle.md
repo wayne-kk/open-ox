@@ -1,6 +1,6 @@
 # Component Skill: Hero — Particle Text
 
-Use this skill when generating a hero section where the headline is rendered as an animated particle system on a `<canvas>`. Particles swarm to form words, cycle through them automatically, and respond to mouse interaction. **No** `<nav>`, header bars, or site link rows in this section — overlay is subheading + CTAs (+ optional eyebrow) only.
+Headline built from canvas particles (swarm, cycle words, mouse). Single component; no `<nav>` in section. Word list from brief only.
 
 ## Core Effect
 

@@ -46,6 +46,7 @@ const TOOLS = [
   { name: "list_dir", color: "text-primary/80", bg: "bg-primary/10", desc: "列出目录内容" },
   { name: "edit_file", color: "text-amber-400/80", bg: "bg-amber-500/10", desc: "精确字符串替换（old_string → new_string）" },
   { name: "write_file", color: "text-amber-400/80", bg: "bg-amber-500/10", desc: "创建新文件" },
+  { name: "generate_image", color: "text-fuchsia-400/80", bg: "bg-fuchsia-500/10", desc: "AI 生图写入 public/images（与生成流水线相同；仅代码修改 intent 暴露）" },
   { name: "run_build", color: "text-green-400/80", bg: "bg-green-500/10", desc: "执行 next build 验证变更" },
 ];
 
@@ -82,7 +83,7 @@ export default function ModifyAgentPage() {
 │
 ├── resolve_project   加载项目元数据
 ├── read_context      文件树 + design-system.md + globals.css
-└── agent_loop        while(true)，最多 40 次迭代
+└── agent_loop        while(true)，最多 100 次迭代
       │
       ├── 第 1 次迭代：tool_choice="required"（必须行动，不允许空想）
       ├── 工具执行 → 更新循环状态
@@ -171,7 +172,7 @@ export default function ModifyAgentPage() {
               </thead>
               <tbody className="divide-y divide-white/5">
                 {[
-                  ["MAX_ITERATIONS", "40", "循环迭代硬上限"],
+                  ["MAX_ITERATIONS", "100", "循环迭代硬上限"],
                   ["MAX_STOP_HOOK_RETRIES", "5", "防止 stop hook 自身无限循环"],
                   ["stopHookRetries reset", "工具调用后", "成功执行工具后计数器归零"],
                 ].map(([param, val, purpose]) => (

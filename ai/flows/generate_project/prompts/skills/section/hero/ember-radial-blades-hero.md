@@ -1,10 +1,10 @@
 # Component Skill: Hero — Ember Void + Radial Blade Sculpture (GSAP)
 
-Use this skill when `generateSection` needs a **full-viewport, high-drama dark hero**: **ember / forge void** atmosphere (**stacked radial gradients** + **film grain**), a **left-aligned masked stagger headline** (word chips **slide up** inside **clip masks**), **wide uppercase micro-labels** with the same reveal, and a **right-anchored “sculpture”** of **dozens of glossy curved blades** fanned in an **arc**—**pure DOM + CSS** (no WebGL). **GSAP** + **ScrollTrigger** drive **blade unfurl**, **text reveals on scroll**, and **subtle ambient breathing** on the hub and each blade.
+Full-viewport dark hero: ember radial stack + grain; left masked word-by-word headline + micro-labels; right **DOM** blade arc (many curved strips). **GSAP + ScrollTrigger** for blades and scroll text—**no WebGL**.
 
-**Source note:** The reference included a **top `<header>`** with **`iconify-icon`** and **CDN** scripts (`tailwindcss.com`, `iconify`, `gsap` from cdnjs). This skill **forbids** those patterns: **no site chrome in-section**, **`lucide-react`** (or project icons), **`gsap` + `ScrollTrigger` from `npm`**, **no `<script src="https://…">` loaders**.
+Reference used CDN header/iconify—**forbid**; nav in layout; **`lucide-react`** (or project icons); **GSAP from npm**.
 
-Route away from **WebGL `*-webgl`** skills and **`cinematic-photo-glass-hero`** (photo full-bleed)—this is **abstract luminous sculpture + typographic theater**.
+Not **`*-webgl`** or **`cinematic-photo-glass-hero`**—abstract blades + type, not photo hero.
 
 ## Core Effect
 

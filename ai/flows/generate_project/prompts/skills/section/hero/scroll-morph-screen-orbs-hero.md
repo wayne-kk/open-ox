@@ -1,10 +1,10 @@
 # Component Skill: Hero — Scroll-Morph Screen Orbs (CSS / DOM)
 
-Use this skill when `generateSection` should deliver a **hero-only** block inspired by **additive “orb” lighting**: several **huge, heavily blurred circles** with `mix-blend-mode: screen`, sitting in a **fixed, non-interactive** backdrop, while **scroll position inside the hero** (or viewport intersection thresholds) **smoothly morphs** each orb’s **translate, scale, opacity, and semantic fill**—without WebGL, canvas animation loops, or a multi-section landing embedded in one file.
+Hero-only: large blurred circles with `mix-blend-mode: screen` on a fixed backdrop; scroll or IO thresholds **morph** translate, scale, opacity, and token-mapped fills. **CSS/DOM**—no WebGL or embedded multi-section page.
 
-For **three phased recipes** (hero / mid / deep) with **long blend transitions** mapped to scroll **0…1**, prefer **`screen-blend-orbs-hero`** — this id is better when you want **flexibility** (e.g. **two** recipes, alternate progress formulas, or simpler MUSTs).
+Prefer **`screen-blend-orbs-hero`** when you need **three** scroll phases with the same long-blend pattern and stricter mapping.
 
-**Scope — hero only:** The exported section contains **only** the first-screen experience: **orb field + primary headline stack** (eyebrow, display title, supporting paragraph). **Do not** include site `<nav>`, brand/version header rows, `mix-blend-difference` top chrome, secondary full-height “chapters” (synthesis/context/download), **equalizer** demos, **orbiting satellite** diagrams, or a **bottom timeline** strip—those belong in **other sections** composed by the page shell.
+**Scope — hero only:** Orb field + headline stack. No `<nav>`, brand bars, chapter blocks, equalizer, orbit UI, or timeline strips—shell composes those.
 
 ## Core Effect
 
@@ -40,7 +40,7 @@ For **three phased recipes** (hero / mid / deep) with **long blend transitions**
 
 ## Required Implementation Blueprint (Do Not Skip)
 
-1. **MUST** render **exactly three** orb `div`s in a **fixed** full-viewport layer with `**mix-blend-mode: screen**` (or documented equivalent), **heavy blur**, and **`pointer-events: none`**; **semantic** fills from **tokens / CSS variables from the active brief**, not mandatory literal reference hex values.
+1. **MUST** render exactly three orb `div`s in a fixed full-viewport layer with `mix-blend-mode: screen` (or documented equivalent), heavy blur, and `pointer-events: none`; semantic fills from tokens / CSS variables from the active brief, not mandatory literal reference hex values.
 2. **MUST** drive **at least one** meaningful **orb state change** from **user scroll while the hero is on screen** (progress-based interpolation or threshold snaps)—unless `prefers-reduced-motion`, in which case **MUST** use a single static hero-balanced layout.
 3. **MUST** implement **staggered fade-in** for eyebrow / title / paragraph via **IntersectionObserver** (or equivalent) and **disconnect** on unmount.
 4. **MUST** include **eyebrow** (uppercase, tracked), **`clamp` fluid headline** with **tight negative tracking**, and **one** supporting paragraph in muted tone; copy may be **props** or realistic placeholders aligned to `projectContext.language`.

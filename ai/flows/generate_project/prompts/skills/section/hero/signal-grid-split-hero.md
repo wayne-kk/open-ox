@@ -1,13 +1,13 @@
 # Component Skill: Hero — Signal Grid Split Panel
 
-Use this skill when `generateSection` needs a **high-contrast, technical-documentary landing hero**: a **two-column split** (stacked on small viewports) with **mono telemetry**, **rail guides**, **layered atmospheric grid**, **stacked display typography** with interaction, and a **photo-forward right panel** read as an instrument frame (corners, reticle, captions). Pure **CSS/Tailwind + static image**—no WebGL.
+Split hero: left mono telemetry + dashed rails + stacked display type + glass description card; right full-bleed photo with instrument frame (corners, reticle, caption). **CSS/Tailwind + one image**—no WebGL.
 
-Route away from `**editorial-blinds-hero`**: this layout is **grid/HUD/chrome + dashed container rails**, not **horizontal blinds / parallax slit** treatment.
+Not **`editorial-blinds-hero`**—here the photo is whole, not vertical-blind parallax.
 
 ## Core Effect
 
 - **Global depth layers (fixed/full-viewport décor only)**: optional **vertical rail lines** at content max-width; **“atmosphere”** stack = center radial falloff + subtle light top-to-bottom wash + **large-pitch line grid** (all low contrast, `pointer-events-none`).
-- **Hero shell**: centered max-width frame, `**min-h-screen`**, vertical **dashed** rules on left/right tying into a **technical dossier** reading.
+- **Hero shell**: centered max-width frame, `min-h-screen`, vertical dashed rules on left/right tying into a technical dossier reading.
 - **Left column**: top **status block** (mono, condensed: recording/system state, location label, live clock line); dominant **three-line headline** (two stacked primary lines + one **accent “signal” chip** line with mono + slight rotation); **glass-ish description card** with **accent-spine** metaphor (thin vertical spine that expands on hover) and hidden **signal acquired** caption that fades in; **primary + ghost** CTAs.
 - **Right column**: edge-to-edge **documentary photograph** (`object-cover`) with restrained **chromatic treatment** (desaturate + contrast/brightness—not fixed demo values); **gradient legibility** scrim; **fine grid** via low-opacity overlay blend; **inner instrument frame** (corner fiducials, centered **crosshair circle** that subtly scales on panel hover, bottom-right caption block with frame ID / place / year pattern).
 
@@ -56,7 +56,7 @@ When this skill is selected, the generated hero MUST include all of the followin
 
 1. **Split composition**: at `lg` breakpoint and above, a **two-column** layout; below `lg`, **single column** with **image panel** given a **bounded height** (reference **~60vh**) so copy remains reachable without excessive dead space.
 2. **Outer dossier frame**: content **max-width** (~`1600px `reference) with **left/right vertical borders** using **dashed** hairlines at **low** opacity; hero region **`min-h-screen`**.
-3. **Rail guides**: `fixed` **four** vertical hairlines distributed across max-width (some **hidden** until `md`/`lg` per reference) — all `**pointer-events-none`**.
+3. **Rail guides**: `fixed` four vertical hairlines distributed across max-width (some hidden until `md`/`lg` per reference) — all `pointer-events-none`.
 4. **Atmosphere layer** covering the viewport: **radial vignette + vertical wash + cross-hatch line grid** (three logical layers minimum), non-interactive.
 5. **Left column telemetry**: **mono** block with **at least** system state line, location line, and a **live updating clock** (`HH:MM:SS` 24h style); updates via `setInterval` or equivalent with **cleanup on unmount** in React.
 6. **Stacked headline system**: **three** distinct lines—two **display** lines + one **smaller mono “signal label”** line with **subtle negative rotate**, **inline padding**, **hairline border**, and **muted panel** behind (token-driven).
@@ -66,8 +66,8 @@ When this skill is selected, the generated hero MUST include all of the followin
 10. **Right panel image treatment**: `object-cover` **full panel**; **desaturation + contrast/brightness** filters **as roles** (“push documentary gray, lift structure”) rather than mandatory numeric class from demo; **legibility gradient** from bottom; **grid overlay** at very low opacity with **blend mode** (reference: overlay-style).
 11. **Instrument frame overlay**: **inner inset border**; **four** corner fiducials (two accent, two neutral pattern); centered **circle reticle** with **cross hairs**; **footer caption** block with bracketed frame id + location + date pattern (**content from brief**, not canned NYC unless brief says so).
 12. **Reduced motion**: respect `prefers-reduced-motion` — **no** image drift/scale choreography, **no** telemetry flicker; optional static hover states simplified.
-13. **Implementation hygiene**: `**use client`** only where clock/hooks demand; **no** `cdn.tailwindcss.com`, **no** `iconify-icon` / Iconify loaders, **no** `<style jsx>`; typography families come from **project theme** (`font-sans` / `font-mono` mappings).
-14. **Image source**: `**next/image` or `<img>`** with `**alt` text** from brief; remote URL **only** when brief supplies an asset — otherwise use **project placeholder** pattern or deterministic neutral placeholder—not a mandatory hard-coded Supabase link.
+13. **Implementation hygiene**: `"use client"` only where clock/hooks demand; no `cdn.tailwindcss.com`, no `iconify-icon` / Iconify loaders, no `<style jsx>`; typography families come from **project theme** (`font-sans` / `font-mono` mappings).
+14. **Image source**: `next/image` or `<img>` with `alt` text from brief; remote URL only when brief supplies an asset — otherwise use **project placeholder** pattern or deterministic neutral placeholder—not a mandatory hard-coded Supabase link.
 
 If any item above is missing, the output is **NOT** valid for `signal-grid-split-hero`.
 
@@ -245,8 +245,8 @@ export function SignalGridSplitHero(props: SignalGridSplitHeroProps) {
 
 ## Layout Details
 
-- Keep **telemetry** readable: avoid overlap with headline—use `**mt`** offset on small breakpoints (see skeleton).
-- **Line lengths**: description `max-width` aligns with dossier rhythm; photograph carries **visual weight** on `**lg`** right rail.
+- Keep **telemetry** readable: avoid overlap with headline—use margin-top offset utilities on small breakpoints (see skeleton).
+- **Line lengths**: description `max-width` aligns with dossier rhythm; photograph carries **visual weight** on `lg` right rail.
 
 ## Content Rules
 
@@ -262,8 +262,8 @@ export function SignalGridSplitHero(props: SignalGridSplitHeroProps) {
 
 ## Accessibility + Performance
 
-- Decorative layers: `**aria-hidden`** where appropriate.
+- Decorative layers: `aria-hidden` where appropriate.
 - Clock updates **once per second** — clear interval on unmount.
-- Image: `**priority`** only when this hero is truly LCP-critical; otherwise project defaults.
+- Image: `priority` only when this hero is truly LCP-critical; otherwise project defaults.
 - **Vestibular / motion**: disable pulse/flicker and panel transforms under reduced motion.
 

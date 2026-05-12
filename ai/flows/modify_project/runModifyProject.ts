@@ -8,19 +8,20 @@ import { createArtifactLogger } from "@/ai/flows/generate_project/shared/logging
 import { setRevertSnapshots, clearRevertSnapshots } from "@/ai/tools/system/revertFileTool";
 import { buildFileTree, buildHistoryContext, buildInitialMessages, tryReadFile } from "./context/buildContext";
 import { FileSnapshotTracker, type DiffStats } from "./tracking/fileSnapshotTracker";
-import { runAgentLoop } from "./engine/loopEngine";
+import { runAgentLoop, MODIFY_AGENT_TOOLS_CORE, MODIFY_AGENT_TOOLS_WITH_IMAGE } from "./engine/loopEngine";
 import { SYSTEM_PROMPT } from "./prompt/systemPrompt";
 import { appendTrajectoryEvent, findOrCreateTrajectoryRun } from "@/lib/trajectory/store";
 import type { TrajectoryData } from "./trajectory";
 import { withLangfuseSpan } from "@/lib/observability/langfuseTracing";
 import { LfSpanModify } from "@/lib/observability/langfuseTraceCatalog";
 import { stepModifyIntentRouter } from "./intent/modifyIntentRouter";
+import { createImageExecutor, awaitPendingImages, type PendingImage } from "@/ai/tools/system/generateImageTool";
+import type { ToolExecutor } from "@/ai/tools/types";
 
 const MODIFY_INTENT_CONVERSATION_FALLBACK =
   "我是修改助手：负责按你的描述修改当前项目并做构建检查。需要改页面或组件时，请说明要改哪里、改成什么样。";
 
 type TrajectoryToolCall = NonNullable<TrajectoryData["messages"][number]["tool_calls"]>[number];
-const ALL_TOOLS_FOR_TRAJECTORY = ["read_file", "search_code", "list_dir", "edit_file", "write_file", "run_build", "exec_shell", "think", "revert_file"];
 
 export type ModifySSEEvent =
   | { type: "step"; name: string; status: "running" | "done" | "error"; message?: string }
@@ -349,6 +350,16 @@ async function runModifyProjectInner(
       imageBase64,
     });
 
+    const modifyToolNames =
+      modifyStopMode === "code_change" ? [...MODIFY_AGENT_TOOLS_WITH_IMAGE] : [...MODIFY_AGENT_TOOLS_CORE];
+    let pendingImages: PendingImage[] = [];
+    let toolOverrides: Record<string, ToolExecutor> | undefined;
+    if (modifyStopMode === "code_change") {
+      const bundle = createImageExecutor("modify");
+      pendingImages = bundle.pendingImages;
+      toolOverrides = { generate_image: bundle.executor };
+    }
+
     const { loopState, iterations } = await withLangfuseSpan(
       LfSpanModify.agentLoop,
       () =>
@@ -358,7 +369,8 @@ async function runModifyProjectInner(
           collectingOnEvent as (event: { type: "step" | "plan" | "diff" | "tool_call" | "thinking" | "done" | "error";[key: string]: unknown }) => void,
           userInstruction,
           modelOverride,
-          modifyStopMode
+          modifyStopMode,
+          { toolOverrides, pendingImages, toolNames: modifyToolNames }
         ),
       { metadata: { projectId } }
     );
@@ -369,10 +381,35 @@ async function runModifyProjectInner(
       message: `${iterations} iterations, edited=${loopState.hasEdited}, build=${loopState.buildPassed ? "passed" : "failed"}`,
     });
 
+    if (pendingImages.length > 0) {
+      await awaitPendingImages(pendingImages);
+    }
+
     const diffs = await tracker.computeAllDiffs();
+    const imageDiffEntries = pendingImages
+      .filter((p) => p.success)
+      .map((p) => ({
+        file: `public/images/${p.filename}.png`,
+        reasoning: userInstruction,
+        patch: `(generated image) ${p.prompt.slice(0, 400)}`,
+        stats: { additions: 1, deletions: 0 },
+      }))
+      .filter((e) => !diffs.some((d) => d.file === e.file));
+
+    for (const img of imageDiffEntries) {
+      onEvent({
+        type: "diff",
+        file: img.file,
+        reasoning: img.reasoning,
+        patch: img.patch,
+        stats: img.stats,
+      });
+    }
     for (const d of diffs) {
       onEvent({ type: "diff", file: d.file, reasoning: userInstruction, patch: d.patch, stats: d.stats });
     }
+
+    const allRecordDiffs = [...imageDiffEntries, ...diffs];
 
     const allThinking = messages
       .filter((m) => m.role === "assistant" && typeof m.content === "string" && m.content.trim().length > 0)
@@ -380,8 +417,8 @@ async function runModifyProjectInner(
       .join("\n\n");
 
     const analysisText =
-      diffs.length > 0
-        ? `Agent made ${diffs.length} file change(s) in ${iterations} iterations.`
+      allRecordDiffs.length > 0
+        ? `Agent made ${allRecordDiffs.length} file change(s) in ${iterations} iterations.`
         : allThinking.length > 0
           ? allThinking.slice(0, 2000)
           : `Agent ran ${iterations} iterations but made no changes. The LLM did not provide an explanation.`;
@@ -390,7 +427,7 @@ async function runModifyProjectInner(
       type: "plan",
       plan: {
         analysis: analysisText,
-        changes: diffs.map((d) => ({
+        changes: allRecordDiffs.map((d) => ({
           path: d.file,
           action: "modify",
           reasoning: `+${d.stats.additions} -${d.stats.deletions}`,
@@ -399,20 +436,20 @@ async function runModifyProjectInner(
     });
 
     onEvent({ type: "step", name: "update_registry", status: "running" });
-    const touchedFiles = diffs.map((d) => d.file);
+    const touchedFiles = allRecordDiffs.map((d) => d.file);
     const record: ModificationRecord = {
       instruction: userInstruction,
       modifiedAt: new Date().toISOString(),
       touchedFiles,
       plan: {
-        analysis: `${diffs.length} file(s) modified`,
-        changes: diffs.map((d) => ({
+        analysis: `${allRecordDiffs.length} file(s) modified`,
+        changes: allRecordDiffs.map((d) => ({
           path: d.file,
           action: "modify",
           reasoning: `+${d.stats.additions} -${d.stats.deletions}`,
         })),
       },
-      diffs: diffs.map((d) => ({
+      diffs: allRecordDiffs.map((d) => ({
         file: d.file,
         reasoning: userInstruction,
         patch: d.patch,
@@ -476,12 +513,12 @@ async function runModifyProjectInner(
           projectId,
           instruction: userInstruction,
           model: modelOverride ?? "default",
-          tools: ALL_TOOLS_FOR_TRAJECTORY,
+          tools: modifyToolNames,
           skills: [],
           iterations,
           buildPassed: loopState.buildPassed,
           touchedFiles,
-          diffs: diffs.map(d => ({ file: d.file, stats: d.stats })),
+          diffs: allRecordDiffs.map(d => ({ file: d.file, stats: d.stats })),
           timestamp: new Date().toISOString(),
         },
         messages: messages.map(m => ({

@@ -1,8 +1,8 @@
 # Component Skill: Hero — Portfolio Tilt Card Rail (Spotlight)
 
-Use this skill when `generateSection` needs a **warm, social portfolio landing hero**: a **centered display headline** with a **gradient-accent line**, **floating role / audience pills** above a **six-card portrait rail**, **playful per-card rotation and vertical offset**, and a **click-to-spotlight** interaction that **dims and blurs siblings** until **reset** (outside click or second click on active). Pure **CSS/Tailwind + images + light client state**—no WebGL, no canvas shaders.
+Centered headline with one gradient span; two floating pills above a **six** portrait-card rail with light scatter (rotate/offset); **click** focuses one card (blur/dim siblings); reset on outside or second click. **CSS + images + client state**—no WebGL.
 
-Route away from **`signal-grid-split-hero`** (split telemetry / documentary) and **`editorial-blinds-hero`** (blinds / parallax still)—this is **centered marketing + gallery scatter + focus mode**.
+Not **`signal-grid-split-hero`** or **`editorial-blinds-hero`**—centered gallery + spotlight, not HUD or blinds.
 
 ## Core Effect
 

@@ -77,7 +77,7 @@ const STEPS = [
     desc: "对本次生成涉及的 TS/TSX 做范围类型检查（非全仓 tsc）。失败可走 repair_build 前的修复链路。",
   },
   { n: "11", name: "run_build", type: "build", desc: "本地 next build。" },
-  { n: "12", name: "repair_build ×0-2", type: "llm+tool", desc: "构建失败时的 Agent 工具循环（read/edit/write + 增量验证）。" },
+  { n: "12", name: "repair_build ×0-5", type: "llm+tool", desc: "构建失败时的 Agent 工具循环（read/edit/write + 增量验证）。" },
 ];
 
 const TOC = [
@@ -219,7 +219,7 @@ user message (page agent) =
   await autoInstallDependenciesForFiles({ files: repair.touchedFiles });
 }`}</Pre>
           <Callout type="warn">
-            最多 2 轮修复。如果构建仍然失败，<Code>verificationStatus</Code> 设为
+            最多 5 轮修复。如果构建仍然失败，<Code>verificationStatus</Code> 设为
             <Code>failed</Code>，项目标记为包含未验证文件。
           </Callout>
         </section>

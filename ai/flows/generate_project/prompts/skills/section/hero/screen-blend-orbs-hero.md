@@ -1,11 +1,10 @@
 # Component Skill: Hero — Screen-Blend Orbs (CSS / DOM)
 
-Use this skill when `generateSection` should deliver a **hero-only** block: a near-black void lit by **three** (**or ≥2**) **large, heavily blurred circular masses** with `mix-blend-mode: screen`, plus a **dense `clamp` headline** stack. Unlike a purely static hero, this pattern **morphs the orb field as the user scrolls through the document** while this section is on screen — the **Retune-style “chapter” handoff** (different translate / scale / opacity / semantic hue per chapter) is **collapsed into scroll progress 0→1** **inside one section** (no extra `<section>` siblings, no nav, no timeline).
+Hero-only: near-black ground, **two or three** large blurred circles with `mix-blend-mode: screen`, tight display headline. Orb layout **morphs** with **scroll progress 0→1** on this section root (long CSS transitions)—no WebGL or canvas loops.
 
-**Do not** require WebGL or canvas animation loops.
+**Scope — hero only:** Orbs + headline column. No `<nav>`, brand rows, multi-chapter grids, equalizer, orbit diagrams, or page-level timelines—those belong elsewhere.
 
-**Scope — hero only:** **Orbs + primary headline column only.** **No** `<nav>`, brand row, `mix-blend-difference` shell header, synthesis/context/download **grids**, **equalizer** bars, **satellite** orbits, or **bottom timeline** — those are **other sections** or **page chrome**.  
-**Mapping from reference:** the reference updates orbs when `#hero` / `#synthesis` / `#context` hit 50% visibility — here, define **three `OrbRecipe` snapshots** keyed to **scroll progress** through this component’s root (`0…1`), e.g. `p < ⅓ → recipe A`, `⅓ ≤ p < ⅔ → recipe B`, `p ≥ ⅔ → recipe C`. Colors are **always design tokens**, never mandatory demo hex.
+**Progress:** Bind **2–3 orb “recipes”** to progress through the section root (e.g. thirds of `0…1`). All fills from **design tokens**, not fixed demo hex.
 
 ## Core Effect
 

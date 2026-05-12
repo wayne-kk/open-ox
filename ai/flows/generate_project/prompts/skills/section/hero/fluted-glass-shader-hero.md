@@ -1,33 +1,33 @@
-# Component Skill: Hero — Full-Viewport “Fluted Glass” Shader + Logo / Rule / Type Stack
+# Component Skill: Hero — Full-Viewport Fluted Glass Shader + Logo / Rule / Type Stack
 
-Use this skill when `generateSection` should deliver a **cinematic, edge-to-edge** first screen: a **100% width / height** (or `min-h-screen` **locked**) **WebGL** layer built as a **single orthographic fullscreen quad** whose **fragment shader** simulates **vertical ribbed / fluted glass** (cylinder-slice **normals**, **seams**, **specular** highlights, **refraction**-style **UV nudge**) over a **time-animated** **fluid blob** **field** in a **dark biotic** palette. The **UI** is a **lightweight overlay**: **custom logomark** (SVG) **+** a **vertical rule** **+** **eyebrow** (mono **icon** + **uppercase** **tracking**) **+** a **tight** **display** **headline** with an optional **forced** **line** **break**—**left-aligned** and **spaced** from the top **inset**. **No** **rounded** **bento** **frame**, **no** **GSAP** **word** **masking**, **no** **scroll-driven** text choreography—**unless** the brief layers them in **addition**; this **`id`** is **valid** with **static** **copy** and **only** the **shader** **in** **motion**.
+Full-viewport WebGL: single orthographic quad; fragment shader = vertical fluted glass (rib normals, seams, spec, slight UV shift) over a time-animated blob field. Overlay: SVG mark, vertical rule, eyebrow, left-aligned display headline—copy may stay static; motion is shader-only unless the brief adds GSAP/scroll text. No bento card framing the canvas.
 
-**Scope — hero only:** The reference page is **already** hero-sized; the section **MUST** **not** **pull** in **subsequent** **landings** **blocks**. **If** **global** **nav** or **CTA** **rows** **are** **required**, they **should** be **siblings** in the **page** **layout** **or** the **app** **shell**, **not** **mandatory** **inside** this **section** **for** `fluted-glass-shader-hero`.
+Scope (hero only): first screen only; nav/global CTAs in layout/shell when needed.
 
-**Full-bleed background (critical):** The shader **fills the entire first screen** (viewport width × at least viewport height). The `<canvas>` is **never** a “card,” **never** inside `max-w-*` / `container` / centered column wrappers, and **never** given a small fixed `w-*`/`h-*` — only the **typography overlay** may use `max-w-*` for line length. If the page wraps sections in a narrow main, the section root **must** use the project’s **full-bleed / breakout** pattern (e.g. `w-screen` + width breakout) so the canvas still spans **100vw**, not the text column.
+**Canvas:** must span the full viewport (`min-h-screen` / full width). Do not nest the `<canvas>` in `max-w-*`, `container`, or fixed small `w-*`/`h-*`—only text uses `max-w-*`. Use the project full-bleed pattern if the main column is narrow.
 
 ## Core Effect
 
-- **Fluted / ribbed** **glass** **read** — **Screen-space** **vertical** **bands** with **a** **normal** **approximation** (rounded **cylinder** **slice**), **darker** **seams**, and **a** **shallow** **horizontal** **UV** **shift** to **mimic** **refraction**.
-- **Blob** **field** — **Two** or **more** **radial** **“masses”** **animated** with **`u_time`** (sin/cos), **blended** with **smoothstep** to **mix** **multiple** **base** **colors**; **optional** **core** **glow** and **a** **slow** **vertical** **sweep** **for** **life**.
-- **Shading** — **Blinn-Phong**-**style** or **simplified** **spec** **on** the **rib** **normal**; **vignette** to **tighten** **focus** **to** **center** **(optional** **per** **brief**).
-- **Overlay** **cluster** — **Vector** **mark** ( **`currentColor`** for **theming** ) **+** **1–2px** **vertical** **bar** with **low** **shadow** **(tokenized)** **+** **eyebrow** in **primary** or **chart** **accent** **role** **+** **h1** in **strong** **foreground** on **void**.
+- Fluted glass read: screen-space vertical bands with normal approximation (rounded cylinder slice), darker seams, shallow horizontal UV shift for refraction.
+- Blob field: two or more radial masses animated with `u_time` (sin/cos), blended with smoothstep to mix base colors; optional core glow and slow vertical sweep.
+- Shading: Blinn-Phong-style or simplified spec on rib normal; optional vignette per brief.
+- Overlay cluster: vector mark (`currentColor` for theming) + 1–2px vertical bar (token shadow) + eyebrow in primary/chart accent + strong foreground `h1` on void.
 
 ## Visual Language
 
-- **Atmosphere** — **Deep** **algae**-to-**black** **void** with **acid** **or** **lime** **accents** on **chrome**; **all** **RGB** in **GLSL** **should** be **driven** by **uniforms** (or a **small** **palette** **struct**) **so** the **output** can **obey** **shadcn**-**style** **tokens** **or** **brand** **brief**s—**not** the **one-off** **NX9** **greens** in **the** **source**.
-- **Figure** / **ground** — **Type** and **icon** are **the** **only** **sharp** **elements**; **keep** **drop** **shadow** on **type** **subtle** **so** the **Shader** **remains** **the** **hero** **(literally** **and** **hierarchically**).
+- Atmosphere: deep algae-to-black void with acid/lime accents on chrome; drive GLSL colors via uniforms or a small palette struct so output obeys design tokens or brand brief—not fixed demo greens.
+- Figure/ground: type and icon are the only sharp elements; keep text shadow subtle so the shader stays the hero.
 
 ## Structure Requirements
 
-1. **Z-order** — The **shader is the full-screen (full hero viewport) background**, not a card inset or partial-width panel: canvas `absolute` or `fixed` **`inset-0`** at `z-0` so it covers **100%** of the section’s width and height; the section itself is **`min-h-screen`** (or `h-screen`) **edge-to-edge**. Content `relative` `z-10` sits on top. Whether the page uses `overflow: hidden` on `html`/`body` (as in the reference) is a product decision: if a full view lock is not desired, use `min-h-screen` on the section and allow page scroll; avoid trapping focus or scroll in a way that breaks accessibility.
-2. **Pointer events** — The source sets `pointer-events-none` on the overlay so the background reads as the focus; if the section includes links or buttons, set `pointer-events-auto` on those elements only.
-3. **Logo** — Inline SVG or imported asset; `currentColor` and token-based sizing so the mark matches theme.
+1. Z-order: shader is full-viewport background — canvas `absolute` or `fixed` `inset-0` at `z-0`; section `min-h-screen` or `h-screen` edge-to-edge; content `relative z-10`. Product choice whether `html`/`body` use overflow lock; otherwise allow scroll without trapping focus.
+2. Pointer events: `pointer-events-none` on overlay shell; `pointer-events-auto` on real controls only.
+3. Logo: inline SVG or import; `currentColor` and token sizing.
 
 ## Motion Direction
 
-- **Time** only — **Continuous** **`u_time`** in **rAF** **loop**; **no** **ScrollTrigger** **required** **for** **this** **`id`**.
-- **Reduced motion** — Option A: freeze `u_time`; Option B: run the loop at ~0.1× speed. Avoid rapid high-chroma pulsing; cap contrast modulation if the brief requires extra safety.
+- Time only: continuous `u_time` in rAF; ScrollTrigger not required for this id.
+- Reduced motion: freeze `u_time` or run loop at ~0.1× speed; avoid rapid high-chroma pulsing.
 
 ## WebGL / Three.js
 
@@ -36,8 +36,8 @@ Use this skill when `generateSection` should deliver a **cinematic, edge-to-edge
 
 ## Required Implementation Blueprint (Do Not Skip)
 
-1. **MUST** implement a **full-viewport / full-bleed** orthographic WebGL background: one fullscreen quad, custom `ShaderMaterial`, and a **root `<section>`** that is at least **`min-h-screen`** (or `min-h-[100dvh]`) and spans the **full visual width** of the hero (see scope note on breakout if the parent layout is narrow).
-2. **MUST** place the `<canvas>` as a **full-bleed layer**: **`absolute inset-0`** (or `fixed inset-0` if the project standard uses sticky viewport backgrounds) with **`w-full h-full`**, **`z-0`**, **first** or **early** child of the section — **not** nested inside flex/grid cells that shrink it, **not** wrapped in `rounded-*` / `Card` / `max-w-*` / `container`.
+1. **MUST** implement a full-viewport / full-bleed orthographic WebGL background: one fullscreen quad, custom `ShaderMaterial`, and a root `<section>` that is at least `min-h-screen` (or `min-h-[100dvh]`) and spans the full visual width of the hero (see scope note on breakout if the parent layout is narrow).
+2. **MUST** place the `<canvas>` as a full-bleed layer: `absolute inset-0` (or `fixed inset-0` if the project standard uses sticky viewport backgrounds) with `w-full h-full`, `z-0`, first or early child of the section — not nested inside flex/grid cells that shrink it, not wrapped in `rounded-*` / `Card` / `max-w-*` / `container`.
 3. **MUST** size the renderer with the **canvas element’s displayed size** (`canvas.clientWidth` / `canvas.clientHeight`, or `getBoundingClientRect()`), **not** a hardcoded small pixel rect; update `u_resolution` to match on every resize. Using only `window.innerWidth` while the canvas is layout-shrunk produces an invalid “postage stamp” look.
 4. **MUST** in the fragment shader (optionally in sibling `.glsl` files) combine: (a) a vertical **ribbed / fluted** term, (b) a **time-animated** fluid blob (or similar) field mixed with it, and (c) specular and optional vignette so the read is “shaped glass,” even if the math is a modest approximation of the source.
 5. **MUST** pass brand-critical color roles (base, mid, bright, highlight) as GLSL `uniform` vectors and document how they map to the design system so generated code does not rely on unlabeled demo `vec3` literals.

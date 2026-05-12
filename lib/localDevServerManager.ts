@@ -1,8 +1,9 @@
 /**
- * Local preview: `next dev` on 127.0.0.1 (no static export, no `serve out`, no template fallbacks).
- * Shared `node_modules`: symlink from `sites/node_modules` or `sites/template/node_modules` when present;
- * otherwise `npm install` in the project directory only.
- * E2B unchanged: set OPEN_OX_PREVIEW_BACKEND=e2b (see `lib/previewMode.ts`).
+ * Local preview: default `next dev` on `127.0.0.1` with iframe URL `http://127.0.0.1:<port>` (same machine only).
+ *
+ * For LAN teammates: set `OPEN_OX_PREVIEW_PUBLIC_HOST`, **or** set `NEXT_PUBLIC_SITE_URL` to a private IP / `.local`
+ * host (e.g. `http://192.168.x.x:3000`) — preview URLs and bind address will use that host automatically.
+ * Optional `OPEN_OX_PREVIEW_PORT` for a fixed port (firewall). Cloud: `OPEN_OX_PREVIEW_BACKEND=e2b`.
  */
 
 import fs from "fs/promises";
@@ -25,12 +26,78 @@ type LocalInstance = { port: number; url: string; dev: ChildProcess | null };
 
 const localRegistry = new Map<string, LocalInstance>();
 
+/** True for RFC1918-style private IPv4, link-local 169.254.*, or *.local (mDNS). */
+function isLikelyLanDevHostname(hostname: string): boolean {
+  const h = hostname.trim().toLowerCase();
+  if (!h || h === "localhost" || h === "127.0.0.1" || h === "::1") return false;
+  if (h.endsWith(".local")) return true;
+  const oct = h.split(".").map((s) => Number(s));
+  if (oct.length !== 4 || oct.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return false;
+  const [a, b] = oct;
+  if (a === 10) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 169 && b === 254) return true;
+  return false;
+}
+
+/**
+ * Host embedded in preview iframe URLs + (when set) binds `0.0.0.0`.
+ * Order: `OPEN_OX_PREVIEW_PUBLIC_HOST` → else hostname from `NEXT_PUBLIC_SITE_URL` if it looks like LAN dev.
+ */
+function previewPublicHost(): string | undefined {
+  const raw = process.env.OPEN_OX_PREVIEW_PUBLIC_HOST?.trim();
+  if (raw) {
+    let s = raw;
+    if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+      s = s.slice(1, -1).trim();
+    }
+    const explicit = s.replace(/^https?:\/\//, "").split("/")[0]?.trim();
+    if (explicit) return explicit;
+  }
+
+  const site = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (!site) return undefined;
+  try {
+    const u = new URL(site);
+    const host = u.hostname;
+    if (host && isLikelyLanDevHostname(host)) return host;
+  } catch {
+    /* ignore */
+  }
+  return undefined;
+}
+
+/** next dev bind address: loopback by default; all interfaces when a public host is set (LAN / tunnel). */
+function previewBindHost(): string {
+  return previewPublicHost() ? "0.0.0.0" : "127.0.0.1";
+}
+
 function buildLocalPreviewUrl(port: number): string {
-  const host = process.env.OPEN_OX_PREVIEW_PUBLIC_HOST?.replace(/^https?:\/\//, "").split("/")[0];
+  const host = previewPublicHost();
   if (host) {
     return `http://${host}:${port}`;
   }
   return `http://127.0.0.1:${port}`;
+}
+
+/** Health checks from this machine: always loopback (works when next dev binds 0.0.0.0). */
+function previewHealthCheckUrl(port: number): string {
+  return `http://127.0.0.1:${port}`;
+}
+
+/**
+ * Current iframe / public URL for a running instance — recompute on every call so env changes
+ * (e.g. adding OPEN_OX_PREVIEW_PUBLIC_HOST) are not stuck behind a stale `localRegistry` url.
+ */
+function syncRegistryPublicUrl(projectId: string, reg: LocalInstance): LocalInstance {
+  const url = buildLocalPreviewUrl(reg.port);
+  if (url !== reg.url) {
+    const next = { ...reg, url };
+    localRegistry.set(projectId, next);
+    return next;
+  }
+  return reg;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -41,7 +108,7 @@ async function getFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const s = net.createServer();
     s.on("error", reject);
-    s.listen(0, "127.0.0.1", () => {
+    s.listen(0, previewBindHost(), () => {
       const a = s.address();
       s.close((err) => {
         if (err) {
@@ -56,6 +123,41 @@ async function getFreePort(): Promise<number> {
       });
     });
   });
+}
+
+function parsedFixedPreviewPort(): number | null {
+  const raw = process.env.OPEN_OX_PREVIEW_PORT?.trim();
+  if (!raw) return null;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1 || n > 65_535) {
+    throw new Error(`OPEN_OX_PREVIEW_PORT must be an integer 1–65535, got "${raw}"`);
+  }
+  return n;
+}
+
+/** Random ephemeral port, or `OPEN_OX_PREVIEW_PORT` when set (LAN firewall / sharing). */
+async function allocatePreviewPort(): Promise<number> {
+  const fixed = parsedFixedPreviewPort();
+  if (fixed === null) return getFreePort();
+  await new Promise<void>((resolve, reject) => {
+    const s = net.createServer();
+    s.on("error", (e: NodeJS.ErrnoException) => {
+      s.close();
+      if (e.code === "EADDRINUSE") {
+        reject(
+          new Error(
+            `OPEN_OX_PREVIEW_PORT=${fixed} is already in use — pick another port or stop the other process`
+          )
+        );
+      } else {
+        reject(e);
+      }
+    });
+    s.listen(fixed, previewBindHost(), () => {
+      s.close((err) => (err ? reject(err) : resolve()));
+    });
+  });
+  return fixed;
 }
 
 async function isDirWithFiles(p: string): Promise<boolean> {
@@ -189,7 +291,7 @@ function startNextDevAndWait(
       reject(new Error(`next dev did not become ready within ${timeoutMs / 1000}s`));
     }, timeoutMs);
     const shell = process.platform === "win32";
-    const child = spawn("npx", ["next", "dev", "-H", "127.0.0.1", "-p", String(port)], {
+    const child = spawn("npx", ["next", "dev", "-H", previewBindHost(), "-p", String(port)], {
       cwd: projectDir,
       stdio: ["ignore", "pipe", "pipe"],
       env: { ...process.env, NODE_ENV: "development" },
@@ -282,16 +384,17 @@ export async function startLocalDevServer(
   const currentHash = await computeProjectFingerprint(projectId);
 
   const reg = localRegistry.get(projectId);
-  if (reg && (await isLocalServerUp(reg.url))) {
+  if (reg && (await isLocalServerUp(previewHealthCheckUrl(reg.port)))) {
+    const synced = syncRegistryPublicUrl(projectId, reg);
     await saveFingerprint(db, projectId, currentHash);
-    return { url: reg.url, port: reg.port };
+    return { url: synced.url, port: synced.port };
   }
 
   stopDevInRegistry(projectId);
   localRegistry.delete(projectId);
 
   await runInstallIfNeeded(projectDir, "start");
-  const port = await getFreePort();
+  const port = await allocatePreviewPort();
   const url = buildLocalPreviewUrl(port);
   const child = await startNextDevAndWait(projectId, projectDir, port);
   localRegistry.set(projectId, { port, url, dev: child });
@@ -320,8 +423,9 @@ export async function hotRefreshLocalDevServer(
   _changedFiles: string[]
 ): Promise<{ url: string; port: number; mode: "hot" }> {
   const reg = localRegistry.get(projectId);
-  if (reg && (await isLocalServerUp(reg.url))) {
-    return { url: reg.url, port: reg.port, mode: "hot" };
+  if (reg && (await isLocalServerUp(previewHealthCheckUrl(reg.port)))) {
+    const synced = syncRegistryPublicUrl(projectId, reg);
+    return { url: synced.url, port: synced.port, mode: "hot" };
   }
   const r = await startLocalDevServer(db, projectId);
   return { ...r, mode: "hot" };
@@ -336,7 +440,7 @@ export async function rebuildLocalDevServer(
   localRegistry.delete(projectId);
   await fs.rm(path.join(projectDir, ".next"), { recursive: true, force: true });
   await runInstallIfNeeded(projectDir, "rebuild");
-  const port = await getFreePort();
+  const port = await allocatePreviewPort();
   const url = buildLocalPreviewUrl(port);
   const child = await startNextDevAndWait(projectId, projectDir, port);
   localRegistry.set(projectId, { port, url, dev: child });
@@ -353,8 +457,9 @@ export async function ensureLocalDevServerAlive(
   projectId: string
 ): Promise<{ status: "ok" | "down"; url?: string }> {
   const reg = localRegistry.get(projectId);
-  if (reg && (await isLocalServerUp(reg.url))) {
-    return { status: "ok", url: reg.url };
+  if (reg && (await isLocalServerUp(previewHealthCheckUrl(reg.port)))) {
+    const synced = syncRegistryPublicUrl(projectId, reg);
+    return { status: "ok", url: synced.url };
   }
   if (!reg) {
     return { status: "down" };
@@ -364,11 +469,11 @@ export async function ensureLocalDevServerAlive(
   localRegistry.delete(projectId);
   try {
     await runInstallIfNeeded(projectDir, "ensureAlive");
-    const port = await getFreePort();
+    const port = await allocatePreviewPort();
     const url = buildLocalPreviewUrl(port);
     const child = await startNextDevAndWait(projectId, projectDir, port);
     localRegistry.set(projectId, { port, url, dev: child });
-    if (await isLocalServerUp(url)) {
+    if (await isLocalServerUp(previewHealthCheckUrl(port))) {
       return { status: "ok", url };
     }
   } catch (err) {
@@ -383,8 +488,9 @@ export async function getLocalDevServerStatus(
 ): Promise<{ status: "running" | "stopped"; url?: string }> {
   const reg = localRegistry.get(projectId);
   if (!reg) return { status: "stopped" };
-  if (await isLocalServerUp(reg.url)) {
-    return { status: "running", url: reg.url };
+  if (await isLocalServerUp(previewHealthCheckUrl(reg.port))) {
+    const synced = syncRegistryPublicUrl(projectId, reg);
+    return { status: "running", url: synced.url };
   }
   return { status: "stopped" };
 }

@@ -1,10 +1,10 @@
 # Component Skill: Hero — Split Bento + Dropzone + Marquee Gallery
 
-Use this skill when `generateSection` needs a **dark, product-style first screen** for a **generative / asset tool**: **two-pane layout** on large viewports—**left**: stacked **rounded bento** panels (**hero copy**, **compact controls**, **interactive file dropzone** with **pointer-tracking glow**); **right**: a **framed preview stage** with **three mariquee-style image columns** (**infinite vertical drift** via **`requestAnimationFrame`**, alternating directions) and **edge gradient fades**. **Pure DOM + CSS + images**—no WebGL.
+Dark product first screen: **lg** two-pane—**left** stacked bento (copy, compact controls, file dropzone with cursor glow); **right** framed stage with **three** vertical marquee image columns (rAF drift, opposing directions) and edge fades. **DOM + CSS + images**—no WebGL.
 
-**Source note:** The reference included a **full app `<header>`** (brand, pill nav, credits, bell, avatar), **`iconify-icon`**, and **CDN** scripts. Per hero-skills contract: **no global header / nav / user chrome inside this section**—implement those in **`layout`**. Use **`lucide-react`** (or the project icon system). **No** `cdn.tailwindcss.com`, **no** Iconify.
+Reference had full `<header>`, Iconify, CDN Tailwind—**omit**; use `layout` for nav and **`lucide-react`** (or project icons).
 
-Route away from **`gradient-frame-shader-hero`** / **`ember-radial-blades-hero`** / **`cinematic-photo-glass-hero`**—this is **dense product UI** + **marquee gallery**, not shader sculpture or single full-bleed photo.
+Not **`gradient-frame-shader-hero`** / **`ember-radial-blades-hero`** / **`cinematic-photo-glass-hero`**—this is UI + gallery, not shader or one photo hero.
 
 ## Core Effect
 

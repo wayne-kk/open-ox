@@ -1,13 +1,12 @@
 # Component Skill: Hero — Lighting / Shader
 
-Use this skill when generating a hero section that features a WebGL-based lightning, shimmer, or ambient glow effect as the primary visual. The hero should feel immersive, tech-forward, and customizable.
+WebGL lightning/shimmer/glow as the main visual. Dark background; at least one control (e.g. hue) wired to a shader uniform. No image-based fake of the effect.
 
-## Design Principles
+## Requirements (summary)
 
-1. **Code-generated visuals** — The main visual is 100% code (WebGL shaders), not images. Emphasize that it can be customized.
-2. **Interactive control** — Provide at least one interactive control (e.g. hue slider) so users can adjust the effect.
-3. **Layered depth** — Combine shader layer, gradient orbs, and content in clear z-order. Content must remain readable.
-4. **Dark-first** — Lighting effects read best on dark backgrounds. Default to black or near-black.
+1. Client component (`"use client"`). Real WebGL context + shaders, not Canvas2D fake.
+2. One interactive control changing a lighting uniform (e.g. `uHue`).
+3. Clear z-order: shader under copy; type stays readable.
 
 ## Non-Negotiable Acceptance Checklist
 
@@ -20,11 +19,11 @@ When this skill is selected, the generated section MUST satisfy all items below:
 
 ## Structure Requirements
 
-- **Headline**: 6–12 words. Use `font-display`. Strong, memorable wordmark or tagline.
-- **Subheading**: 1–2 sentences. Use `font-body`. Clarify the value and that the effect is customizable.
-- **CTA block**: Primary and optional secondary CTA. Use `font-body` with label-style utilities (size/weight/tracking).
-- **Interactive control**: Hue slider or similar to adjust the lightning color. Use `ElasticHueSlider` pattern (see Implementation Reference).
-- **Feature badges**: Optional floating labels (e.g. "React", "Tailwind", "Shaders") positioned around the hero. Use `FeatureItem` pattern.
+- **Headline**: 6–12 words, `font-display`.
+- **Subheading**: 1–2 sentences; state value proposition only (no filler slogans).
+- **CTA block**: Primary + optional secondary.
+- **Interactive control**: Hue slider or equivalent → uniform.
+- **Feature badges**: Optional; **omit** unless brief asks for tech stack labels; max 2–4, corner placement.
 - **Visual layer**: WebGL `Lightning` canvas as a section-local background layer; optional gradient orbs and geometric accents for depth.
 
 ## Layout Patterns

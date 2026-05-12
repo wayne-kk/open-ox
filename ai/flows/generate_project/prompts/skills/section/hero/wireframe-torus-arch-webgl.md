@@ -1,14 +1,14 @@
 # Component Skill: Hero — Wireframe Torus Arch (Three.js)
 
-Use this skill when `generateSection` needs a **commanding SaaS/community launch hero**: a **WebGL wireframe torus “gateway” arch** drifting above the viewport, softened by a **vertical gradient fade mask** into the page chrome, paired with **ambient radial glow**, **massive headline** (light-to-warm gradient fill from tokens), subdued subcopy, and a **pill primary CTA**. The reference page included a **global header with logo, nav links, chamfer CTAs, and Iconify menu** — **omit all of that** from this section; shell navigation belongs in layout, not here.
+WebGL **wireframe torus arch** in the upper band, **mask-faded** so it tapers before copy; optional radial glow behind; centered **large gradient headline**, muted body, **pill CTA**. Reference had global header/nav/Iconify—**omit**; shell owns chrome.
 
 ## Core Effect
 
-- **Masked WebGL band**: renderer targets roughly the **upper ~75% of the hero viewport height** (`75vh` reference), full width, `**pointer-events-none`**, clipped/faded via `**mask-image` / `-webkit-mask-image`** linear gradient so the wireframe **dissolves before** the typography block (opaque at top → transparent toward ~60–100% depending on tuning).
-- **Scene**: dual **nested `TorusGeometry` meshes**, both **wireframe** `MeshBasicMaterial`, stacked at the same pose: translated **above** scene origin on Y, rotated on X to read as an **arch** facing the viewer; **slow opposing `rotation.z` drift** plus **shared subtle breathing scale** driven by `**sin`** time.
-- **Camera**: `**PerspectiveCamera`** placed **below** and **rear** (`z` pushed back, `y` negative reference), `**lookAt`** a focal point **above** origin so the rings arc through the upper frame (**monumental atrium** framing).
+- **Masked WebGL band**: renderer targets roughly the **upper ~75% of the hero viewport height** (`75vh` reference), full width, `pointer-events-none`, clipped/faded via `mask-image` / `-webkit-mask-image` linear gradient so the wireframe **dissolves before** the typography block (opaque at top → transparent toward ~60–100% depending on tuning).
+- **Scene**: dual **nested `TorusGeometry` meshes**, both **wireframe** `MeshBasicMaterial`, stacked at the same pose: translated **above** scene origin on Y, rotated on X to read as an **arch** facing the viewer; **slow opposing `rotation.z` drift** plus **shared subtle breathing scale** driven by `sin` time.
+- **Camera**: `PerspectiveCamera` below and behind mesh, `lookAt` above origin so rings arc through the upper frame.
 - **Ambient**: oversized **radial bloom** centered above content (cyan family in demo only)—implement as **CSS** behind WebGL (`pointer-events-none`), alpha from tokens.
-- **Foreground content**: vertically centered `**main`** feeling with slight **negative top margin** offset (pull headline into arch—tune per safe area), `**text-center`**, one dominant word or short title at extreme scale (`text-7xl` → `**10rem`** class of scale on large breakpoints), **gradient text fill**, **muted body line**, **single high-contrast CTA** (reference: **filled light pill** on dark ground).
+- **Foreground content**: vertically centered `main` feeling with slight **negative top margin** offset (pull headline into arch—tune per safe area), `text-center`, one dominant word or short title at extreme scale (`text-7xl` → `10rem` class of scale on large breakpoints), **gradient text fill**, **muted body line**, **single high-contrast CTA** (reference: **filled light pill** on dark ground).
 
 ## Visual Language
 
@@ -29,16 +29,16 @@ Use this skill when `generateSection` needs a **commanding SaaS/community launch
 
 ## Motion Direction
 
-- **WebGL**: continuous `**requestAnimationFrame`**; use `**THREE.Clock`** for elapsed time (reference pattern).
+- **WebGL**: continuous `requestAnimationFrame`; use `THREE.Clock` for elapsed time (reference pattern).
 - **Breathing**: shared scale `1 + sin(t * 1.5) * 0.015` class amplitude—**reduce or disable** under `prefers-reduced-motion`.
 - **Rotation**: outer **faster** negative Z than inner (reference scale `0.05` vs `0.03` rad/s order).
 - **No scroll-driven requirement** in reference (page `overflow-hidden` demo)—product may allow scroll; if so, keep WebGL **fixed to hero section box**, not `position: fixed` to viewport, unless brief demands parallax.
 
 ## WebGL Requirements (Three.js)
 
-- Import `**three`** from the app bundle (**no** CDN `r128` global).
-- **Renderer**: `WebGLRenderer({ alpha: true, antialias: true })`; `**setPixelRatio(Math.min(devicePixelRatio, 2))`**.
-- **Mount sizing**: `setSize(width, height)` where `height = hostHeight` (e.g. `container.clientHeight`), `**width = container.clientWidth`** — **not** raw `window` if the hero is inset.
+- Import `three` from the app bundle (**no** CDN `r128` global).
+- **Renderer**: `WebGLRenderer({ alpha: true, antialias: true })`; `setPixelRatio(Math.min(devicePixelRatio, 2))`.
+- **Mount sizing**: `setSize(width, height)` where `height = hostHeight` (e.g. `container.clientHeight`), `width = container.clientWidth` — **not** raw `window` if the hero is inset.
 - **Camera aspect**: `width / height` of the **same host box** used by the mask.
 - **Dispose** on unmount: `cancelAnimationFrame`, remove resize listener, `geometry.dispose()` ×2, `material.dispose()` ×2, `renderer.dispose()`.
 
@@ -46,16 +46,16 @@ Use this skill when `generateSection` needs a **commanding SaaS/community launch
 
 When this skill is selected, the generated hero MUST include all of the following:
 
-1. **Masked WebGL host**: a dedicated container with **height ≈ 75% of the hero viewport** (same proportion as reference), **full width**, `**pointer-events-none`**, and **CSS mask** (`mask-image` + webkit prefix) **fading the canvas to transparent toward the bottom** so the wireframe does not hard-cut across copy.
-2. **Dual torus wireframe pair**: **outer** `TorusGeometry` + **inner** `TorusGeometry` with **smaller tube** and **adjusted segment counts** so the inner reads as a **denser core**; both use `**MeshBasicMaterial` wireframe** with **theme-mapped colors** (outer brighter, inner dimmer — **no mandatory demo hex**).
-3. **Shared rig**: both meshes share the **same** `position.y` lift and `**rotation.x` tilt** so they form one **arch**; both participate in the **same breathing scale** each frame.
+1. **Masked WebGL host**: a dedicated container with **height ≈ 75% of the hero viewport** (same proportion as reference), **full width**, `pointer-events-none`, and **CSS mask** (`mask-image` + webkit prefix) **fading the canvas to transparent toward the bottom** so the wireframe does not hard-cut across copy.
+2. **Dual torus wireframe pair**: **outer** `TorusGeometry` + **inner** `TorusGeometry` with **smaller tube** and **adjusted segment counts** so the inner reads as a **denser core**; both use `MeshBasicMaterial` in wireframe mode with **theme-mapped colors** (outer brighter, inner dimmer — **no mandatory demo hex**).
+3. **Shared rig**: both meshes share the **same** `position.y` lift and `rotation.x` tilt so they form one **arch**; both participate in the **same breathing scale** each frame.
 4. **Opposing slow spin**: **outer** and **inner** **negative `rotation.z`** over time at **different rates** (outer faster).
-5. **Camera staging**: **off-center camera** with `**lookAt`** targeting a point **above** the origin (reference: camera low/behind, focal point elevated) so the composition feels **upward and monumental**.
+5. **Camera staging**: **off-center camera** with `lookAt` targeting a point **above** the origin (reference: camera low/behind, focal point elevated) so the composition feels **upward and monumental**.
 6. **Ambient glow layer**: **CSS radial gradient** blob (large max dimensions) **behind** WebGL, **very low** opacity, **cool accent** role from tokens.
 7. **Typography stack**: **single-line or tightly controlled** display title at **extreme** responsive scale; **gradient text** using **token stops** (top light → bottom warm tint **per brief**).
 8. **Body + CTA**: muted supporting paragraph (`max-width` readable), **one** rounded **filled** CTA with subtle **hover scale** and **soft outer shadow** (token-driven shadow color).
 9. **Resize correctness**: on resize, update **renderer size** and **camera aspect** from the **WebGL host element**’s client dimensions; **skip** when width/height are zero.
-10. `**prefers-reduced-motion`**: **no** continuous animation **or** freeze on first frame / disable breathing while allowing static render—**must not** ignore the media query.
+10. `prefers-reduced-motion`: **no** continuous animation **or** freeze on first frame / disable breathing while allowing static render—**must not** ignore the media query.
 11. **Integration hygiene**: **no** CDN Three, **no** CDN Tailwind, **no** Iconify; icons **not required** for this hero unless brief adds them via project system.
 12. **No navigation chrome** inside the section output (no brand header row, no `nav` links, no mobile menu control).
 
@@ -219,7 +219,7 @@ export function WireframeTorusArchHero({ title, subcopy, cta }: WireframeTorusAr
 
 ## Implementation Constraints
 
-- `**use client`** for Three lifecycle.
+- `"use client"` for Three lifecycle.
 - **No** `cdn.tailwindcss.com`, **no** `iconify-icon`, **no** global `THREE` script tag.
 - **No** `<style jsx>` unless project standard.
 

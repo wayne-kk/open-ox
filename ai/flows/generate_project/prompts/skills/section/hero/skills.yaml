@@ -1,26 +1,18 @@
-# Hero skill matching: `keywords` MUST be ≥80% business-facing — industry, buyer persona,
-# product category, funnel moment, or outcome — NOT shader/UI/effect vocabulary (those stay in `notes`).
+# Hero skill matching: 6–7 keyword lines/skill; 1–2 English words/line. notes = one-line technical hook only (no mood stacking).
 skills:
   - name: adaptive-vbars-webgl
     kind: component-skill
     sectionTypes: [hero]
     priority: 81
-    notes: >
-      动态 V 形渐变条 WebGL 背景，适合 AI/SaaS/DevTool/企业级产品的 hero。
-      深色系、精密感、前瞻感。
+    notes: WebGL V 形渐变条背景；企业/B2B/技术产品首屏。
     keywords:
-      - enterprise platform homepage
-      - B2B SaaS positioning
-      - developer tools marketing site
-      - AI workflow product landing
-      - ops automation buyer narrative
-      - cloud observability vendor pitch
-      - IT modernization storytelling
-      - technical credibility above fold
-      - procurement-ready trust cues
-      - integrations-heavy product story
-      - SOC-to-board reporting metaphor
-      - FinTech infra adjacent positioning
+      - enterprise
+      - procurement
+      - CIO buyers
+      - regulated cloud
+      - sober precision
+      - B2B category
+      - forward urgency
     exclude_keywords:
       - warm
       - organic
@@ -33,22 +25,15 @@ skills:
     kind: component-skill
     sectionTypes: [hero]
     priority: 78
-    notes: >
-      黑洞粒子吸积盘 WebGL 效果，适合数据平台/分析/基础设施类产品。
-      宇宙感、引力感、深邃神秘。
+    notes: WebGL 黑洞吸积盘粒子；数据/分析/基础设施首屏。
     keywords:
-      - unified analytics platform launch
-      - enterprise data integration narrative
-      - CIO roadmap storytelling site
-      - observability vendor repositioning
-      - intelligence layer product homepage
-      - mission-critical infrastructure pitch
-      - data warehouse modernization story
-      - convergence hub positioning metaphor
-      - regulated enterprise BI rollout
-      - platform engineering flagship refresh
-      - backbone connectivity vendor marketing
-      - executive briefing microsite
+      - analytics
+      - data platform
+      - SRE culture
+      - lakehouse
+      - midnight depth
+      - mission-critical
+      - board visibility
     exclude_keywords:
       - warm
       - friendly
@@ -61,22 +46,15 @@ skills:
     kind: component-skill
     sectionTypes: [hero]
     priority: 79
-    notes: >
-      WebGL 流动光丝效果 + 玻璃导航栏，颜色映射到 design tokens。
-      适合 AI/认知/暗色 hero 场景。
+    notes: WebGL 流动光丝 + 顶栏；暗色首屏，配色走 design tokens。
     keywords:
-      - conversational AI product landing
-      - LLM copilot onboarding narrative
-      - research assistant SaaS homepage
-      - knowledge work automation pitch
-      - ML platform developer marketing
-      - AI-native workspace positioning
-      - neural search product storytelling
-      - deep-tech startup credibility site
-      - cognition tooling buyer journey
-      - academic lab spinout GTM page
-      - dark-theme SaaS category leadership
-      - inference infrastructure adjacent story
+      - LLM
+      - copilot
+      - knowledge workers
+      - dark premium
+      - luminous tension
+      - inference pressure
+      - AI native
     exclude_keywords:
       - editorial
       - magazine
@@ -90,22 +68,15 @@ skills:
     kind: component-skill
     sectionTypes: [hero]
     priority: 80
-    notes: >
-      几何框架语言 + Three.js 切面网格视觉，适合 3D/生成艺术/科学/创作者类产品。
-      探索感、科幻感、知性、大胆。
+    notes: 几何线框壳 + Three.js 切面体；科学/3D/生成向首屏。
     keywords:
-      - scientific instrumentation vendor site
-      - R&D consortium public homepage
-      - computational design tool marketing
-      - generative media startup positioning
-      - simulation software credibility narrative
-      - PhD-led deep tech investor page
-      - technical conference hero storytelling
-      - innovation program grants landing
-      - visual computing lab outreach site
-      - creator-facing engineering tool GTM
-      - defense-adjacent research storytelling
-      - museum science exhibit promo funnel
+      - laboratory
+      - simulation
+      - R&D
+      - generative
+      - sci-fi bold
+      - technical artists
+      - deep tech
     exclude_keywords:
       - warm
       - organic
@@ -118,19 +89,15 @@ skills:
     kind: component-skill
     sectionTypes: [hero]
     priority: 60
-    notes: >
-      WebGL 闪电/等离子 shader 效果，仅用于明确需要闪电/shader 视觉的 hero。
+    notes: WebGL 闪电/等离子 shader；仅当 brief 明确要求该视觉。
     keywords:
-      - esports league flagship homepage
-      - gaming peripheral launch campaign
-      - competitive fitness challenge brand site
-      - performance benchmarking tool splash
-      - cybersecurity adrenaline storytelling page
-      - stadium entertainment venue marketing
-      - EV hypercar hype reveal narrative
-      - broadcast graphics vendor teaser site
-      - adrenaline-led consumer hardware launch
-      - youth-facing entertainment IP premiere
+      - esports
+      - cyber
+      - adrenaline
+      - neon
+      - gaming drops
+      - stadium energy
+      - launch hype
     exclude_keywords:
       - editorial
       - magazine
@@ -147,21 +114,15 @@ skills:
     kind: component-skill
     sectionTypes: [hero]
     priority: 80
-    notes: >
-      Canvas 粒子文字效果，粒子组成文字并可交互散开/聚合。
-      适合动感、生成艺术、交互式 hero。
+    notes: Canvas 粒子拼字，可交互聚散。
     keywords:
-      - experiential campaign microsite
-      - interactive brand installation promo
-      - museum digital exhibit landing funnel
-      - festival tech activation storytelling
-      - creator economy tool viral launch
-      - design-led consumer app teaser page
-      - youth culture product unveil narrative
-      - motion-first agency portfolio premiere
-      - subscription teaser waitlist storytelling
-      - cultural institution donor microsite
-      - boutique electronics drop countdown page
+      - experiential
+      - festival
+      - kinetic joy
+      - waitlist
+      - creators
+      - interactive drop
+      - crowd energy
     exclude_keywords:
       - editorial
       - magazine
@@ -176,21 +137,15 @@ skills:
     kind: component-skill
     sectionTypes: [hero]
     priority: 56
-    notes: >
-      CSS 星空 + 模糊星球地平线，滚动视差，玻璃 UI，等宽 + 展示衬线字体。
-      适合极光/空灵/AI/Web3/游戏/约会类产品。
+    notes: CSS 星空 + 模糊行星地平线 + 视差；无 WebGL。
     keywords:
-      - Web3 consumer wallet onboarding narrative
-      - crypto retail app emotional positioning
-      - dating product flagship storytelling
-      - mobile gaming studio IP teaser site
-      - fantasy lifestyle subscription launch
-      - Gen-Z digital-native brand flagship
-      - virtual events platform marketing page
-      - social discovery app repositioning
-      - nightlife hospitality booking funnel
-      - crossover entertainment franchise teaser
-      - neo-bank lifestyle cohort storytelling
+      - Web3
+      - crypto wallet
+      - dating
+      - cosmic mood
+      - Gen Z
+      - mobile gaming
+      - escapism
     exclude_keywords:
       - webgl
       - three
@@ -204,56 +159,19 @@ skills:
       - 3d
       - wireframe
 
-  - name: gradient-frame-shader-hero
-    kind: component-skill
-    sectionTypes: [hero]
-    priority: 77
-    notes: >
-      圆角 bento 大卡片 + 伪金属渐变相框 + Three 全屏正交 quad 自定义 shader，canvas 为 screen 混合叠层。
-      GSAP+ScrollTrigger 逐词遮罩上升；无 section 内 nav；色走 uniform/ token。
-    keywords:
-      - enterprise control plane positioning
-      - vertical SaaS flagship refresh narrative
-      - cloud governance product homepage
-      - security posture platform marketing site
-      - FinTech institutional onboarding story
-      - HR enterprise suite repositioning page
-      - regulated industry trust storytelling hub
-      - CIO-approved procurement narrative
-      - executive sponsor briefing landing
-      - mission-critical workflow orchestration pitch
-      - compliance-forward SaaS category page
-    exclude_keywords:
-      - particle
-      - particles
-      - starfield
-      - planet
-      - venetian
-      - blinds
-      - editorial spread
-      - gltf
-      - model
-      - instanced
-      - css-only
-
   - name: fluted-glass-shader-hero
     kind: component-skill
     sectionTypes: [hero]
     priority: 75
-    notes: >
-      全视口全幅竖纹/凹槽玻璃 GLSL（正交全屏四边形）+ 流体 blob 与高光，仅 logomark+竖线+字叠层。
-      无圆角 bento 外框、无必须 GSAP 词动画；按 canvas client 尺寸 setSize。
+    notes: 全屏竖纹玻璃 GLSL 四边形 + blob；左上 logomark/竖线/标题叠层；setSize 跟 canvas 容器。
     keywords:
-      - biotech Series B narrative website
-      - clinical diagnostics vendor homepage
-      - life sciences investor relations storytelling
-      - laboratory instrumentation digital flagship
-      - pharma innovation program landing
-      - healthtech regulatory trust positioning page
-      - CRO discovery services credibility hub
-      - academic medical center partnership pitch
-      - precision medicine coalition microsite
-      - scientific instrument aftermarket storytelling
+      - biotech
+      - clinical
+      - pharma
+      - life sciences
+      - sterile trust
+      - diagnostics
+      - IR window
     exclude_keywords:
       - bento
       - rounded card
@@ -270,20 +188,15 @@ skills:
     kind: component-skill
     sectionTypes: [hero]
     priority: 58
-    notes: >
-      纯 CSS 大模糊色团 + mix-blend-mode: screen 加光，无 WebGL/Canvas 动画；IntersectionObserver 分步入场。
-      夜模式/环境光/散景/应用发布类紧排标题 hero。
+    notes: CSS 模糊色团 + mix-blend-mode:screen；无 WebGL；IO 分步入场。
     keywords:
-      - productivity suite repositioning narrative
-      - creative software launch campaign site
-      - live collaboration tool storytelling page
-      - remote-first SaaS emotional onboarding
-      - audio workstation buyer journey teaser
-      - subscription productivity seasonal launch
-      - maker SaaS community-led homepage refresh
-      - night-shift operations dashboard marketing
-      - wellness tech ambient positioning story
-      - indie app studio flagship credibility page
+      - remote work
+      - productivity
+      - creative tools
+      - night mode
+      - ambient calm
+      - flow state
+      - indie makers
     exclude_keywords:
       - webgl
       - three
@@ -302,19 +215,15 @@ skills:
     kind: component-skill
     sectionTypes: [hero]
     priority: 80
-    notes: >
-      Split hero: telemetry + stacked type; rails + atmosphere; framed image panel + HUD chrome; no nav.
+    notes: 分栏 hero：telemetry + 叠字；导轨/网格氛围；右侧摄影 + HUD 框；无 nav。
     keywords:
-      - documentary production house homepage
-      - photojournalism nonprofit credibility site
-      - broadcast systems integrator marketing narrative
-      - industrial design consultancy storytelling page
-      - architecture firm competition microsite
-      - investigative newsroom membership funnel
-      - field telemetry SaaS buyer briefing landing
-      - defense-adjacent communications storytelling
-      - civic accountability program homepage
-      - infrastructure inspection vendor narrative site
+      - documentary
+      - journalism
+      - civic truth
+      - telemetry
+      - broadcast
+      - field inspectors
+      - institutional
     exclude_keywords:
       - webgl
       - shader
@@ -328,19 +237,15 @@ skills:
     kind: component-skill
     sectionTypes: [hero]
     priority: 82
-    notes: >
-      THREE point swarm; mouse pull + click impulse; additive glow; stats ribbon; hero only, no nav.
+    notes: Three.js Points 球云；鼠标吸引/点击脉冲；additive；可选数据带；无 nav。
     keywords:
-      - spatial computing platform homepage
-      - digital twin operations storytelling site
-      - enterprise AI backbone positioning narrative
-      - real-time analytics war room marketing page
-      - AR VR tooling vendor credibility funnel
-      - mission control software flagship storytelling
-      - latency-sensitive trading infra pitch site
-      - neural infrastructure buyer enablement page
-      - cloud HPC workload storytelling narrative
-      - robotics orchestration platform teaser site
+      - digital twin
+      - war room
+      - live operations
+      - trading desk
+      - robotics
+      - spatial computing
+      - swarm density
     exclude_keywords:
       - editorial
       - magazine
@@ -354,19 +259,15 @@ skills:
     kind: component-skill
     sectionTypes: [hero]
     priority: 81
-    notes: >
-      Twin torus wireframe WebGL arc, mask-fade to copy; giant gradient title + glow; no shell nav here.
+    notes: 双环钢丝 WebGL + 底部遮罩渐隐；大标题渐变；无顶栏 nav。
     keywords:
-      - developer conference flagship landing
-      - community-led OSS foundation homepage
-      - flagship SDK launch narrative microsite
-      - hackathon sponsor storytelling page
-      - platform ecosystem summit registration hub
-      - CTO-facing roadmap reveal storytelling
-      - DevRel annual splash credibility site
-      - cloud native contributor program landing
-      - API-first platform positioning narrative
-      - technical certification program teaser page
+      - developers
+      - SDK launch
+      - open source
+      - hackathon
+      - platform API
+      - contributors
+      - DevRel energy
     exclude_keywords:
       - editorial
       - photography hero
@@ -380,19 +281,15 @@ skills:
     kind: component-skill
     sectionTypes: [hero]
     priority: 77
-    notes: >
-      余烬径向渐变 + 胶片噪点；GSAP 右侧扇形叶片雕塑 + ScrollTrigger 遮罩标题；打包依赖；无 nav/CDN。
+    notes: 余烬径向渐变 + 噪点；GSAP 扇形叶片 + ScrollTrigger 标题遮罩；无 CDN。
     keywords:
-      - renewable energy utility storytelling site
-      - climate venture flagship narrative page
-      - industrial decarbonization program landing
-      - sustainability reporting transparency hub
-      - premium EV charging network repositioning
-      - infrastructure modernization keynote microsite
-      - power-grid innovation consortium homepage
-      - ESG-forward manufacturer credibility funnel
-      - cleantech IPO narrative storytelling page
-      - resilience engineering coalition landing site
+      - renewable
+      - climate tech
+      - ESG season
+      - grid stress
+      - decarbonization
+      - cleantech
+      - utility scale
     exclude_keywords:
       - webgl
       - three.js
@@ -407,19 +304,15 @@ skills:
     kind: component-skill
     sectionTypes: [hero]
     priority: 74
-    notes: >
-      居中渐变标题 + 悬浮角色胶囊；六张肖像卡错落倾斜 + 点击聚光（模糊/压暗 siblings）；双 CTA；无 nav。
+    notes: 居中渐变标题 + 肖像卡列倾斜布局；点击聚光兄弟卡；双 CTA；无 nav。
     keywords:
-      - illustrator collective booking funnel site
-      - independent filmmaker promo storytelling page
-      - boutique creative agency talent showcase hub
-      - collectible art curator credibility narrative
-      - patron-supported creator membership landing
-      - portrait photographer conversion homepage
-      - casting talent roster showcase microsite
-      - design residency program applicant funnel
-      - NFT-adjacent gallery prestige storytelling
-      - artisan marketplace maker spotlight page
+      - illustrators
+      - filmmakers
+      - creative agency
+      - casting
+      - gallery week
+      - portrait studio
+      - artisan makers
     exclude_keywords:
       - webgl
       - shader
@@ -434,19 +327,15 @@ skills:
     kind: component-skill
     sectionTypes: [hero]
     priority: 73
-    notes: >
-      左侧 Bento：主文案 + 配置条 + 可跟踪光晕拖放区；右侧三列无限纵向跑马灯图廊，约 40/60；无 app 顶栏。
+    notes: 左 Bento 文案区 + 右三列竖向跑马灯图；约 40/60；无顶栏。
     keywords:
-      - generative AI studio client acquisition landing
-      - digital asset management pipeline SaaS homepage
-      - creative operations platform onboarding narrative
-      - marketing production studio flagship storytelling
-      - brand toolkit SaaS enterprise repositioning page
-      - campaign asset factory buyer journey funnel
-      - content supply chain orchestration pitch site
-      - in-house creative team efficiency narrative
-      - multimodal media workflow credibility landing
-      - agency-client collaboration portal teaser page
+      - brand ops
+      - creative DAM
+      - studio throughput
+      - campaign crunch
+      - in-house creative
+      - client velocity
+      - asset pipeline
     exclude_keywords:
       - webgl
       - shader
@@ -461,19 +350,15 @@ skills:
     kind: component-skill
     sectionTypes: [hero]
     priority: 70
-    notes: >
-      全幅摄影背景 + 玻璃公告条 + 衬线大标题 + 双 CTA + 合作 logo 条；section 内不含顶栏 nav。
+    notes: 全宽摄影底 + 玻璃条 + 衬线标题 + 双 CTA；无顶栏 nav；不含合作方 logo 带。
     keywords:
-      - aerospace contractor public flagship site
-      - commercial space tourism booking narrative
-      - aviation heritage foundation storytelling hub
-      - expedition logistics premium positioning page
-      - advanced mobility consortium credibility landing
-      - explorer membership club onboarding funnel
-      - institutional partnership announcement microsite
-      - defense innovation storytelling adjacent page
-      - scientific expedition donor credibility story
-      - high-touch travel broker prestige homepage
+      - aerospace
+      - space tourism
+      - aviation heritage
+      - expeditions
+      - explorer club
+      - institutional PR
+      - solemn awe
     exclude_keywords:
       - webgl
       - shader
@@ -489,19 +374,15 @@ skills:
     kind: component-skill
     sectionTypes: [hero]
     priority: 64
-    notes: >
-      Unicorn Studio 全屏嵌入作背景，前景需叠 hero 文案；project id 来自 brief；单次 init；固定版或自托管 UMD。
+    notes: Unicorn Studio 全屏背景嵌入；前景叠文案；project id 来自 brief；单次 init。
     keywords:
-      - experiential marketing agency flagship site
-      - automotive reveal microsite storytelling funnel
-      - luxury hospitality immersive teaser landing
-      - flagship consumer electronics hype narrative page
-      - concert tour promoter flagship storytelling hub
-      - motion design studio reel-first credibility site
-      - luxury goods capsule launch storytelling page
-      - branded entertainment premiere microsite funnel
-      - destination resort repositioning narrative hub
-      - creator economy spectacle-led onboarding story
+      - motor show
+      - luxury hotel
+      - device unveil
+      - concert tour
+      - experiential PR
+      - sensory maximalism
+      - premium reveal
     exclude_keywords:
       - static photography hero
       - editorial blinds

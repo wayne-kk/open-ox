@@ -1,55 +1,55 @@
 # Component Skill: Hero — Gradient Frame + Three.js Shader Field + GSAP Word Reveal
 
-Use this skill when `generateSection` should deliver a **bento-style marketing hero**: a **large rounded rectangle** (heavy radius) with a **fake 1px “chrome” border** (outer gradient stroke), **dark inner field**, **full-viewport WebGL** as a **single orthographic quad** running a **time-animated fragment shader** (noise + horizontal streak read), `**mix-blend-mode: screen`** on the canvas, a **vignette-style** dark **gradient overlay** on top of the field, and **foreground copy** in **light text** with a **per-word masked rise** driven by **GSAP + ScrollTrigger** (stagger). **Icons and layout** follow a **control-plane / platform** tone. **No GLB geometry, particles, or external 3D assets**—only **procedural shader** output.
+Rounded dark card (~`75vh` + `min-height`): 1px gradient “chrome” frame, inner orthographic fullscreen quad + time-driven fragment shader (noise + horizontal streak), canvas `mix-blend-mode: screen`, dark scrim for copy. Foreground: icon row + GSAP/ScrollTrigger per-word rise (stagger). **Procedural shader only**—no GLB, particles, or external meshes.
 
-**Scope — hero only:** Ship **one** rounded hero block (height ~`75vh`with sensible`min-height`, max width within page grid). **Do not** include the **four-column micro-demo grid**, feature cards, or any `**`siblings** below the hero from source one-pagers. **Do not** place `<nav>`, site headers, or top link rows **inside** this section — only the **card + its inner WebGL + copy** (and CTAs) are in scope; global nav stays in the app shell.
+Scope (hero only): this card + WebGL + copy/CTAs. No demo grids, feature strips, or extra sections from reference pages. No `<nav>` or site header inside the section.
 
 ## Core Effect
 
-- **Gradient frame** — Outer wrapper uses a **1px padding** or **pseudo** technique with a **diagonal light-to-transparent** linear gradient so the rounded shape reads as **metallic / glass edge**; inner clip matches `rounded-[calc(radius-1px)]`.
-- **Shader layer** — **Three.js** `WebGLRenderer` (`alpha: true`) fills `#webgl-container`; **orthographic** camera `(-1,1,1,-1,0,1)`; **single** `PlaneGeometry(2,2)` with `**ShaderMaterial`**; **uniforms** `u_time`, `u_resolution` (and **color roles** as `vec3` uniforms if needed). **Fragment** shader uses **simplex / classic noise** to mix **three** tonal roles (deep void + two accents) and **horizontal streak** energy; colors **map from brief** via uniforms—**not** hardcoded teal/orange RGB in production.
-- **Blend + scrim** — Canvas at **~80% opacity**, `**mix-blend-mode: screen`**; above it, `**bg-gradient-to-t`** from **strong bottom** to lighter top so **body copy** stays readable.
-- **Copy column** — Top row: **small icon** + **category line** (`text-xs`, `uppercase`, `tracking-widest`, **muted white**). Lower area: `**lg:flex-row`** — **left**: **stacked wrapped** **display** words in **light** weight, with one phrase in **dimmed** foreground; each **word** sits in `**overflow-hidden`** + inner **span** for the **reveal**. **Right**: **paragraph** + **solid** **inverted** CTA (white on black or **surface** per tokens) with **arrow** icon.
-- **Entrance** — **Initial** state for words: `**translateY(120%)`** + slight `**rotateZ`**; **ScrollTrigger** fires when the **hero** enters **~80%** from top; **stagger** ~0.1s, **ease** `power3.out` class, **duration** ~1.2s—**or** equivalent with **Framer Motion** if the project bans GSAP (then document swap in constraints).
+- Gradient frame: outer wrapper uses 1px padding or pseudo + diagonal light-to-transparent gradient; inner clip `rounded-[calc(radius-1px)]`.
+- Shader layer: Three.js `WebGLRenderer` (`alpha: true`) in `#webgl-container`; orthographic camera `(-1,1,1,-1,0,1)`; single `PlaneGeometry(2,2)` with `ShaderMaterial`; uniforms `u_time`, `u_resolution` and color roles as `vec3` if needed. Fragment shader: noise mixes void + two accents + horizontal streak; colors from brief via uniforms, not fixed demo RGB.
+- Blend + scrim: canvas ~80% opacity, `mix-blend-mode: screen`; above it `bg-gradient-to-t` (strong bottom to lighter top) for readable copy.
+- Copy column: small icon + category line (`text-xs`, uppercase, tracking-widest, muted). Lower: `lg:flex-row` — left: stacked display words; each word in `overflow-hidden` + inner span for reveal. Right: paragraph + solid inverted CTA and arrow icon.
+- Entrance: words start `translateY(120%)` + slight `rotateZ`; ScrollTrigger ~80% from top; stagger ~0.1s, ease `power3.out`, duration ~1.2s, or Framer Motion if GSAP is disallowed.
 
 ## Visual Language
 
-- **Atmosphere** — High-end **infra / API** product: **cool void**, **warm or electric** shader accents from **primary** / **accent** roles; **always** tunable via uniforms or theme map.
-- **Frame** — Page **background** is a **warm off-white** or **neutral** surface (token); the **hero card** is the **dark island**—contrast is **in the card**, not the whole viewport.
+- Atmosphere: infra / API product, cool void, warm or electric accents from primary/accent roles; tunable via uniforms or theme.
+- Frame: page background warm off-white or neutral token; hero card is the dark island.
 
 ## Structure Requirements
 
-1. **DOM order** (bottom → top): inner **dark** `bg` → **canvas** (z-0) → **gradient overlay** (z-0) → **content** flex column `justify-between` (z-10).
-2. **Border trick** — Implement the **double-radius** wrapper so the **stroke** is **not** a separate SVG unless the design system already uses one.
-3. **Headline DOM** — Each **word** (or phrase unit) that animates **independently** **MUST** wrap in `**overflow-hidden`** + inner `**inline-block`** target for the transform.
-4. **Resize** — On `**window` `resize`**, update renderer size and `**u_resolution`**; on unmount **cancel** **rAF**, **remove** listeners, `**dispose()`** **geometry**, **material**, **renderer**.
+1. DOM order (bottom to top): inner dark `bg` → canvas (z-0) → gradient overlay (z-0) → content column `justify-between` (z-10).
+2. Border: double-radius wrapper so stroke is not a separate SVG unless the design system uses one.
+3. Headline DOM: each animating word/phrase wraps in `overflow-hidden` + inner `inline-block` for transforms.
+4. Resize: on window resize, update renderer size and `u_resolution`; on unmount cancel rAF, remove listeners, dispose geometry, material, renderer.
 
 ## Motion Direction
 
-- **Shader** — Continuous `**u_time`** increment in the **render loop**; keep **DPR** capped (e.g. `min(devicePixelRatio, 2)`).
-- **Text** — **ScrollTrigger** `start: "top 80%"` (or `"top 85%"`) **once**; **no** scrub loop for the default spec.
-- **Reduced motion** — Set words to **final** state **without** `y`/`rotate` tween; **pause** or **slow** shader time step if the brief allows; at minimum **static** shader frame is acceptable.
+- Shader: continuous `u_time` in rAF; cap DPR (e.g. `min(devicePixelRatio, 2)`).
+- Text: ScrollTrigger `start: "top 80%"` (or `85%`) once; no scrub by default.
+- Reduced motion: final word state without y/rotate tween; slow or pause shader time; static shader frame acceptable.
 
 ## WebGL / Three.js (required for this id)
 
-- **Renderer**: `alpha: true`, size to **container** `clientWidth`/`clientHeight` (not `window` unless full-bleed).
-- **No depth complexity**—single **fullscreen tri/quad**; `**depthWrite: false`** on material if used as **underlay**.
+- Renderer: `alpha: true`, size to container `clientWidth`/`clientHeight` (not `window` unless full-bleed).
+- Single fullscreen tri/quad; `depthWrite: false` on material if used as underlay.
 
 ## Required Implementation Blueprint (Do Not Skip)
 
-1. **MUST** implement the **hero** as a **rounded** (large radius) **contained** block with a **visible gradient “hairline” frame** and **inset** dark surface—**not** a full-bleed edge-to-edge without the card metaphor unless the brief explicitly drops the frame.
-2. **MUST** mount a **Three.js** **orthographic** **fullscreen quad** with a **custom `ShaderMaterial`**, **animate** with `**requestAnimationFrame`**, and **update `u_resolution`** on **resize**; **MUST** **dispose** renderer, **material**, **geometry**, and **remove** `resize` listener on unmount.
-3. **MUST** expose **fragment** accent / void **colors** via **uniforms** (or a single `u_palette` struct) so **generated code** can **bind** design tokens / brief—not **fixed** GLSL `vec3` constants copied from a demo.
-4. **MUST** set the **canvas** layer to `**mix-blend-mode: screen`** (or project-approved equivalent) and **tuned opacity** so it reads **additive** over the **dark** inner field.
-5. **MUST** add a **darkening gradient overlay** (stronger at **bottom** or per brief) **above** the canvas, **below** text, so **WCAG**-level contrast is achievable for **headline and CTA**.
-6. **MUST** implement **per-word (or per-unit) masked rise**: **parent** `overflow-hidden`, **child** `inline-block` with **from** `**translateY(100%–120%)`** and **small** `**rotateZ`** **to** **neutral**; **MUST** trigger on **enter view** (ScrollTrigger, **IntersectionObserver**, or `whileInView`) with **stagger**; **MUST** respect `**prefers-reduced-motion`**.
-7. **MUST** use `**flex` / `grid`** so on `**lg`** the **headline block** and **subtext + CTA** sit in a **two-column** **bottom** alignment (`items-end` or matching token).
-8. **MUST** use project **icons** (e.g. `**lucide-react`**) for eyebrow, CTA arrow, and any chrome—MUST NOT use `**iconify-icon`**, **CDN** Iconify, or **unstyled** **external** **icon** scripts.
-9. **MUST NOT** include `<nav>`, site headers, or top navigation links inside this section (only the rounded hero card + copy + CTAs).
-10. **MUST** (hero-only) **not** output the **four-card** feature grid, **steppers**, or **stat** widgets from reference marketing pages.
-11. **MUST NOT** add `**<script src="https://…">`** for **Three, GSAP, Tailwind, or Iconify**; **import** from `**npm`** packages (`three`, `gsap` if used) in the app bundle.
+1. MUST: rounded contained block with visible gradient hairline frame and inset dark surface (not full-bleed without card metaphor unless brief drops frame).
+2. MUST: orthographic fullscreen quad + custom `ShaderMaterial`, `requestAnimationFrame`, update `u_resolution` on resize; dispose renderer, material, geometry; remove resize listener on unmount.
+3. MUST: fragment colors via uniforms (or `u_palette`) bound to design tokens—not fixed demo `vec3`.
+4. MUST: canvas `mix-blend-mode: screen` (or equivalent) and tuned opacity for additive read on dark field.
+5. MUST: darkening gradient overlay above canvas, below text, for WCAG contrast on headline and CTA.
+6. MUST: per-word masked rise (`overflow-hidden` parent, `inline-block` child from translateY 100–120% and small rotateZ to neutral); trigger on enter view with stagger; respect `prefers-reduced-motion`.
+7. MUST: flex/grid so at `lg` headline block and subtext + CTA use two-column bottom alignment (`items-end` or tokens).
+8. MUST: project icons (e.g. `lucide-react`); MUST NOT use Iconify CDN or raw external icon scripts.
+9. MUST NOT: `<nav>` or site headers inside this section.
+10. MUST NOT (hero-only): four-card grid, steppers, or stat widgets from reference pages.
+11. MUST NOT: CDN scripts for Three, GSAP, Tailwind, Iconify; use npm imports.
 
-If any of the **MUST** items is missing, the output is **not** valid for `gradient-frame-shader-hero`.
+If any MUST above is missing, the output is not valid for `gradient-frame-shader-hero`.
 
 ## Reference TSX Skeleton (Adapt, Do Not Copy Blindly)
 
@@ -173,22 +173,22 @@ export function GradientFrameShaderHero() {
             <div className="flex items-center gap-2 text-primary-foreground/80">
               <Cpu className="size-4 text-primary" strokeWidth={1.5} aria-hidden />
               <span className="text-xs font-normal uppercase tracking-widest">
-                Core Architecture
+                Eyebrow from brief
               </span>
             </div>
             <div className="mt-auto flex flex-col items-start justify-between gap-12 lg:flex-row lg:items-end">
               <div className="max-w-4xl flex-1">
                 <h1 className="flex flex-wrap items-center gap-x-4 gap-y-2 text-5xl font-light leading-[1.05] tracking-tighter text-primary-foreground md:text-7xl lg:text-8xl">
                   <span className="inline-block overflow-hidden pb-[0.1em]">
-                    <span className="reveal-word inline-block">Commanding</span>
+                    <span className="reveal-word inline-block">Headline one</span>
                   </span>
                   <span className="hidden h-0 w-full md:block" aria-hidden />
                   <span className="inline-block overflow-hidden pb-[0.1em]">
-                    <span className="reveal-word inline-block">High-Stakes</span>
+                    <span className="reveal-word inline-block">Headline two</span>
                   </span>
                   <span className="inline-block overflow-hidden pb-[0.1em]">
                     <span className="reveal-word inline-block text-primary-foreground/50">
-                      Infrastructures
+                      Accent phrase
                     </span>
                   </span>
                 </h1>
@@ -201,7 +201,7 @@ export function GradientFrameShaderHero() {
                   className="group inline-flex w-max items-center justify-center gap-2 rounded-md bg-primary-foreground px-7 py-3.5 text-sm font-normal text-foreground transition-colors hover:bg-muted"
                   href="#"
                 >
-                  Initialize Framework
+                  Primary CTA
                   <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
                 </a>
               </div>
@@ -214,25 +214,25 @@ export function GradientFrameShaderHero() {
 }
 ```
 
-**Fix the skeleton in doc:** replace the broken `className "` on the line-break `span` with a valid `className="hidden h-0 w-full md:block"`; replace placeholder `**fragmentShader`** with the project’s real noise/streak GLSL, keeping **color uniforms**; map `**bg-card`**, `**text-primary-foreground`**, etc., to the active theme. If GSAP is unavailable, use `**motion` / `framer-motion**` with **staggered** `variants` and `**whileInView`**—still **must** satisfy the **masked** **structure**.
+Skeleton fixes: use valid `className="hidden h-0 w-full md:block"` on the line-break span; replace placeholder `fragmentShader` with real noise/streak GLSL and tokenized color uniforms; map `bg-card`, `text-primary-foreground`, etc. to the active theme. If GSAP is unavailable, use Framer Motion with staggered `variants` and `whileInView` while keeping the masked word DOM structure.
 
 ## Layout Details
 
-- **Card height** `75vh` + `**min-h-[600px]`** avoids **too-short** **laptops**; adjust via tokens on **small** **heights** if the brief is **dense** with **one** **column** **only**.
-- **Padding** `p-8` → `lg:p-20` keeps **air** around **GPU** field.
+- Card height: `75vh` + `min-h-[600px]` avoids too-short laptops; tune tokens on small viewports if copy is dense in one column.
+- Padding `p-8` to `lg:p-20` gives space around the GPU field.
 
 ## Content Rules
 
-- Eyebrow: **capability** or **product pillar**; headline: **three beats** (two **white**, one **dim**); subcopy: **B2B** **precision**; CTA: **action verb** + **noun** (framework, workspace, control plane).
+- Eyebrow: capability or product pillar; headline: three beats (two bright lines, one dim); subcopy: B2B precision; CTA: verb + noun (framework, workspace, control plane).
 
 ## Implementation Constraints
 
-- **Bundled** `three` + `gsap` (if used); **Tree-shake** where possible; **no** `eval` of shader strings from **user** **input** in production.
-- **Next.js** `dynamic` import for the **client** **block** if **SSR** must not touch **WebGL** **context**.
+- Bundle `three` and `gsap` if used; tree-shake; never `eval` shader strings from user input.
+- Next.js `dynamic` import for the client block if SSR must not touch WebGL.
 
 ## Accessibility + Performance
 
-- **Decorative** **canvas** `aria-hidden`; **h1** is the **sole** top-level **heading** in the **section**; **CTA** is a **link** with **real** `href` when possible.
-- **GPU**: **DPR** cap, **antialias: false** acceptable for **full-screen** **quad**; **test** **battery** on **mobile**—optional **static** **poster** **image** **fallback** when **WebGL** **fails** (brief may require).
+- Decorative canvas: `aria-hidden`; single `h1` in section; CTA uses a real `href` when possible.
+- Cap DPR; `antialias: false` is acceptable for a fullscreen quad; test on mobile; optional static poster if WebGL fails when the brief allows.
 
-If the **background** is **only** **CSS** **or** **video** with **no** **custom** **GLSL** **field**, the output does **not** match this `id`.
+If the background is only CSS or video with no custom GLSL field, the output does not match this id.

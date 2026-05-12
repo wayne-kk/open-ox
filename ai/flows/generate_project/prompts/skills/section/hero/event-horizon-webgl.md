@@ -1,6 +1,6 @@
 # Component Skill: Hero - Event Horizon WebGL
 
-Use this skill when generating a hero section with a dark framed interface and a Three.js particle accretion disk (black-hole/event-horizon style) as the central visual atmosphere.
+Hero with framed shell + Three.js particle disk (void center) + GSAP word reveal + light glass on panels. Canvas fills the same box used for `setSize`; no in-section nav.
 
 ## Core Effect
 
@@ -17,7 +17,7 @@ Build a full-viewport hero with:
 1. Near-black base (`#050507`-like) with cyan/violet luminous accents.
 2. Structured frame geometry: thin rails, corner brackets, alignment ticks.
 3. Deep-space atmosphere: radial fade to dark edges, additive particle glow.
-4. Data-console tone: minimal, precise, technical, premium.
+4. Tone: dark UI, precise type; no playful illustration style unless brief says so.
 
 ## Structure Requirements
 

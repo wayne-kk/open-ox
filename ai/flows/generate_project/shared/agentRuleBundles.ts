@@ -34,6 +34,7 @@ export const PAGE_IMPLEMENT_AGENT_RULE_IDS_BASE: readonly string[] = [
 /** Base stack for `runArchitectAgent` (after `frontend` + `architectAgent` step). */
 export const ARCHITECT_AGENT_RULE_IDS_BASE: readonly string[] = [
   "section.navigation",
+  "section.footer",
   "outputTsx",
   "framerMotionVariants",
 ];

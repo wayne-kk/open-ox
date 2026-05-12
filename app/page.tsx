@@ -16,7 +16,7 @@ const AGENT_STEPS = [
   { id: "architect", label: "architect_agent", detail: "全局 chrome 与 layout 契约", color: "text-accent-tertiary" },
   { id: "pages", label: "page_implement_agent ×N", detail: "每路由工具循环实现页面与组件", color: "text-primary" },
   { id: "build", label: "run_build", detail: "构建 · 类型检查 · 验证", color: "text-green-400" },
-  { id: "repair", label: "repair_build", detail: "自动修复 · 最多 2 轮", color: "text-orange-400" },
+  { id: "repair", label: "repair_build", detail: "自动修复 · 最多 5 轮", color: "text-orange-400" },
 ];
 
 const STATS = [
@@ -58,7 +58,7 @@ const FEATURES = [
     icon: Shield,
     tag: "Auto Repair",
     title: "构建失败？AI 修",
-    body: "生成后自动运行 build 验证，失败时 AI 诊断根因并修复，最多 2 轮。",
+    body: "生成后自动运行 build 验证，失败时 AI 诊断根因并修复，最多 5 轮。",
     accent: "tertiary" as const,
     metric: "2x",
     metricLabel: "auto-fix",

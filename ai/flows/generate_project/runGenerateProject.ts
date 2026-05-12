@@ -399,7 +399,7 @@ async function runBuildWithRepair(params: {
   logger: StepLogger;
 }): Promise<BuildLifecycleResult> {
   const { blueprint, artifactLogger, result, logger } = params;
-  const maxRepairAttempts = 2;
+  const maxRepairAttempts = 5;
   let lastBuildOutput = "";
 
   for (let attempt = 0; attempt <= maxRepairAttempts; attempt += 1) {

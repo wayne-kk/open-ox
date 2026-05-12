@@ -1,8 +1,6 @@
 # Component Skill: Hero — Geometric WebGL Frame
 
-Use this skill when generating a hero section with a dark sci-fi UI frame, precision line-work, and a Three.js geometric mesh as the central visual layer.
-
-The effect should feel like an analysis console: structural, technical, and premium.
+For a hero with dark chrome frame lines, subtle texture, and a centered Three.js faceted mesh (e.g. icosahedron) behind copy. Client-only; GSAP reveal optional. No `<nav>` in section.
 
 ## Core Effect
 
@@ -27,7 +25,7 @@ Keep the implementation self-contained in the hero component — no extra compon
 - **Hero shell (no navigation)** — **Do not** implement `<nav>`, logo+links header rows, hamburger menus, or site chrome. Those belong in the app layout, not this section.
 - **Hero Main**:
   - Full-viewport hero area (`min-h-screen` class of constraint).
-  - Absolute WebGL canvas container filling the hero.
+  - Absolute WebGL canvas layer **filling the hero and visually centered**: wrapper `absolute inset-0`, canvas `block h-full w-full` (avoids inline-element baseline gap and edge misalignment). Geometry stays **world-origin centered** — use **rotation** for pointer parallax, not horizontal `position.x` drift.
   - Radial gradient overlay to blend edges into dark background.
 - **Content Overlay**:
   - Top badge with vertical indicator line (revealed by animation).
@@ -65,8 +63,8 @@ Scene setup should include:
 
 Interaction and loop:
 
-- Mouse movement softly influences rotation/position (lerped target vector).
-- Mesh has slow autonomous rotation and gentle vertical floating motion.
+- Mouse movement softly influences **rotation only** (lerped target vector); **do not** translate the mesh on **X** for pointer follow — that reads as off-center background. Optional: tiny **Y-only** bob (`sin(time)`) around `y = 0`.
+- Mesh has slow autonomous rotation and gentle vertical floating motion; keep `position.x` and `position.z` at 0 so the faceted form stays framing the viewport midpoint.
 - `requestAnimationFrame` render loop.
 - Handle resize: camera aspect + renderer size update.
 - Cleanup on unmount: remove listeners, cancel RAF, dispose renderer/geometry/material.
@@ -75,13 +73,13 @@ Interaction and loop:
 
 When this skill is selected, the generated hero MUST include all of the following:
 
-1. A dedicated `canvas` node rendered behind content (`absolute inset-0`).
+1. A dedicated `canvas` node rendered behind content: parent `absolute inset-0`, canvas `className` includes `block h-full w-full` (plus `pointer-events-none` if desired).
 2. A Three.js scene with `IcosahedronGeometry(1.2~1.5, 0)` and `MeshStandardMaterial` using `flatShading: true`.
 3. At least 3 lights: ambient + key directional + colored rim/back light.
 4. A render loop with:
   - autonomous rotation,
-  - gentle floating (`sin(elapsedTime)`),
-  - mouse-driven offset/rotation (lerped smoothing).
+  - gentle floating on **Y only** (`sin(elapsedTime)` at `x=0`, `z=0`),
+  - mouse-driven **rotation** only (lerped smoothing) — **no** mesh `position.x` / horizontal drift.
 5. Proper lifecycle safety:
   - `useEffect` setup and teardown,
   - `cancelAnimationFrame`,
@@ -117,6 +115,7 @@ export default function HeroSection() {
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
     camera.position.set(0, 0, 4);
+    camera.lookAt(0, 0, 0);
 
     const renderer = new THREE.WebGLRenderer({
       canvas: canvasRef.current,
@@ -173,8 +172,7 @@ export default function HeroSection() {
 
       mesh.rotation.x = elapsed * 0.18 + currentMouse.y * 0.35;
       mesh.rotation.y = elapsed * 0.26 + currentMouse.x * 0.35;
-      mesh.position.y = Math.sin(elapsed * 1.4) * 0.12;
-      mesh.position.x = currentMouse.x * 0.12;
+      mesh.position.set(0, Math.sin(elapsed * 1.4) * 0.12, 0);
 
       renderer.render(scene, camera);
       rafId = window.requestAnimationFrame(animate);
@@ -210,7 +208,14 @@ export default function HeroSection() {
     };
   }, []);
 
-  return <section ref={containerRef} className="relative min-h-screen">{/* ... */}</section>;
+  return (
+    <section ref={containerRef} className="relative min-h-screen overflow-x-hidden">
+      <div className="pointer-events-none absolute inset-0">
+        <canvas ref={canvasRef} className="block h-full w-full" />
+      </div>
+      {/* frame + gradient overlay + content */}
+    </section>
+  );
 }
 ```
 
@@ -224,6 +229,7 @@ export default function HeroSection() {
 ## Layout Details
 
 - Preserve `overflow-x-hidden`, `min-h-screen`, and smooth-scrolling-friendly layout.
+- **WebGL centering checklist**: resize handler uses **hero container** `clientWidth` / `clientHeight` (same box as `inset-0` canvas); after any camera move, `camera.lookAt(0, 0, 0)`; mesh anchor at origin with **no X translation** from input.
 - Use a centered max-width shell (`max-w-[1400px]` or similar) with vertical border rails.
 - Add optional one-third vertical guide lines on desktop for blueprint rhythm.
 - Keep content overlay centered and pointer-events disabled except CTA area.
