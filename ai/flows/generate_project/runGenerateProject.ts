@@ -18,6 +18,7 @@ import {
   runWithLangfuseTraceRoot,
   withLangfuseSpan,
 } from "@/lib/observability/langfuseTracing";
+import { LfSpanGen, LfTrace, lfSpanGenInstallDeps, lfSpanGenPage } from "@/lib/observability/langfuseTraceCatalog";
 import { createArtifactLogger, createStepLogger } from "./shared/logging";
 import { slugToPagePath } from "./shared/paths";
 import { stepAnalyzeProjectRequirement } from "./steps/analyzeProjectRequirement";
@@ -169,11 +170,12 @@ async function autoInstallDependenciesForFiles(params: {
     }
 
     const installResult = await withLangfuseSpan(
-      `install_dependencies_${scope.replace(/[^a-zA-Z0-9_-]+/g, "_")}`,
-      () => stepInstallDependencies({
-        files: uniqueFiles,
-        buildOutput,
-      }),
+      lfSpanGenInstallDeps(scope),
+      () =>
+        stepInstallDependencies({
+          files: uniqueFiles,
+          buildOutput,
+        }),
       { metadata: { scope } }
     );
     appendInstalledDependencies(result, installResult.installed);
@@ -336,7 +338,7 @@ async function generatePages(params: {
         agentStepName,
         async () =>
           runWithLangfuseSpanBranch(
-            `page:${page.slug.replace(/[^a-zA-Z0-9_.-]+/g, "_")}`,
+            lfSpanGenPage(page.slug),
             async () => {
               let heroSkillIdInner: string | null = null;
               let heroSkillPromptInner: string | undefined;
@@ -501,7 +503,7 @@ async function ensureLangfuseGenerateTrace<T>(
   }
   return runWithLangfuseTraceRoot(
     {
-      name: "generate_project",
+      name: LfTrace.generateProject,
       userId: options.langfuseUserId,
       sessionId: options.langfuseSessionId ?? options.projectId,
       tags: ["flow:generate_project"],
@@ -565,6 +567,7 @@ async function runGenerateProjectInner(
 
   const cp = options.checkpoint;
 
+  const runPipeline = async (): Promise<void> => {
   try {
     // Always validate skill files (skills are enabled by default)
     {
@@ -591,7 +594,7 @@ async function runGenerateProjectInner(
 
     if (options.enableIntentGuide !== false && !cp?.skipAnalyze) {
       logger.startStep("project_intent_guide");
-      const intentResult = await withLangfuseSpan("project_intent_guide", () =>
+      const intentResult = await withLangfuseSpan(LfSpanGen.intentGuide, () =>
         stepProjectIntentGuide(userInput)
       );
       logger.logStep(
@@ -620,7 +623,7 @@ async function runGenerateProjectInner(
         result.totalDuration = Date.now() - flowStart;
         await persistJsonArtifact(artifactLogger, "run", "result", result);
         resetSectionTscCache();
-        return result;
+        return;
       }
 
       effectiveUserInput = buildEffectiveUserPromptForGeneration(
@@ -648,7 +651,7 @@ async function runGenerateProjectInner(
         await persistTextArtifact(artifactLogger, "infer_design_intent", "output", inferredDesignIntent.text, "md");
       }
     } else {
-      await withLangfuseSpan("analyze_blueprint_parallel", async () => {
+      await withLangfuseSpan(LfSpanGen.analyzeBlueprintParallel, async () => {
         logger.startStep("analyze_project_requirement");
         logger.startStep("infer_design_intent");
         const [analyzeResult, inferResult] = await Promise.all([
@@ -707,7 +710,7 @@ async function runGenerateProjectInner(
       logger.logStep("plan_project", "ok", "resumed from checkpoint");
       logger.logStep("generate_project_design_system", "ok", "resumed from checkpoint");
     } else {
-      await withLangfuseSpan("plan_and_design_system", async () => {
+      await withLangfuseSpan(LfSpanGen.planAndDesignSystem, async () => {
         logger.startStep("plan_project");
         logger.startStep("match_design_system_skill");
 
@@ -834,7 +837,7 @@ async function runGenerateProjectInner(
     if (cp?.skipDesignTokens) {
       logger.logStep("apply_project_design_tokens", "ok", "resumed from checkpoint");
     } else {
-      const tokenResult = await withLangfuseSpan("apply_project_design_tokens", () =>
+      const tokenResult = await withLangfuseSpan(LfSpanGen.applyDesignTokens, () =>
         logger.timed(
           "apply_project_design_tokens",
           () =>
@@ -873,7 +876,7 @@ async function runGenerateProjectInner(
     // up-to-date `app/layout.tsx` snapshot and finalized `components/chrome/**`,
     // avoiding duplicate in-page chrome from stale/minimal interim layouts.
     if (!cp?.skipArchitect) {
-      const architectResult = await withLangfuseSpan("architect_agent", () =>
+      const architectResult = await withLangfuseSpan(LfSpanGen.architectAgent, () =>
         runArchitectStep({
           blueprint,
           designSystem,
@@ -888,7 +891,7 @@ async function runGenerateProjectInner(
       appendGeneratedFiles(result, collectExistingArchitectOwnedRelativePaths());
     }
 
-    const pageOutcome = await withLangfuseSpan("implement_pages", () =>
+    const pageOutcome = await withLangfuseSpan(LfSpanGen.implementPages, () =>
       generatePages({
         blueprint,
         designSystem,
@@ -907,7 +910,7 @@ async function runGenerateProjectInner(
     // installation since they don't conflict.
     const [imageStats] = await Promise.all([
       awaitPendingImages(allPendingImages),
-      runWithLangfuseSpanBranch("install_dependencies_after_implement", () =>
+      runWithLangfuseSpanBranch(LfSpanGen.installDependenciesAfterImplement, () =>
         autoInstallDependenciesForFiles({
           scope: "generated",
           files: result.generatedFiles,
@@ -999,7 +1002,7 @@ async function runGenerateProjectInner(
           `[typecheck] scoped: ${errorCount} error(s) in ${scoped.fileCount} file(s), attempting repair...`
         );
         const repairResult = await withLangfuseSpan(
-          "typescript_repair_after_typecheck",
+          LfSpanGen.typescriptRepair,
           () =>
             stepRepairBuild({
               blueprint,
@@ -1053,7 +1056,7 @@ async function runGenerateProjectInner(
       );
     }
 
-    const buildLifecycle = await withLangfuseSpan("next_js_build_and_repair", () =>
+    const buildLifecycle = await withLangfuseSpan(LfSpanGen.buildVerifyAndRepair, () =>
       runBuildWithRepair({ blueprint, artifactLogger, result, logger })
     );
     result.verificationStatus = buildLifecycle.verificationStatus;
@@ -1095,6 +1098,13 @@ async function runGenerateProjectInner(
     await persistJsonArtifact(artifactLogger, "run", "error", {
       error: result.error,
     });
+  }
+  };
+
+  if (getLangfuse() && getLangfuseRunContext()) {
+    await withLangfuseSpan(LfSpanGen.fullPipeline, runPipeline);
+  } else {
+    await runPipeline();
   }
 
   result.totalDuration = Date.now() - flowStart;

@@ -11,8 +11,9 @@
  *   - enableIntentAgentWebSearch?: boolean
  *   - styleGuide?, enableSkills?, enableIntentGuide?, model? — applied only when committing and running generation
  *   - runGenerateOnCommit?: boolean (default true)
- *   - langfuseSessionId?: string — same value across intent turns + /api/ai + modify
- *     groups Langfuse **Sessions** (otherwise each request uses `projectId:run:<trajectoryRunId>`).
+ *   - langfuseSessionId?: string — optional override for Langfuse Session grouping; default
+ *     is one Session per `projectId` (all intent / generate / modify traces for the site
+ *     aggregate under the same Session row).
  */
 
 import { runGenerateProject } from "@/ai/flows";
@@ -49,6 +50,7 @@ import {
   runWithLangfuseTraceRoot,
   withLangfuseSpan,
 } from "@/lib/observability/langfuseTracing";
+import { LfSpanIntent, LfTrace } from "@/lib/observability/langfuseTraceCatalog";
 import { executeWebSearch, webSearchTool } from "@/ai/tools/system/webSearchTool";
 import {
   coerceAdditionalToolsFromJson,
@@ -183,11 +185,15 @@ export async function POST(req: Request) {
 
           await runWithLangfuseTraceRoot(
             {
-              name: "intent_agent_pipeline",
+              name: LfTrace.intentAgent,
               userId: user.id,
               sessionId: langfuseSessionKey,
               tags: ["flow:intent_agent", "route:api_intent_agent"],
-              metadata: { resetSession, runGenerateOnCommit },
+              metadata: {
+                projectId,
+                resetSession,
+                runGenerateOnCommit,
+              },
               input: { message: message.trim() },
             },
             () =>
@@ -214,7 +220,7 @@ export async function POST(req: Request) {
                 }
               : undefined;
 
-          const intentResult = await withLangfuseSpan("intent_agent_turn", () =>
+          const intentResult = await withLangfuseSpan(LfSpanIntent.agentTurn, () =>
             runIntentAgentTurn({
               projectId,
               userMessage: message.trim(),
@@ -312,19 +318,21 @@ export async function POST(req: Request) {
               dbPromptByStepId: corePromptOverrides,
             },
             () =>
-              runGenerateProject(
-                intentResult.mergedBrief!,
-                onStep,
-                {
-                  projectId,
-                  styleGuide,
-                  enableSkills,
-                  useDatabasePrompts,
-                  checkpoint,
-                  enableIntentGuide,
-                  langfuseUserId: user.id,
-                  langfuseSessionId: langfuseSessionKey,
-                }
+              withLangfuseSpan(LfSpanIntent.mergedBriefGeneration, () =>
+                runGenerateProject(
+                  intentResult.mergedBrief!,
+                  onStep,
+                  {
+                    projectId,
+                    styleGuide,
+                    enableSkills,
+                    useDatabasePrompts,
+                    checkpoint,
+                    enableIntentGuide,
+                    langfuseUserId: user.id,
+                    langfuseSessionId: langfuseSessionKey,
+                  }
+                )
               )
           );
 

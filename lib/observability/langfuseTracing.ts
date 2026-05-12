@@ -6,10 +6,13 @@
  * Defaults to https://cloud.langfuse.com when unset — set US host for US Cloud.
  *
  * ## Session / aggregation
- * Pass the same `sessionId` on every trace that belongs to one “generation journey”
- * (intent turns, `/api/ai`, `/api/projects/.../modify`). Prefer
- * {@link resolveLangfuseSessionId}: optional client id + trajectory run id, so Langfuse
- * **Sessions** groups related traces instead of leaving unrelated rows in the global list.
+ * Prefer {@link resolveLangfuseSessionId}: by default **one Langfuse Session per open-ox
+ * `projectId`** (intent, generate, modify all reuse the same `sessionId`), so the **Sessions**
+ * tab shows **one row per site project**. Pass optional `langfuseSessionId` from the client
+ * when you need a finer grouping (e.g. multiple workspaces).
+ *
+ * Trace and span **names** are centralized in {@link ./langfuseTraceCatalog} (`ox.trace.*`,
+ * `ox.span.*`) so the Langfuse tree stays sorted and filterable.
  *
  * ## Tree under a trace
  * LLM generations attach to the **current observation parent** (deepest open span, else
@@ -84,20 +87,23 @@ export function getLangfuseRunContext(): LangfuseRunContext | undefined {
 }
 
 /**
- * Stable Langfuse `sessionId` so multiple HTTP traces (intent, generate, modify)
- * appear under one Session when you pass the same client id across requests.
+ * Stable Langfuse `sessionId` for **one Session row per open-ox project** in the Langfuse UI.
  *
- * Precedence: explicit client id → `projectId:run:trajectoryRunId` → `projectId`.
+ * - If the client sends `langfuseSessionId`, that wins (allows custom grouping).
+ * - Otherwise uses **`projectId` only** — all traces for that site (intent / generate / modify)
+ *   share one Session. (Trajectory run ids are intentionally **not** folded in, so each HTTP
+ *   batch does not create a separate Session.)
+ *
+ * @param trajectoryRunId Unused; kept for call-site compatibility.
  */
 export function resolveLangfuseSessionId(params: {
   projectId: string;
   clientSessionId?: string | null;
+  /** @deprecated Ignored. Session is keyed by `projectId` unless `clientSessionId` is set. */
   trajectoryRunId?: string | null;
 }): string {
   const client = params.clientSessionId?.trim();
   if (client) return client;
-  const run = params.trajectoryRunId?.trim();
-  if (run) return `${params.projectId}:run:${run}`;
   return params.projectId;
 }
 

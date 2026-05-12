@@ -6,8 +6,8 @@
  *   data: {"type":"done", "result": ProcessResult}\n\n
  *   data: {"type":"error", "message": string}\n\n
  *
- * Body 可选字段 `langfuseSessionId`：与 intent-agent / modify 传同一字符串时，Langfuse 会归到同一 Session。
-
+ * Body 可选字段 `langfuseSessionId`：用于自定义 Langfuse Session；不传时默认使用请求里的 `projectId`，同一站点的 intent / generate / modify 会归到同一条 Session。
+ */
 import { runGenerateProject } from "@/ai/flows";
 import {
   detectCheckpoint,
@@ -41,6 +41,7 @@ import {
   resolveLangfuseSessionId,
   runWithLangfuseTraceRoot,
 } from "@/lib/observability/langfuseTracing";
+import { LfTrace } from "@/lib/observability/langfuseTraceCatalog";
 
 export const runtime = "nodejs";
 
@@ -235,11 +236,12 @@ export async function POST(req: Request) {
           // Step 3: Run generation, writing files into sites/{projectId}/
           const result = await runWithLangfuseTraceRoot(
             {
-              name: "generate_project",
+              name: LfTrace.generateProject,
               userId: user.id,
               sessionId: langfuseSessionKey,
               tags: ["flow:generate_project", "route:api_ai"],
               metadata: {
+                projectId,
                 retry: retryProjectId != null,
                 preCreatedProjectId: preCreatedProjectId != null,
               },

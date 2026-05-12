@@ -23,7 +23,7 @@ describe("langfuseTracing", () => {
     expect(getLangfuse()).not.toBeNull();
   });
 
-  it("resolveLangfuseSessionId prefers client id then trajectory then projectId", async () => {
+  it("resolveLangfuseSessionId uses client id when set otherwise projectId", async () => {
     const { resolveLangfuseSessionId } = await import("./langfuseTracing");
     expect(
       resolveLangfuseSessionId({
@@ -37,7 +37,7 @@ describe("langfuseTracing", () => {
         projectId: "p1",
         trajectoryRunId: "run-abc",
       })
-    ).toBe("p1:run:run-abc");
+    ).toBe("p1");
     expect(resolveLangfuseSessionId({ projectId: "p1" })).toBe("p1");
   });
 });

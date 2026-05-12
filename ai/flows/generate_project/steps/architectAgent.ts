@@ -214,6 +214,7 @@ ${truncate(designSystem, 10_000)}
 Hard rules:
 - Do **not** write any \`app/**/page.tsx\` — page content is owned by Page Agents.
 - Do **not** invent product features or fake content; chrome may have placeholder navigation labels but must not fabricate marketing claims, customer logos, etc.
+- Do **not** add **decorative full-page / full-viewport backgrounds** on \`<body>\`, root layout wrappers, or chrome shells: no hero-style gradients, full-bleed images, mesh or noise textures, or ornamental patterns meant as "scene" backdrop. Keep the canvas **plain** (use existing \`globals.css\` / token background only). Nav/header/footer bars may use normal surface \`bg-*\` for the bar itself — not a site-wide mood layer. **Hero and section atmospherics** belong in **Page Agents** inside \`page.tsx\`.
 - Do **not** redefine CSS variables / keyframes already in \`globals.css\`.
 - Do **not** call \`format_code\` on files you wrote — \`write_file\`/\`edit_file\` auto-format on save.
 - If the product is a fullscreen / minimal canvas form, leaving \`app/layout.tsx\` minimal is the right answer — do not pad chrome to feel productive.`;

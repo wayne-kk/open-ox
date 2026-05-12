@@ -13,6 +13,7 @@ import { SYSTEM_PROMPT } from "./prompt/systemPrompt";
 import { appendTrajectoryEvent, findOrCreateTrajectoryRun } from "@/lib/trajectory/store";
 import type { TrajectoryData } from "./trajectory";
 import { withLangfuseSpan } from "@/lib/observability/langfuseTracing";
+import { LfSpanModify } from "@/lib/observability/langfuseTraceCatalog";
 import { stepModifyIntentRouter } from "./intent/modifyIntentRouter";
 
 const MODIFY_INTENT_CONVERSATION_FALLBACK =
@@ -85,7 +86,7 @@ async function runModifyProjectInner(
   };
   try {
     routed = await withLangfuseSpan(
-      "modify_intent_router",
+      LfSpanModify.intentRouter,
       () => stepModifyIntentRouter(userInstruction),
       { metadata: { projectId } }
     );
@@ -349,7 +350,7 @@ async function runModifyProjectInner(
     });
 
     const { loopState, iterations } = await withLangfuseSpan(
-      "modify_agent_loop",
+      LfSpanModify.agentLoop,
       () =>
         runAgentLoop(
           messages,

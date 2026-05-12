@@ -2,7 +2,7 @@
  * POST /api/projects/[id]/modify
  *
  * Accepts { userInstruction } and streams SSE events from runModifyProject.
- * Optional body.langfuseSessionId — use the same as /api/ai for Langfuse Session grouping.
+ * Optional body.langfuseSessionId — 自定义 Langfuse Session；不传则按路径中的项目 `id` 聚合为一条 Session。
  * Returns 404 if the project is not found.
  *
  * SSE format (same as Generate_Flow):
@@ -20,6 +20,7 @@ import { scheduleUploadFullProject } from "@/lib/storage";
 import { classifyModificationScope } from "@/lib/devServerManager";
 import { getSessionUser } from "@/lib/auth/session";
 import { flushLangfuse, resolveLangfuseSessionId, runWithLangfuseTraceRoot } from "@/lib/observability/langfuseTracing";
+import { LfTrace } from "@/lib/observability/langfuseTraceCatalog";
 
 export const runtime = "nodejs";
 
@@ -97,12 +98,12 @@ export async function POST(
 
         await runWithLangfuseTraceRoot(
           {
-            name: "modify_project",
+            name: LfTrace.modifyProject,
             userId: user.id,
             sessionId: langfuseSessionKey,
             tags: ["flow:modify_project", "route:api_modify"],
             input: { userInstruction },
-            metadata: { modelOverride: modelOverride ?? null },
+            metadata: { projectId: id, modelOverride: modelOverride ?? null },
           },
           () =>
             runModifyProject(
