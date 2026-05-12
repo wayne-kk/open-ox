@@ -279,6 +279,10 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
   const previewStateRef = useRef<"idle" | "starting" | "ready" | "error">("idle");
   const rightPanelRef = useRef<RightPanel>("topology");
   const ensureAliveSeqRef = useRef(0);
+  /** Monotonic id: responses from older preview fetches are ignored (avoids overlapping POST/PUT races). */
+  const previewSessionRef = useRef(0);
+  /** Throttle GET /preview health checks when switching back to the Preview tab. */
+  const lastEnsureAliveAtRef = useRef(0);
   const projectIdFromGenerationRef = useRef<string | null>(null);
   const autoStartedRef = useRef(false);
   /** Mirrors `startedAt` for use inside SSE callbacks without stale closure gaps. */
@@ -454,9 +458,6 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
 
   // ── Load project data on projectId change ──────────────────────────────
   useEffect(() => {
-    setPreviewUrl(null);
-    setPreviewState("idle");
-    setPreviewError(null);
     setModifySteps([]);
     setModifyPlan(null);
     setModifyDiffs([]);
@@ -468,15 +469,22 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       setLastRunInput(null);
       setIntentAgent(null);
       setConversationMessages([]);
+      setPreviewUrl(null);
+      setPreviewState("idle");
+      setPreviewError(null);
       return;
     }
 
-    // If this projectId was just set by a live SSE generation, skip DB load
+    // Same-tick handoff from SSE onDone: keep preview state — openPreviewAfterBuild is starting the dev server.
     if (projectIdFromGenerationRef.current === projectId) {
       projectIdFromGenerationRef.current = null;
       setProjectLoading(false);
       return;
     }
+
+    setPreviewUrl(null);
+    setPreviewState("idle");
+    setPreviewError(null);
 
     fetch(`/api/projects/${projectId}`)
       .then((r) => r.ok ? r.json() : null)
@@ -813,22 +821,28 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
   // ── Preview ──────────────────────────────────────────────────────────
   const startPreview = useCallback(async () => {
     if (!projectId) return;
+    const session = ++previewSessionRef.current;
+    lastEnsureAliveAtRef.current = 0;
     setPreviewUrl(null);
     setPreviewState("starting");
     setPreviewError(null);
     try {
       const res = await fetch(`/api/projects/${projectId}/preview`, { method: "POST" });
+      if (session !== previewSessionRef.current) return;
       if (res.ok) {
         const data = await res.json();
+        if (session !== previewSessionRef.current) return;
         setPreviewUrl(data.url);
         setPreviewVersion((v) => v + 1);
         setPreviewState("ready");
       } else {
         const err = await res.json().catch(() => ({}));
+        if (session !== previewSessionRef.current) return;
         setPreviewError(err.error ?? `HTTP ${res.status}`);
         setPreviewState("error");
       }
     } catch (e) {
+      if (session !== previewSessionRef.current) return;
       setPreviewError(e instanceof Error ? e.message : "Network error");
       setPreviewState("error");
     }
@@ -836,22 +850,28 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
 
   const rebuildPreview = useCallback(async () => {
     if (!projectId) return;
+    const session = ++previewSessionRef.current;
+    lastEnsureAliveAtRef.current = 0;
     setPreviewUrl(null);
     setPreviewState("starting");
     setPreviewError(null);
     try {
       const res = await fetch(`/api/projects/${projectId}/preview`, { method: "PUT" });
+      if (session !== previewSessionRef.current) return;
       if (res.ok) {
         const data = await res.json();
+        if (session !== previewSessionRef.current) return;
         setPreviewUrl(data.url);
         setPreviewVersion((v) => v + 1);
         setPreviewState("ready");
       } else {
         const err = await res.json().catch(() => ({}));
+        if (session !== previewSessionRef.current) return;
         setPreviewError(err.error ?? `HTTP ${res.status}`);
         setPreviewState("error");
       }
     } catch (e) {
+      if (session !== previewSessionRef.current) return;
       setPreviewError(e instanceof Error ? e.message : "Network error");
       setPreviewState("error");
     }
@@ -859,6 +879,8 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
 
   const openPreviewAfterBuild = useCallback(
     async (targetProjectId: string, forceRebuild = false) => {
+      const session = ++previewSessionRef.current;
+      lastEnsureAliveAtRef.current = 0;
       setRightPanel("preview");
       setPreviewState("starting");
       setPreviewError(null);
@@ -867,17 +889,21 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       try {
         const method: "POST" | "PUT" = forceRebuild ? "PUT" : "POST";
         const res = await fetch(`/api/projects/${targetProjectId}/preview`, { method });
+        if (session !== previewSessionRef.current) return;
         if (res.ok) {
           const data = await res.json();
+          if (session !== previewSessionRef.current) return;
           setPreviewUrl(data.url);
           setPreviewVersion((v) => v + 1);
           setPreviewState("ready");
         } else {
           const err = await res.json().catch(() => ({}));
+          if (session !== previewSessionRef.current) return;
           setPreviewError(err.error ?? `HTTP ${res.status}`);
           setPreviewState("error");
         }
       } catch (e) {
+        if (session !== previewSessionRef.current) return;
         setPreviewError(e instanceof Error ? e.message : "Network error");
         setPreviewState("error");
       }
@@ -893,6 +919,12 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
    */
   const ensurePreviewAlive = useCallback(async () => {
     if (!projectId || !previewUrlRef.current) return;
+
+    const now = Date.now();
+    if (now - lastEnsureAliveAtRef.current < 25_000) {
+      return;
+    }
+
     const requestSeq = ++ensureAliveSeqRef.current;
     const expectedUrl = previewUrlRef.current;
     try {
@@ -907,6 +939,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         return;
       }
       const data = await res.json();
+      lastEnsureAliveAtRef.current = Date.now();
       if (data.status === "ok" && data.url) {
         // Serve is alive — update URL in case it changed (sandbox reconnect)
         if (data.url !== previewUrlRef.current) {
