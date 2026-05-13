@@ -4,8 +4,8 @@ import { Suspense, useEffect, useState, useCallback, useRef, useMemo } from "rea
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
-  Trash2, Plus, Clock, Layers, Pencil,
-  CheckCircle2, AlertCircle, Loader2, Sparkles, Globe,
+  Trash2, Plus, Clock, Layers,
+  CheckCircle2, AlertCircle, Loader2, Sparkles,
   AlertTriangle, FolderInput, Search, Users,
 } from "lucide-react";
 import { HamsterLoader } from "@/components/ui/hamster-loader";
@@ -160,13 +160,18 @@ function ProjectCard({
   const isReady = project.status === "ready";
   const isFailed = project.status === "failed";
   const isGenerating = project.status === "generating";
-  const isClickable = isReady || isFailed;
+  /** Studio 在生成中会轮询进度，列表应可进入 */
+  const isClickable = isReady || isFailed || isGenerating;
+  const hasCover = project.coverImageStatus === "ready";
   const colors = hashColor(project.id);
   const initials = (project.name || "P")
     .split(/[\s-_]+/)
     .slice(0, 2)
     .map((w) => w[0]?.toUpperCase() ?? "")
     .join("");
+
+  const statusChipClass =
+    "flex shrink-0 items-center gap-1 rounded-full border border-white/12 bg-black/55 px-2 py-0.5 backdrop-blur-md";
 
   const pressedRef = useRef(false);
   const [pressed, setPressed] = useState(false);
@@ -186,11 +191,19 @@ function ProjectCard({
     const target = e.target as HTMLElement;
     if (!target.closest("[data-delete-btn]")) {
       if (e.metaKey || e.ctrlKey) {
-        window.open(`/studio/${project.id}`, "_blank");
+        window.open(`/projects/${project.id}/preview-launch`, "_blank");
       } else {
         onClick();
       }
     }
+  };
+
+  const handleAuxClick = (e: React.MouseEvent) => {
+    if (e.button !== 1 || !isClickable) return;
+    e.preventDefault();
+    const target = e.target as HTMLElement;
+    if (target.closest("[data-delete-btn]")) return;
+    window.open(`/projects/${project.id}/preview-launch`, "_blank");
   };
 
   const handleMouseLeave = () => {
@@ -202,100 +215,122 @@ function ProjectCard({
     <div
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
+      onAuxClick={handleAuxClick}
       onMouseLeave={handleMouseLeave}
-      className={`
-        group relative rounded-2xl border overflow-hidden transition-all duration-300${pressed ? " select-none" : ""}
-        ${isReady
-          ? `border-white/10 hover:border-primary/40 cursor-pointer hover:shadow-[0_0_50px_-12px_rgba(247,147,26,0.25)] ${pressed ? "scale-[0.98]" : "hover:-translate-y-1"}`
-          : isFailed
-            ? `border-red-400/20 hover:border-red-400/40 cursor-pointer hover:shadow-[0_0_30px_-12px_rgba(248,113,113,0.2)] ${pressed ? "scale-[0.98]" : "hover:-translate-y-1"}`
-            : isGenerating
-              ? "border-primary/20 cursor-default"
-              : "border-white/8 cursor-default"
-        }
-      `}
+      title={
+        isClickable
+          ? isGenerating
+            ? "点击进入 Studio 查看生成进度（也可 ⌘/Ctrl 点击在新标签打开预览）"
+            : "点击进入 Studio；⌘/Ctrl 点击或鼠标中键在新标签打开站点预览"
+          : undefined
+      }
+      className={cn(
+        "group/card relative flex h-full flex-col overflow-hidden rounded-2xl border bg-[#080a0e]",
+        "shadow-[0_4px_20px_-8px_rgba(0,0,0,0.65)]",
+        "transition-[box-shadow,border-color] duration-200 ease-out",
+        pressed && "select-none",
+        isReady &&
+          cn(
+            "cursor-pointer border-white/[0.07] hover:border-primary/40",
+            hasCover
+              ? "hover:shadow-[0_12px_36px_-14px_rgba(247,147,26,0.28)]"
+              : "hover:shadow-[0_10px_32px_-14px_rgba(247,147,26,0.14)]"
+          ),
+        isFailed &&
+          cn(
+            "cursor-pointer border-red-400/22 hover:border-red-400/40 hover:shadow-[0_10px_28px_-12px_rgba(248,113,113,0.18)]"
+          ),
+        isGenerating &&
+          cn(
+            "cursor-pointer border-primary/22 hover:border-primary/45 hover:shadow-[0_10px_32px_-14px_rgba(247,147,26,0.18)]"
+          ),
+        !isReady && !isFailed && !isGenerating && "cursor-default border-white/[0.05]"
+      )}
     >
-      {/* Cover: real site first viewport JPEG when ready; else branded gradient */}
-      <div className={`relative z-0 h-32 bg-gradient-to-br ${colors.bg} flex items-center justify-center overflow-hidden`}>
-        {project.coverImageStatus === "ready" ? (
-          // eslint-disable-next-line @next/next/no-img-element -- API route JPEG with session cookie (no next/image optimizer)
-          <img
-            src={`/api/projects/${project.id}/cover`}
-            alt=""
-            className="absolute inset-0 z-0 h-full w-full object-cover object-top"
-            loading="lazy"
-          />
-        ) : (
-          <>
-            <div className="absolute inset-0 opacity-[0.06]" style={{
-              backgroundImage: "radial-gradient(circle, white 1px, transparent 1px)",
-              backgroundSize: "20px 20px",
-            }} />
-            <span className={`relative font-heading text-4xl font-bold ${colors.text} opacity-80`}>
-              {initials || "?"}
-            </span>
-          </>
-        )}
+      {/* 封面：与截取视口 1480×960 同源比例；内边距 + contain 完整呈现成片暗角与安全区 */}
+      <div className="relative w-full shrink-0 bg-[#030406] p-2 sm:p-2.5">
+        <div
+          className={cn(
+            "relative aspect-[1480/960] w-full overflow-hidden rounded-[11px] ring-1 ring-inset ring-white/[0.07]",
+            !hasCover && `bg-gradient-to-br ${colors.bg}`,
+            hasCover && "bg-[#020309] shadow-[inset_0_0_52px_rgba(0,0,0,0.42)]"
+          )}
+        >
+          {hasCover ? (
+            /* eslint-disable-next-line @next/next/no-img-element -- API route JPEG with session cookie (no next/image optimizer) */
+            <img
+              src={`/api/projects/${project.id}/cover`}
+              alt=""
+              className="relative z-0 h-full w-full object-contain object-center"
+              loading="lazy"
+            />
+          ) : (
+            <>
+              <div
+                className="absolute inset-0 opacity-[0.09]"
+                style={{
+                  backgroundImage: "radial-gradient(circle, white 1px, transparent 1px)",
+                  backgroundSize: "22px 22px",
+                }}
+              />
+              <span
+                className={cn(
+                  "relative z-[1] flex h-full items-center justify-center font-heading text-3xl font-bold tracking-tight sm:text-4xl",
+                  colors.text,
+                  "opacity-[0.88]"
+                )}
+              >
+                {initials || "?"}
+              </span>
+            </>
+          )}
 
-        {/* Status overlay */}
-        <div className="absolute top-3 right-3 z-10">
+          {isGenerating && (
+            <div className="pointer-events-none absolute inset-0 z-10 animate-[shimmer_2s_ease-in-out_infinite] rounded-[11px] bg-gradient-to-r from-transparent via-white/[0.05] to-transparent" />
+          )}
+        </div>
+      </div>
+
+      <div className="flex min-h-0 flex-1 flex-col bg-[#080b10] px-3 py-2.5 sm:px-3.5 sm:py-3">
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="min-w-0 flex-1 truncate font-heading text-[14px] font-semibold leading-tight text-white transition-colors duration-150 group-hover/card:text-primary">
+            {project.name || "未命名项目"}
+          </h3>
           {isGenerating ? (
-            <div className="flex items-center gap-1.5 rounded-full bg-black/40 backdrop-blur-sm px-2.5 py-1">
-              <Loader2 className="h-3 w-3 animate-spin text-primary" />
-              <span className="text-[9px] font-mono font-bold text-primary tracking-wider">生成中</span>
+            <div className={statusChipClass}>
+              <Loader2 className="h-3 w-3 shrink-0 animate-spin text-primary" />
+              <span className="text-[8px] font-mono font-bold tracking-wider text-primary">生成中</span>
             </div>
           ) : project.status === "failed" ? (
-            <div className="flex items-center gap-1.5 rounded-full bg-black/40 backdrop-blur-sm px-2.5 py-1">
-              <AlertCircle className="h-3 w-3 text-red-400" />
-              <span className="text-[9px] font-mono font-bold text-red-400 tracking-wider">失败</span>
+            <div className={statusChipClass}>
+              <AlertCircle className="h-3 w-3 shrink-0 text-red-400" />
+              <span className="text-[8px] font-mono font-bold tracking-wider text-red-400">失败</span>
             </div>
           ) : (
-            <div className="flex items-center gap-1.5 rounded-full bg-black/40 backdrop-blur-sm px-2.5 py-1">
-              <CheckCircle2 className="h-3 w-3 text-green-400" />
-              <span className="text-[9px] font-mono font-bold text-green-400 tracking-wider">就绪</span>
+            <div className={statusChipClass}>
+              <CheckCircle2 className="h-3 w-3 shrink-0 text-green-400" />
+              <span className="text-[8px] font-mono font-bold tracking-wider text-green-400">就绪</span>
             </div>
           )}
         </div>
-
-        {/* Globe icon */}
-        <Globe className="absolute bottom-3 left-3 z-10 h-4 w-4 text-white/10" />
-
-        {/* Generating shimmer */}
-        {isGenerating && (
-          <div className="absolute inset-0 z-10 animate-[shimmer_2s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/[0.04] to-transparent" />
-        )}
-      </div>
-
-      {/* Content */}
-      <div className="bg-[#0b0d12] p-4">
-        <h3 className="font-heading text-[15px] font-semibold text-white truncate group-hover:text-primary transition-colors">
-          {project.name || "未命名项目"}
-        </h3>
         {showOwner && (project.ownerUsername || project.ownerUserId) && (
-          <p className="mt-1 text-[10px] font-mono text-primary/70 truncate">
+          <p className="mt-0.5 truncate text-[10px] font-mono text-primary/75">
             {project.ownerUsername?.trim() || project.ownerUserId?.slice(0, 8)}
           </p>
         )}
-        <p className="mt-1.5 text-[12px] leading-relaxed text-white/50 line-clamp-2 min-h-[40px]">
+        <p className="mt-1.5 line-clamp-2 text-[11px] leading-snug text-white/45">
           {project.userPrompt}
         </p>
 
-        {/* Footer */}
-        <div className="mt-3 pt-3 border-t border-white/6 flex items-center justify-between">
-          <div className="flex items-center gap-3 text-[10px] font-mono text-white/30">
-            <span className="flex items-center gap-1">
-              <Clock className="h-3 w-3" />
+        <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-white/[0.06] pt-2">
+          <div className="flex min-w-0 items-center gap-2 text-[9px] font-mono text-white/35">
+            <span className="flex items-center gap-0.5 truncate">
+              <Clock className="h-2.5 w-2.5 shrink-0 opacity-70" />
               {timeAgo(project.createdAt)}
             </span>
-            {project.modificationHistory.length > 0 && (
-              <span className="flex items-center gap-1">
-                <Pencil className="h-3 w-3" />
-                {project.modificationHistory.length}
-              </span>
-            )}
             {project.verificationStatus === "passed" && (
-              <span className="flex items-center gap-1 text-green-400/40">
-                <Layers className="h-3 w-3" />
+              <span className="flex shrink-0 items-center gap-0.5 text-green-400/50">
+                <Layers className="h-2.5 w-2.5" />
                 已验证
               </span>
             )}
@@ -306,18 +341,17 @@ function ProjectCard({
               data-delete-btn
               onClick={onDelete}
               disabled={deleting}
-              className="rounded-lg p-1.5 text-white/20 hover:text-red-400 hover:bg-red-400/10
-                transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="rounded-md p-1 text-white/22 transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50 shrink-0"
               title="删除项目"
             >
               {deleting ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <Loader2 className="h-3 w-3 animate-spin" />
               ) : (
-                <Trash2 className="h-3.5 w-3.5" />
+                <Trash2 className="h-3 w-3" />
               )}
             </button>
           ) : (
-            <span className="w-7" aria-hidden />
+            <span className="w-6 shrink-0" aria-hidden />
           )}
         </div>
       </div>
@@ -459,6 +493,7 @@ function ProjectsPageContent() {
   const [hasMore, setHasMore] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [pendingDeleteFolderId, setPendingDeleteFolderId] = useState<string | null>(null);
   const [deletingFolder, setDeletingFolder] = useState(false);
   const [ownerOptionsFromApi, setOwnerOptionsFromApi] = useState<ProjectOwnerOption[]>([]);
@@ -584,6 +619,21 @@ function ProjectsPageContent() {
   useEffect(() => {
     void loadFolders();
   }, [loadFolders]);
+
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/auth/user")
+      .then((res) => res.json())
+      .then((data: { isAdmin?: boolean }) => {
+        if (active) setIsAdmin(data.isAdmin === true);
+      })
+      .catch(() => {
+        if (active) setIsAdmin(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!isMineView) {
@@ -726,8 +776,7 @@ function ProjectsPageContent() {
   };
 
   return (
-    <main className="relative min-h-screen ">
-
+    <main className="relative min-h-screen bg-[#030304]">
       {/* Confirm delete modal */}
       {pendingDeleteId && (
         <ConfirmDeleteModal
@@ -748,7 +797,7 @@ function ProjectsPageContent() {
         />
       )}
 
-      <div className="relative z-1 mx-auto max-w-6xl px-6 py-8 lg:px-8 min-h-screen">
+      <div className="relative z-[1] container mx-auto min-h-screen px-4 py-8 sm:px-6 md:py-10 lg:px-8">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[11px] font-mono text-white/35 uppercase tracking-wider mr-1">视图</span>
@@ -962,16 +1011,17 @@ function ProjectsPageContent() {
               </p>
             )}
 
-            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid items-stretch gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
               <Link
                 href={newProjectHref}
-                className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-white/10
-                  bg-white/[0.01] p-8 transition-all hover:border-primary/30 hover:bg-primary/[0.03] group min-h-[260px]"
+                className="group flex min-h-[200px] flex-col items-center justify-center gap-3 self-stretch rounded-2xl border border-dashed border-white/[0.12]
+                  bg-gradient-to-b from-white/[0.025] to-transparent p-6 shadow-[0_4px_20px_-8px_rgba(0,0,0,0.5)]
+                  transition-[box-shadow,border-color] duration-200 ease-out hover:border-primary/35 hover:shadow-[0_10px_32px_-12px_rgba(247,147,26,0.15)]"
               >
-                <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] group-hover:border-primary/30 group-hover:bg-primary/10 transition-all">
-                  <Plus className="h-6 w-6 text-white/30 group-hover:text-primary transition-colors" />
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] transition-colors group-hover:border-primary/30 group-hover:bg-primary/10">
+                  <Plus className="h-5 w-5 text-white/30 group-hover:text-primary transition-colors" />
                 </div>
-                <span className="font-mono text-[11px] text-white/30 group-hover:text-primary/70 tracking-wider transition-colors">
+                <span className="font-mono text-[10px] text-white/35 group-hover:text-primary/70 tracking-wider transition-colors">
                   新建项目
                 </span>
               </Link>
@@ -983,7 +1033,10 @@ function ProjectsPageContent() {
                   onClick={() => router.push(`/studio/${project.id}`)}
                   onDelete={(e) => handleDeleteClick(e, project.id)}
                   deleting={deletingId === project.id}
-                  canDelete={!!authUser?.id && project.ownerUserId === authUser.id}
+                  canDelete={
+                    !!authUser?.id &&
+                    (project.ownerUserId === authUser.id || isAdmin)
+                  }
                   showOwner
                 />
               ))}
@@ -1015,16 +1068,17 @@ function ProjectsPageContent() {
           </>
         ) : (
           <>
-            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid items-stretch gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
               <Link
                 href={newProjectHref}
-                className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-white/10
-                  bg-white/[0.01] p-8 transition-all hover:border-primary/30 hover:bg-primary/[0.03] group min-h-[260px]"
+                className="group flex min-h-[200px] flex-col items-center justify-center gap-3 self-stretch rounded-2xl border border-dashed border-white/[0.12]
+                  bg-gradient-to-b from-white/[0.025] to-transparent p-6 shadow-[0_4px_20px_-8px_rgba(0,0,0,0.5)]
+                  transition-[box-shadow,border-color] duration-200 ease-out hover:border-primary/35 hover:shadow-[0_10px_32px_-12px_rgba(247,147,26,0.15)]"
               >
-                <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] group-hover:border-primary/30 group-hover:bg-primary/10 transition-all">
-                  <Plus className="h-6 w-6 text-white/30 group-hover:text-primary transition-colors" />
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] transition-colors group-hover:border-primary/30 group-hover:bg-primary/10">
+                  <Plus className="h-5 w-5 text-white/30 group-hover:text-primary transition-colors" />
                 </div>
-                <span className="font-mono text-[11px] text-white/30 group-hover:text-primary/70 tracking-wider transition-colors">
+                <span className="font-mono text-[10px] text-white/35 group-hover:text-primary/70 tracking-wider transition-colors">
                   新建项目
                 </span>
               </Link>
@@ -1036,7 +1090,7 @@ function ProjectsPageContent() {
                   onClick={() => router.push(`/studio/${project.id}`)}
                   onDelete={(e) => handleDeleteClick(e, project.id)}
                   deleting={deletingId === project.id}
-                  canDelete
+                  canDelete={!!authUser?.id}
                   showOwner={false}
                 />
               ))}

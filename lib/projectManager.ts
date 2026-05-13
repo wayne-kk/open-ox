@@ -1,9 +1,22 @@
-import { execSync } from "child_process";
+import { exec } from "child_process";
+import { promisify } from "util";
 import fs from "fs/promises";
 import path from "path";
 import { Dirent } from "fs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { clampProjectListName } from "@/lib/projectDisplayName";
+
+const execAsync = promisify(exec);
+
+/** Non-blocking `pnpm install` — unlike `execSync`, other HTTP handlers can run while install proceeds. */
+async function runPnpmInstall(cwd: string): Promise<void> {
+  await execAsync("pnpm install", {
+    cwd,
+    maxBuffer: 16 * 1024 * 1024,
+    env: process.env,
+  });
+}
 export const WORKSPACE_ROOT = process.cwd();
 export type GenerationMode = "web";
 
@@ -64,6 +77,8 @@ export interface ProjectMetadata {
   coverImageStoragePath?: string | null;
   coverImageError?: string | null;
   coverImageUpdatedAt?: string;
+  /** Active background generation run (`019_generation_runs`) */
+  currentGenerationRunId?: string | null;
 }
 
 interface ProjectRow {
@@ -91,6 +106,7 @@ interface ProjectRow {
   cover_image_storage_path: string | null;
   cover_image_error: string | null;
   cover_image_updated_at: string | null;
+  current_generation_run_id: string | null;
 }
 
 function rowToMetadata(row: ProjectRow): ProjectMetadata {
@@ -123,6 +139,7 @@ function rowToMetadata(row: ProjectRow): ProjectMetadata {
     coverImageStoragePath: row.cover_image_storage_path ?? undefined,
     coverImageError: row.cover_image_error ?? undefined,
     coverImageUpdatedAt: row.cover_image_updated_at ?? undefined,
+    currentGenerationRunId: row.current_generation_run_id ?? undefined,
   };
 }
 
@@ -337,7 +354,7 @@ export async function createProject(
   const promptTrimmed = userPrompt.trim();
   const displayName =
     promptTrimmed.length > 0
-      ? promptTrimmed.replace(/\s+/g, " ").slice(0, 120)
+      ? clampProjectListName(promptTrimmed.replace(/\s+/g, " ")) || "未命名项目"
       : "未命名项目";
 
   const latinSlug = promptTrimmed
@@ -392,6 +409,8 @@ export async function updateProjectStatus(
     if (extra.logDirectory !== undefined) update.log_directory = extra.logDirectory;
     if (extra.totalDuration !== undefined) update.total_duration = extra.totalDuration;
     if (extra.modificationHistory !== undefined) update.modification_history = extra.modificationHistory;
+    if (extra.currentGenerationRunId !== undefined)
+      update.current_generation_run_id = extra.currentGenerationRunId;
   }
   const maxRetries = 2;
   let lastMessage = "";
@@ -464,9 +483,11 @@ export async function setProjectFolder(
 }
 
 export async function renameProject(db: SupabaseClient, id: string, name: string): Promise<void> {
+  const safeName = clampProjectListName(name);
+  const finalName = safeName.length > 0 ? safeName : "未命名项目";
   const { error } = await db
     .from("projects")
-    .update({ name, updated_at: new Date().toISOString() })
+    .update({ name: finalName, updated_at: new Date().toISOString() })
     .eq("id", id);
   if (error) throw new Error(`[projectManager] renameProject failed: ${error.message}`);
 }
@@ -474,7 +495,10 @@ export async function renameProject(db: SupabaseClient, id: string, name: string
 export async function deleteProject(db: SupabaseClient, id: string): Promise<void> {
   const { error } = await db.from("projects").delete().eq("id", id);
   if (error) throw new Error(`[projectManager] deleteProject failed: ${error.message}`);
-  await fs.rm(getSiteRoot(id), { recursive: true, force: true });
+  const root = getSiteRoot(id);
+  void fs.rm(root, { recursive: true, force: true }).catch((err) => {
+    console.error(`[projectManager] deleteProject site dir cleanup failed id=${id}:`, err);
+  });
 }
 
 const TEMPLATE_EXCLUDE = new Set([
@@ -488,26 +512,6 @@ const TEMPLATE_EXCLUDE = new Set([
   "node_modules",
   "pnpm-lock.yaml",
   "tsconfig.tsbuildinfo",
-]);
-
-/**
- * Deps kept on generated sites even when the monorepo root already lists them.
- * Without these, we'd rely entirely on symlinked `sites/template/node_modules`.
- * When that symlink breaks or templates were never installed, `pnpm run build`
- * must still resolve `next` locally from this package.json via `pnpm install`.
- */
-const SITE_PACKAGE_JSON_KEEP = new Set([
-  "next",
-  "react",
-  "react-dom",
-  "typescript",
-  "@types/node",
-  "@types/react",
-  "@types/react-dom",
-  "tailwindcss",
-  "@tailwindcss/postcss",
-  "eslint",
-  "eslint-config-next",
 ]);
 
 const SITE_NEXT_CLI_REL = ["node_modules", "next", "dist", "bin", "next"] as const;
@@ -570,13 +574,7 @@ export async function ensureProjectNodeModules(projectDir: string): Promise<void
       "[ensureProjectNodeModules] sites/template/node_modules/next missing — attempting `pnpm install` in sites/template (one-time)."
     );
     try {
-      execSync("pnpm install", {
-        cwd: path.join(WORKSPACE_ROOT, "sites", "template"),
-        encoding: "utf-8",
-        maxBuffer: 16 * 1024 * 1024,
-        stdio: ["ignore", "pipe", "pipe"],
-        env: process.env,
-      });
+      await runPnpmInstall(path.join(WORKSPACE_ROOT, "sites", "template"));
     } catch (err: unknown) {
       console.warn(
         "[ensureProjectNodeModules] template pnpm install failed:",
@@ -598,13 +596,7 @@ export async function ensureProjectNodeModules(projectDir: string): Promise<void
   }
 
   try {
-    execSync("pnpm install", {
-      cwd: projectDir,
-      encoding: "utf-8",
-      maxBuffer: 16 * 1024 * 1024,
-      stdio: ["ignore", "pipe", "pipe"],
-      env: process.env,
-    });
+    await runPnpmInstall(projectDir);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(
@@ -707,41 +699,11 @@ export async function initProjectDir(db: SupabaseClient, projectId: string): Pro
       }
     }
 
-    const rootPkgRaw = await fs.readFile(path.join(WORKSPACE_ROOT, "package.json"), "utf-8");
-    const rootPkg = JSON.parse(rootPkgRaw) as {
-      dependencies?: Record<string, string>;
-      devDependencies?: Record<string, string>;
-    };
-    const sharedDeps = new Set([
-      ...Object.keys(rootPkg.dependencies ?? {}),
-      ...Object.keys(rootPkg.devDependencies ?? {}),
-    ]);
-
     const projPkg = JSON.parse(await fs.readFile(pkgPath, "utf-8")) as {
       name?: string;
-      dependencies?: Record<string, string>;
-      devDependencies?: Record<string, string>;
       [key: string]: unknown;
     };
     projPkg.name = projectId;
-
-    if (projPkg.dependencies) {
-      for (const dep of Object.keys(projPkg.dependencies)) {
-        if (sharedDeps.has(dep) && !SITE_PACKAGE_JSON_KEEP.has(dep)) {
-          delete projPkg.dependencies[dep];
-        }
-      }
-      if (Object.keys(projPkg.dependencies).length === 0) delete projPkg.dependencies;
-    }
-    if (projPkg.devDependencies) {
-      for (const dep of Object.keys(projPkg.devDependencies)) {
-        if (sharedDeps.has(dep) && !SITE_PACKAGE_JSON_KEEP.has(dep)) {
-          delete projPkg.devDependencies[dep];
-        }
-      }
-      if (Object.keys(projPkg.devDependencies).length === 0) delete projPkg.devDependencies;
-    }
-
     await fs.writeFile(pkgPath, JSON.stringify(projPkg, null, 2) + "\n", "utf-8");
 
     await writeDefaultRootLayout(projectDir);

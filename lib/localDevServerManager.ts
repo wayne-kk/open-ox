@@ -15,12 +15,73 @@ import net from "node:net";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSiteRoot, WORKSPACE_ROOT } from "./projectManager";
 import { restoreProjectFiles } from "./storage";
-import { getSavedFingerprint, saveFingerprint } from "./previewFingerprintDb";
+import { saveFingerprint } from "./previewFingerprintDb";
 import { computeProjectFingerprint, getTemplateDepMap, readProjectPackageJson, SITES_TEMPLATE_DIR } from "./previewShared";
 
 const execFileAsync = promisify(execFile);
 const SITES_DIR = path.join(WORKSPACE_ROOT, "sites");
 const SHARED_NODE_MODULES_CANDIDATES = [path.join(SITES_DIR, "node_modules"), path.join(SITES_TEMPLATE_DIR, "node_modules")];
+
+/** Cross-process reuse: Next may handle API routes on different workers — in-memory `localRegistry` alone misses running `next dev`. */
+const LOCAL_PREVIEW_STATE_DIR = path.join(WORKSPACE_ROOT, ".open-ox", "local-preview");
+
+/** Structured phase durations for diagnosing slow POST /preview. */
+function timingLog(projectId: string, label: string, start: number, extra?: string): void {
+  const ms = Math.round(performance.now() - start);
+  const tail = extra ? ` ${extra}` : "";
+  console.log(`[local preview][timing] ${label}=${ms}ms projectId=${projectId}${tail}`);
+}
+
+type PersistedLocalPreview = { port: number; pid?: number; updatedAt: string };
+
+function persistedPreviewPath(projectId: string): string {
+  const safe = projectId.replace(/[^a-zA-Z0-9._-]/g, "_");
+  return path.join(LOCAL_PREVIEW_STATE_DIR, `${safe}.json`);
+}
+
+async function readPersistedLocalPreview(projectId: string): Promise<PersistedLocalPreview | null> {
+  try {
+    const raw = await fs.readFile(persistedPreviewPath(projectId), "utf-8");
+    const parsed = JSON.parse(raw) as Partial<PersistedLocalPreview>;
+    const port = typeof parsed.port === "number" ? parsed.port : Number.NaN;
+    if (!Number.isInteger(port) || port < 1 || port > 65_535) return null;
+    return {
+      port,
+      pid: typeof parsed.pid === "number" && parsed.pid > 0 ? parsed.pid : undefined,
+      updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : "",
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function writePersistedLocalPreview(
+  projectId: string,
+  data: Pick<PersistedLocalPreview, "port" | "pid">
+): Promise<void> {
+  try {
+    await fs.mkdir(LOCAL_PREVIEW_STATE_DIR, { recursive: true });
+    const payload: PersistedLocalPreview = {
+      port: data.port,
+      pid: data.pid,
+      updatedAt: new Date().toISOString(),
+    };
+    const target = persistedPreviewPath(projectId);
+    const tmp = `${target}.${process.pid}.tmp`;
+    await fs.writeFile(tmp, JSON.stringify(payload, null, 2) + "\n", "utf-8");
+    await fs.rename(tmp, target);
+  } catch (err) {
+    console.warn("[local preview] Could not persist preview state:", err);
+  }
+}
+
+async function clearPersistedLocalPreview(projectId: string): Promise<void> {
+  try {
+    await fs.unlink(persistedPreviewPath(projectId));
+  } catch {
+    /* missing */
+  }
+}
 
 type LocalInstance = { port: number; url: string; dev: ChildProcess | null };
 
@@ -104,6 +165,35 @@ function syncRegistryPublicUrl(projectId: string, reg: LocalInstance): LocalInst
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * If `next dev` is already up for this project (this worker's registry or persisted port from another worker), adopt and return URL.
+ */
+async function tryReuseRunningLocalPreview(projectId: string): Promise<{ url: string; port: number } | null> {
+  const reg = localRegistry.get(projectId);
+  if (reg && (await isLocalServerUp(previewHealthCheckUrl(reg.port)))) {
+    const synced = syncRegistryPublicUrl(projectId, reg);
+    return { url: synced.url, port: synced.port };
+  }
+
+  const persisted = await readPersistedLocalPreview(projectId);
+  if (persisted !== null) {
+    const baseUrl = previewHealthCheckUrl(persisted.port);
+    let up = await isLocalServerUp(baseUrl);
+    if (!up) {
+      await sleep(600);
+      up = await isLocalServerUp(baseUrl);
+    }
+    if (up) {
+      const url = buildLocalPreviewUrl(persisted.port);
+      localRegistry.set(projectId, { port: persisted.port, url, dev: null });
+      return { url, port: persisted.port };
+    }
+    await clearPersistedLocalPreview(projectId);
+  }
+
+  return null;
 }
 
 async function getFreePort(): Promise<number> {
@@ -298,6 +388,7 @@ function startNextDevAndWait(
   timeoutMs = 120_000
 ): Promise<ChildProcess> {
   return new Promise((resolve, reject) => {
+    const spawnToReadyStart = performance.now();
     const timer = setTimeout(() => {
       reject(new Error(`next dev did not become ready within ${timeoutMs / 1000}s`));
     }, timeoutMs);
@@ -316,6 +407,7 @@ function startNextDevAndWait(
         if (!settled) {
           settled = true;
           clearTimeout(timer);
+          timingLog(projectId, "nextDevSpawnToReady", spawnToReadyStart);
           resolve(child);
         }
       }
@@ -335,7 +427,20 @@ function startNextDevAndWait(
         clearTimeout(timer);
         reject(new Error(`next dev exited before ready (code ${code})`));
       } else {
-        localRegistry.delete(projectId);
+        void (async () => {
+          const persisted = await readPersistedLocalPreview(projectId);
+          if (
+            persisted &&
+            persisted.port === port &&
+            (persisted.pid === undefined || persisted.pid === child.pid)
+          ) {
+            await clearPersistedLocalPreview(projectId);
+          }
+          const cur = localRegistry.get(projectId);
+          if (cur?.dev === child) {
+            localRegistry.delete(projectId);
+          }
+        })();
         console.warn(`[local preview] next dev for ${projectId} exited (code ${code})`);
       }
     });
@@ -359,26 +464,37 @@ function stopDevInRegistry(projectId: string): void {
 async function ensureProjectDirExists(projectId: string): Promise<string> {
   const projectDir = getSiteRoot(projectId);
   await restoreProjectFiles(projectId);
+  const tVerify = performance.now();
   try {
     await fs.access(path.join(projectDir, "package.json"));
   } catch {
     throw new Error(`Project directory not found: ${projectDir}`);
   }
+  timingLog(projectId, "verifyPackageJsonAccess", tVerify);
   return projectDir;
 }
 
-async function runInstallIfNeeded(projectDir: string, label: string): Promise<void> {
+async function runInstallIfNeeded(projectDir: string, label: string, projectId: string): Promise<void> {
+  const tSym = performance.now();
   await ensureSharedNodeModulesSymlink(projectDir);
+  timingLog(projectId, `install:${label}.shareNodeModulesSymlink`, tSym);
+
+  const tScan = performance.now();
   const miss = await getMissingDepsOnDisk(projectDir);
+  timingLog(projectId, `install:${label}.scanMissingDeps`, tScan);
   if (miss === null) {
     console.log(`[local ${label}] No node_modules in project, running full npm install in project dir...`);
+    const tNpm = performance.now();
     const r = await runNpmInstall(projectDir, null);
+    timingLog(projectId, `install:${label}.npmFull`, tNpm);
     if (!r.ok) {
       throw new Error(`npm install failed: ${r.tail}`);
     }
   } else if (miss.length > 0) {
     console.log(`[local ${label}] Installing ${miss.length} extra dep(s) in project...`);
+    const tNpm = performance.now();
     const r = await runNpmInstall(projectDir, miss.join(" "));
+    timingLog(projectId, `install:${label}.npmExtras(count=${miss.length})`, tNpm);
     if (!r.ok) {
       throw new Error(`npm install (extras) failed: ${r.tail}`);
     }
@@ -397,36 +513,74 @@ export async function startLocalDevServer(
   }
 
   const work = (async (): Promise<{ url: string; port: number }> => {
-  const projectDir = await ensureProjectDirExists(projectId);
-  const currentHash = await computeProjectFingerprint(projectId);
+    const wallStart = performance.now();
+    console.log(`[local preview] startLocalDevServer BEGIN projectId=${projectId}`);
 
-  const reg = localRegistry.get(projectId);
-  if (reg && (await isLocalServerUp(previewHealthCheckUrl(reg.port)))) {
-    const synced = syncRegistryPublicUrl(projectId, reg);
-    await saveFingerprint(db, projectId, currentHash);
-    return { url: synced.url, port: synced.port };
-  }
+    const tDir = performance.now();
+    const projectDir = await ensureProjectDirExists(projectId);
+    timingLog(projectId, "ensureProjectDirExists(total)", tDir);
 
-  /** Registry miss or warm-up: avoid killing a live Next dev Turbo is still compiling. */
-  if (reg && !(await isLocalServerUp(previewHealthCheckUrl(reg.port)))) {
-    await sleep(600);
-    if (await isLocalServerUp(previewHealthCheckUrl(reg.port))) {
-      const synced = syncRegistryPublicUrl(projectId, reg);
+    const tFp = performance.now();
+    const currentHash = await computeProjectFingerprint(projectId);
+    timingLog(projectId, "computeProjectFingerprint", tFp);
+
+    const tReuse = performance.now();
+    const reusedEarly = await tryReuseRunningLocalPreview(projectId);
+    timingLog(projectId, "tryReuseRunningLocalPreview", tReuse);
+    if (reusedEarly) {
       await saveFingerprint(db, projectId, currentHash);
-      return { url: synced.url, port: synced.port };
+      timingLog(projectId, "TOTAL_startLocalDevServer.exitReuse", wallStart);
+      return reusedEarly;
     }
-  }
 
-  stopDevInRegistry(projectId);
-  localRegistry.delete(projectId);
+    const reg = localRegistry.get(projectId);
 
-  await runInstallIfNeeded(projectDir, "start");
-  const port = await allocatePreviewPort();
-  const url = buildLocalPreviewUrl(port);
-  const child = await startNextDevAndWait(projectId, projectDir, port);
-  localRegistry.set(projectId, { port, url, dev: child });
-  await saveFingerprint(db, projectId, currentHash);
-  return { url, port };
+    /** Registry miss or warm-up: avoid killing a live Next dev Turbo is still compiling. */
+    const tWarm = performance.now();
+    if (reg && !(await isLocalServerUp(previewHealthCheckUrl(reg.port)))) {
+      await sleep(600);
+      if (await isLocalServerUp(previewHealthCheckUrl(reg.port))) {
+        const synced = syncRegistryPublicUrl(projectId, reg);
+        await saveFingerprint(db, projectId, currentHash);
+        timingLog(projectId, "registryWarmRetry600ms+fingerprint", tWarm);
+        timingLog(projectId, "TOTAL_startLocalDevServer.exitRegistryWarmReuse", wallStart);
+        return { url: synced.url, port: synced.port };
+      }
+    }
+    timingLog(projectId, "registryWarmProbe(noEarlyExit)", tWarm);
+
+    const tTeardown = performance.now();
+    const hadLiveChild = !!(reg?.dev && !reg.dev.killed);
+    stopDevInRegistry(projectId);
+    localRegistry.delete(projectId);
+    /** Avoid stale bindings before spawning (another worker may have exited without clearing). */
+    await clearPersistedLocalPreview(projectId);
+    /** Next 16+ uses `.next/dev/lock`; spawning before the old `next dev` exits causes "Unable to acquire lock". */
+    if (hadLiveChild) await sleep(1200);
+    timingLog(
+      projectId,
+      "stopClearPersistStaleLockSleep",
+      tTeardown,
+      hadLiveChild ? "sleptMs=1200" : "sleptMs=0"
+    );
+
+    await runInstallIfNeeded(projectDir, "start", projectId);
+    const tPort = performance.now();
+    const port = await allocatePreviewPort();
+    timingLog(projectId, "allocatePreviewPort", tPort);
+
+    const url = buildLocalPreviewUrl(port);
+
+    const child = await startNextDevAndWait(projectId, projectDir, port);
+
+    localRegistry.set(projectId, { port, url, dev: child });
+    await writePersistedLocalPreview(projectId, { port, pid: child.pid ?? undefined });
+    const tSav = performance.now();
+    await saveFingerprint(db, projectId, currentHash);
+    timingLog(projectId, "saveFingerprint", tSav);
+
+    timingLog(projectId, "TOTAL_startLocalDevServer.exitFreshSpawn", wallStart);
+    return { url, port };
   })();
 
   localStartInFlight.set(projectId, work);
@@ -448,7 +602,16 @@ export async function stopLocalDevServer(projectId: string): Promise<void> {
       /* */
     }
   }
+  const persisted = await readPersistedLocalPreview(projectId);
+  if (persisted?.pid && (!inst?.dev || inst.dev.killed)) {
+    try {
+      process.kill(persisted.pid, "SIGTERM");
+    } catch {
+      /* ESRCH */
+    }
+  }
   localRegistry.delete(projectId);
+  await clearPersistedLocalPreview(projectId);
 }
 
 /**
@@ -457,12 +620,12 @@ export async function stopLocalDevServer(projectId: string): Promise<void> {
 export async function hotRefreshLocalDevServer(
   db: SupabaseClient,
   projectId: string,
-  _changedFiles: string[]
+  changedFiles: string[]
 ): Promise<{ url: string; port: number; mode: "hot" }> {
-  const reg = localRegistry.get(projectId);
-  if (reg && (await isLocalServerUp(previewHealthCheckUrl(reg.port)))) {
-    const synced = syncRegistryPublicUrl(projectId, reg);
-    return { url: synced.url, port: synced.port, mode: "hot" };
+  void changedFiles;
+  const reused = await tryReuseRunningLocalPreview(projectId);
+  if (reused) {
+    return { ...reused, mode: "hot" };
   }
   const r = await startLocalDevServer(db, projectId);
   return { ...r, mode: "hot" };
@@ -472,20 +635,54 @@ export async function rebuildLocalDevServer(
   db: SupabaseClient,
   projectId: string
 ): Promise<{ url: string; port: number }> {
+  const wall = performance.now();
+  console.log(`[local preview] rebuildLocalDevServer BEGIN projectId=${projectId}`);
+
+  const tEns = performance.now();
   const projectDir = await ensureProjectDirExists(projectId);
+  timingLog(projectId, "rebuild.ensureProjectDirExists", tEns);
+
+  const reg = localRegistry.get(projectId);
+  const hadLiveChild = !!(reg?.dev && !reg.dev.killed);
+  const tTd = performance.now();
   stopDevInRegistry(projectId);
   localRegistry.delete(projectId);
+  const persisted = await readPersistedLocalPreview(projectId);
+  if (persisted?.pid) {
+    try {
+      process.kill(persisted.pid, "SIGTERM");
+    } catch {
+      /* */
+    }
+  }
+  await clearPersistedLocalPreview(projectId);
+  if (hadLiveChild) await sleep(1200);
+  timingLog(projectId, "rebuild.teardownKillSleep", tTd, hadLiveChild ? "sleptMs=1200" : "sleptMs=0");
+
+  const tRm = performance.now();
   await fs.rm(path.join(projectDir, ".next"), { recursive: true, force: true });
-  await runInstallIfNeeded(projectDir, "rebuild");
+  timingLog(projectId, "rebuild.rmDotNext", tRm);
+
+  await runInstallIfNeeded(projectDir, "rebuild", projectId);
+
+  const tPort = performance.now();
   const port = await allocatePreviewPort();
+  timingLog(projectId, "rebuild.allocatePreviewPort", tPort);
+
   const url = buildLocalPreviewUrl(port);
   const child = await startNextDevAndWait(projectId, projectDir, port);
+
   localRegistry.set(projectId, { port, url, dev: child });
+  await writePersistedLocalPreview(projectId, { port, pid: child.pid ?? undefined });
+  const tFp = performance.now();
   try {
     await saveFingerprint(db, projectId, await computeProjectFingerprint(projectId));
   } catch {
     /* */
   }
+  timingLog(projectId, "rebuild.saveFingerprint", tFp);
+
+  timingLog(projectId, "TOTAL_rebuildLocalDevServer", wall);
   return { url, port };
 }
 
@@ -493,6 +690,11 @@ export async function ensureLocalDevServerAlive(
   db: SupabaseClient,
   projectId: string
 ): Promise<{ status: "ok" | "down"; url?: string }> {
+  const reused = await tryReuseRunningLocalPreview(projectId);
+  if (reused) {
+    return { status: "ok", url: reused.url };
+  }
+
   const reg = localRegistry.get(projectId);
   if (reg && (await isLocalServerUp(previewHealthCheckUrl(reg.port)))) {
     const synced = syncRegistryPublicUrl(projectId, reg);
@@ -502,18 +704,37 @@ export async function ensureLocalDevServerAlive(
     return { status: "down" };
   }
   const projectDir = getSiteRoot(projectId);
+  const hadLiveChild = !!(reg.dev && !reg.dev.killed);
   stopDevInRegistry(projectId);
   localRegistry.delete(projectId);
+  const persistedKill = await readPersistedLocalPreview(projectId);
+  if (persistedKill?.pid) {
+    try {
+      process.kill(persistedKill.pid, "SIGTERM");
+    } catch {
+      /* */
+    }
+  }
+  await clearPersistedLocalPreview(projectId);
+  if (hadLiveChild) await sleep(1200);
+  const wallRestart = performance.now();
+  console.log(`[local preview] ensureLocalDevServerAlive RESTART_AFTER_DOWN projectId=${projectId}`);
   try {
-    await runInstallIfNeeded(projectDir, "ensureAlive");
+    await runInstallIfNeeded(projectDir, "ensureAlive", projectId);
+    const tp = performance.now();
     const port = await allocatePreviewPort();
+    timingLog(projectId, "ensureAlive.allocatePreviewPort", tp);
     const url = buildLocalPreviewUrl(port);
     const child = await startNextDevAndWait(projectId, projectDir, port);
     localRegistry.set(projectId, { port, url, dev: child });
+    await writePersistedLocalPreview(projectId, { port, pid: child.pid ?? undefined });
     if (await isLocalServerUp(previewHealthCheckUrl(port))) {
+      timingLog(projectId, "TOTAL_ensureLocalDevServerAlive.restartOk", wallRestart);
       return { status: "ok", url };
     }
+    timingLog(projectId, "TOTAL_ensureLocalDevServerAlive.restartSpawnButHealthFail", wallRestart);
   } catch (err) {
+    timingLog(projectId, "TOTAL_ensureLocalDevServerAlive.restartCatch", wallRestart);
     console.error("[local ensureAlive] next dev restart failed:", err);
   }
   return { status: "down" };
@@ -523,6 +744,10 @@ export async function getLocalDevServerStatus(
   _db: SupabaseClient,
   projectId: string
 ): Promise<{ status: "running" | "stopped"; url?: string }> {
+  const reused = await tryReuseRunningLocalPreview(projectId);
+  if (reused) {
+    return { status: "running", url: reused.url };
+  }
   const reg = localRegistry.get(projectId);
   if (!reg) return { status: "stopped" };
   if (await isLocalServerUp(previewHealthCheckUrl(reg.port))) {
@@ -533,21 +758,18 @@ export async function getLocalDevServerStatus(
 }
 
 /**
- * If this Node process already holds a healthy local preview for the project, return its URL
- * without starting another `next dev` (same project dir shares one `.next/dev/lock`).
+ * If local preview is already healthy (this worker or another via persisted port), return URL without starting `next dev`.
  */
 export async function getExistingLocalPreviewUrl(
   db: SupabaseClient,
   projectId: string
 ): Promise<{ url: string; port: number } | null> {
-  const reg = localRegistry.get(projectId);
-  if (!reg) return null;
-  if (!(await isLocalServerUp(previewHealthCheckUrl(reg.port)))) return null;
-  const synced = syncRegistryPublicUrl(projectId, reg);
+  const reused = await tryReuseRunningLocalPreview(projectId);
+  if (!reused) return null;
   try {
     await saveFingerprint(db, projectId, await computeProjectFingerprint(projectId));
   } catch {
     /* */
   }
-  return { url: synced.url, port: synced.port };
+  return reused;
 }

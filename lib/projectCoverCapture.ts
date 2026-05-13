@@ -1,14 +1,16 @@
 /**
- * Background job: desktop first-viewport JPEG (1480×960) → Storage → DB.
+ * Background job: desktop first-viewport JPEG (1480×960) → cinematic polish → Storage → DB.
  * Server-only. Requires SUPABASE_SERVICE_ROLE_KEY and Chromium (Playwright).
  */
 
+import { polishCoverJpeg } from "@/lib/coverImagePolish";
 import { startDevServer, getExistingLocalPreviewUrl } from "@/lib/devServerManager";
 import { previewUrlAllowedForScreenshot } from "@/lib/previewScreenshotUrl";
 import { updateProjectCoverState } from "@/lib/projectManager";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { uploadCoverScreenshot } from "@/lib/storage";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
+import { chromium } from "playwright";
 
 const COVER_VIEWPORT_WIDTH = 1480;
 const COVER_VIEWPORT_HEIGHT = 960;
@@ -33,13 +35,6 @@ function sleep(ms: number): Promise<void> {
 
 async function screenshotHomeViewport(previewOrigin: string): Promise<Buffer> {
   previewUrlAllowedForScreenshot(previewOrigin);
-
-  let chromium: typeof import("playwright").chromium;
-  try {
-    ({ chromium } = await import("playwright"));
-  } catch {
-    throw new Error("Install playwright: `pnpm add playwright` then `pnpm exec playwright install chromium`");
-  }
 
   const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH?.trim();
   const browser = await chromium.launch({
@@ -66,6 +61,18 @@ async function screenshotHomeViewport(previewOrigin: string): Promise<Buffer> {
     return buf as Buffer;
   } finally {
     await browser.close().catch(() => undefined);
+  }
+}
+
+async function jpegWithCoverPolish(raw: Buffer): Promise<Buffer> {
+  try {
+    return await polishCoverJpeg(raw, {
+      width: COVER_VIEWPORT_WIDTH,
+      height: COVER_VIEWPORT_HEIGHT,
+    });
+  } catch (e) {
+    console.warn("[projectCoverCapture] polish fallback (raw jpeg):", e);
+    return raw;
   }
 }
 
@@ -106,7 +113,8 @@ export async function runCaptureProjectCover(
     const { url } = reused ?? (await startDevServer(db, projectId));
     previewUrlAllowedForScreenshot(url);
 
-    const jpeg = await screenshotHomeViewport(url);
+    const rawJpeg = await screenshotHomeViewport(url);
+    const jpeg = await jpegWithCoverPolish(rawJpeg);
 
     await uploadCoverScreenshot(db, projectId, jpeg);
 

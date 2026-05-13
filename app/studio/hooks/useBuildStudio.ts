@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { runBuildSite } from "../lib/build-studio-api";
 import type { AiResponse, BuildStep, IntentAgentTurn } from "../types/build-studio";
+import { stripRecoverablePrefixForDisplay } from "@/lib/generationRecovery";
 
 export type RightPanel = "topology" | "preview" | "code";
 
@@ -66,6 +67,12 @@ export interface BuildStudioState {
   handleRun: (messageOverride?: string) => Promise<void>;
   handleClear: () => Promise<void>;
   handleRetry: () => Promise<void>;
+  /** Generation poll shows no SSE for a while — user can unlock as interrupted */
+  generationSeemsStuck: boolean;
+  recoveryUnlocking: boolean;
+  handleUnlockInterruptedGeneration: () => Promise<void>;
+  /** After unlock / recoverable failed: resume preserving checkpoint */
+  handleContinueFromCheckpoint: () => Promise<void>;
 
   // Model
   selectedModel: string;
@@ -119,6 +126,9 @@ export interface BuildStudioState {
 const AUTO_PREVIEW_STORAGE_KEY = "open-ox:studio:autoPreviewAfterBuild";
 const USE_DB_PROMPTS_STORAGE_KEY = "open-ox:studio:useDatabasePrompts";
 const CONVERSATION_STORAGE_PREFIX = "open-ox:studio:conversation:";
+
+/** Polling DB while status is `generating` — after this duration with no SSE, offer recovery UX */
+const GENERATION_POLL_STUCK_MS = 90_000;
 
 function readAutoPreviewAfterBuild(): boolean {
   if (typeof window === "undefined") return true;
@@ -271,6 +281,8 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
   const [contextCleared, setContextCleared] = useState(false);
   const [pendingModifyInstruction, setPendingModifyInstruction] = useState<string | null>(null);
   const [pendingModifyImage, setPendingModifyImage] = useState<string | null>(null);
+  const [generationSeemsStuck, setGenerationSeemsStuck] = useState(false);
+  const [recoveryUnlocking, setRecoveryUnlocking] = useState(false);
 
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -351,8 +363,10 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
 
   // ── DB polling (only for "another tab is generating" scenario) ─────────
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const generatingPollStartedAtRef = useRef<number | null>(null);
   const stopPolling = useCallback(() => {
     if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
+    generatingPollStartedAtRef.current = null;
   }, []);
 
   type ProjectData = {
@@ -370,6 +384,42 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       error?: string;
     }>;
   };
+
+  function conversationFallbackFromDb(
+    project: ProjectData,
+    stored: ConversationMessage[]
+  ): ConversationMessage[] {
+    if (stored.length > 0) return stored;
+    const steps = (project.buildSteps ?? []) as BuildStep[];
+    const intentSteps = steps.filter((s) => s.step === "intent_agent");
+    const messages: ConversationMessage[] = [];
+    const up = project.userPrompt?.trim();
+    if (up) {
+      messages.push({
+        id: `${project.id}-initial-user`,
+        role: "user",
+        content: project.userPrompt,
+      });
+    }
+    intentSteps.forEach((step, i) => {
+      const d = typeof step.detail === "string" ? step.detail.trim() : "";
+      if (d) {
+        messages.push({
+          id: `${project.id}-ia-${typeof step.timestamp === "number" ? step.timestamp : i}`,
+          role: "assistant",
+          content: d,
+        });
+      }
+    });
+    if (intentSteps.length > 0 && project.status === "ready") {
+      messages.push({
+        id: `${project.id}-committed-line`,
+        role: "assistant",
+        content: "需求已确认，开始生成项目...",
+      });
+    }
+    return messages;
+  }
 
   const applyProjectData = useCallback((project: ProjectData) => {
     setLastRunInput(project.userPrompt ?? null);
@@ -424,19 +474,16 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       );
     } else if (project.status !== "awaiting_input") {
       setIntentAgent(null);
-      setConversationMessages(
-        storedConversation.length > 0
-          ? storedConversation
-          : project.userPrompt
-          ? [{ id: `${project.id}-initial-user`, role: "user", content: project.userPrompt }]
-          : []
-      );
+      setConversationMessages(conversationFallbackFromDb(project, storedConversation));
     }
     setResponse({
       content: project.status === "ready"
         ? `项目已生成完成。${project.verificationStatus === "passed" ? "构建验证通过。" : ""}`
         : project.status === "failed"
-          ? `项目生成失败：${project.error ?? "未知错误"}`
+          ? `项目生成失败：${(() => {
+              const raw = project.error ?? "未知错误";
+              return stripRecoverablePrefixForDisplay(raw) || raw;
+            })()}`
           : project.status === "awaiting_input"
             ? "我还需要你补充或确认需求，然后再开始生成。"
             : "项目生成中...",
@@ -472,8 +519,11 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       setPreviewUrl(null);
       setPreviewState("idle");
       setPreviewError(null);
+      setGenerationSeemsStuck(false);
       return;
     }
+
+    setGenerationSeemsStuck(false);
 
     // Same-tick handoff from SSE onDone: keep preview state — openPreviewAfterBuild is starting the dev server.
     if (projectIdFromGenerationRef.current === projectId) {
@@ -515,17 +565,26 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
             });
             setElapsed(0);
             setLoading(true);
+            generatingPollStartedAtRef.current = Date.now();
+            setGenerationSeemsStuck(false);
             pollingRef.current = setInterval(async () => {
               // If SSE became active while polling, stop immediately
-              if (sseActiveRef.current) { stopPolling(); return; }
+              if (sseActiveRef.current) { stopPolling(); setGenerationSeemsStuck(false); return; }
               const r2 = await fetch(`/api/projects/${projectId}`);
               if (!r2.ok) return;
               const updated: ProjectData = await r2.json();
-              if (sseActiveRef.current) { stopPolling(); return; }
+              if (sseActiveRef.current) { stopPolling(); setGenerationSeemsStuck(false); return; }
               applyProjectData(updated);
               if (updated.status !== "generating") {
                 stopPolling();
                 setLoading(false);
+                setGenerationSeemsStuck(false);
+              } else if (!sseActiveRef.current) {
+                const t0 = generatingPollStartedAtRef.current;
+                if (t0 != null && Date.now() - t0 >= GENERATION_POLL_STUCK_MS) {
+                  setGenerationSeemsStuck(true);
+                  setLoading(false);
+                }
               }
             }, 3000);
           }
@@ -753,7 +812,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
 
   // ── handleRetry ────────────────────────────────────────────────────────
   async function handleRetry() {
-    if (!projectId || loading) return;
+    if (!projectId || loading || recoveryUnlocking) return;
     abortRef.current?.abort();
     abortRef.current = new AbortController();
     stopPolling();
@@ -814,6 +873,111 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     } finally {
       sseActiveRef.current = false;
       // Loading is usually stopped by onDone/onError to avoid UI lag after final SSE event.
+      setLoading(false);
+    }
+  }
+
+  async function handleUnlockInterruptedGeneration() {
+    if (!projectId || recoveryUnlocking || !generationSeemsStuck) return;
+    setRecoveryUnlocking(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/recovery`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "unlock_stuck" }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as ProjectData & { error?: string };
+      if (!res.ok) {
+        const msg =
+          typeof payload.error === "string" ? payload.error : `HTTP ${res.status}`;
+        appendConversationMessage({
+          role: "assistant",
+          content: `无法标记中断：${msg}`,
+        });
+        return;
+      }
+      stopPolling();
+      setGenerationSeemsStuck(false);
+      setLoading(false);
+      applyProjectData(payload as ProjectData);
+      appendConversationMessage({
+        role: "assistant",
+        content:
+          "已标记为中断。可选「继续生成」从检查点恢复，或「重新生成」从头开始（会清空当前构建进度）。",
+      });
+    } finally {
+      setRecoveryUnlocking(false);
+    }
+  }
+
+  async function handleContinueFromCheckpoint() {
+    if (!projectId || loading || recoveryUnlocking) return;
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+    stopPolling();
+    sseActiveRef.current = true;
+
+    const t0 = Date.now();
+    startedAtRef.current = t0;
+    setStartedAt(t0);
+    setElapsed(0);
+    setLoading(true);
+    setGenerationSeemsStuck(false);
+    setResponse((prev) =>
+      prev
+        ? {
+            ...prev,
+            content: "",
+            error: undefined,
+            verificationStatus: undefined,
+          }
+        : null
+    );
+    setRightPanel("topology");
+    setPreviewUrl(null);
+    setPreviewState("idle");
+
+    const retryId = projectId;
+
+    try {
+      await runBuildSite(
+        "",
+        {
+          onStep: handleStepEvent,
+          onDone: (result) => {
+            finishBuildLiveState(result.buildTotalDuration);
+            setResponse((prev) => ({ ...result, buildSteps: result.buildSteps ?? prev?.buildSteps }));
+            const nextProjectId = result.projectId ?? retryId;
+            if (nextProjectId) {
+              projectIdFromGenerationRef.current = nextProjectId;
+              setProjectId(nextProjectId);
+              if (autoPreviewAfterBuildRef.current && result.verificationStatus === "passed") {
+                void openPreviewAfterBuild(nextProjectId, true);
+              }
+            }
+          },
+          onError: (msg) => {
+            finishBuildLiveState();
+            appendConversationMessage({ role: "assistant", content: `流程出错：${msg}` });
+            setResponse({ content: "", error: msg });
+          },
+        },
+        abortRef.current.signal,
+        {
+          model: selectedModel,
+          retryProjectId: retryId,
+          resumeFromCheckpoint: true,
+          ...(useDatabasePromptsRef.current ? {} : { useDatabasePrompts: false }),
+        }
+      );
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        const message = err instanceof Error ? err.message : String(err);
+        appendConversationMessage({ role: "assistant", content: `流程出错：${message}` });
+        setResponse({ content: "", error: message });
+      }
+    } finally {
+      sseActiveRef.current = false;
       setLoading(false);
     }
   }
@@ -1153,6 +1317,10 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
   return {
     input, setInput, loading, clearing, response, intentAgent, mergedBrief, conversationMessages, lastRunInput, elapsed, flowStart,
     handleRun, handleClear, handleRetry,
+    generationSeemsStuck,
+    recoveryUnlocking,
+    handleUnlockInterruptedGeneration,
+    handleContinueFromCheckpoint,
     selectedModel, setSelectedModel, availableModels,
     projectId, setProjectId, projectLoading,
     rightPanel, setRightPanel,

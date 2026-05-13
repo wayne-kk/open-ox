@@ -9,25 +9,22 @@ type Params = { params: Promise<{ id: string }> };
 export const runtime = "nodejs";
 
 /**
- * POST /api/projects/[id]/cover/capture — queue a fresh desktop viewport screenshot (1480×960).
+ * POST /api/projects/[id]/cover/capture — queue a fresh desktop viewport screenshot (1480×960),
+ * then apply cinematic polish (safe margin, vignette, subtle letterbox) before upload.
  * 202 Accepted: job started in-process (runs even when OPEN_OX_COVER_CAPTURE=0).
- * Owner-only; requires SUPABASE_SERVICE_ROLE_KEY at runtime.
+ * Requires authentication; requires SUPABASE_SERVICE_ROLE_KEY at runtime.
  */
 export async function POST(_req: Request, { params }: Params) {
   const session = await getSessionUser();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
   }
-  const { user, supabase: db } = session;
+  const { supabase: db } = session;
   const { id } = await params;
 
   const project = await getProject(db, id);
   if (!project) {
     return NextResponse.json({ error: "Project not found", code: "PROJECT_NOT_FOUND" }, { status: 404 });
-  }
-
-  if (!project.ownerUserId || project.ownerUserId !== user.id) {
-    return NextResponse.json({ error: "Forbidden", code: "FORBIDDEN" }, { status: 403 });
   }
 
   try {

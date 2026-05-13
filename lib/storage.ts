@@ -3,11 +3,16 @@
  *
  * Layout:
  *   project-files/{projectId}/{relativePath}
+ *
+ * Fast restore: `.open-ox/manifest.json` (file list in one GET) +
+ * `.open-ox/snapshot.zip` (single GET then local extract).
  */
 
 import fs from "fs/promises";
 import path from "path";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import archiver from "archiver";
+import AdmZip from "adm-zip";
 import { supabase } from "./supabase";
 import { getSiteRoot, WORKSPACE_ROOT } from "./projectManager";
 
@@ -15,6 +20,8 @@ const BUCKET = "project-files";
 const STORAGE_UPLOAD_EXCLUDE = new Set(["node_modules", ".next", ".git", "out", ".open-ox"]);
 const STORAGE_UPLOAD_EXCLUDE_PREFIXES = ["components/ui/"];
 const STORAGE_UPLOAD_CONCURRENCY = 20;
+/** Bounded concurrency for manifest-guided per-file restores (fewer sockets than naive Promise.all). */
+const MANIFEST_RESTORE_CONCURRENCY = 16;
 const STORAGE_UPLOAD_MAX_RETRIES = 4;
 const TEMPLATE_RESTORE_EXCLUDE = new Set([
   "components/sections",
@@ -28,6 +35,19 @@ const TEMPLATE_RESTORE_EXCLUDE = new Set([
   "pnpm-lock.yaml",
   "tsconfig.tsbuildinfo",
 ]);
+
+const MANIFEST_REL = ".open-ox/manifest.json";
+const SNAPSHOT_ZIP_REL = ".open-ox/snapshot.zip";
+const SNAPSHOT_MANIFEST_VERSION = 1;
+
+/** Paths always upserted; never prune as “stale” when comparing to local crawl. */
+const PROTECTED_SNAPSHOT_OBJECTS = new Set([MANIFEST_REL, SNAPSHOT_ZIP_REL]);
+
+type SnapshotManifestJson = {
+  v: number;
+  generatedAt?: string;
+  files: string[];
+};
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -181,6 +201,147 @@ async function collectProjectFiles(dir: string, base: string): Promise<string[]>
   return files;
 }
 
+async function buildProjectZipBuffer(projectRoot: string, relativePaths: string[]): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    const archive = archiver("zip", { zlib: { level: 6 } });
+    archive.on("error", (err: Error) => reject(err));
+    archive.on("data", (chunk: Buffer) => {
+      chunks.push(chunk);
+    });
+    archive.on("end", () => {
+      resolve(Buffer.concat(chunks));
+    });
+    try {
+      const sorted = [...relativePaths].sort();
+      for (const rel of sorted) {
+        const norm = rel.split(path.sep).join("/");
+        archive.file(path.join(projectRoot, ...norm.split("/")), { name: norm });
+      }
+    } catch (e) {
+      reject(e instanceof Error ? e : new Error(String(e)));
+      return;
+    }
+    void archive.finalize();
+  });
+}
+
+async function downloadStorageBlob(storagePath: string): Promise<Blob | null> {
+  const { data, error } = await supabase.storage.from(BUCKET).download(storagePath);
+  if (error || !data) {
+    return null;
+  }
+  return data;
+}
+
+async function fetchSnapshotManifestParsed(projectId: string): Promise<SnapshotManifestJson | null> {
+  const blob = await downloadStorageBlob(`${projectId}/${MANIFEST_REL}`);
+  if (!blob) return null;
+  try {
+    const raw = typeof blob.text === "function" ? await blob.text() : Buffer.from(await blob.arrayBuffer()).toString("utf-8");
+    const parsed = JSON.parse(raw) as Partial<SnapshotManifestJson>;
+    if (
+      parsed.v !== SNAPSHOT_MANIFEST_VERSION ||
+      !Array.isArray(parsed.files) ||
+      parsed.files.length === 0
+    ) {
+      return null;
+    }
+    const files = parsed.files
+      .filter((f): f is string => typeof f === "string" && f.length > 0)
+      .map((f) => f.replace(/\\/g, "/"))
+      .filter(isSafeRestoreRelativePath);
+    if (!files.length) return null;
+    return { v: SNAPSHOT_MANIFEST_VERSION, generatedAt: parsed.generatedAt, files };
+  } catch {
+    return null;
+  }
+}
+
+/** Remote index for stale-object pruning — manifest when present avoids recursive list (same cost model as preview). */
+async function getRemoteRelativePathsForPrune(projectId: string): Promise<string[]> {
+  const m = await fetchSnapshotManifestParsed(projectId);
+  if (m?.files?.length) {
+    return [...new Set([...m.files, MANIFEST_REL, SNAPSHOT_ZIP_REL])];
+  }
+  return listProjectFiles(projectId);
+}
+
+function isSafeRestoreRelativePath(rel: string): boolean {
+  if (!rel.trim()) return false;
+  const n = rel.replace(/\\/g, "/");
+  if (n.startsWith("/") || n.includes("\0")) return false;
+  const parts = n.split("/");
+  if (parts.some((p) => p === "..")) return false;
+  return true;
+}
+
+async function restoreFromSnapshotZip(
+  projectId: string,
+  projectRoot: string
+): Promise<{ ok: true; files: string[] } | { ok: false; reason: string }> {
+  const blob = await downloadStorageBlob(`${projectId}/${SNAPSHOT_ZIP_REL}`);
+  if (!blob) {
+    return { ok: false, reason: "snapshot_zip_not_found_or_forbidden" };
+  }
+  let buf: Buffer;
+  try {
+    buf = Buffer.from(await blob.arrayBuffer());
+  } catch {
+    return { ok: false, reason: "snapshot_zip_read_buffer_failed" };
+  }
+  if (buf.length < 4 || buf.readUInt16LE(0) !== 0x4b50) {
+    return { ok: false, reason: "snapshot_zip_not_pk_zip" };
+  }
+
+  try {
+    const zip = new AdmZip(buf);
+    const entries = zip.getEntries();
+    const written: string[] = [];
+    for (const entry of entries) {
+      if (entry.isDirectory) continue;
+      const name = entry.entryName.replace(/\\/g, "/");
+      if (!isSafeRestoreRelativePath(name)) continue;
+      const data = entry.getData();
+      if (!data?.length && name.length > 0) continue;
+      const localPath = path.join(projectRoot, ...name.split("/"));
+      await fs.mkdir(path.dirname(localPath), { recursive: true });
+      await fs.writeFile(localPath, data);
+      written.push(name);
+    }
+
+    try {
+      await fs.access(path.join(projectRoot, "package.json"));
+    } catch {
+      return { ok: false, reason: `snapshot_zip_missing_package_json_after_extract(wrote=${written.length})` };
+    }
+    return { ok: true, files: written.sort() };
+  } catch {
+    return { ok: false, reason: "snapshot_zip_unzip_threw" };
+  }
+}
+
+async function restoreFromManifestBatchedDownloads(
+  projectId: string,
+  projectRoot: string,
+  files: string[]
+): Promise<string[]> {
+  const unique = [...new Set(files)].filter(isSafeRestoreRelativePath);
+  const restored: string[] = [];
+  await runInBatches(unique, MANIFEST_RESTORE_CONCURRENCY, async (relativePath) => {
+    const storagePath = `${projectId}/${relativePath}`;
+    const { data, error } = await supabase.storage.from(BUCKET).download(storagePath);
+    if (error || !data) return;
+    const localPath = path.join(projectRoot, ...relativePath.split("/"));
+    await fs.mkdir(path.dirname(localPath), { recursive: true });
+    const buffer = Buffer.from(await data.arrayBuffer());
+    await fs.writeFile(localPath, buffer);
+    restored.push(relativePath);
+  });
+  restored.sort();
+  return restored;
+}
+
 /** Upload the complete local project tree so cross-device restore is consistent */
 export async function uploadFullProject(projectId: string): Promise<string[]> {
   const projectRoot = getSiteRoot(projectId);
@@ -188,17 +349,33 @@ export async function uploadFullProject(projectId: string): Promise<string[]> {
   files.sort();
   const localSet = new Set(files);
 
-  // Snapshot remote file list once. Recursive listing is expensive (one Storage `list`
-  // per directory); doing it again after upload doubled latency on large prefixes.
-  const storageFilesBefore = await listProjectFiles(projectId);
+  const storageFilesBefore = await getRemoteRelativePathsForPrune(projectId);
 
-  // Upload files with bounded concurrency to avoid storage rate-limit spikes.
   await runInBatches(files, STORAGE_UPLOAD_CONCURRENCY, async (relativePath) => {
     await uploadProjectFile(projectId, relativePath);
   });
 
-  // Remove stale files so storage mirrors local project state across devices.
-  const staleFiles = storageFilesBefore.filter((relativePath) => !localSet.has(relativePath));
+  const manifestPayload: SnapshotManifestJson = {
+    v: SNAPSHOT_MANIFEST_VERSION,
+    generatedAt: new Date().toISOString(),
+    files,
+  };
+  await uploadProjectFileContent(
+    projectId,
+    MANIFEST_REL,
+    JSON.stringify(manifestPayload, null, 2) + "\n",
+    { contentType: "application/json" }
+  );
+
+  const zipBuf = await buildProjectZipBuffer(projectRoot, files);
+  await uploadProjectFileContent(projectId, SNAPSHOT_ZIP_REL, zipBuf, {
+    contentType: "application/zip",
+  });
+
+  const staleFiles = storageFilesBefore.filter(
+    (relativePath) => !localSet.has(relativePath) && !PROTECTED_SNAPSHOT_OBJECTS.has(relativePath)
+  );
+
   if (staleFiles.length > 0) {
     const staleStoragePaths = staleFiles.map((relativePath) => `${projectId}/${relativePath}`);
     await removeStoragePaths(staleStoragePaths);
@@ -246,25 +423,82 @@ async function listAllFiles(prefix: string): Promise<string[]> {
 
 /** Download all files for a project from Storage to local sites/ directory */
 export async function restoreProjectFiles(projectId: string): Promise<string[]> {
+  const totalStart = performance.now();
   const projectRoot = getSiteRoot(projectId);
   await fs.mkdir(projectRoot, { recursive: true });
+  const tplStart = performance.now();
   await restoreTemplateBaseFiles(projectId);
+  const tplMs = Math.round(performance.now() - tplStart);
 
+  /** 1 — Single GET snapshot + unzip (fewest Storage round trips). */
+  const zipTryStart = performance.now();
+  const zipResult = await restoreFromSnapshotZip(projectId, projectRoot);
+  const zipTryMs = Math.round(performance.now() - zipTryStart);
+  if (zipResult.ok === true && zipResult.files.length > 0) {
+    const totalMs = Math.round(performance.now() - totalStart);
+    console.log(
+      `[preview restore] strategy=zip templateMissingMs=${tplMs} snapshotDownloadUnpackMs=${zipTryMs} ` +
+        `files=${zipResult.files.length} TOTAL=${totalMs}ms projectId=${projectId}`
+    );
+    return zipResult.files;
+  }
+  console.log(
+    `[preview restore] zipPathSkipped reason=${zipResult.ok === false ? zipResult.reason : "empty_entries"} ` +
+      `zipTryMs=${zipTryMs} projectId=${projectId}`
+  );
+
+  /** 2 — One GET manifest + bounded-parallel downloads. */
+  const manifestStart = performance.now();
+  const manifest = await fetchSnapshotManifestParsed(projectId);
+  const manifestFetchMs = Math.round(performance.now() - manifestStart);
+  if (!manifest?.files?.length) {
+    console.log(
+      `[preview restore] manifestSkipped fetchMs=${manifestFetchMs} (missing invalid_v1 or empty_files) projectId=${projectId}`
+    );
+  }
+  if (manifest?.files?.length) {
+    const dlStart = performance.now();
+    const restored = await restoreFromManifestBatchedDownloads(projectId, projectRoot, manifest.files);
+    const dlMs = Math.round(performance.now() - dlStart);
+    const totalMs = Math.round(performance.now() - totalStart);
+    console.log(
+      `[preview restore] strategy=manifestBatched manifestFetchMs=${manifestFetchMs} ` +
+        `templateMissingMs=${tplMs} manifestFiles=${manifest.files.length} downloaded=${restored.length} ` +
+        `downloadWriteMs=${dlMs} zipFallbackMs=${zipTryMs} TOTAL=${totalMs}ms projectId=${projectId}`
+    );
+    return restored;
+  }
+
+  /** 3 — Legacy: recursive list + parallel GET (old projects without manifest/zip). */
+  const listStart = performance.now();
   const allPaths = await listAllFiles(projectId);
-  if (allPaths.length === 0) return [];
+  const listMs = Math.round(performance.now() - listStart);
+  console.log(
+    `[preview restore] strategy=recursiveList templateMissingMs=${tplMs} listRemoteMs=${listMs} ` +
+      `remoteObjects=${allPaths.length} projectId=${projectId}`
+  );
 
+  if (allPaths.length === 0) {
+    console.log(
+      `[preview restore] TOTAL=${Math.round(performance.now() - totalStart)}ms (no remote files) projectId=${projectId}`
+    );
+    return [];
+  }
+
+  const codePathsOnly = allPaths.filter((storagePath) => {
+    const relativePath = storagePath.slice(projectId.length + 1);
+    return !relativePath.startsWith(".open-ox/");
+  });
+
+  const dlStart = performance.now();
   const restored: string[] = [];
 
   await Promise.all(
-    allPaths.map(async (storagePath) => {
-      const { data, error } = await supabase.storage
-        .from(BUCKET)
-        .download(storagePath);
+    codePathsOnly.map(async (storagePath) => {
+      const { data, error } = await supabase.storage.from(BUCKET).download(storagePath);
 
       if (error || !data) return;
 
-      // storagePath = "projectId/components/sections/Foo.tsx"
-      // relativePath = "components/sections/Foo.tsx"
       const relativePath = storagePath.slice(projectId.length + 1);
       const localPath = path.join(getSiteRoot(projectId), relativePath);
       await fs.mkdir(path.dirname(localPath), { recursive: true });
@@ -272,6 +506,12 @@ export async function restoreProjectFiles(projectId: string): Promise<string[]> 
       await fs.writeFile(localPath, buffer);
       restored.push(relativePath);
     })
+  );
+
+  const dlMs = Math.round(performance.now() - dlStart);
+  const totalMs = Math.round(performance.now() - totalStart);
+  console.log(
+    `[preview restore] downloadWriteMs=${dlMs} wrote=${restored.length} TOTAL=${totalMs}ms projectId=${projectId}`
   );
 
   return restored;
@@ -291,7 +531,6 @@ export async function listProjectFiles(projectId: string): Promise<string[]> {
 }
 
 async function removeStoragePaths(storagePaths: string[]): Promise<void> {
-  // Supabase remove accepts max 1000 paths at a time
   for (let i = 0; i < storagePaths.length; i += 1000) {
     const batch = storagePaths.slice(i, i + 1000);
     const { error } = await supabase.storage.from(BUCKET).remove(batch);

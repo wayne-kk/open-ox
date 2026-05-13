@@ -12,6 +12,10 @@ import { BlueprintOverview } from "./BlueprintOverview";
 import { MemoryDebugPanel } from "./MemoryDebugPanel";
 import { SlashMenu } from "@/app/components/ui/SlashMenu";
 import { useSlashMenu } from "@/app/hooks/useSlashMenu";
+import {
+  isRecoverableGenerationError,
+  stripRecoverablePrefixForDisplay,
+} from "@/lib/generationRecovery";
 import type { BuildStudioState, ModifyRecord, ModifyDiff } from "../hooks/useBuildStudio";
 import { inferMonacoLanguage } from "../lib/inferMonacoLanguage";
 
@@ -409,6 +413,10 @@ export function BuildConversation({
     handleRun,
     handleClear,
     handleRetry,
+    generationSeemsStuck,
+    recoveryUnlocking,
+    handleUnlockInterruptedGeneration,
+    handleContinueFromCheckpoint,
     projectId,
     setProjectId,
     modifyInstruction,
@@ -474,7 +482,8 @@ export function BuildConversation({
         response?.blueprint ||
         response?.verificationStatus ||
         response?.logDirectory ||
-        response?.buildTotalDuration
+        response?.buildTotalDuration ||
+        response?.error
     );
     const latestAssistantMessageId = [...conversationMessages].reverse().find((message) => message.role === "assistant")?.id;
     const showThinkingBubble =
@@ -525,6 +534,32 @@ export function BuildConversation({
                             <p className="mt-2 text-sm leading-7 text-muted-foreground">
                                 描述你想要的页面、应用或视觉系统，我会将它转化为一个完整的构建流程，并在这里实时推送每一步的执行详情。
                             </p>
+                        </ChatBubble>
+                    ) : null}
+
+                    {generationSeemsStuck && projectId ? (
+                        <ChatBubble role="assistant">
+                            <div className="text-[11px] font-medium text-foreground">构建助手</div>
+                            <div className="mt-2 space-y-3 text-[13px] leading-6 text-foreground">
+                                <p className="flex items-start gap-2 text-amber-200/90">
+                                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                                    <span>
+                                        长时间没有看到新的构建进度（可能 SSE 断开或后台已停止）。
+                                        如果确认没有其它标签页在生成此项目，可标记为中断，然后选择继续或重新开始。
+                                    </span>
+                                </p>
+                                <button
+                                    type="button"
+                                    disabled={recoveryUnlocking}
+                                    onClick={() => void handleUnlockInterruptedGeneration()}
+                                    className="defi-button-outline flex items-center gap-2 px-4 py-2 text-[11px] font-medium disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    <RefreshCw
+                                        className={`h-3.5 w-3.5 ${recoveryUnlocking ? "animate-spin" : ""}`}
+                                    />
+                                    {recoveryUnlocking ? "处理中…" : "标记为中断"}
+                                </button>
+                            </div>
                         </ChatBubble>
                     ) : null}
 
@@ -704,17 +739,46 @@ export function BuildConversation({
 
                                 {response?.error ? (
                                     <LogSection title="Error">
-                                        <TermLine color="text-red-400">error: {response.error}</TermLine>
-                                        {projectId && !loading && (
-                                            <button
-                                                type="button"
-                                                onClick={handleRetry}
-                                                className="mt-3 defi-button-outline flex items-center gap-2 px-4 py-2 text-[11px] font-medium"
-                                            >
-                                                <RefreshCw className="h-3.5 w-3.5" />
-                                                重新生成
-                                            </button>
-                                        )}
+                                        <TermLine color="text-red-400">
+                                            error:{" "}
+                                            {isRecoverableGenerationError(response.error)
+                                                ? stripRecoverablePrefixForDisplay(response.error)
+                                                : response.error}
+                                        </TermLine>
+                                        {projectId && !loading ? (
+                                            isRecoverableGenerationError(response.error) ? (
+                                                <div className="mt-3 flex flex-wrap gap-2">
+                                                    <button
+                                                        type="button"
+                                                        disabled={recoveryUnlocking}
+                                                        onClick={() => void handleContinueFromCheckpoint()}
+                                                        className="defi-button flex items-center gap-2 px-4 py-2 text-[11px] font-medium disabled:cursor-not-allowed disabled:opacity-50"
+                                                    >
+                                                        <Play className="h-3.5 w-3.5" />
+                                                        继续生成
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        disabled={recoveryUnlocking}
+                                                        onClick={() => void handleRetry()}
+                                                        className="defi-button-outline flex items-center gap-2 px-4 py-2 text-[11px] font-medium disabled:cursor-not-allowed disabled:opacity-50"
+                                                    >
+                                                        <RefreshCw className="h-3.5 w-3.5" />
+                                                        重新生成
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    disabled={recoveryUnlocking}
+                                                    onClick={() => void handleRetry()}
+                                                    className="mt-3 defi-button-outline flex items-center gap-2 px-4 py-2 text-[11px] font-medium disabled:cursor-not-allowed disabled:opacity-50"
+                                                >
+                                                    <RefreshCw className="h-3.5 w-3.5" />
+                                                    重新生成
+                                                </button>
+                                            )
+                                        ) : null}
                                     </LogSection>
                                 ) : null}
 

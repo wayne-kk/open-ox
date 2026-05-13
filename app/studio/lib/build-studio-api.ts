@@ -8,33 +8,170 @@ interface BuildSiteCallbacks {
   onError: (msg: string) => void;
 }
 
-function processSSEChunk(
-  chunk: string,
-  callbacks: BuildSiteCallbacks
-): void {
+type QueuedHandshake = {
+  kind: "generation_queued";
+  projectId: string;
+  extras: Partial<AiResponse>;
+};
+
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(resolve, ms);
+    if (!signal) return;
+    const onAbort = () => {
+      clearTimeout(t);
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+function projectPayloadToAiResponse(project: Record<string, unknown>): AiResponse {
+  const status = String(project.status ?? "");
+  const err =
+    typeof project.error === "string" ? project.error : project.error ? String(project.error) : undefined;
+  const vf = project.verificationStatus as "passed" | "failed" | undefined;
+  const content =
+    status === "ready"
+      ? `项目已生成完成。${vf === "passed" ? "构建验证通过。" : ""}`
+      : status === "failed"
+        ? `项目生成失败：${err ?? "未知错误"}`
+        : "";
+
+  return {
+    content,
+    projectId: project.id as string | undefined,
+    blueprint: project.blueprint as AiResponse["blueprint"],
+    buildSteps: (project.buildSteps ?? []) as BuildStep[],
+    generatedFiles: (project.generatedFiles ?? []) as string[],
+    verificationStatus: vf,
+    logDirectory: project.logDirectory as string | undefined,
+    buildTotalDuration:
+      typeof project.totalDuration === "number"
+        ? project.totalDuration
+        : project.totalDuration != null
+          ? Number(project.totalDuration)
+          : undefined,
+    error: status === "failed" ? err : undefined,
+    unvalidatedFiles: project.unvalidatedFiles as AiResponse["unvalidatedFiles"],
+    installedDependencies:
+      project.installedDependencies as AiResponse["installedDependencies"],
+    dependencyInstallFailures:
+      project.dependencyInstallFailures as AiResponse["dependencyInstallFailures"],
+  };
+}
+
+async function waitForBackgroundGeneration(
+  projectId: string,
+  callbacks: BuildSiteCallbacks,
+  signal?: AbortSignal,
+  extras?: Partial<AiResponse>
+): Promise<void> {
+  let lastFingerprint = "";
+  try {
+    let firstPoll = true;
+    while (!signal?.aborted) {
+      if (!firstPoll) {
+        await delay(1200, signal);
+      }
+      firstPoll = false;
+      const res = await fetch(`/api/projects/${projectId}`, { signal });
+      if (!res.ok) {
+        callbacks.onError((await res.json().catch(() => ({}))).error ?? `HTTP ${res.status}`);
+        return;
+      }
+      const project = (await res.json()) as Record<string, unknown>;
+      const steps = (project.buildSteps ?? []) as BuildStep[];
+      const fp = JSON.stringify(steps);
+      if (fp !== lastFingerprint) {
+        for (const s of steps) {
+          callbacks.onStep(s);
+        }
+        lastFingerprint = fp;
+      }
+      if (project.status !== "generating") {
+        callbacks.onDone({
+          ...projectPayloadToAiResponse(project),
+          ...extras,
+        });
+        return;
+      }
+    }
+  } catch (e) {
+    if ((e as Error).name === "AbortError") {
+      callbacks.onError("Aborted");
+    } else {
+      callbacks.onError(e instanceof Error ? e.message : String(e));
+    }
+  }
+}
+
+function processSSEChunk(chunk: string, callbacks: BuildSiteCallbacks): QueuedHandshake | undefined {
   const line = chunk.replace(/^data:\s*/, "").trim();
   if (!line) return;
 
   try {
     const event = JSON.parse(line) as {
-      type: "intent_agent_turn" | "intent_agent_commit" | "step" | "done" | "error";
+      type?: string;
+      phase?: string;
+      result?: Record<string, unknown> & {
+        intentAgent?: IntentAgentTurn;
+        mergedBriefFromAgent?: string;
+        generationQueued?: boolean;
+        projectId?: string;
+      };
+      message?: string;
       [key: string]: unknown;
     };
 
     if (event.type === "intent_agent_turn") {
       callbacks.onIntentTurn?.(event.turn as IntentAgentTurn);
-    } else if (event.type === "intent_agent_commit") {
+      return;
+    }
+    if (event.type === "intent_agent_commit") {
       callbacks.onIntentCommit?.(String(event.mergedBrief ?? ""));
-    } else if (event.type === "step") {
+      return;
+    }
+    if (event.type === "step") {
       callbacks.onStep(event as unknown as BuildStep);
-    } else if (event.type === "done") {
-      callbacks.onDone(event.result as AiResponse);
-    } else if (event.type === "error") {
+      return;
+    }
+    if (event.type === "done") {
+      const phase = typeof event.phase === "string" ? event.phase : "";
+      const result = event.result ?? {};
+      const genQueued =
+        phase === "generation_queued" || result.generationQueued === true;
+
+      if (genQueued && typeof result.projectId === "string") {
+        const extras: Partial<AiResponse> = {};
+        if (result.mergedBriefFromAgent)
+          extras.mergedBriefFromAgent = String(result.mergedBriefFromAgent);
+        if (result.mergedBriefFromAgent)
+          extras.mergedBrief = String(result.mergedBriefFromAgent);
+        if (result.intentAgent) extras.intentAgent = result.intentAgent as IntentAgentTurn;
+        if (typeof result.content === "string") extras.content = result.content;
+
+        return {
+          kind: "generation_queued",
+          projectId: result.projectId,
+          extras,
+        };
+      }
+
+      callbacks.onDone(result as unknown as AiResponse);
+      return;
+    }
+    if (event.type === "error") {
       callbacks.onError(String(event.message));
     }
   } catch {
     // ignore malformed SSE chunks
   }
+  return undefined;
 }
 
 export async function runBuildSite(
@@ -44,10 +181,10 @@ export async function runBuildSite(
   options?: {
     model?: string;
     retryProjectId?: string;
+    resumeFromCheckpoint?: boolean;
     projectId?: string;
     styleGuide?: string;
     enableSkills?: boolean;
-    /** When false, core step prompts use repo defaults only (skip DB overrides). Default on server is true. */
     useDatabasePrompts?: boolean;
   }
 ): Promise<void> {
@@ -58,23 +195,24 @@ export async function runBuildSite(
     body: JSON.stringify(
       useIntentAgent
         ? {
-          projectId: options?.projectId,
-          message: input,
-          ...(options?.model ? { model: options.model } : {}),
-          ...(options?.styleGuide ? { styleGuide: options.styleGuide } : {}),
-          ...(options?.enableSkills ? { enableSkills: true } : {}),
-          ...(options?.useDatabasePrompts === false ? { useDatabasePrompts: false } : {}),
-          runGenerateOnCommit: true,
-        }
+            projectId: options?.projectId,
+            message: input,
+            ...(options?.model ? { model: options.model } : {}),
+            ...(options?.styleGuide ? { styleGuide: options.styleGuide } : {}),
+            ...(options?.enableSkills ? { enableSkills: true } : {}),
+            ...(options?.useDatabasePrompts === false ? { useDatabasePrompts: false } : {}),
+            runGenerateOnCommit: true,
+          }
         : {
-          userPrompt: input,
-          ...(options?.model ? { model: options.model } : {}),
-          ...(options?.retryProjectId ? { retryProjectId: options.retryProjectId } : {}),
-          ...(options?.projectId ? { projectId: options.projectId } : {}),
-          ...(options?.styleGuide ? { styleGuide: options.styleGuide } : {}),
-          ...(options?.enableSkills ? { enableSkills: true } : {}),
-          ...(options?.useDatabasePrompts === false ? { useDatabasePrompts: false } : {}),
-        }
+            userPrompt: input,
+            ...(options?.model ? { model: options.model } : {}),
+            ...(options?.resumeFromCheckpoint ? { resumeFromCheckpoint: true } : {}),
+            ...(options?.retryProjectId ? { retryProjectId: options.retryProjectId } : {}),
+            ...(options?.projectId ? { projectId: options.projectId } : {}),
+            ...(options?.styleGuide ? { styleGuide: options.styleGuide } : {}),
+            ...(options?.enableSkills ? { enableSkills: true } : {}),
+            ...(options?.useDatabasePrompts === false ? { useDatabasePrompts: false } : {}),
+          }
     ),
     signal,
   });
@@ -89,6 +227,11 @@ export async function runBuildSite(
 
   const contentType = res.headers.get("content-type") ?? "";
 
+  const handleQueuedHandshake = async (q: QueuedHandshake): Promise<boolean> => {
+    await waitForBackgroundGeneration(q.projectId, callbacks, signal, q.extras);
+    return true;
+  };
+
   if (contentType.includes("text/event-stream")) {
     const reader = res.body?.getReader();
     if (!reader) throw new Error("SSE stream unavailable");
@@ -96,32 +239,54 @@ export async function runBuildSite(
     const decoder = new TextDecoder();
     let buffer = "";
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n\n");
-      buffer = lines.pop() ?? "";
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() ?? "";
 
-      for (const chunk of lines) {
-        processSSEChunk(chunk, callbacks);
+        for (const chunk of lines) {
+          const handshake = processSSEChunk(chunk, callbacks);
+          if (handshake?.kind === "generation_queued") {
+            await handleQueuedHandshake(handshake);
+            return;
+          }
+        }
       }
-    }
 
-    // Flush any remaining data left in the buffer after the stream closes.
-    // This handles the edge case where the server closes the connection
-    // without a trailing \n\n, leaving the last event stranded in buffer.
-    if (buffer.trim()) {
-      processSSEChunk(buffer, callbacks);
+      if (buffer.trim()) {
+        const handshake = processSSEChunk(buffer, callbacks);
+        if (handshake?.kind === "generation_queued") {
+          await handleQueuedHandshake(handshake);
+          return;
+        }
+      }
+    } catch {
+      callbacks.onError("SSE stream aborted or failed.");
     }
-  } else {
-    const data = (await res.json()) as AiResponse;
-    if (data.error) {
-      callbacks.onError(data.error);
-    } else {
-      callbacks.onDone(data);
+  } else if (contentType.includes("application/json")) {
+    const raw = await res.json().catch(() => ({})) as {
+      ok?: boolean;
+      projectId?: string;
+      error?: string;
+      code?: string;
+    };
+    if (!res.ok) {
+      callbacks.onError(typeof raw.error === "string" ? raw.error : `HTTP ${res.status}`);
+      return;
     }
+    if (typeof raw.projectId === "string" && raw.ok === true) {
+      await waitForBackgroundGeneration(raw.projectId, callbacks, signal);
+      return;
+    }
+    if ("error" in raw && raw.error) {
+      callbacks.onError(String(raw.error));
+      return;
+    }
+    callbacks.onDone(raw as unknown as AiResponse);
   }
 }
 

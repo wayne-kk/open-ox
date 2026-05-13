@@ -28,7 +28,7 @@
 ```json
 {
   "brief": {
-    "projectTitle": "可读项目标题",
+    "projectTitle": "数字孪生作战室",
     "projectDescription": "一句话：目标、受众、范围（不得添加用户未提及的功能）",
     "language": "网站内容语言的 BCP-47 标签（例如 zh-CN, en）",
     "productScope": {
@@ -45,6 +45,14 @@
 ```
 
 `brief.productScope` 至少包含键：`productType`、`mvpDefinition`、`coreOutcome`、`businessGoal`、`audienceSummary`、`inScope`、`outOfScope`（`inScope` / `outOfScope` 必须非空；信息不足时写诚实说明）。
+
+### `brief.projectTitle`（列表标题）
+
+这是**项目在列表里的短名**，不是广告语、更不是用户原文复述。
+
+- 中文：约 **6–24 个字**，像「品牌 / 产品线 / 场景控制台」一类的叫法。
+- 英文：常见 **2–8 个词**，Title Case 或 sentence case，不要塞从句。
+- **禁止**：整段 briefing、冒号接引语、首尾引号包装的“口号句”；细节放进 `projectDescription`。
 
 ### `site`
 
@@ -88,7 +96,7 @@
 
 ## 最终自检（静默）
 
-- `productType` 与类别一致；`page.description` 无未授权功能扩展；**未输出**任何 `layoutSections` / `navigation` / `footer` 字段；**未输出** `layoutMode`。
+- `productType` 与类别一致；`brief.projectTitle` 为短产品名而非长句；`page.description` 无未授权功能扩展；**未输出**任何 `layoutSections` / `navigation` / `footer` 字段；**未输出** `layoutMode`。
 
 ## 输出
 

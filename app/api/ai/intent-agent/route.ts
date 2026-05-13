@@ -1,45 +1,20 @@
 /**
  * POST /api/ai/intent-agent
  *
- * Task Agent：可多轮 yield / resume；commit 后可在同一条 SSE 中衔接 `runGenerateProject`。
- *
- * Body JSON:
- *   - projectId: string (required)
- *   - message: string (required)
- *   - resetSession?: boolean
- *   - additionalTools?: OpenAI-format function tool array (merged server-side)
- *   - enableIntentAgentWebSearch?: boolean
- *   - styleGuide?, enableSkills?, enableIntentGuide?, model? — applied only when committing and running generation
- *   - runGenerateOnCommit?: boolean (default true)
- *   - langfuseSessionId?: string — optional override for Langfuse Session grouping; default
- *     is one Session per `projectId` (all intent / generate / modify traces for the site
- *     aggregate under the same Session row).
+ * Task Agent：可多轮 yield / resume；commit 后入队后台生成（由 generation worker 执行）。
  */
-
-import { runGenerateProject } from "@/ai/flows";
-import {
-  detectCheckpoint,
-  type CheckpointResult,
-} from "@/ai/flows/generate_project/shared/checkpoint";
 import {
   getProject,
   initProjectDir,
   getSiteRoot as projectManagerGetSiteRoot,
   updateProjectStatus,
-  renameProject,
 } from "@/lib/projectManager";
-import { scheduleUploadFullProject } from "@/lib/storage";
-import { scheduleCaptureProjectCover } from "@/lib/projectCoverCapture";
 import { setRuntimeModelId, type ModelId } from "@/lib/config/models";
 import { loadStepModelsFromDB } from "@/lib/config/models";
 import {
   loadCoreStepPromptsFromDB,
   normalizePromptProfile,
-  withCorePromptRuntime,
 } from "@/lib/config/corePrompts";
-import type { BuildStep } from "@/ai/flows";
-import { redactBuildStepForTransport } from "@/ai/flows/generate_project/shared/buildStepPayload";
-import { shouldSkipNamingFromBlueprintTitle } from "@/ai/flows/generate_project/intentAgent/commitMergeBrief";
 import { SSE_RESPONSE_HEADERS } from "@/lib/sse-headers";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
@@ -60,6 +35,11 @@ import {
   runIntentAgentTurn,
   isSafeProjectId,
 } from "@/ai/flows/generate_project/intentAgent";
+import type { GenerationRunPayloadBody } from "@/lib/generation/types";
+import {
+  enqueueGenerationJob,
+  getActiveQueuedOrRunningRunId,
+} from "@/lib/generation/enqueueGenerationJob";
 import fs from "fs/promises";
 import path from "path";
 
@@ -197,8 +177,8 @@ export async function POST(req: Request) {
               },
               input: { message: message.trim() },
             },
-            () =>
-              runWithSiteRoot(projectManagerGetSiteRoot(projectId), async () => {
+            async () => {
+              await runWithSiteRoot(projectManagerGetSiteRoot(projectId), async () => {
           const additionalParsed = coerceAdditionalToolsFromJson(body.additionalTools);
           const mergedExtraTools = [...additionalParsed];
           if (
@@ -302,116 +282,59 @@ export async function POST(req: Request) {
             throw new Error("commit_generate invoked without a merged brief.");
           }
 
-          let checkpoint: CheckpointResult | undefined;
-          const existing = await getProject(db, projectId);
-          if (existing?.buildSteps && existing.buildSteps.length > 0) {
-            checkpoint = detectCheckpoint(existing);
-          }
-
-          const onStep = (step: BuildStep) => {
-            send({ type: "step", ...redactBuildStepForTransport(step) });
+          const mergedBrief = intentResult.mergedBrief!.trim();
+          const intentRunPayload: GenerationRunPayloadBody = {
+            requestingUserId: user.id,
+            effectivePrompt: mergedBrief,
+            effectiveModel: modelOverride ?? meta.modelId ?? undefined,
+            effectiveGenerationMode: meta.generationMode ?? "web",
+            preCreatedProjectId: projectId,
+            resumeFromCheckpoint: false,
+            styleGuide,
+            enableSkills,
+            enableIntentGuide,
+            ...(typeof body.langfuseSessionId === "string"
+              ? { langfuseSessionId: body.langfuseSessionId }
+              : {}),
+            useDatabasePrompts: false,
           };
 
-          const genResult = await withCorePromptRuntime(
-            {
-              promptProfile,
-              useDatabasePrompts,
-              dbPromptByStepId: corePromptOverrides,
-            },
-            () =>
-              withLangfuseSpan(LfSpanIntent.mergedBriefGeneration, () =>
-                runGenerateProject(
-                  intentResult.mergedBrief!,
-                  onStep,
-                  {
-                    projectId,
-                    styleGuide,
-                    enableSkills,
-                    useDatabasePrompts,
-                    checkpoint,
-                    enableIntentGuide,
-                    langfuseUserId: user.id,
-                    langfuseSessionId: langfuseSessionKey,
-                  }
-                )
-              )
-          );
-
-          const fileSummary = `生成了 ${genResult.generatedFiles.length} 个文件：\n${genResult.generatedFiles.join("\n")}`;
-          const logSummary = genResult.logDirectory ? `\n\n日志目录：${genResult.logDirectory}` : "";
-          const content = genResult.intentGuideDeferred && genResult.intentGuide
-            ? genResult.intentGuide.assistantMessage
-            : genResult.success
-              ? genResult.verificationStatus === "passed"
-                ? `项目构建完成并通过校验。\n${fileSummary}${logSummary}`
-                : `项目文件已写入正式目录，但当前未通过校验，相关生成文件已标记。\n${fileSummary}${logSummary}`
-              : `项目生成失败：${genResult.error}`;
-
-          if (genResult.success) {
-            await updateProjectStatus(db, projectId, "ready", {
-              completedAt: new Date().toISOString(),
-              verificationStatus: genResult.verificationStatus,
-              blueprint: genResult.blueprint,
-              buildSteps: genResult.steps.map(redactBuildStepForTransport),
-              generatedFiles: genResult.generatedFiles,
-              logDirectory: genResult.logDirectory,
-              totalDuration: genResult.totalDuration,
-            });
-            const projectTitle = (genResult.blueprint as { brief?: { projectTitle?: string } })?.brief
-              ?.projectTitle;
-            if (
-              projectTitle &&
-              projectTitle.trim() &&
-              !shouldSkipNamingFromBlueprintTitle(projectTitle)
-            ) {
-              await renameProject(db, projectId, projectTitle.trim());
-            }
-            scheduleUploadFullProject(projectId);
-            scheduleCaptureProjectCover(projectId);
-          } else if (genResult.intentGuideDeferred && genResult.intentGuide) {
-            await updateProjectStatus(db, projectId, "failed", {
-              error: `[intent_guide] ${genResult.intentGuide.assistantMessage.slice(0, 480)}`,
-              buildSteps: genResult.steps.map(redactBuildStepForTransport),
-            });
+          let runId: string;
+          let attached: boolean;
+          const aliveRunId = await getActiveQueuedOrRunningRunId(db, projectId);
+          if (aliveRunId) {
+            runId = aliveRunId;
+            attached = true;
           } else {
-            await updateProjectStatus(db, projectId, "failed", {
-              error: genResult.error ?? "Generation failed",
-              buildSteps: genResult.steps.map(redactBuildStepForTransport),
+            const job = await enqueueGenerationJob({
+              db,
+              projectId,
+              ownerUserId: user.id,
+              kind: "new",
+              resumeFromCheckpoint: false,
+              payload: intentRunPayload,
             });
+            runId = job.runId;
+            attached = job.attached;
           }
 
           send({
             type: "done",
-            phase: "full_pipeline",
+            phase: "generation_queued",
             result: {
-              content,
               projectId,
-              mergedBriefFromAgent: intentResult.mergedBrief,
-              generatedFiles: genResult.generatedFiles,
-              blueprint: genResult.blueprint,
-              verificationStatus: genResult.verificationStatus,
-              unvalidatedFiles: genResult.unvalidatedFiles,
-              installedDependencies: genResult.installedDependencies,
-              dependencyInstallFailures: genResult.dependencyInstallFailures,
-              buildSteps: genResult.steps.map(redactBuildStepForTransport),
-              logDirectory: genResult.logDirectory,
-              buildTotalDuration: genResult.totalDuration,
-              intentGuideDeferred: genResult.intentGuideDeferred === true,
-              intentGuide: genResult.intentGuide
-                ? {
-                    outcome: genResult.intentGuide.outcome,
-                    phase: genResult.intentGuide.phase,
-                    assistantMessage: genResult.intentGuide.assistantMessage,
-                    suggestedReplies: genResult.intentGuide.suggestedReplies,
-                    choiceOptions: genResult.intentGuide.choiceOptions,
-                    buildPromptAppendix: genResult.intentGuide.buildPromptAppendix,
-                  }
-                : undefined,
+              runId,
+              attached,
+              mergedBriefFromAgent: mergedBrief,
               intentAgent: serializeIntentTurn(intentResult),
+              content:
+                "需求已确认，生成任务已进入后台队列。你可关闭页面，稍后刷新查看进度或结果。",
+              generationQueued: true,
             },
           });
-          })
-        );
+              });
+            }
+          );
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : String(err);
           send({ type: "error", message: errMsg });

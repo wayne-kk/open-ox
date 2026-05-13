@@ -370,24 +370,4 @@ skills:
       - brutalist grid
       - bento
 
-  - name: unicorn-studio-embed-hero-bg
-    kind: component-skill
-    sectionTypes: [hero]
-    priority: 64
-    notes: Unicorn Studio 全屏背景嵌入；前景叠文案；project id 来自 brief；单次 init。
-    keywords:
-      - motor show
-      - luxury hotel
-      - device unveil
-      - concert tour
-      - experiential PR
-      - sensory maximalism
-      - premium reveal
-    exclude_keywords:
-      - static photography hero
-      - editorial blinds
-      - bento dashboard
-      - custom three.js
-      - shader hero
-      - css marquee gallery
-      - split telemetry
+  

@@ -1,73 +1,53 @@
 # Component Skill: Hero — Split Metrics + Triple Fanned Phone Mockups
 
-Mobile product hero: **left** status chip, split headline, body, metric chips, CTAs, avatar stack; **right** three fanned phone frames (~**−8° / 0° / +8°**) with notch, dark chrome, three distinct in-screen UIs (card, map/route, live tracker). **CSS/DOM + inline SVG**—no WebGL or embed runtime.
+**Intent:** Marketing / product hero for a consumer mobile app—not a HUD, data wall, marquee gallery, or full-bleed WebGL/embed background. Split layout: copy + proof on one side; three fanned phone mockups (~−8° / 0° / +8°) on the other. **Implementation stack:** semantic HTML, Tailwind (or equivalent), **inline SVG** where needed (`<pattern>` for map grid, route path). **No WebGL, no iframe/embed runtimes.**
 
-Not **`bento-split-marquee-gallery-hero`**, **`unicorn-studio-embed-hero-bg`**, or **`signal-grid-split-hero`**—consumer device showcase, not bento/gallery or HUD.
+## Layout & composition
 
-## Core Effect
+- **Section:** `relative`, horizontal clip (`overflow-x-hidden` or `overflow-hidden`), top padding for header clearance (`pt-16`→`pt-24` tier—tune if there is no global nav).
+- **Background:** Three large soft blobs (`blur-3xl`), `absolute`, `pointer-events-none`, `aria-hidden` on wrapper; tint from design tokens / brief—not a fixed demo hex.
+- **Container:** `max-w-7xl`, horizontal padding; `lg:grid-cols-2`, `gap-16`, items vertically centered. Mobile: stack; column order follows brief (copy first unless specified).
+- **Left column:** Status pill (border, frosted bg, pulse dot + one line); split headline (primary + muted secondary span); body with max width; metric chips (≥3, typically four—label muted, value emphasized); primary solid CTA + secondary ghost with leading `lucide-react` icon; avatar stack (about four faces) + overflow count + one trust line.
+- **Right column — stage:** `relative`, `max-w-xl`, `lg:ml-auto`, `min-h` ~560–600px so rotated phones don’t clip. Three phones `absolute`; center phone highest `z-index`, slightly elevated; sides lower. Chrome: ~`rounded-[2.2rem]`, ring, strong shadow, dark shell, pill notch, home indicator.
+- **Per-screen content (distinct stories):**
+  1. **Trail / product card:** header controls, title, hero image card with scrim, meta + small stat grid / schedule strip.
+  2. **Map / route:** SVG grid via `<pattern>`, curved route, start/end dots; strokes and fills from CSS variables / `currentColor`; optional floating chips (distance, offline, GPS, etc.) + compact stats + CTA.
+  3. **Live session:** hero photo, live pulse badge, glass metrics (pace/time/distance), progress bar, primary actions (pause / end—end uses destructive token).
 
-- **Atmosphere**: **three** large **soft accent orbs** (`blur-3xl` class family) **`absolute`**, **`pointer-events-none`**, **low/medium opacity**—**hues map to brief** (**lime-chartreuse + soft gold** in reference = **primary + highlight accent tokens**, not frozen Tailwind hex).
-- **Shell**: **`relative`** section, **`overflow-hidden`**, **top padding** for breathing room below global header (**`pt-16`→`pt-20`** reference; tune if shell has no header).
-- **Grid**: **`max-w-7xl`** container, **`lg:grid-cols-2`**, **`gap-16`**, items **vertically centered**.
-- **Left block**:
-  - **Status row**: pill with **border + frosted bg**, **leading pulse dot** (accent), **short status string** (e.g. conditions / system state).
-  - **Headline**: **large** display (**two-part**: primary emphasis + **muted** secondary span); **project display font** (reference **Bricolage** → map to **`font-bricolage`** or brief).
-  - **Body**: **muted** foreground, **max-width** for line length.
-  - **Metric tags**: **2×2 / wrap** **rounded** panels, **label** (muted) + **value** per chip.
-  - **CTAs**: **solid** primary (accent fill, dark text pattern) + **ghost** secondary with **leading icon** (e.g. **map** metaphor).
-  - **Proof row**: **4** overlapping **avatars** (`ring` separates stacks) + **overflow count** chip + **one-line** social proof.
-- **Right block**:
-  - **Stage** **`relative`**, **`max-w-xl`** centered on mobile, **`lg:ml-auto`**, **fixed min-height** (**~560–600px**) to **lock** composition.
-  - **Three phones** **`absolute`** within stage: **left** phone **rotated negative**, **center** **upright** (slightly raised), **right** **rotated positive**; **z-index** orders **center** above **sides** (typical: sides **lower**, center **highest`).
-  - **Device chrome**: **`~rounded-[2.2rem]`**, **`ring`**, **strong shadow**, **dark** **panel** bg; **pill notch** top center; **home indicator** bar bottom.
-  - **Screen 1** (example): **header** icon buttons, **title + subtitle**, **hero image card** with **gradient scrim**, **difficulty chip**, **footer meta** + **stat grid** + **schedule** row.
-  - **Screen 2**: **map panel** with **SVG** grid pattern, **curved route path**, **start/end** markers—**stroke/fill** from **CSS variables** (no mandatory **`#d9ff3f`**); **floating** **chips** (location, distance, offline, GPS); **trail stats** card; **primary CTA** button.
-  - **Screen 3**: **live** **hero photo**, **`Live`** **pulse** badge, **metrics** **glass** card (pace, time, distance), **progress** bar, **Pause / End** **actions** (semantic **destructive** on end).
+## Visual language
 
-## Visual Language
+Ink/void page surface; phones in elevated neutral-dark band; accent drives CTAs and route emphasis; destructive only where appropriate (e.g. end session). Display font for headline if brief supplies one (e.g. Bricolage → project utility). Tone: clean, optimistic, iOS-like depth—not brutalist.
 
-- **Roles**: **void / ink** page background; **elevated** **phone** **neutral-900** family; **primary accent** for **CTAs**, **route**, **progress**; **destructive** token for **live danger** / **end** (reference red)—**derive** from **design system**.
-- **Typography**: **rounded display** for **headlines** and **large stats**; **UI** sizes for **chips** and **buttons**.
-- **Texture**: **optimistic**, **trail-ready**, **clean** **iOS-style** **mock depth**—not **brutalist**.
+## Rules
 
-## Structure Requirements
+- No in-section site `<nav>` or app chrome (hero-only strip).
+- Optional motion: subtle parallax or drift on phones wrapper—throttle (`rAF` or CSS-only); honor `prefers-reduced-motion`.
+- SVG `id`s on patterns/gradients must be unique per phone—use React `useId()` (or equivalent) prefixes.
+- Images inside phones: `next/image` or `<img>` with meaningful `alt` for marketing content when it carries meaning.
 
-- **No site `<nav>`** or **app** **top** **chrome** in-section (**hero-only** rule).
-- **Decorative glows** stay **`pointer-events-none`**.
+## Mandatory checklist
 
-## Motion Direction
+If any item is missing, the hero is invalid for **`triple-phone-mockup-fan-hero`**:
 
-- **Optional**: **subtle** **`translateY`** / **mouse** **parallax** on **`#phones`** wrapper—**throttled** **rAF** or **CSS** **`transition`**; **disable** under **`prefers-reduced-motion: reduce`**.
-- **Micro**: **CTA** **`active:translate-y-[1px]`**; **icon** **nudge** on **hover** (primary link).
+1. `relative` section with responsive vertical padding and `max-w-7xl` inner width.
+2. At least three non-interactive blurred glow ellipses (token-colored; no mandatory single neon hex).
+3. Two-column grid from `lg` up; single column below; sensible visual balance.
+4. Status pill with dot + one status string.
+5. Two-part headline + bounded-width body.
+6. ≥3 metric chips in a wrapping row (`label` + `value`).
+7. Two CTAs: primary filled (accent); secondary ghost with `lucide-react` icon (no Iconify).
+8. Avatar stack + overflow badge + caption.
+9. Right stage with explicit `min-h` in the ~560–600px range.
+10. Three separate phone shells with distinct `rotate`/offset and center-forward stacking.
+11. Each phone: notch, ring, shadow, `overflow-hidden` shell around screen content.
+12. Three distinct screen narratives: (A) media card + stats, (B) SVG route map + chips/panel, (C) live session + progress + controls.
+13. Route SVG path/markers wired to theme (CSS vars / `currentColor`), not only hard-coded neon.
+14. Parallax/drift disabled when `prefers-reduced-motion: reduce`.
+15. No `data-element-locator`, no CDN Tailwind script, no styled-jsx `<style jsx>`.
 
-## Implementation Notes (SVG / A11y)
+## Reference TSX skeleton
 
-- **Unique `id`s** for **SVG** **`<pattern>`** / **gradients** when **multiple** phones render—prefix with **`useId()`** in React to avoid **collisions**.
-- **Images** inside phones: **`next/image`** or **`<img>`** with **meaningful** **`alt`** (trail name, map screen, live view) **or** **`alt=""`** **only** if **decorative** **and** **redundant** with **visible** **text**—prefer **non-empty** **for** **marketing** **screens**.
-
-## Required Implementation Blueprint (Do Not Skip)
-
-When this skill is selected, the generated hero MUST include all of the following:
-
-1. **`relative`** **section**, **`overflow-x-hidden`**, **responsive** **vertical** **padding** and **`max-w-7xl`** **content** **width**.
-2. **At least three** **`absolute`** **glow** **ellipses** **full** **blur**, **non-interactive**, **token**-tinted (**no** **single** **mandatory** **lime** **hex**).
-3. **`lg` two-column** **grid** with **~equal** **visual** **weight**; **single** **column** **on** **small** **viewports** **(order**: **copy** **first** **or** **match** **brief**).
-4. **Status** **pill** **with** **dot** + **single** **status** **line**.
-5. **Split** **headline** **(two** **spans** **or** **lines)** **+** **body** **paragraph** **with** **bounded** **width**.
-6. **≥3** **metric** **chips** **(reference** **four)** in **wrap** **row**, **each** **with** **label** **+** **value**.
-7. **Two** **CTAs**—**primary** **filled** **accent**, **secondary** **ghost** **with** **icon** **from** **`lucide-react`** (**no** **Iconify**).
-8. **Avatar** **stack** **+** **overflow** **count** **+** **trust** **caption** **line**.
-9. **Right** **stage** with **explicit** **`min-h`** **(reference** **560–600px)**.
-10. **Three** **phone** **frames**, **distinct** **`rotate`** **and** **offsets**, **`z-index`** **layers** **center-forward**.
-11. **Each** **phone** includes **notch**, **ring**, **shadow**, **scrollable-looking** **content** **regions** **(overflow** **`hidden`** **on** **shell)**.
-12. **Three** **different** **screen** **stories**: **(A)** **media** **card** **+** **stats**, **(B)** **vector** **route** **map** **+** **chips** **+** **stats** **panel**, **(C)** **live** **session** **UI** **with** **progress** **+** **controls**.
-13. **Route** **SVG** **uses** **theme** **`currentColor` / CSS vars** for **path** **stroke** **and** **markers**—**not** **hard-coded** **demo** **neons** **as** **only** **option**.
-14. **`prefers-reduced-motion`** **gates** **any** **parallax** **or** **phone** **drift**.
-15. **No** **`data-element-locator`**, **no** **CDN** **Tailwind** **script**, **no** **`<style jsx>`**.
-
-If any item above is missing, the output is **NOT** valid for `triple-phone-mockup-fan-hero`.
-
-## Reference TSX Skeleton (Adapt, Do Not Copy Blindly)
+Adapt naming and tokens to the project. Add three `PhoneShell` components inside the stage; wire `props.phones` and unique SVG ids.
 
 ```tsx
 "use client"
@@ -84,9 +64,17 @@ type TriplePhoneMockupFanHeroProps = {
   metrics: readonly Metric[]
   primaryCta: { label: string; href: string }
   secondaryCta: { label: string; href: string }
-  socialProof: { avatars: readonly { src: string; alt: string }[]; overflow: string; caption: string }
+  socialProof: {
+    avatars: readonly { src: string; alt: string }[]
+    overflow: string
+    caption: string
+  }
   phones: {
-    trailCard: { image: { src: string; alt: string }; trailName: string; chips: Metric[] }
+    trailCard: {
+      image: { src: string; alt: string }
+      trailName: string
+      chips: Metric[]
+    }
     map: { title: string; routeStroke: string }
     live: { image: { src: string; alt: string }; trailTitle: string }
   }
@@ -108,7 +96,7 @@ export function TriplePhoneMockupFanHero(props: TriplePhoneMockupFanHeroProps) {
               <span className="inline-flex h-1.5 w-1.5 rounded-full bg-[color:var(--primary)]" />
               {props.status.text}
             </div>
-            <h1 className="font-bricolage text-5xl font-medium tracking-tight leading-[1.05] sm:text-6xl">
+            <h1 className="font-bricolage text-5xl font-medium leading-[1.05] tracking-tight sm:text-6xl">
               {props.title.primary}{" "}
               <span className="font-medium tracking-tight text-[color:var(--muted-foreground)]">
                 {props.title.secondary}
@@ -164,11 +152,10 @@ export function TriplePhoneMockupFanHero(props: TriplePhoneMockupFanHeroProps) {
             </div>
           </div>
 
-            <div className="relative mx-auto w-full max-w-xl lg:ml-auto">
-              <div className="relative h-[560px] sm:h-[600px]">
-                {/* TODO: three PhoneShell components — left rotate-[-8deg], center upright (higher z), right rotate-[8deg].
-                    Use props.phones + unique SVG pattern ids via useId(). See blueprint items 9–12. */}
-              </div>
+          <div className="relative mx-auto w-full max-w-xl lg:ml-auto">
+            <div className="relative h-[560px] sm:h-[600px]">
+              {/* Three PhoneShell nodes: left ~-8deg, center upright + higher z, right ~+8deg.
+                  useId() prefixes for SVG pattern ids; populate from props.phones. */}
             </div>
           </div>
         </div>
@@ -177,7 +164,7 @@ export function TriplePhoneMockupFanHero(props: TriplePhoneMockupFanHeroProps) {
   )
 }
 
-/** Example: map panel only — prefix pattern id with useId() when embedding multiple SVGs. */
+/** Example map panel — pass patternId from useId() when multiple SVGs mount. */
 function RouteMapPanel({ patternId, routeStroke }: { patternId: string; routeStroke: string }) {
   return (
     <svg viewBox="0 0 400 300" className="h-[240px] w-full text-neutral-700/40" aria-hidden>
@@ -201,24 +188,9 @@ function RouteMapPanel({ patternId, routeStroke }: { patternId: string; routeStr
 }
 ```
 
-**Implementers:** Replace the **placeholder** **`SvgMapPreview`** **placement** with **three** **`PhoneShell`** **components** **(left/center/right)** **matching** **blueprint** **positions**; **pass** **content** **from** **`props.phones`**.
+## Sizing & content
 
-## Layout Details
-
-- **Phone** **width** **reference**: **`w-64`/`sm:w-72`**, **height** **`~620px`**—**scale** **down** **on** **short** **viewports** **if** **needed** **(overflow** **`hidden`** **on** **stage)**.
-- **Negative** **rotation** **must not** **clip** **against** **section** **edges**—**increase** **stage** **`min-h`** **or** **reduce** **phone** **scale** **on`sm`**.
-
-## Content Rules
-
-- **Replace** **Yosemite**-specific **strings** **with** **brief** **place** **/ product**; **metrics** **mirror** **real** **product** **fields**.
-- **Legal**: **use** **licensed** **imagery** **or** **placeholders**—**no** **required** **Supabase** **URLs**.
-
-## Implementation Constraints
-
-- **`use client`** **only** **if** **parallax** **or** **pointer** **hooks** **are** **used**.
-- **Icons**: **`lucide-react`** **throughout** **(replace** **inline** **SVG** **from** **demo)**.
-
-## Accessibility + Performance
-
-- **Decorative** **glow** **`aria-hidden`** **(already** **on** **wrapper)**.
-- **Many** **images**: **lazy** **offscreen** **phones** **if** **possible**; **LCP** **image** **should** **be** **one** **hero** **asset** **in** **first** **visible** **column** **or** **center** **phone** **only**.
+- Phone footprint reference: `w-64` / `sm:w-72`, height ~620px tread; scale down if the stage clips rotated frames.
+- Copy and imagery come from the product brief—not placeholder national-park meme strings. Use licensed or generic placeholders; don’t assume Supabase URLs.
+- Omit `"use client"` unless you add pointer hooks or non-CSS motion.
+- **LCP:** Prefer one primary hero image in the first paint column or the center phone; lazy-load peripheral phone assets when practical.

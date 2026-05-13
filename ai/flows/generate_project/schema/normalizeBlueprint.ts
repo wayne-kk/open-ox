@@ -12,6 +12,7 @@ import type {
   TaskLoop,
   UserRole,
 } from "../types";
+import { clampProjectListName } from "@/lib/projectDisplayName";
 import { isStringArray } from "../shared/typeGuards";
 
 function isSectionSpecArray(value: unknown): value is SectionSpec[] {
@@ -322,8 +323,14 @@ function normalizeBrief(value: unknown): ProjectBrief {
   }
 
   const roles = normalizeRoles(candidate.roles);
+  const projectTitle = clampProjectListName(candidate.projectTitle);
+  if (!projectTitle.length) {
+    throw new Error(
+      "analyze_project_requirement: brief.projectTitle is empty after normalization"
+    );
+  }
   return {
-    projectTitle: candidate.projectTitle,
+    projectTitle,
     projectDescription: candidate.projectDescription,
     language: typeof candidate.language === "string" && candidate.language.trim()
       ? candidate.language.trim()
@@ -494,15 +501,23 @@ export function asProjectBlueprint(value: unknown): ProjectBlueprint {
     ];
 
     return {
-      brief: {
-        projectTitle: singlePage.title,
-        projectDescription: singlePage.description,
-        language: "en",
-        productScope: normalizeProductScope(undefined, singlePage.description),
-        roles: normalizedRoles,
-        taskLoops: normalizeTaskLoops(undefined, normalizedRoles),
-        capabilities: [],
-      },
+      brief: (() => {
+        const projectTitle = clampProjectListName(singlePage.title);
+        if (!projectTitle.length) {
+          throw new Error(
+            "analyze_project_requirement: inferred projectTitle from page title is empty after normalization"
+          );
+        }
+        return {
+          projectTitle,
+          projectDescription: singlePage.description,
+          language: "en",
+          productScope: normalizeProductScope(undefined, singlePage.description),
+          roles: normalizedRoles,
+          taskLoops: normalizeTaskLoops(undefined, normalizedRoles),
+          capabilities: [],
+        };
+      })(),
       experience: {
         designIntent: singlePage.designIntent,
       },

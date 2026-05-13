@@ -111,9 +111,13 @@ export function resolveCommitMergedBrief(params: {
   return draft || raw || tail;
 }
 
-/** Prevent renaming the DB row to conversational junk from a bad analyze pass. */
+/**
+ * Prevent renaming the DB row from a bad analyze pass.
+ * Blueprint titles may be short real product names ("WAR ROOM", "Acme") — do not
+ * require SUBSTANTIVE_MIN here (that threshold is for conversational merge text).
+ */
 export function shouldSkipNamingFromBlueprintTitle(title: string): boolean {
   const t = title.trim();
   if (!t.length) return true;
-  return t.length < SUBSTANTIVE_MIN || isMostlyMetaAgreement(t);
+  return META_COMMIT_PATTERNS.some((p) => p.test(t));
 }

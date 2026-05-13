@@ -32,6 +32,7 @@ Keep the implementation self-contained in the hero component — no extra compon
   - Two-line headline with masked upward reveal.
   - Supporting paragraph with masked reveal.
   - CTA button with subtle gradient hover sweep.
+- **No faux HUD / telemetry chrome** — Do **not** add bottom (or floating) strips that imitate system diagnostics: fake `SYSTEM STATUS`, `COORDINATES`, LAT/LON lines, encryption / “128-bit” fluff, or monospace `// …` commentary purely for decoration. Corner brackets and measurement ticks are **layout framing only**, not pretend OS or radar readouts.
 
 ## Motion Direction
 
@@ -88,8 +89,9 @@ When this skill is selected, the generated hero MUST include all of the followin
   - `geometry.dispose()` and `material.dispose()`.
 6. GSAP staged reveal for badge, heading text lines, and CTA.
 7. **MUST NOT** add top navigation, persistent header links, or mobile menu affordances inside this section.
+8. **MUST NOT** add decorative footer or edge strips with fake telemetry copy (system status, coordinates, encryption claims, monospace HUD-style annotations) unless the **product brief explicitly requires** real, truthful metrics—this skill’s frame language is geometric, not diagnostic fiction.
 
-If any item above is missing, the result is NOT considered a valid geometric-webgl implementation.
+If any required item above is missing or any **MUST NOT** is violated, the result is NOT considered a valid geometric-webgl implementation.
 
 ## Reference TSX Skeleton (Adapt, Do Not Copy Blindly)
 
