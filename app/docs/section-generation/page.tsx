@@ -81,7 +81,7 @@ export default function SectionGenerationPage() {
         <section id="upstream" className="scroll-mt-24">
           <H2>上游：规划与数据</H2>
           <P>
-            <Code>plan_project</Code>（提示词见 <Code>ai/flows/generate_project/prompts/steps/planProject.md</Code>）把「仅有页面、尚无 section」的蓝图，
+            <Code>plan_project</Code>（提示词见 <Code>ai/flows/generate_project/prompts/steps/planProject.agent.md</Code>）把「仅有页面、尚无 section」的蓝图，
             扩展为 <Code>PlannedProjectBlueprint</Code>：为每个页面推导 <Code>sections[]</Code>，并为每个 section 挂上{" "}
             <Code>designPlan</Code>。
           </P>

@@ -5,6 +5,7 @@ import { getModelForStep } from "@/lib/config/models";
 import { clearIntentAgentSession, loadIntentAgentSession, saveIntentAgentSession } from "./sessionStore";
 import { buildIntentAgentTools, PIPELINE_CONSTRAINTS_TEXT } from "./tools";
 import { mergeIntentAgentTools, INTENT_AGENT_RESERVED_TOOL_NAMES } from "./toolSurface";
+import { classifyBriefSubstanceForCommit } from "./briefSubstanceClassifier";
 import { resolveCommitMergedBrief } from "./commitMergeBrief";
 import { executeReferenceSiteDigest } from "@/ai/tools/system/referenceSiteDigestTool";
 import { executeBrandKitFromUrl } from "@/ai/tools/system/brandKitFromUrlTool";
@@ -164,6 +165,11 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
     },
     commit_generate: async (args: Record<string, unknown>) => {
       const raw = typeof args.merged_brief === "string" ? args.merged_brief.trim() : "";
+      const substance = await classifyBriefSubstanceForCommit({
+        mergedBriefRaw: raw,
+        tailUserMessage: userMessage.trim(),
+        bootstrapUserPrompt: bootstrapUserPrompt ?? "",
+      });
       box.resolution = {
         type: "commit",
         mergedBrief: resolveCommitMergedBrief({
@@ -171,6 +177,7 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
           messages,
           tailUserMessage: userMessage.trim(),
           bootstrapUserPrompt,
+          substance,
         }).trim(),
       };
       return JSON.stringify({ ok: true, halted: true, action: "commit_generate" });

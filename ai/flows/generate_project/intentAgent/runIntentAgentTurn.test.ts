@@ -59,6 +59,11 @@ describe("resolveCommitMergedBrief", () => {
       tailUserMessage: "就这样，开始生成吧",
       bootstrapUserPrompt:
         "更长一些的原始需求：高山摄影装备品牌单页，胶片感、产品故事、装备展示与联系入口。",
+      substance: {
+        mergedBriefFieldSubstantive: false,
+        tailSubstantive: false,
+        bootstrapSubstantive: true,
+      },
     });
     expect(out).toContain("户外");
     expect(out).not.toMatch(/^就这样/);
@@ -71,6 +76,11 @@ describe("resolveCommitMergedBrief", () => {
       messages: msgs,
       tailUserMessage: "确认",
       bootstrapUserPrompt: "short",
+      substance: {
+        mergedBriefFieldSubstantive: true,
+        tailSubstantive: false,
+        bootstrapSubstantive: false,
+      },
     });
     expect(out).toBe(long);
   });

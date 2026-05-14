@@ -104,6 +104,7 @@ export const GENERATION_STEPS = [
     { id: "reference_site_digest", label: "参考站截图+多模态摘要" },
     { id: "project_intent_guide", label: "建站意向引导" },
     { id: "modify_intent_router", label: "修改入口意图分类" },
+    { id: "commit_merged_brief_classifier", label: "确认生成·需求文本实质性（LLM）" },
     { id: "analyze_project_requirement", label: "需求分析" },
     { id: "infer_design_intent", label: "设计意图推断" },
     { id: "plan_project", label: "项目规划" },

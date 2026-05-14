@@ -1,3 +1,4 @@
+import type { BriefSubstanceClassification } from "./briefSubstanceClassifier";
 import type { ChatMessage } from "@/ai/shared/llm/types";
 
 /** Enough characters that the string is unlikely to be a pure confirmation cue. */
@@ -5,46 +6,8 @@ const SUBSTANTIVE_MIN = 48;
 const DRAFT_FALLBACK_MIN = 24;
 const TINY_HOLD_MIN = 16;
 
-/** Phrases users send on the confirm turn instead of substantive briefs — must not sole-source generation. */
-const META_COMMIT_PATTERNS: RegExp[] = [
-  /^就这样\b/iu,
-  /开始生成/iu,
-  /^好的\b/iu,
-  /^好吧\b/iu,
-  /^行行行/iu,
-  /^确认了?\b/iu,
-  /^可以了\b/iu,
-  /^可以的\b/iu,
-  /^行[,，.。!！]?\s*$/iu,
-  /^嗯+[，。\s!.]*$/iu,
-  /^对对/iu,
-  /^是的\b/iu,
-  /^同上\b/iu,
-  /^照旧\b/iu,
-  /^按这个来\b/iu,
-  /^直接生成\b/iu,
-  /^开搞\b/iu,
-  /^开工\b/iu,
-  /^走起\b/iu,
-  /^建站吧\b/iu,
-  /^就这样吧\b/iu,
-  /^ok\b[,!.。\s]*$/iu,
-  /^yes\b[,!.。\s]*$/iu,
-  /^yep\b[,!.。\s]*$/iu,
-  /^sure\b[,!.。\s]*$/iu,
-];
-
-function isMostlyMetaAgreement(text: string): boolean {
-  const t = text.trim();
-  if (!t.length) return true;
-  if (t.length > 120) return false;
-  if (META_COMMIT_PATTERNS.some((p) => p.test(t))) return true;
-  // Very short, no obvious product noun tokens
-  if (t.length <= 36 && !/[网站页品牌产品首页落地SaaSB2B控制台官网关于联系服务价格团队案例]/.test(t)) {
-    return true;
-  }
-  return false;
-}
+/** Blueprint titles longer than this are almost never display names — skip DB rename. */
+const MAX_PROJECT_TITLE_CHARS = 80;
 
 /**
  * Reads the newest `yield_to_user.brief_draft_markdown` from assistant tool_calls before the trailing user bubble.
@@ -72,39 +35,42 @@ export function extractLatestYieldBriefDraft(messages: ChatMessage[]): string | 
 }
 
 /**
- * Reconcile `merged_brief` from commit_generate vs session — avoids using the trailing
- * 「就这样」「开始生成吧」alone as analyze input when the model omits merged_brief.
+ * Reconcile `merged_brief` from commit_generate vs session.
+ * Whether each candidate is "real brief vs confirm-only" comes from {@link classifyBriefSubstanceForCommit} — no local phrase/regex heuristics.
  */
 export function resolveCommitMergedBrief(params: {
   mergedBriefRaw: string;
   messages: ChatMessage[];
   tailUserMessage: string;
   bootstrapUserPrompt?: string | null;
+  substance: BriefSubstanceClassification;
 }): string {
   const raw = params.mergedBriefRaw.trim();
   const draft = extractLatestYieldBriefDraft(params.messages)?.trim() ?? "";
   const bootstrap = (params.bootstrapUserPrompt ?? "").trim();
   const tail = params.tailUserMessage.trim();
+  const { substance } = params;
 
-  const rawSubstantive = raw.length >= SUBSTANTIVE_MIN && !isMostlyMetaAgreement(raw);
+  const rawSubstantive =
+    raw.length >= SUBSTANTIVE_MIN && substance.mergedBriefFieldSubstantive;
 
   if (rawSubstantive) return raw;
 
   if (draft.length >= SUBSTANTIVE_MIN) return draft;
 
-  if (bootstrap.length >= SUBSTANTIVE_MIN && !isMostlyMetaAgreement(bootstrap)) return bootstrap;
+  if (bootstrap.length >= SUBSTANTIVE_MIN && substance.bootstrapSubstantive) return bootstrap;
 
   if (draft.length >= DRAFT_FALLBACK_MIN) return draft;
 
-  if (tail.length >= SUBSTANTIVE_MIN && !isMostlyMetaAgreement(tail)) return tail;
+  if (tail.length >= SUBSTANTIVE_MIN && substance.tailSubstantive) return tail;
 
-  if (raw.length >= DRAFT_FALLBACK_MIN && !isMostlyMetaAgreement(raw)) return raw;
+  if (raw.length >= DRAFT_FALLBACK_MIN && substance.mergedBriefFieldSubstantive) return raw;
 
   if (bootstrap.length >= DRAFT_FALLBACK_MIN) return bootstrap;
 
   if (draft.length >= TINY_HOLD_MIN) return draft;
 
-  if (raw.length >= TINY_HOLD_MIN && !isMostlyMetaAgreement(raw)) return raw;
+  if (raw.length >= TINY_HOLD_MIN && substance.mergedBriefFieldSubstantive) return raw;
 
   if (bootstrap) return bootstrap;
 
@@ -113,11 +79,13 @@ export function resolveCommitMergedBrief(params: {
 
 /**
  * Prevent renaming the DB row from a bad analyze pass.
- * Blueprint titles may be short real product names ("WAR ROOM", "Acme") — do not
- * require SUBSTANTIVE_MIN here (that threshold is for conversational merge text).
+ * Uses title shape only (length, layout) so short real names stay valid.
  */
 export function shouldSkipNamingFromBlueprintTitle(title: string): boolean {
   const t = title.trim();
   if (!t.length) return true;
-  return META_COMMIT_PATTERNS.some((p) => p.test(t));
+  if (t.length > MAX_PROJECT_TITLE_CHARS) return true;
+  if (/[\r\n]/.test(t)) return true;
+  if (/^\s*#{1,6}\s|^\s*[-*]\s|^\s*\d+[.)]\s/m.test(t)) return true;
+  return false;
 }
