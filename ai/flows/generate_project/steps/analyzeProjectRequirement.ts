@@ -2,6 +2,14 @@ import { composePromptBlocks, loadStepPrompt } from "../shared/files";
 import { callLLMWithTools, extractJSON } from "../shared/llm";
 import { LfToolPhase } from "@/lib/observability/langfuseGenerationCatalog";
 import { webSearchTool, executeWebSearch } from "../../../tools/system/webSearchTool";
+import {
+  fetchReferencePageTool,
+  executeFetchReferencePage,
+} from "../../../tools/system/fetchReferencePageTool";
+import {
+  referenceSiteDigestTool,
+  executeReferenceSiteDigest,
+} from "../../../tools/system/referenceSiteDigestTool";
 import type { ProjectBlueprint, StepTrace } from "../types";
 import { asProjectBlueprint } from "../schema/normalizeBlueprint";
 import { detectBlueprintInputShape, warnOnBlueprintFallback } from "../schema/projectBlueprint.schema";
@@ -19,11 +27,15 @@ export async function stepAnalyzeProjectRequirement(
   const { content: raw, toolCalls } = await callLLMWithTools({
     systemPrompt,
     userMessage: userInput,
-    tools: [webSearchTool],
+    tools: [referenceSiteDigestTool, fetchReferencePageTool, webSearchTool],
     temperature: 0.5,
-    maxIterations: 4,
+    maxIterations: 8,
     model,
-    executeToolOverrides: { web_search: executeWebSearch },
+    executeToolOverrides: {
+      fetch_reference_page: executeFetchReferencePage,
+      reference_site_digest: executeReferenceSiteDigest,
+      web_search: executeWebSearch,
+    },
     langfusePhase: LfToolPhase.analyzeRequirement,
   });
 

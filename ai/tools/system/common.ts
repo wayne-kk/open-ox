@@ -1,4 +1,4 @@
-import { AsyncLocalStorage } from "async_hooks";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { join, sep } from "path";
 
 /** 当前 open-ox 仓库根目录（AI 引擎所在项目） */

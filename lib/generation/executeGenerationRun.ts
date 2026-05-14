@@ -15,22 +15,17 @@ import { scheduleCaptureProjectCover } from "@/lib/projectCoverCapture";
 import { setRuntimeModelId, type ModelId } from "@/lib/config/models";
 import { loadStepModelsFromDB } from "@/lib/config/models";
 import {
-  loadCoreStepPromptsFromDB,
   normalizePromptProfile,
   withCorePromptRuntime,
 } from "@/lib/config/corePrompts";
 import { redactBuildStepForTransport } from "@/ai/flows/generate_project/shared/buildStepPayload";
 import { shouldSkipNamingFromBlueprintTitle } from "@/ai/flows/generate_project/intentAgent/commitMergeBrief";
 import { appendTrajectoryEvent, createRunEndEvent, createTrajectoryRun } from "@/lib/trajectory/store";
-import {
-  flushLangfuse,
-  resolveLangfuseSessionId,
-  runWithLangfuseTraceRoot,
-} from "@/lib/observability/langfuseTracing";
-import { LfTrace } from "@/lib/observability/langfuseTraceCatalog";
+import { flushLangfuse, resolveLangfuseSessionId } from "@/lib/observability/langfuseTracing";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { GenerationRunRow } from "./types";
+import { upsertBuildStepByName } from "./foldStepEvents";
 
 /** Pre-commit intent rounds are stored as `intent_agent` on the project row; the pipeline replaces `build_steps` at the end — preserve those steps so Studio can restore the dialogue. */
 function mergeIntentAgentStepsIntoFinal(
@@ -99,6 +94,8 @@ export async function executeGenerationRun(args: {
   const retryProjectId = payload.retryProjectId;
   const preCreatedProjectId = payload.preCreatedProjectId;
   const resumeFromCheckpoint = payload.resumeFromCheckpoint === true;
+
+  let liveStepsTimer: ReturnType<typeof setTimeout> | null = null;
 
   try {
     const { data: runState } = await admin
@@ -212,10 +209,8 @@ export async function executeGenerationRun(args: {
     await loadStepModelsFromDB();
     const promptProfile = normalizePromptProfile(payload.effectiveGenerationMode as "web");
 
-    const useDatabasePrompts = payload.useDatabasePrompts === true;
-    const corePromptOverrides = useDatabasePrompts
-      ? await loadCoreStepPromptsFromDB(promptProfile)
-      : new Map();
+    const useDatabasePrompts = false;
+    const corePromptOverrides = new Map();
 
     const langfuseSessionKey = resolveLangfuseSessionId({
       projectId,
@@ -225,10 +220,46 @@ export async function executeGenerationRun(args: {
 
     let persistTail: Promise<void> = Promise.resolve();
 
+    const projectForLiveSteps = await getProject(admin, projectId);
+    const intentBaseSteps: BuildStep[] = ((projectForLiveSteps?.buildSteps ?? []) as BuildStep[]).filter(
+      (s) => s.step === "intent_agent"
+    );
+    let pipelineFoldedLive: BuildStep[] = [];
+
+    const cancelLiveStepsSchedule = () => {
+      if (liveStepsTimer) {
+        clearTimeout(liveStepsTimer);
+        liveStepsTimer = null;
+      }
+    };
+
+    const pushLiveBuildStepsNow = async () => {
+      const merged = [...intentBaseSteps, ...pipelineFoldedLive];
+      try {
+        await updateProjectStatus(admin, projectId, "generating", { buildSteps: merged });
+      } catch (e) {
+        console.warn(
+          "[generation-worker] live build_steps update failed:",
+          e instanceof Error ? e.message : e
+        );
+      }
+    };
+
+    const scheduleLiveBuildSteps = () => {
+      cancelLiveStepsSchedule();
+      liveStepsTimer = setTimeout(() => {
+        liveStepsTimer = null;
+        void pushLiveBuildStepsNow();
+      }, 520);
+    };
+
     const onStepForPipeline = (step: BuildStep) => {
       eventSeq += 1;
       const seq = eventSeq;
       persistTail = persistTail.then(() => persistGenerationStep(admin, generationRunUuid, seq, step));
+
+      pipelineFoldedLive = upsertBuildStepByName(pipelineFoldedLive, step);
+      scheduleLiveBuildSteps();
 
       const phase = mapPhase(step.step);
 
@@ -373,41 +404,33 @@ export async function executeGenerationRun(args: {
       });
     };
 
-    const result = await runWithLangfuseTraceRoot(
+    const result = await withCorePromptRuntime(
       {
-        name: LfTrace.generateProject,
-        userId: requestingUserId,
-        sessionId: langfuseSessionKey,
-        tags: ["flow:generate_project", "route:generation_worker"],
-        metadata: {
-          projectId,
-          generationRunId: generationRunUuid,
-          retry: retryProjectId != null,
-          preCreatedProjectId: preCreatedProjectId != null,
-        },
-        input: { userPrompt: effectivePrompt },
+        promptProfile,
+        useDatabasePrompts,
+        dbPromptByStepId: corePromptOverrides,
       },
       () =>
-        withCorePromptRuntime(
-          {
-            promptProfile,
-            useDatabasePrompts,
-            dbPromptByStepId: corePromptOverrides,
+        runGenerateProject(effectivePrompt, onStepForPipeline, {
+          projectId,
+          styleGuide: payload.styleGuide,
+          enableSkills: true,
+          useDatabasePrompts,
+          checkpoint,
+          enableIntentGuide: payload.enableIntentGuide !== false,
+          langfuseUserId: requestingUserId,
+          langfuseSessionId: langfuseSessionKey,
+          langfuseTraceTags: ["route:generation_worker"],
+          langfuseTraceMetadata: {
+            generationRunId: generationRunUuid,
+            retry: retryProjectId != null,
+            preCreatedProjectId: preCreatedProjectId != null,
           },
-          () =>
-            runGenerateProject(effectivePrompt, onStepForPipeline, {
-              projectId,
-              styleGuide: payload.styleGuide,
-              enableSkills: payload.enableSkills !== false,
-              useDatabasePrompts,
-              checkpoint,
-              enableIntentGuide: payload.enableIntentGuide !== false,
-              langfuseUserId: requestingUserId,
-              langfuseSessionId: langfuseSessionKey,
-            })
-        )
+          langfuseTraceInput: { userPrompt: effectivePrompt },
+        })
     );
 
+    cancelLiveStepsSchedule();
     await persistTail;
 
     const projectSnapshot = await getProject(admin, projectId);
@@ -490,6 +513,10 @@ export async function executeGenerationRun(args: {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
+    if (liveStepsTimer) {
+      clearTimeout(liveStepsTimer);
+      liveStepsTimer = null;
+    }
     try {
       await updateProjectStatus(admin, projectId, "failed", {
         error: message,

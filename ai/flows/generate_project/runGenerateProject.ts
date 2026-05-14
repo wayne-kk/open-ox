@@ -520,6 +520,12 @@ export interface RunGenerateProjectOptions {
    * Routes should pass the same id as HTTP-level {@link resolveLangfuseSessionId}.
    */
   langfuseSessionId?: string;
+  /** Appended to default Langfuse trace tags (`flow:generate_project`). */
+  langfuseTraceTags?: string[];
+  /** Shallow-merged into default trace metadata (`projectId` is always set). */
+  langfuseTraceMetadata?: Record<string, unknown>;
+  /** When set, replaces the default trace `input` snapshot for the root observation. */
+  langfuseTraceInput?: unknown;
 }
 
 async function ensureLangfuseGenerateTrace<T>(
@@ -530,18 +536,34 @@ async function ensureLangfuseGenerateTrace<T>(
   if (!getLangfuse() || getLangfuseRunContext()) {
     return fn();
   }
+  const extraTags = options.langfuseTraceTags?.filter(
+    (t): t is string => typeof t === "string" && t.trim().length > 0
+  );
+  const tags =
+    extraTags && extraTags.length > 0
+      ? ["flow:generate_project", ...extraTags]
+      : ["flow:generate_project"];
+  const metadata: Record<string, unknown> = {
+    ...(options.langfuseTraceMetadata ?? {}),
+    projectId: options.projectId,
+  };
+  const input =
+    options.langfuseTraceInput !== undefined
+      ? options.langfuseTraceInput
+      : {
+          userInput,
+          enableIntentGuide: options.enableIntentGuide,
+          enableSkills: options.enableSkills,
+        };
+
   return runWithLangfuseTraceRoot(
     {
       name: LfTrace.generateProject,
       userId: options.langfuseUserId,
       sessionId: options.langfuseSessionId ?? options.projectId,
-      tags: ["flow:generate_project"],
-      metadata: { projectId: options.projectId },
-      input: {
-        userInput,
-        enableIntentGuide: options.enableIntentGuide,
-        enableSkills: options.enableSkills,
-      },
+      tags,
+      metadata,
+      input,
     },
     fn
   );

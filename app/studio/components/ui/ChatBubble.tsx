@@ -15,9 +15,7 @@ export function ChatBubble({
 
   return (
     <div className={`flex w-full min-w-0 ${align}`}>
-      <div className={`min-w-0 rounded-[20px] border px-4 py-3 ${variant}`}>
-        {children}
-      </div>
+      <div className={`min-w-0 rounded-[20px] border px-4 py-3 ${variant}`}>{children}</div>
     </div>
   );
 }

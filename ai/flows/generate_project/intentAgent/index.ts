@@ -21,4 +21,5 @@ export type {
   IntentAgentTurnStatus,
   IntentAgentYieldKind,
   IntentAgentYieldPayload,
+  IntentProgressEvent,
 } from "./types";

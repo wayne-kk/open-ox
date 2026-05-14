@@ -43,3 +43,20 @@ export interface IntentAgentToolExtensions {
   tools?: ChatCompletionTool[];
   toolHandlers?: Record<string, IntentAgentToolHandler>;
 }
+
+/** Streaming progress for UI during intent analysis (tools, model rounds, optional reasoning text). */
+export type IntentProgressEvent =
+  | {
+      kind: "assistant_round";
+      iteration: number;
+      textPreview: string | null;
+      toolCallNames: string[];
+    }
+  | { kind: "reasoning"; iteration: number; text: string }
+  | {
+      kind: "tool";
+      iteration: number;
+      toolName: string;
+      argsPreview: string;
+      resultPreview: string;
+    };

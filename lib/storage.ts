@@ -276,6 +276,52 @@ function isSafeRestoreRelativePath(rel: string): boolean {
   return true;
 }
 
+/**
+ * Download a single object from Storage into `sites/{projectId}/…` without running a full
+ * snapshot/manifest/legacy restore. Used by preview file reads to avoid 10–60s full-tree syncs.
+ */
+export async function restoreSingleProjectFileFromStorage(
+  projectId: string,
+  relativePath: string
+): Promise<boolean> {
+  const normalized = relativePath.replace(/\\/g, "/").replace(/^(\.\/)+/, "").trim();
+  if (!normalized || !isSafeRestoreRelativePath(normalized)) return false;
+  const storagePath = `${projectId}/${normalized}`;
+  const blob = await downloadStorageBlob(storagePath);
+  if (!blob) return false;
+  const projectRoot = getSiteRoot(projectId);
+  const localPath = path.join(projectRoot, ...normalized.split("/"));
+  await fs.mkdir(path.dirname(localPath), { recursive: true });
+  const buf = Buffer.from(await blob.arrayBuffer());
+  await fs.writeFile(localPath, buf);
+  return true;
+}
+
+/**
+ * Copy one file from `sites/template` when present. Bulk template sync skips some paths
+ * (e.g. `design-system.md` via {@link TEMPLATE_RESTORE_EXCLUDE}); explicit single-file copy
+ * is used for editor/preview reads.
+ */
+export async function copyTemplateFileIntoProjectIfPresent(
+  projectId: string,
+  relativePath: string
+): Promise<boolean> {
+  const normalized = relativePath.replace(/\\/g, "/").trim();
+  if (!normalized || !isSafeRestoreRelativePath(normalized)) return false;
+  const templateRoot = path.join(WORKSPACE_ROOT, "sites", "template");
+  const src = path.join(templateRoot, ...normalized.split("/"));
+  const dest = path.join(getSiteRoot(projectId), ...normalized.split("/"));
+  try {
+    const st = await fs.stat(src);
+    if (!st.isFile()) return false;
+  } catch {
+    return false;
+  }
+  await fs.mkdir(path.dirname(dest), { recursive: true });
+  await fs.copyFile(src, dest);
+  return true;
+}
+
 async function restoreFromSnapshotZip(
   projectId: string,
   projectRoot: string

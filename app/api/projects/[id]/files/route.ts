@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getProject } from "@/lib/projectManager";
-import { restoreProjectFiles, uploadGeneratedFiles, listProjectFiles } from "@/lib/storage";
+import { restoreProjectFiles, uploadGeneratedFiles, listProjectFiles, restoreSingleProjectFileFromStorage, copyTemplateFileIntoProjectIfPresent } from "@/lib/storage";
 import fs from "fs/promises";
 import path from "path";
 import { getSiteRoot } from "@/lib/projectManager";
@@ -9,12 +9,12 @@ import { getSessionUser } from "@/lib/auth/session";
 type Params = { params: Promise<{ id: string }> };
 
 /**
- * Hydrate local `sites/{projectId}`: merge missing files from `sites/template`, then
- * overlay Supabase uploads. Safe when the folder already exists but only holds partial
- * generated files (otherwise preview/CODE lacked package.json et al.).
+ * Best-effort single-file hydration — avoids `restoreProjectFiles` (full zip/manifest/tree).
  */
-async function ensureWorkspaceReady(projectId: string): Promise<void> {
-    await restoreProjectFiles(projectId);
+async function hydrateSingleWorkspaceFile(projectId: string, normalizedPath: string): Promise<boolean> {
+  if (await restoreSingleProjectFileFromStorage(projectId, normalizedPath)) return true;
+  if (await copyTemplateFileIntoProjectIfPresent(projectId, normalizedPath)) return true;
+  return false;
 }
 
 /** GET /api/projects/[id]/files — list files in Storage */
@@ -48,8 +48,11 @@ export async function GET(_req: NextRequest, { params }: Params) {
             return NextResponse.json({ path: normalizedPath, content });
         } catch (error) {
             if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+                const ok = await hydrateSingleWorkspaceFile(id, normalizedPath);
+                if (!ok) {
+                    return NextResponse.json({ error: "File not found", code: "FILE_NOT_FOUND" }, { status: 404 });
+                }
                 try {
-                    await ensureWorkspaceReady(id);
                     const stat = await fs.stat(filePath);
                     if (!stat.isFile()) {
                         return NextResponse.json({ error: "Not a file", code: "NOT_A_FILE" }, { status: 400 });
@@ -57,9 +60,6 @@ export async function GET(_req: NextRequest, { params }: Params) {
                     const content = await fs.readFile(filePath, "utf8");
                     return NextResponse.json({ path: normalizedPath, content });
                 } catch (retryError) {
-                    if ((retryError as NodeJS.ErrnoException).code === "ENOENT") {
-                        return NextResponse.json({ error: "File not found", code: "FILE_NOT_FOUND" }, { status: 404 });
-                    }
                     console.error("[GET /api/projects/:id/files path retry]", retryError);
                     return NextResponse.json({ error: "Failed to read file", code: "FILE_READ_FAILED" }, { status: 500 });
                 }
@@ -72,7 +72,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     /** Workspace listing matches local reads (`path` query); default remains Storage for API compat. */
     if (listSource === "workspace") {
         try {
-            await ensureWorkspaceReady(id);
+            await restoreProjectFiles(id);
             const files = await collectFiles(projectDir, projectDir);
             files.sort((a, b) => a.localeCompare(b));
             return NextResponse.json({ files, count: files.length, source: "workspace" });

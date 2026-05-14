@@ -24,7 +24,7 @@ function StudioInner({ projectId }: { projectId: string }) {
   const { loading, response, elapsed, rightPanel, setRightPanel,
     previewUrl, previewState, previewError, previewVersion, startPreview, iframeRef, projectLoading,
     autoPreviewAfterBuild, setAutoPreviewAfterBuild,
-    useDatabasePrompts, setUseDatabasePrompts } = studio;
+  } = studio;
 
   // Sync AI processing state → dynamic favicon
   useFaviconSync({
@@ -268,20 +268,6 @@ function StudioInner({ projectId }: { projectId: string }) {
               </div>
 
               <div className="hidden sm:flex flex-wrap items-center gap-2">
-                <div className="flex items-center gap-2 rounded-lg border border-white/8 bg-white/3 px-2.5 h-7">
-                  <Checkbox
-                    id="use-db-prompts"
-                    checked={useDatabasePrompts}
-                    onCheckedChange={(v) => setUseDatabasePrompts(v === true)}
-                  />
-                  <Label
-                    htmlFor="use-db-prompts"
-                    className="cursor-pointer font-mono text-[9px] uppercase tracking-widest text-muted-foreground/80"
-                    title="开启：使用 Supabase 中配置的核心步骤 Prompt；关闭：仅使用代码仓库内置 Prompt"
-                  >
-                    云端 Prompt
-                  </Label>
-                </div>
                 <div className="flex items-center gap-2 rounded-lg border border-white/8 bg-white/3 px-2.5 h-7">
                   <Checkbox
                     id="auto-preview-after-build"

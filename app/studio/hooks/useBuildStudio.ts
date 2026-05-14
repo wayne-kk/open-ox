@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { runBuildSite } from "../lib/build-studio-api";
-import type { AiResponse, BuildStep, IntentAgentTurn } from "../types/build-studio";
+import type { AiResponse, BuildStep, IntentAgentTurn, IntentProgressEvent } from "../types/build-studio";
 import { stripRecoverablePrefixForDisplay } from "@/lib/generationRecovery";
 
 export type RightPanel = "topology" | "preview" | "code";
@@ -49,6 +49,8 @@ export interface ConversationMessage {
   role: "user" | "assistant";
   content: string;
   intentPayload?: IntentAgentTurn["yieldPayload"];
+  /** Snapshot of tool/reasoning steps for this assistant turn (session only). */
+  activityLog?: IntentProgressEvent[];
 }
 
 export interface BuildStudioState {
@@ -61,6 +63,8 @@ export interface BuildStudioState {
   intentAgent: IntentAgentTurn | null;
   mergedBrief: string | null;
   conversationMessages: ConversationMessage[];
+  /** Live intent analysis trace (tools / rounds / reasoning) during the current request. */
+  intentProgressLog: IntentProgressEvent[];
   lastRunInput: string | null;
   elapsed: number;
   flowStart: number;
@@ -99,10 +103,6 @@ export interface BuildStudioState {
   autoPreviewAfterBuild: boolean;
   setAutoPreviewAfterBuild: (v: boolean) => void;
 
-  /** When true, load core step prompt overrides from Supabase; when false, use repo prompts only */
-  useDatabasePrompts: boolean;
-  setUseDatabasePrompts: (v: boolean) => void;
-
   // Modify
   modifyInstruction: string;
   setModifyInstruction: (v: string) => void;
@@ -124,7 +124,6 @@ export interface BuildStudioState {
 }
 
 const AUTO_PREVIEW_STORAGE_KEY = "open-ox:studio:autoPreviewAfterBuild";
-const USE_DB_PROMPTS_STORAGE_KEY = "open-ox:studio:useDatabasePrompts";
 const CONVERSATION_STORAGE_PREFIX = "open-ox:studio:conversation:";
 
 /** Polling DB while status is `generating` — after this duration with no SSE, offer recovery UX */
@@ -134,15 +133,6 @@ function readAutoPreviewAfterBuild(): boolean {
   if (typeof window === "undefined") return true;
   try {
     return localStorage.getItem(AUTO_PREVIEW_STORAGE_KEY) !== "false";
-  } catch {
-    return true;
-  }
-}
-
-function readUseDatabasePrompts(): boolean {
-  if (typeof window === "undefined") return true;
-  try {
-    return localStorage.getItem(USE_DB_PROMPTS_STORAGE_KEY) !== "false";
   } catch {
     return true;
   }
@@ -228,19 +218,10 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
   const [autoPreviewAfterBuild, setAutoPreviewAfterBuildState] = useState(true);
   const autoPreviewAfterBuildRef = useRef(true);
 
-  const [useDatabasePrompts, setUseDatabasePromptsState] = useState(true);
-  const useDatabasePromptsRef = useRef(true);
-
   useEffect(() => {
     const v = readAutoPreviewAfterBuild();
     autoPreviewAfterBuildRef.current = v;
     setAutoPreviewAfterBuildState(v);
-  }, []);
-
-  useEffect(() => {
-    const v = readUseDatabasePrompts();
-    useDatabasePromptsRef.current = v;
-    setUseDatabasePromptsState(v);
   }, []);
 
   const setAutoPreviewAfterBuild = useCallback((next: boolean) => {
@@ -250,16 +231,6 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       localStorage.setItem(AUTO_PREVIEW_STORAGE_KEY, next ? "true" : "false");
     } catch {
       /* ignore quota / private mode */
-    }
-  }, []);
-
-  const setUseDatabasePrompts = useCallback((next: boolean) => {
-    useDatabasePromptsRef.current = next;
-    setUseDatabasePromptsState(next);
-    try {
-      localStorage.setItem(USE_DB_PROMPTS_STORAGE_KEY, next ? "true" : "false");
-    } catch {
-      /* ignore */
     }
   }, []);
 
@@ -305,6 +276,26 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
   const modifyThinkingRef = useRef<string[]>([]);
   const modifyToolCallsRef = useRef<ModifyToolCall[]>([]);
 
+  const intentProgressLogRef = useRef<IntentProgressEvent[]>([]);
+  const [intentProgressLog, setIntentProgressLog] = useState<IntentProgressEvent[]>([]);
+
+  const clearIntentProgress = useCallback(() => {
+    intentProgressLogRef.current = [];
+    setIntentProgressLog([]);
+  }, []);
+
+  const appendIntentProgress = useCallback((evt: IntentProgressEvent) => {
+    intentProgressLogRef.current = [...intentProgressLogRef.current, evt];
+    setIntentProgressLog(intentProgressLogRef.current);
+  }, []);
+
+  const takeIntentProgressSnapshot = useCallback((): IntentProgressEvent[] => {
+    const snap = intentProgressLogRef.current;
+    intentProgressLogRef.current = [];
+    setIntentProgressLog([]);
+    return snap;
+  }, []);
+
   const finishBuildLiveState = useCallback((totalDuration?: number) => {
     if (typeof totalDuration === "number" && Number.isFinite(totalDuration) && totalDuration >= 0) {
       setElapsed(totalDuration);
@@ -322,7 +313,13 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     (message: Omit<ConversationMessage, "id">) => {
       setConversationMessages((prev) => {
         const last = prev[prev.length - 1];
-        if (last?.role === message.role && last.content === message.content) {
+        const sameActivity =
+          JSON.stringify(last?.activityLog ?? []) === JSON.stringify(message.activityLog ?? []);
+        if (
+          last?.role === message.role &&
+          last.content === message.content &&
+          sameActivity
+        ) {
           return prev;
         }
         return [
@@ -652,6 +649,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     setStartedAt(t0);
     setElapsed(0);
     setLoading(true);
+    clearIntentProgress();
     // Preserve existing buildSteps to avoid topology flash.
     // New SSE steps will upsert into the existing array.
     setResponse((prev) => prev
@@ -682,18 +680,23 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       await runBuildSite(
         outboundInput,
         {
+          onIntentProgress: appendIntentProgress,
           onIntentTurn: (turn) => {
             setIntentAgent(turn);
+            const activityLog = takeIntentProgressSnapshot();
             const assistantContent =
               turn.yieldPayload?.message ??
               turn.assistantText ??
               turn.errorMessage ??
               "";
-            if (assistantContent) {
+            if (assistantContent || activityLog.length > 0) {
               appendConversationMessage({
                 role: "assistant",
-                content: assistantContent,
+                content:
+                  assistantContent ||
+                  (activityLog.length > 0 ? "（见下方「分析过程」）" : ""),
                 intentPayload: turn.yieldPayload,
+                ...(activityLog.length > 0 ? { activityLog } : {}),
               });
             }
             setResponse((prev) => ({
@@ -716,9 +719,11 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
           onIntentCommit: (brief) => {
             const cleanBrief = brief.trim();
             setMergedBrief(cleanBrief || null);
+            const activityLog = takeIntentProgressSnapshot();
             appendConversationMessage({
               role: "assistant",
               content: "需求已确认，开始生成项目...",
+              ...(activityLog.length > 0 ? { activityLog } : {}),
             });
             setResponse((prev) => ({
               content: "需求已确认，开始生成项目...",
@@ -731,6 +736,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
           onStep: handleStepEvent,
           onDone: (result) => {
             finishBuildLiveState(result.buildTotalDuration);
+            clearIntentProgress();
             setIntentAgent(result.intentAgent ?? null);
             setMergedBrief(result.mergedBriefFromAgent ?? result.mergedBrief ?? null);
             // done payload carries the authoritative final buildSteps from the server.
@@ -753,6 +759,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
           },
           onError: (msg) => {
             finishBuildLiveState();
+            clearIntentProgress();
             if (msg === "已取消" || msg === "Aborted") {
               return;
             }
@@ -764,32 +771,6 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         {
           model: selectedModel,
           ...(projectId ? { projectId } : {}),
-          ...(projectId && typeof sessionStorage !== "undefined"
-            ? (() => {
-              const sg = sessionStorage.getItem(`styleGuide:${projectId}`);
-              if (sg) { sessionStorage.removeItem(`styleGuide:${projectId}`); return { styleGuide: sg }; }
-              return {};
-            })()
-            : {}),
-          ...(projectId && typeof sessionStorage !== "undefined"
-            ? (() => {
-              const sk = sessionStorage.getItem(`enableSkills:${projectId}`);
-              if (sk === "true") { sessionStorage.removeItem(`enableSkills:${projectId}`); return { enableSkills: true }; }
-              return {};
-            })()
-            : {}),
-          ...(() => {
-            let effective = useDatabasePromptsRef.current;
-            if (projectId && typeof sessionStorage !== "undefined") {
-              const k = `useDatabasePrompts:${projectId}`;
-              const oneShot = sessionStorage.getItem(k);
-              if (oneShot !== null) {
-                sessionStorage.removeItem(k);
-                effective = oneShot === "true";
-              }
-            }
-            return effective ? {} : { useDatabasePrompts: false };
-          })(),
         }
       );
     } catch (err) {
@@ -875,7 +856,6 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         {
           model: selectedModel,
           retryProjectId: retryId,
-          ...(useDatabasePromptsRef.current ? {} : { useDatabasePrompts: false }),
         }
       );
     } catch (err) {
@@ -985,7 +965,6 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
           model: selectedModel,
           retryProjectId: retryId,
           resumeFromCheckpoint: true,
-          ...(useDatabasePromptsRef.current ? {} : { useDatabasePrompts: false }),
         }
       );
     } catch (err) {
@@ -1333,7 +1312,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       : startedAt ?? 0;
 
   return {
-    input, setInput, loading, clearing, response, intentAgent, mergedBrief, conversationMessages, lastRunInput, elapsed, flowStart,
+    input, setInput, loading, clearing, response, intentAgent, mergedBrief, conversationMessages, intentProgressLog, lastRunInput, elapsed, flowStart,
     handleRun, handleClear, handleRetry,
     generationSeemsStuck,
     recoveryUnlocking,
@@ -1344,7 +1323,6 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     rightPanel, setRightPanel,
     previewUrl, previewState, previewError, previewVersion, startPreview, rebuildPreview,
     autoPreviewAfterBuild, setAutoPreviewAfterBuild,
-    useDatabasePrompts, setUseDatabasePrompts,
     modifyInstruction, setModifyInstruction, modifyImage, setModifyImage, modifying,
     modifySteps, modifyPlan, modifyDiffs, modifyToolCalls, modifyThinking, modifyError, handleModify,
     clearModifyHistory: () => {

@@ -37,19 +37,23 @@ const TEMPLATES = [
 interface QuickTemplatesProps {
   onSelect: (prompt: string) => void;
   visible: boolean;
+  /** single horizontal row; use with parent overflow-x-auto */
+  layout?: "wrap" | "row";
 }
 
-export function QuickTemplates({ onSelect, visible }: QuickTemplatesProps) {
+export function QuickTemplates({ onSelect, visible, layout = "wrap" }: QuickTemplatesProps) {
   if (!visible) return null;
 
+  const row = layout === "row";
+
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div className={row ? "flex flex-nowrap items-center gap-1.5" : "flex flex-wrap gap-1.5"}>
       {TEMPLATES.map((t) => (
         <button
           key={t.label}
           type="button"
           onClick={() => onSelect(t.prompt)}
-          className="rounded-full border border-white/8 bg-white/[0.03] px-3 py-1 font-mono text-[11px] text-muted-foreground/60 transition-all hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
+          className={`rounded-full border border-white/8 bg-white/[0.03] font-mono text-[11px] text-muted-foreground/60 transition-all hover:border-primary/30 hover:bg-primary/5 hover:text-primary ${row ? "shrink-0 px-2.5 py-1 sm:px-3" : "px-3 py-1"}`}
         >
           {t.label}
         </button>

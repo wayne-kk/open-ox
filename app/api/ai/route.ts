@@ -38,8 +38,6 @@ export async function POST(req: Request) {
       typeof body.resumeFromCheckpoint === "boolean" &&
       body.resumeFromCheckpoint;
     const preCreatedProjectId: string | undefined = body.projectId;
-    const styleGuide: string | undefined = body.styleGuide;
-    const enableSkills: boolean = body.enableSkills !== false;
     const enableIntentGuide: boolean = body.enableIntentGuide !== false;
     const folderId: string | null | undefined =
       typeof body.folderId === "string" ? body.folderId : body.folderId === null ? null : undefined;
@@ -111,8 +109,7 @@ export async function POST(req: Request) {
       ...(retryProjectId ? { retryProjectId } : {}),
       ...(!retryProjectId && preCreatedProjectId ? { preCreatedProjectId } : {}),
       resumeFromCheckpoint,
-      ...(styleGuide !== undefined ? { styleGuide } : {}),
-      enableSkills,
+      enableSkills: true,
       enableIntentGuide,
       ...(typeof body.langfuseSessionId === "string"
         ? { langfuseSessionId: body.langfuseSessionId }

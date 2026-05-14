@@ -1,9 +1,12 @@
 import type { AiResponse, BuildStep, IntentAgentTurn } from "../types/build-studio";
+import type { IntentProgressEvent } from "@/ai/flows/generate_project/intentAgent/types";
 
 interface BuildSiteCallbacks {
   onStep: (step: BuildStep) => void;
   onIntentTurn?: (turn: IntentAgentTurn) => void;
   onIntentCommit?: (mergedBrief: string) => void;
+  /** Live intent-agent tool loop activity (SSE `intent_progress`). */
+  onIntentProgress?: (event: IntentProgressEvent) => void;
   onDone: (result: AiResponse) => void;
   /** User-facing info (not treated as a fatal “流程出错” in the UI). */
   onNotice?: (msg: string) => void;
@@ -174,6 +177,13 @@ function processSSEChunk(chunk: string, callbacks: BuildSiteCallbacks): QueuedHa
       callbacks.onIntentTurn?.(event.turn as IntentAgentTurn);
       return;
     }
+    if (event.type === "intent_progress") {
+      const kind = event.kind;
+      if (kind === "assistant_round" || kind === "reasoning" || kind === "tool") {
+        callbacks.onIntentProgress?.(event as IntentProgressEvent);
+      }
+      return;
+    }
     if (event.type === "intent_agent_commit") {
       callbacks.onIntentCommit?.(String(event.mergedBrief ?? ""));
       return;
@@ -225,9 +235,6 @@ export async function runBuildSite(
     retryProjectId?: string;
     resumeFromCheckpoint?: boolean;
     projectId?: string;
-    styleGuide?: string;
-    enableSkills?: boolean;
-    useDatabasePrompts?: boolean;
   }
 ): Promise<void> {
   const useIntentAgent = Boolean(options?.projectId && !options.retryProjectId);
@@ -240,9 +247,6 @@ export async function runBuildSite(
             projectId: options?.projectId,
             message: input,
             ...(options?.model ? { model: options.model } : {}),
-            ...(options?.styleGuide ? { styleGuide: options.styleGuide } : {}),
-            ...(options?.enableSkills ? { enableSkills: true } : {}),
-            ...(options?.useDatabasePrompts === false ? { useDatabasePrompts: false } : {}),
             runGenerateOnCommit: true,
           }
         : {
@@ -251,9 +255,6 @@ export async function runBuildSite(
             ...(options?.resumeFromCheckpoint ? { resumeFromCheckpoint: true } : {}),
             ...(options?.retryProjectId ? { retryProjectId: options.retryProjectId } : {}),
             ...(options?.projectId ? { projectId: options.projectId } : {}),
-            ...(options?.styleGuide ? { styleGuide: options.styleGuide } : {}),
-            ...(options?.enableSkills ? { enableSkills: true } : {}),
-            ...(options?.useDatabasePrompts === false ? { useDatabasePrompts: false } : {}),
           }
     ),
     signal,

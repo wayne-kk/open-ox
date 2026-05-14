@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { updateProjectStatus } from "@/lib/projectManager";
+import type { BuildStep } from "@/ai/flows";
+import { getProject, updateProjectStatus } from "@/lib/projectManager";
 
 import type { GenerationRunPayloadBody } from "./types";
 
@@ -68,9 +69,16 @@ export async function enqueueGenerationJob(input: EnqueueGenerationInput): Promi
 
   const runId = inserted.id as string;
 
+  const meta = await getProject(db, projectId);
+  const intentOnly = ((meta?.buildSteps ?? []) as BuildStep[]).filter(
+    (s) => s?.step === "intent_agent"
+  );
+
   await updateProjectStatus(db, projectId, "generating", {
     error: undefined,
     currentGenerationRunId: runId,
+    /** Drop previous run’s pipeline steps so polling/UI doesn’t show stale phases. */
+    buildSteps: intentOnly,
   });
 
   return { runId, attached: false };

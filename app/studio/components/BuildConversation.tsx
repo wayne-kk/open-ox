@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import dynamic from "next/dynamic";
 import Link from "next/link";
 import { AlertTriangle, CircleCheckBig, Play, Send, Wand2, RefreshCw } from "lucide-react";
 import { ChatBubble } from "./ui/ChatBubble";
@@ -10,6 +9,7 @@ import { TermLine } from "./ui/TermLine";
 import { StepRow } from "./StepRow";
 import { BlueprintOverview } from "./BlueprintOverview";
 import { MemoryDebugPanel } from "./MemoryDebugPanel";
+import { StudioMessageMarkdown } from "./StudioMessageMarkdown";
 import { SlashMenu } from "@/app/components/ui/SlashMenu";
 import { useSlashMenu } from "@/app/hooks/useSlashMenu";
 import {
@@ -17,9 +17,7 @@ import {
   stripRecoverablePrefixForDisplay,
 } from "@/lib/generationRecovery";
 import type { BuildStudioState, ModifyRecord, ModifyDiff } from "../hooks/useBuildStudio";
-import { inferMonacoLanguage } from "../lib/inferMonacoLanguage";
-
-const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
+import type { IntentProgressEvent } from "../types/build-studio";
 
 function formatMs(ms: number): string {
     if (ms < 1000) return `${ms}ms`;
@@ -39,153 +37,90 @@ function buildIndentedList(values: string[]): string {
     return values.map((value) => `  - ${value}`).join("\n");
 }
 
-function GeneratedFilesPreview({
-    projectId,
-    files,
-}: {
-    projectId: string | null;
-    files: string[];
-}) {
-    const [selectedFile, setSelectedFile] = useState<string | null>(files[0] ?? null);
-    const [content, setContent] = useState<string>("");
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [copied, setCopied] = useState(false);
-    const editorRef = useRef<{ getAction: (id: string) => { run: () => Promise<void> } | null } | null>(null);
+function IntentAnalysisStep({ evt }: { evt: IntentProgressEvent }) {
+    if (evt.kind === "tool") {
+        return (
+            <div className="space-y-1 border-l-2 border-primary/30 pl-2">
+                <div>
+                    <span className="text-foreground/90">{evt.toolName}</span>
+                    <span className="text-muted-foreground"> · 第 {evt.iteration + 1} 轮</span>
+                </div>
+                <pre className="whitespace-pre-wrap break-words text-[10px] leading-relaxed opacity-90">
+                    {evt.resultPreview}
+                </pre>
+            </div>
+        );
+    }
+    if (evt.kind === "reasoning") {
+        return (
+            <div className="space-y-1 border-l-2 border-violet-500/35 pl-2">
+                <div className="text-[10px] font-medium text-violet-300/90">思考</div>
+                <pre className="whitespace-pre-wrap break-words text-[10px] leading-relaxed">
+                    {evt.text}
+                </pre>
+            </div>
+        );
+    }
+    return (
+        <div className="space-y-1 border-l-2 border-white/15 pl-2">
+            <div className="text-[10px] text-muted-foreground">
+                模型第 {evt.iteration + 1} 轮
+                {evt.toolCallNames.length > 0 ? (
+                    <span className="text-foreground/80"> → {evt.toolCallNames.join(", ")}</span>
+                ) : null}
+            </div>
+            {evt.textPreview ? (
+                <pre className="whitespace-pre-wrap break-words text-[10px] leading-relaxed opacity-85">
+                    {evt.textPreview}
+                </pre>
+            ) : null}
+        </div>
+    );
+}
 
-    useEffect(() => {
-        if (!files.length) {
-            setSelectedFile(null);
-            return;
-        }
-        if (!selectedFile || !files.includes(selectedFile)) {
-            setSelectedFile(files[0]);
-        }
-    }, [files, selectedFile]);
+function GeneratedFilesList({ files }: { files: string[] }) {
+    const [copiedPath, setCopiedPath] = useState<string | null>(null);
 
-    useEffect(() => {
-        if (!projectId || !selectedFile) {
-            setContent("");
-            setError(null);
-            return;
-        }
-
-        const controller = new AbortController();
-        const loadFile = async () => {
-            setLoading(true);
-            setError(null);
-            try {
-                const res = await fetch(
-                    `/api/projects/${projectId}/files?path=${encodeURIComponent(selectedFile)}`,
-                    { signal: controller.signal }
-                );
-                const data = await res.json().catch(() => ({}));
-                if (!res.ok) {
-                    throw new Error(data.error ?? `HTTP ${res.status}`);
-                }
-                setContent(typeof data.content === "string" ? data.content : "");
-            } catch (err) {
-                if ((err as Error).name === "AbortError") return;
-                setContent("");
-                setError(err instanceof Error ? err.message : "Failed to load file");
-            } finally {
-                setLoading(false);
-            }
-        };
-        void loadFile();
-
-        return () => controller.abort();
-    }, [projectId, selectedFile]);
-
-    const handleCopy = async () => {
-        if (!content) return;
+    const copyPath = async (relPath: string) => {
         try {
-            await navigator.clipboard.writeText(content);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
+            await navigator.clipboard.writeText(relPath);
+            setCopiedPath(relPath);
+            setTimeout(() => setCopiedPath(null), 1_200);
         } catch {
-            // Ignore clipboard failures (permission denied, insecure context).
+            // Ignore clipboard failures.
         }
     };
 
-    return (
-        <div className="rounded-xl border border-white/8 bg-black/20">
-            <div className="grid max-h-[360px] min-h-[260px] grid-cols-[minmax(180px,34%)_1fr]">
-                <div className="border-r border-white/8 overflow-y-auto scrollbar-unified">
-                    {files.map((file) => (
-                        <button
-                            key={file}
-                            type="button"
-                            onClick={() => setSelectedFile(file)}
-                            className={`flex w-full items-center gap-2 px-3 py-2 text-left font-mono text-[11px] transition-colors ${selectedFile === file
-                                ? "bg-primary/12 text-primary"
-                                : "text-muted-foreground/80 hover:bg-white/5 hover:text-foreground"
-                                }`}
-                        >
-                            <span className="text-[10px] opacity-60">›</span>
-                            <span className="truncate">{file}</span>
-                        </button>
-                    ))}
-                </div>
+    if (!files.length) {
+        return null;
+    }
 
-                <div className="min-w-0">
-                    <div className="flex items-center justify-between border-b border-white/8 px-3 py-2">
-                        <span className="truncate font-mono text-[10px] uppercase tracking-wider text-muted-foreground/70">
-                            {selectedFile ?? "No file selected"}
+    return (
+        <div className="rounded-xl border border-white/8 bg-black/20 overflow-hidden">
+            <div className="max-h-[min(40vh,280px)] overflow-y-auto scrollbar-unified divide-y divide-white/[0.06]">
+                {files.map((file) => (
+                    <div
+                        key={file}
+                        className="flex items-center gap-2 px-3 py-2 text-[11px] hover:bg-white/[0.03]"
+                    >
+                        <span className="shrink-0 text-primary/45 font-mono text-[10px]">›</span>
+                        <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground/90" title={file}>
+                            {file}
                         </span>
-                        <div className="flex items-center gap-1.5">
-                            <button
-                                type="button"
-                                onClick={() => void editorRef.current?.getAction("actions.find")?.run()}
-                                disabled={!content}
-                                className="rounded border border-white/10 px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70 transition-colors hover:border-white/20 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                            >
-                                Search
-                            </button>
-                            <button
-                                type="button"
-                                onClick={handleCopy}
-                                disabled={!content}
-                                className="rounded border border-white/10 px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70 transition-colors hover:border-white/20 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                            >
-                                {copied ? "Copied" : "Copy"}
-                            </button>
-                        </div>
+                        <button
+                            type="button"
+                            onClick={() => void copyPath(file)}
+                            className="shrink-0 rounded-md border border-white/10 px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/80 transition-colors hover:border-white/18 hover:text-foreground"
+                        >
+                            {copiedPath === file ? "已复制" : "路径"}
+                        </button>
                     </div>
-                    <div className="h-[320px] overflow-hidden bg-[#080a0d]">
-                        {loading ? (
-                            <div className="p-3 font-mono text-[11px] text-muted-foreground/70">Loading file...</div>
-                        ) : error ? (
-                            <div className="p-3 font-mono text-[11px] text-red-300/80">{error}</div>
-                        ) : (
-                            <MonacoEditor
-                                height="100%"
-                                language={inferMonacoLanguage(selectedFile)}
-                                value={content || "// Empty file"}
-                                theme="vs-dark"
-                                onMount={(editor) => {
-                                    editorRef.current = editor as unknown as { getAction: (id: string) => { run: () => Promise<void> } | null };
-                                }}
-                                options={{
-                                    readOnly: true,
-                                    minimap: { enabled: false },
-                                    fontSize: 12,
-                                    lineNumbers: "on",
-                                    glyphMargin: false,
-                                    folding: true,
-                                    scrollBeyondLastLine: false,
-                                    renderLineHighlight: "line",
-                                    wordWrap: "off",
-                                    automaticLayout: true,
-                                    find: {
-                                        addExtraSpaceOnTop: false,
-                                    },
-                                }}
-                            />
-                        )}
-                    </div>
-                </div>
+                ))}
             </div>
+            <p className="border-t border-white/8 bg-black/15 px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground/85">
+                已生成 <span className="text-foreground/90">{files.length}</span> 个文件。
+                不在此处展开源码；请在右侧边栏打开「代码」面板浏览与编辑。
+            </p>
         </div>
     );
 }
@@ -276,18 +211,19 @@ function CollapsedThinkingBlock({ thinking }: { thinking: string[] }) {
 function ModifyBubble({ record }: { record: ModifyRecord }) {
     return (
         <ChatBubble role="user">
-            <div className="text-[11px] font-medium text-foreground">You</div>
-            {record.image && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                    src={record.image}
-                    alt="attached"
-                    className="mt-2 max-h-64 rounded-lg border border-white/10 object-cover"
-                />
-            )}
-            <pre className="mt-2 whitespace-pre-wrap font-body text-[14px] leading-7 text-foreground">
-                {record.instruction}
-            </pre>
+            <div className="space-y-3">
+                {record.image && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                        src={record.image}
+                        alt="attached"
+                        className="max-h-64 rounded-lg border border-white/10 object-cover"
+                    />
+                )}
+                <pre className="whitespace-pre-wrap font-body text-[14px] leading-7 text-foreground">
+                    {record.instruction}
+                </pre>
+            </div>
         </ChatBubble>
     );
 }
@@ -315,9 +251,7 @@ function ModifyResultBubble({ record }: { record: ModifyRecord }) {
             <div className="mt-3 space-y-3">
                 {record.plan && (
                     <LogSection title="Analysis">
-                        <div className="space-y-1 text-[12px] leading-6 text-foreground/90">
-                            <p>{record.plan.analysis}</p>
-                        </div>
+                        <StudioMessageMarkdown content={record.plan.analysis} />
                         <div className="mt-2 space-y-1">
                             {record.plan.changes.map((c) => (
                                 <div key={c.path} className="flex items-start gap-2 font-mono text-[10px]">
@@ -435,6 +369,7 @@ export function BuildConversation({
     modifyError,
     pendingModifyInstruction,
     pendingModifyImage,
+    intentProgressLog,
 }: BuildStudioState) {
     const chatRef = useRef<HTMLDivElement>(null);
     const [slashHint, setSlashHint] = useState<string | null>(null);
@@ -510,7 +445,7 @@ export function BuildConversation({
         if (isNearBottomRef.current && chatRef.current) {
             chatRef.current.scrollTop = chatRef.current.scrollHeight;
         }
-    }, [response, conversationMessages, loading, modifying, modifyToolCalls, modifyThinking, modifySteps, modifyDiffs, modifyError, modifyHistory]);
+    }, [response, conversationMessages, loading, modifying, modifyToolCalls, modifyThinking, modifySteps, modifyDiffs, modifyError, modifyHistory, intentProgressLog]);
 
     return (
         <aside className="flex h-full min-h-0 w-full shrink-0 flex-col overflow-hidden lg:w-[540px] lg:max-h-full scrollbar-hidden">
@@ -565,21 +500,39 @@ export function BuildConversation({
 
                     {conversationMessages.map((message) => (
                         <ChatBubble key={message.id} role={message.role}>
-                            <div className="text-[11px] font-medium text-foreground">
-                                {message.role === "user" ? "You" : "意图助手"}
-                            </div>
-                            <div className="mt-2 space-y-3">
+                            {message.role === "assistant" ? (
+                                <div className="text-[11px] font-medium text-foreground">意图助手</div>
+                            ) : null}
+                            <div className={message.role === "assistant" ? "mt-2 space-y-3" : "space-y-3"}>
                                 <div className="text-[13px] leading-7 text-foreground">
-                                    {message.content.split("\n").filter(Boolean).map((line, i) => (
-                                        <p key={i}>{line}</p>
-                                    ))}
+                                    {message.role === "user" ? (
+                                        <pre className="whitespace-pre-wrap font-body">{message.content}</pre>
+                                    ) : (
+                                        <StudioMessageMarkdown content={message.content} />
+                                    )}
                                 </div>
+
+                                {message.role === "assistant" && message.activityLog && message.activityLog.length > 0 ? (
+                                    <details
+                                        className="rounded-xl border border-white/8 bg-black/15 px-3 py-2"
+                                        open={message.id === latestAssistantMessageId}
+                                    >
+                                        <summary className="cursor-pointer select-none text-[11px] text-muted-foreground">
+                                            分析过程（{message.activityLog.length} 步）
+                                        </summary>
+                                        <div className="scrollbar-unified mt-2 max-h-[min(52vh,320px)] space-y-3 overflow-y-auto pr-1">
+                                            {message.activityLog.map((evt, i) => (
+                                                <IntentAnalysisStep key={`${message.id}-act-${i}`} evt={evt} />
+                                            ))}
+                                        </div>
+                                    </details>
+                                ) : null}
 
                                 {/* Brief draft — always visible so the confirmed structure stays in the conversation */}
                                 {message.role === "assistant" && message.intentPayload?.briefDraftMarkdown ? (
-                                    <pre className="rounded-2xl border border-white/8 bg-black/20 px-4 py-3 whitespace-pre-wrap text-[12px] leading-6 text-muted-foreground">
-                                        {message.intentPayload.briefDraftMarkdown}
-                                    </pre>
+                                    <div className="rounded-2xl border border-white/8 bg-black/20 px-4 py-3 text-muted-foreground">
+                                        <StudioMessageMarkdown content={message.intentPayload.briefDraftMarkdown} />
+                                    </div>
                                 ) : null}
 
                                 {/* Interactive options — only on the latest assistant message (clicking old buttons is meaningless) */}
@@ -623,8 +576,21 @@ export function BuildConversation({
                         <ChatBubble role="assistant">
                             <div className="text-[11px] font-medium text-foreground">意图助手</div>
                             <div className="mt-2 space-y-3">
+                                {intentProgressLog.length > 0 ? (
+                                    <LogSection title="分析进行中">
+                                        <div className="scrollbar-unified max-h-[min(44vh,280px)] space-y-3 overflow-y-auto pr-1">
+                                            {intentProgressLog.map((evt, i) => (
+                                                <IntentAnalysisStep key={`live-act-${i}`} evt={evt} />
+                                            ))}
+                                        </div>
+                                    </LogSection>
+                                ) : null}
                                 <div className="text-[13px] leading-7 text-foreground">
-                                    <p className="text-muted-foreground">正在理解你的需求...</p>
+                                    <p className="text-muted-foreground">
+                                        {intentProgressLog.length > 0
+                                            ? "正在分析需求与参考资料（上方为实时步骤）…"
+                                            : "正在理解你的需求..."}
+                                    </p>
                                 </div>
                             </div>
                         </ChatBubble>
@@ -667,11 +633,7 @@ export function BuildConversation({
 
                                 {response?.content ? (
                                     <LogSection title="Summary">
-                                        <div className="space-y-1 text-[13px] leading-6 text-foreground">
-                                            {response.content.split("\n").filter(Boolean).map((line, i) => (
-                                                <p key={i}>{line}</p>
-                                            ))}
-                                        </div>
+                                        <StudioMessageMarkdown content={response.content} />
                                     </LogSection>
                                 ) : null}
 
@@ -711,7 +673,7 @@ export function BuildConversation({
 
                                 {response?.generatedFiles && response.generatedFiles.length > 0 ? (
                                     <LogSection title="Generated Files">
-                                        <GeneratedFilesPreview projectId={projectId} files={response.generatedFiles} />
+                                        <GeneratedFilesList files={response.generatedFiles} />
                                     </LogSection>
                                 ) : null}
 
@@ -807,18 +769,19 @@ export function BuildConversation({
                     {/* In-progress modify — show user's input bubble first */}
                     {modifying && pendingModifyInstruction && (
                         <ChatBubble role="user">
-                            <div className="text-[11px] font-medium text-foreground">You</div>
-                            {pendingModifyImage && (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                    src={pendingModifyImage}
-                                    alt="attached"
-                                    className="mt-2 max-h-64 rounded-lg border border-white/10 object-cover"
-                                />
-                            )}
-                            <pre className="mt-2 whitespace-pre-wrap font-body text-[14px] leading-7 text-foreground">
-                                {pendingModifyInstruction}
-                            </pre>
+                            <div className="space-y-3">
+                                {pendingModifyImage && (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                        src={pendingModifyImage}
+                                        alt="attached"
+                                        className="max-h-64 rounded-lg border border-white/10 object-cover"
+                                    />
+                                )}
+                                <pre className="whitespace-pre-wrap font-body text-[14px] leading-7 text-foreground">
+                                    {pendingModifyInstruction}
+                                </pre>
+                            </div>
                         </ChatBubble>
                     )}
 

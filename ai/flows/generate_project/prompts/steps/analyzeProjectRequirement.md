@@ -17,6 +17,12 @@
 - 此步骤**不要**输出 `site.pages[].sections`；分页块在后续规划（或直接由页面 Agent 自组织）。
 - 此步骤**不要**输出任何「全局壳层」相关字段（不要写 `layoutSections` / `navigation` / `footer`）。layout 形态由下游 Architect Agent 根据产品形态决定——可能是顶 nav + footer，也可能是 sidebar + topbar，可能是工具栏 + 主舞台，也可能完全不需要任何全局 chrome。**这不是需求层的问题**。
 
+### 可用工具（与生成配置一致）
+
+- **`reference_site_digest`**：用户 prompt 中有参考链接时**优先**调用：浏览器视口截图 + 可见文本 + 多模态摘要，再写入 `ProjectBlueprint` 可字段。
+- **`fetch_reference_page`**：digest 不可用或需对照时的 HTTP HTML 轻量摘要。
+- **`web_search`**：遇到陌生品牌/产品名等需要核实时再使用。
+
 ## 输出格式（权威）
 
 最终答案必须是**原始 JSON**（以 `{` 开始、以 `}` 结束），且**不包含** markdown、代码块或解释文本。

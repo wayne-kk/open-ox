@@ -23,6 +23,7 @@ export type {
   IntentAgentTurnStatus,
   IntentAgentYieldKind,
   IntentAgentYieldPayload,
+  IntentProgressEvent,
 } from "./intentAgent/types";
 export type {
   AutoInstalledDependency,

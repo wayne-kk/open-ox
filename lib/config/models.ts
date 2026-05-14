@@ -97,6 +97,11 @@ export function clearStepConfig(stepName: string): void {
 /** Available generation steps that can have model overrides */
 export const GENERATION_STEPS = [
     { id: "intent_agent", label: "建站意向 Task Agent" },
+    { id: "intent_brand_kit", label: "意向阶段·品牌体检（多模态）" },
+    { id: "intent_ia_proposal", label: "意向阶段·单页 IA 提案" },
+    { id: "intent_a11y_seo", label: "意向阶段·无障碍与 SEO 清单" },
+    { id: "intent_competitive", label: "意向阶段·竞品速写" },
+    { id: "reference_site_digest", label: "参考站截图+多模态摘要" },
     { id: "project_intent_guide", label: "建站意向引导" },
     { id: "modify_intent_router", label: "修改入口意图分类" },
     { id: "analyze_project_requirement", label: "需求分析" },

@@ -1,4 +1,9 @@
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
+import { referenceSiteDigestTool } from "@/ai/tools/system/referenceSiteDigestTool";
+import { brandKitFromUrlTool } from "@/ai/tools/system/brandKitFromUrlTool";
+import { singlePageIaProposalTool } from "@/ai/tools/system/singlePageIaProposalTool";
+import { accessibilitySeoBriefTool } from "@/ai/tools/system/accessibilitySeoBriefTool";
+import { competitiveLandscapeSnapshotTool } from "@/ai/tools/system/competitiveLandscapeSnapshotTool";
 
 export const PIPELINE_CONSTRAINTS_TEXT = `## open-ox 生成流水线（硬约束）
 
@@ -21,6 +26,11 @@ export function buildIntentAgentTools(): ChatCompletionTool[] {
         },
       },
     },
+    referenceSiteDigestTool,
+    brandKitFromUrlTool,
+    singlePageIaProposalTool,
+    accessibilitySeoBriefTool,
+    competitiveLandscapeSnapshotTool,
     {
       type: "function",
       function: {

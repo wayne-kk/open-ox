@@ -60,10 +60,9 @@ export async function POST(req: Request) {
     const { supabase: db, user } = session;
 
     const body = await req.json();
-    const { userPrompt, modelId, styleGuide, folderId, generationMode } = body as {
+    const { userPrompt, modelId, folderId, generationMode } = body as {
       userPrompt: string;
       modelId?: string;
-      styleGuide?: string;
       folderId?: string | null;
       generationMode?: GenerationMode;
     };
@@ -81,7 +80,7 @@ export async function POST(req: Request) {
       folderId: folderId ?? null,
       generationMode,
     });
-    return NextResponse.json({ projectId: project.id, styleGuide: styleGuide ?? null });
+    return NextResponse.json({ projectId: project.id });
   } catch (err) {
     console.error("[POST /api/projects]", err);
     return NextResponse.json(

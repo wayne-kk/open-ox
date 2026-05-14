@@ -1,7 +1,8 @@
 // Import shared types from the AI flow layer
 import type { StepLlmCall, StepTrace, BuildStep } from "@/ai/flows/generate_project/types";
+import type { IntentProgressEvent } from "@/ai/flows/generate_project/intentAgent/types";
 // Re-export for consumers
-export type { StepLlmCall, StepTrace, BuildStep };
+export type { StepLlmCall, StepTrace, BuildStep, IntentProgressEvent };
 
 export interface PlannedProjectBlueprint {
     brief: {

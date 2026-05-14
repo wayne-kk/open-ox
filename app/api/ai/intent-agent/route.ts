@@ -11,10 +11,6 @@ import {
 } from "@/lib/projectManager";
 import { setRuntimeModelId, type ModelId } from "@/lib/config/models";
 import { loadStepModelsFromDB } from "@/lib/config/models";
-import {
-  loadCoreStepPromptsFromDB,
-  normalizePromptProfile,
-} from "@/lib/config/corePrompts";
 import { SSE_RESPONSE_HEADERS } from "@/lib/sse-headers";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
@@ -79,18 +75,11 @@ export async function POST(req: Request) {
     const projectId: unknown = body.projectId;
     const message: unknown = body.message;
     const resetSession: boolean = body.resetSession === true;
-    const styleGuide: string | undefined =
-      typeof body.styleGuide === "string" ? body.styleGuide : undefined;
-    // Default ON — matches runGenerateProject's `options.enableSkills !== false`
-    // contract so resume / modify flows get skill matching unless they
-    // explicitly opt out with `enableSkills: false`.
-    const enableSkills: boolean = body.enableSkills !== false;
     const enableIntentGuide: boolean = body.enableIntentGuide !== false;
     const runGenerateOnCommit: boolean = body.runGenerateOnCommit !== false;
     const modelOverride: string | undefined = typeof body.model === "string" ? body.model : undefined;
     const enableIntentAgentWebSearch: boolean = body.enableIntentAgentWebSearch === true;
 
-    const useDatabasePrompts = false;
     if (!projectId || typeof projectId !== "string" || !isSafeProjectId(projectId)) {
       return NextResponse.json({ error: "Missing or invalid projectId" }, { status: 400 });
     }
@@ -111,10 +100,6 @@ export async function POST(req: Request) {
     }
 
     await loadStepModelsFromDB();
-    const promptProfile = normalizePromptProfile("web");
-    const corePromptOverrides = useDatabasePrompts
-      ? await loadCoreStepPromptsFromDB(promptProfile)
-      : new Map();
 
     const encoder = new TextEncoder();
 
@@ -208,6 +193,12 @@ export async function POST(req: Request) {
               bootstrapUserPrompt: meta.userPrompt ?? null,
               resetSession,
               toolExtensions: intentToolExtensions,
+              onIntentProgress: (evt) => {
+                send({
+                  type: "intent_progress",
+                  ...evt,
+                });
+              },
             })
           );
 
@@ -290,8 +281,7 @@ export async function POST(req: Request) {
             effectiveGenerationMode: meta.generationMode ?? "web",
             preCreatedProjectId: projectId,
             resumeFromCheckpoint: false,
-            styleGuide,
-            enableSkills,
+            enableSkills: true,
             enableIntentGuide,
             ...(typeof body.langfuseSessionId === "string"
               ? { langfuseSessionId: body.langfuseSessionId }

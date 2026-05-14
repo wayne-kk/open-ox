@@ -7,6 +7,16 @@ import type { AgentToolCallRecord, ChatMessage } from "./types";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { lfToolAgentRound } from "@/lib/observability/langfuseGenerationCatalog";
 
+function extractReasoningFromAssistantMessage(msg: unknown): string | null {
+  if (!msg || typeof msg !== "object") return null;
+  const o = msg as Record<string, unknown>;
+  for (const k of ["reasoning", "thinking", "reasoning_content", "thought"]) {
+    const v = o[k];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return null;
+}
+
 function resolveToolLoopPhase(
   explicit: string | undefined,
   legacyLabel: string | undefined,
@@ -114,6 +124,7 @@ export async function callLLMWithTools(params: {
       message,
       executeToolOverrides,
       emit,
+      iteration,
     });
   }
 
@@ -159,6 +170,15 @@ export async function callLLMWithToolsFromMessages(params: {
     name: string;
     args: Record<string, unknown>;
     iteration: number;
+    result: ToolResult | string;
+  }) => void;
+  /** Model extended/thinking fields surfaced as text (provider-dependent). */
+  onReasoning?: (info: { iteration: number; text: string }) => void;
+  /** Each assistant message before tool execution (tool names + short text preview). */
+  onAssistantRound?: (info: {
+    iteration: number;
+    textPreview: string | null;
+    toolCallNames: string[];
   }) => void;
   langfusePhase?: string;
   /** @deprecated Prefer `langfusePhase` */
@@ -256,6 +276,23 @@ export async function callLLMWithToolsFromMessages(params: {
       lastAssistantContent = message.content.trim();
     }
 
+    const reasoningText = extractReasoningFromAssistantMessage(message);
+    if (reasoningText && params.onReasoning) {
+      params.onReasoning({ iteration, text: reasoningText });
+    }
+    const toolCallNames =
+      message.tool_calls
+        ?.map((tc) => tc.function?.name)
+        .filter((n): n is string => typeof n === "string" && n.length > 0) ?? [];
+    params.onAssistantRound?.({
+      iteration,
+      textPreview:
+        typeof message.content === "string" && message.content.trim()
+          ? message.content.trim().slice(0, 900)
+          : null,
+      toolCallNames,
+    });
+
     if (!message.tool_calls || message.tool_calls.length === 0) {
       return { content: message.content?.trim() ?? lastAssistantContent, toolCalls };
     }
@@ -266,9 +303,8 @@ export async function callLLMWithToolsFromMessages(params: {
       message,
       executeToolOverrides,
       emit,
-      onToolCall: params.onToolCall
-        ? (info) => params.onToolCall?.({ ...info, iteration })
-        : undefined,
+      iteration,
+      onToolCall: params.onToolCall,
     });
 
     if (shouldAbortAfterToolResults?.()) {
@@ -345,9 +381,15 @@ async function dispatchToolCalls(params: {
     (args: Record<string, unknown>) => Promise<ToolResult | string>
   >;
   emit?: (msg: ChatMessage) => void;
-  onToolCall?: (info: { name: string; args: Record<string, unknown> }) => void;
+  iteration: number;
+  onToolCall?: (info: {
+    name: string;
+    args: Record<string, unknown>;
+    result: ToolResult | string;
+    iteration: number;
+  }) => void;
 }): Promise<void> {
-  const { toolCalls, messages, message, executeToolOverrides, emit, onToolCall } = params;
+  const { toolCalls, messages, message, executeToolOverrides, emit, onToolCall, iteration } = params;
   const calls = (message.tool_calls ?? []).map(parseToolCall);
   if (calls.length === 0) return;
 
@@ -358,7 +400,7 @@ async function dispatchToolCalls(params: {
     for (const call of calls) {
       const result = await executeOne(call, executeToolOverrides);
       toolCalls.push({ name: call.name, args: call.args, result });
-      onToolCall?.({ name: call.name, args: call.args });
+      onToolCall?.({ name: call.name, args: call.args, result, iteration });
       const toolMsg: ChatMessage = {
         role: "tool",
         tool_call_id: call.id,
@@ -390,7 +432,7 @@ async function dispatchToolCalls(params: {
 
   for (const { call, result } of settled) {
     toolCalls.push({ name: call.name, args: call.args, result });
-    onToolCall?.({ name: call.name, args: call.args });
+    onToolCall?.({ name: call.name, args: call.args, result, iteration });
     const toolMsg: ChatMessage = {
       role: "tool",
       tool_call_id: call.id,

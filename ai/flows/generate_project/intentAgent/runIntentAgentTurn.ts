@@ -6,6 +6,11 @@ import { clearIntentAgentSession, loadIntentAgentSession, saveIntentAgentSession
 import { buildIntentAgentTools, PIPELINE_CONSTRAINTS_TEXT } from "./tools";
 import { mergeIntentAgentTools, INTENT_AGENT_RESERVED_TOOL_NAMES } from "./toolSurface";
 import { resolveCommitMergedBrief } from "./commitMergeBrief";
+import { executeReferenceSiteDigest } from "@/ai/tools/system/referenceSiteDigestTool";
+import { executeBrandKitFromUrl } from "@/ai/tools/system/brandKitFromUrlTool";
+import { executeSinglePageIaProposal } from "@/ai/tools/system/singlePageIaProposalTool";
+import { executeAccessibilitySeoBrief } from "@/ai/tools/system/accessibilitySeoBriefTool";
+import { executeCompetitiveLandscapeSnapshot } from "@/ai/tools/system/competitiveLandscapeSnapshotTool";
 import { LfToolPhase } from "@/lib/observability/langfuseGenerationCatalog";
 import type { ToolResult } from "@/ai/tools/types";
 import type {
@@ -14,7 +19,35 @@ import type {
   IntentAgentToolExtensions,
   IntentAgentYieldKind,
   IntentAgentYieldPayload,
+  IntentProgressEvent,
 } from "./types";
+
+function truncatePreview(s: string, max: number): string {
+  const t = s.trim();
+  if (t.length <= max) return t;
+  return `${t.slice(0, max)}…`;
+}
+
+function serializeArgsPreview(args: Record<string, unknown>): string {
+  try {
+    return truncatePreview(JSON.stringify(args), 1500);
+  } catch {
+    return "{}";
+  }
+}
+
+function serializeResultPreview(result: ToolResult | string): string {
+  if (typeof result === "string") return truncatePreview(result, 2800);
+  if (result.success && typeof result.output === "string") {
+    return truncatePreview(result.output, 2800);
+  }
+  if (!result.success && result.error) return truncatePreview(result.error, 2800);
+  try {
+    return truncatePreview(JSON.stringify(result), 2800);
+  } catch {
+    return "[result]";
+  }
+}
 
 function isYieldKind(k: unknown): k is IntentAgentYieldKind {
   return k === "capability" || k === "clarify" || k === "options" || k === "confirm_brief";
@@ -69,6 +102,11 @@ export interface RunIntentAgentTurnParams {
    * Tool calls without local handlers forward to global `executeSystemTool` when the name is registered project-wide.
    */
   toolExtensions?: IntentAgentToolExtensions;
+  /**
+   * Streamed while the intent tool loop runs: assistant rounds, optional model reasoning
+   * text, and each completed tool (name + truncated args/result).
+   */
+  onIntentProgress?: (event: IntentProgressEvent) => void;
 }
 
 /**
@@ -76,8 +114,15 @@ export interface RunIntentAgentTurnParams {
  * Persists OpenAI-shaped history under `.open-ox/intent-agent/{projectId}/intent-agent-session.json`.
  */
 export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Promise<IntentAgentTurnResult> {
-  const { projectId, userMessage, bootstrapUserPrompt, resetSession, onMessage, toolExtensions } =
-    params;
+  const {
+    projectId,
+    userMessage,
+    bootstrapUserPrompt,
+    resetSession,
+    onMessage,
+    toolExtensions,
+    onIntentProgress,
+  } = params;
   const model = getModelForStep("intent_agent");
   const systemPrompt = composePromptBlocks([loadStepPrompt("projectIntentAgent")]);
   const tools = mergeIntentAgentTools({
@@ -130,6 +175,12 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
       };
       return JSON.stringify({ ok: true, halted: true, action: "commit_generate" });
     },
+    reference_site_digest: (args: Record<string, unknown>) => executeReferenceSiteDigest(args),
+    brand_kit_from_url: (args: Record<string, unknown>) => executeBrandKitFromUrl(args),
+    single_page_ia_proposal: (args: Record<string, unknown>) => executeSinglePageIaProposal(args),
+    accessibility_and_seo_brief: (args: Record<string, unknown>) => executeAccessibilitySeoBrief(args),
+    competitive_landscape_snapshot: (args: Record<string, unknown>) =>
+      executeCompetitiveLandscapeSnapshot(args),
   };
 
   for (const [name, fn] of Object.entries(toolExtensions?.toolHandlers ?? {})) {
@@ -147,6 +198,36 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
     onMessage,
     shouldAbortAfterToolResults: () => box.resolution !== null,
     langfusePhase: LfToolPhase.intentAgent,
+    onReasoning: onIntentProgress
+      ? ({ iteration, text }) => {
+          onIntentProgress({
+            kind: "reasoning",
+            iteration,
+            text: truncatePreview(text, 12_000),
+          });
+        }
+      : undefined,
+    onAssistantRound: onIntentProgress
+      ? ({ iteration, textPreview, toolCallNames }) => {
+          onIntentProgress({
+            kind: "assistant_round",
+            iteration,
+            textPreview,
+            toolCallNames,
+          });
+        }
+      : undefined,
+    onToolCall: onIntentProgress
+      ? ({ name, args, iteration, result }) => {
+          onIntentProgress({
+            kind: "tool",
+            iteration,
+            toolName: name,
+            argsPreview: serializeArgsPreview(args),
+            resultPreview: serializeResultPreview(result),
+          });
+        }
+      : undefined,
   });
 
   for (const c of calls) {

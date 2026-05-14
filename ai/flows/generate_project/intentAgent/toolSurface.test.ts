@@ -41,6 +41,16 @@ describe("mergeIntentAgentTools", () => {
     expect(y.length).toBe(1);
   });
 
+  it("includes reference_site_digest in base intent tools", () => {
+    const merged = buildIntentAgentTools();
+    const names = merged.map((t) => (t.type === "function" ? t.function.name : ""));
+    expect(names).toContain("reference_site_digest");
+    expect(names).toContain("brand_kit_from_url");
+    expect(names).toContain("single_page_ia_proposal");
+    expect(names).toContain("accessibility_and_seo_brief");
+    expect(names).toContain("competitive_landscape_snapshot");
+  });
+
   it("reserved set is frozen control surface", () => {
     expect(INTENT_AGENT_RESERVED_TOOL_NAMES.has("commit_generate")).toBe(true);
     expect(INTENT_AGENT_RESERVED_TOOL_NAMES.has("get_pipeline_constraints")).toBe(false);

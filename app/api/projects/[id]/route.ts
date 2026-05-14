@@ -6,13 +6,25 @@ import { getSessionUser } from "@/lib/auth/session";
 import { isAdminUser } from "@/lib/auth/roles";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 import { loadFoldedBuildStepsForRun } from "@/lib/generation/loadRunSteps";
+import type { BuildStep } from "@/ai/flows";
 
 type Params = { params: Promise<{ id: string }> };
+
+/** Worker + row materialization: non-intent steps mean we can skip scanning `generation_events`. */
+function hasMaterializedPipelineProgress(
+  project: NonNullable<Awaited<ReturnType<typeof getProject>>>
+): boolean {
+  const steps = project.buildSteps as BuildStep[] | undefined;
+  return Array.isArray(steps) && steps.some((s) => s?.step != null && s.step !== "intent_agent");
+}
 
 async function enrichProjectPayloadForGenerationProgress(
   project: Awaited<ReturnType<typeof getProject>>
 ): Promise<Record<string, unknown>> {
   if (!project?.currentGenerationRunId || project.status !== "generating") {
+    return { ...project } as Record<string, unknown>;
+  }
+  if (hasMaterializedPipelineProgress(project)) {
     return { ...project } as Record<string, unknown>;
   }
   try {

@@ -19,6 +19,11 @@
  * trace). Sequential {@link withLangfuseSpan} maintains a stack; for **parallel** work
  * (e.g. multiple page agents) wrap each branch with {@link runWithLangfuseSpanBranch}
  * so AsyncLocalStorage stays isolated per branch.
+ *
+ * ## Flush behaviour (server)
+ * The singleton client uses {@link Langfuse} with **no periodic flush timer** (`flushInterval: 0`)
+ * and a larger `flushAt` so long flows enqueue fewer partial batches; HTTP handlers and the
+ * generation worker call {@link flushLangfuse} when the logical request/job finishes.
  */
 import { AsyncLocalStorage } from "node:async_hooks";
 import Langfuse, { type LangfuseParent } from "langfuse";
@@ -66,7 +71,12 @@ export function getLangfuse(): Langfuse | null {
     return null;
   }
   const baseUrl = resolveLangfuseBaseUrl();
-  cachedLangfuseInstance = new Langfuse(baseUrl !== undefined ? { baseUrl } : {});
+  /** Avoid timer-driven mid-run flushes; routes/workers call {@link flushLangfuse} at the boundary. */
+  const flushInterval = 0;
+  const flushAt = 512;
+  cachedLangfuseInstance = new Langfuse(
+    baseUrl !== undefined ? { baseUrl, flushInterval, flushAt } : { flushInterval, flushAt }
+  );
   if (process.env.LANGFUSE_DEBUG === "1") {
     console.info(
       `[langfuse] client initialized baseUrl=${baseUrl ?? "default https://cloud.langfuse.com"}`

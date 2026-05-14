@@ -502,10 +502,29 @@ function stopDevInRegistry(projectId: string): void {
 
 async function ensureProjectDirExists(projectId: string): Promise<string> {
   const projectDir = getSiteRoot(projectId);
-  await restoreProjectFiles(projectId);
+  const pkgPath = path.join(projectDir, "package.json");
+
+  let pkgExisted = false;
+  try {
+    await fs.access(pkgPath);
+    pkgExisted = true;
+  } catch {
+    pkgExisted = false;
+  }
+
+  /** Full Storage restore is 30s–several minutes; skip when the worker already materialized the site locally. */
+  const tRestore = performance.now();
+  if (!pkgExisted) {
+    await fs.mkdir(projectDir, { recursive: true });
+    await restoreProjectFiles(projectId);
+    timingLog(projectId, "restoreProjectFiles(full)", tRestore);
+  } else {
+    timingLog(projectId, "restoreProjectFiles(skipped)", tRestore, "package.json already on disk");
+  }
+
   const tVerify = performance.now();
   try {
-    await fs.access(path.join(projectDir, "package.json"));
+    await fs.access(pkgPath);
   } catch {
     throw new Error(`Project directory not found: ${projectDir}`);
   }
