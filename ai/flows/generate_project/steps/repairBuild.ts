@@ -10,6 +10,7 @@ import type {
   BuildRepairResult,
   PlannedProjectBlueprint,
 } from "../types";
+import { tryTypeScriptCodeFixUntilResolved } from "../shared/tsxDiagnostics";
 
 interface RepairBuildParams {
   blueprint: PlannedProjectBlueprint;
@@ -63,8 +64,14 @@ function selectRepairTargets(buildOutput: string, generatedFiles: string[]): str
   return unique(preferred.length > 0 ? preferred : generatedFiles).slice(-3);
 }
 
-/** Repair tools: read → edit; read_lints lets the agent verify each patch. */
-const REPAIR_TOOLS = ["read_file", "edit_file", "write_file", "read_lints"];
+/** Repair tools: read → apply_workspace_edits (preferred) → edit fallback; read_lints. */
+const REPAIR_TOOLS = [
+  "read_file",
+  "apply_workspace_edits",
+  "edit_file",
+  "write_file",
+  "read_lints",
+];
 
 export async function stepRepairBuild({
   blueprint,
@@ -77,6 +84,18 @@ export async function stepRepairBuild({
       success: false,
       output: "repair_build: no candidate files available for repair",
       touchedFiles: [],
+    };
+  }
+
+  const codeFixOutcome = await tryTypeScriptCodeFixUntilResolved(generatedFiles, 25);
+  const touchedFromCodeFix = [...codeFixOutcome.touchedFiles];
+
+  if (codeFixOutcome.resolved) {
+    return {
+      success: true,
+      output:
+        `repair_build: TypeScript language-service fixes cleared diagnostics (${touchedFromCodeFix.join(", ") || "workspace"})`,
+      touchedFiles: touchedFromCodeFix,
     };
   }
 
@@ -100,10 +119,11 @@ ${allowedFiles.map((path) => `- ${path}`).join("\n")}
 ## All Generated Files
 ${generatedFiles.map((path) => `- ${path}`).join("\n")}
 
-Fix the build error using the smallest possible edits. Start by reading the failing file(s), then use edit_file to patch only the broken lines.`;
+Fix the build error using **apply_workspace_edits** with 0-based lines/characters from read_file (\`N:\` prefix → line index is N-1) and **base_content_hash** from read_file meta.contentHash. Prefer that over edit_file. Use the smallest possible edits. Start by reading failing file(s).`;
 
   const tools = getSystemToolDefinitions(REPAIR_TOOLS);
-  const touchedFiles = new Set<string>();
+  const touchedFromTools = new Set<string>();
+  touchedFromCodeFix.forEach((f) => touchedFromTools.add(f));
 
   try {
     const { toolCalls } = await callLLMWithTools({
@@ -120,12 +140,20 @@ Fix the build error using the smallest possible edits. Start by reading the fail
       if ((tc.name === "edit_file" || tc.name === "write_file") && tc.args.path) {
         const result = typeof tc.result === "object" ? tc.result : { success: true };
         if (result.success) {
-          touchedFiles.add(tc.args.path as string);
+          touchedFromTools.add(tc.args.path as string);
+        }
+      }
+      if (tc.name === "apply_workspace_edits" && tc.args.path) {
+        const result = typeof tc.result === "object" ? tc.result : { success: false };
+        if (result.success) {
+          touchedFromTools.add(tc.args.path as string);
         }
       }
     }
 
-    if (touchedFiles.size === 0) {
+    const touchedFiles = Array.from(touchedFromTools);
+
+    if (touchedFiles.length === 0) {
       return {
         success: false,
         output: "repair_build: agent made no successful edits",
@@ -135,14 +163,21 @@ Fix the build error using the smallest possible edits. Start by reading the fail
 
     return {
       success: true,
-      output: `repair_build: patched ${touchedFiles.size} file(s) via tool calls`,
-      touchedFiles: Array.from(touchedFiles),
+      output:
+        touchedFromCodeFix.length > 0
+          ? `repair_build: typescript code fixes and/or patches (${touchedFiles.length} file(s))`
+          : `repair_build: patched ${touchedFiles.length} file(s) via tool calls`,
+      touchedFiles,
     };
   } catch (error) {
+    const fromCf = touchedFromCodeFix.length > 0;
     return {
-      success: false,
-      output: error instanceof Error ? error.message : String(error),
-      touchedFiles: Array.from(touchedFiles),
+      success: fromCf,
+      output:
+        error instanceof Error
+          ? `${fromCf ? "partial code fixes; " : ""}${error.message}`
+          : String(error),
+      touchedFiles: fromCf ? Array.from(new Set(touchedFromCodeFix)) : [],
     };
   }
 }

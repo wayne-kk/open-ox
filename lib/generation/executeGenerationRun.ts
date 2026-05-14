@@ -37,7 +37,7 @@ function mergeIntentAgentStepsIntoFinal(
   existing: Awaited<ReturnType<typeof getProject>>,
   pipelineSteps: BuildStep[]
 ): BuildStep[] {
-  const preserved = (existing?.buildSteps ?? []).filter((s) => s.step === "intent_agent");
+  const preserved = ((existing?.buildSteps ?? []) as BuildStep[]).filter((s) => s.step === "intent_agent");
   return [...preserved, ...pipelineSteps];
 }
 

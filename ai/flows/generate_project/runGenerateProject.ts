@@ -10,6 +10,7 @@ import {
   buildScopedTypecheckStepTrace,
   checkGeneratedTypeScriptFiles,
   formatScopedTypecheckDetail,
+  tryTypeScriptCodeFixUntilResolved,
 } from "./shared/tsxDiagnostics";
 import {
   getLangfuse,
@@ -400,39 +401,67 @@ async function runBuildWithRepair(params: {
 }): Promise<BuildLifecycleResult> {
   const { blueprint, artifactLogger, result, logger } = params;
   const maxRepairAttempts = 5;
+  /** Extra build retries driven by TS language-service fixes (no repair agent). */
+  const maxCfBuildRetriesPerRound = 14;
   let lastBuildOutput = "";
+  let sequentialBuildAttempt = 0;
 
-  for (let attempt = 0; attempt <= maxRepairAttempts; attempt += 1) {
-    const buildStepName = getBuildStepName(attempt);
-    logger.startStep(buildStepName);
-    const buildResult = await stepRunBuild();
-    lastBuildOutput = buildResult.output;
-    logger.logStep(
-      buildStepName,
-      buildResult.success ? "ok" : "error",
-      buildResult.output
-    );
-    await persistTextArtifact(
-      artifactLogger,
-      buildStepName,
-      "build-output",
-      buildResult.output,
-      "log"
-    );
+  for (let repairRound = 0; repairRound <= maxRepairAttempts; repairRound += 1) {
+    let buildResult: Awaited<ReturnType<typeof stepRunBuild>>;
+    let cfRetries = 0;
 
-    if (buildResult.success) {
-      return {
-        verificationStatus: "passed",
-        verificationOutput: buildResult.output,
-      };
+    cfLoop: while (true) {
+      sequentialBuildAttempt += 1;
+      const buildStepName = getBuildStepName(sequentialBuildAttempt - 1);
+      logger.startStep(buildStepName);
+      buildResult = await stepRunBuild();
+      lastBuildOutput = buildResult.output;
+      logger.logStep(
+        buildStepName,
+        buildResult.success ? "ok" : "error",
+        buildResult.output
+      );
+      await persistTextArtifact(
+        artifactLogger,
+        buildStepName,
+        "build-output",
+        buildResult.output,
+        "log"
+      );
+
+      if (buildResult.success) {
+        return {
+          verificationStatus: "passed",
+          verificationOutput: buildResult.output,
+        };
+      }
+
+      const cfResult = await tryTypeScriptCodeFixUntilResolved(result.generatedFiles, 25);
+      if (cfResult.touchedFiles.length === 0) {
+        break cfLoop;
+      }
+      cfRetries += 1;
+      if (cfRetries > maxCfBuildRetriesPerRound) {
+        break cfLoop;
+      }
+
+      appendGeneratedFiles(result, cfResult.touchedFiles);
+      await autoInstallDependenciesForFiles({
+        scope: `ts_code_fix_r${repairRound}_c${cfRetries}`,
+        files: cfResult.touchedFiles,
+        buildOutput: buildResult.output,
+        artifactLogger,
+        result,
+        logger,
+      });
     }
 
-    if (attempt === maxRepairAttempts) {
+    if (repairRound === maxRepairAttempts) {
       break;
     }
 
     const repairResult = await logger.timed(
-      getRepairStepName(attempt + 1),
+      getRepairStepName(repairRound + 1),
       () =>
         stepRepairBuild({
           blueprint,
@@ -441,7 +470,7 @@ async function runBuildWithRepair(params: {
         }),
       (value) => (value.success ? value.touchedFiles.join(", ") || "repair applied" : value.output)
     );
-    await persistJsonArtifact(artifactLogger, getRepairStepName(attempt + 1), "output", repairResult);
+    await persistJsonArtifact(artifactLogger, getRepairStepName(repairRound + 1), "output", repairResult);
 
     if (!repairResult.success) {
       return {
@@ -454,13 +483,13 @@ async function runBuildWithRepair(params: {
     for (const touchedFile of repairResult.touchedFiles) {
       await persistSiteFileArtifact(
         artifactLogger,
-        getRepairStepName(attempt + 1),
+        getRepairStepName(repairRound + 1),
         touchedFile,
         `touched-${touchedFile.replace(/[\\/]+/g, "_")}`
       );
     }
     await autoInstallDependenciesForFiles({
-      scope: `repair_${attempt + 1}`,
+      scope: `repair_${repairRound + 1}`,
       files: repairResult.touchedFiles,
       buildOutput: buildResult.output,
       artifactLogger,
@@ -1010,17 +1039,24 @@ async function runGenerateProjectInner(
               generatedFiles: result.generatedFiles,
             })
         );
-        if (repairResult.success) {
+        if (repairResult.success && repairResult.touchedFiles.length > 0) {
           appendGeneratedFiles(result, repairResult.touchedFiles);
+        }
+
+        const scopedAfter = await checkGeneratedTypeScriptFiles(result.generatedFiles);
+
+        if (scopedAfter.passed || scopedAfter.errorCount === 0) {
           logger.logStep(
             tscStepName,
             "ok",
             formatScopedTypecheckDetail(
-              scoped,
-              `Repair: patched file(s) — ${repairResult.touchedFiles.join(", ")}`
+              scopedAfter,
+              repairResult.success
+                ? `Repair: patched file(s) — ${repairResult.touchedFiles.join(", ") || "(language-service fixes only)"}`
+                : undefined
             ),
             undefined,
-            buildScopedTypecheckStepTrace(scoped, {
+            buildScopedTypecheckStepTrace(scopedAfter, {
               repairTouched: repairResult.touchedFiles,
               repairSuccess: true,
             })
@@ -1030,20 +1066,30 @@ async function runGenerateProjectInner(
             tscStepName,
             "error",
             formatScopedTypecheckDetail(
-              scoped,
-              "Repair: step_repair_build did not apply edits; see trace / `.open-ox/logs/.../typecheck_generated/`."
+              scopedAfter,
+              repairResult.success
+                ? `Partial repair (${repairResult.touchedFiles.join(", ") || "no paths"}); diagnostics remain.`
+                : "Repair: step_repair_build did not apply edits; see trace / `.open-ox/logs/.../typecheck_generated/`."
             ),
             undefined,
-            buildScopedTypecheckStepTrace(scoped, { repairSuccess: false })
+            buildScopedTypecheckStepTrace(scopedAfter, {
+              repairSuccess: false,
+              repairTouched: repairResult.touchedFiles,
+            })
           );
         }
+
         await persistJsonArtifact(artifactLogger, tscStepName, "output", {
-          fileCount: scoped.fileCount,
-          checkedFiles: scoped.checkedFiles,
-          errorCount: scoped.issues.length,
-          errors: scoped.tscStyleLog.slice(0, 4000),
-          issues: scoped.issues,
-          repairResult: { success: repairResult.success, touchedFiles: repairResult.touchedFiles },
+          fileCount: scopedAfter.fileCount,
+          checkedFiles: scopedAfter.checkedFiles,
+          errorCount: scopedAfter.errorCount,
+          errors: scopedAfter.tscStyleLog.slice(0, 4000),
+          issues: scopedAfter.issues,
+          repairResult: {
+            success: repairResult.success,
+            touchedFiles: repairResult.touchedFiles,
+          },
+          scopedAfterPassed: scopedAfter.passed,
         });
       }
     } else {

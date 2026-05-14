@@ -685,10 +685,32 @@ function ProjectsPageContent() {
     });
   }, [projects, listSearch, isMineView]);
 
+  /**
+   * 只要**当前已加载列表**里有一条 `generating`，就每 3s 刷新同一段数据，
+   * 让卡片上的「生成中 → 就绪/失败」及时更新（无需手动刷新页面）。
+   * 标签页在后台时不请求，回到前台时会立刻刷新一次。
+   */
   useEffect(() => {
     if (!projects.some((p) => p.status === "generating")) return;
-    const interval = setInterval(refreshLoadedProjects, 3000);
-    return () => clearInterval(interval);
+
+    const tick = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      void refreshLoadedProjects();
+    };
+
+    const interval = setInterval(tick, 3000);
+
+    const onVisibility = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        void refreshLoadedProjects();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [projects, refreshLoadedProjects]);
 
   useEffect(() => {

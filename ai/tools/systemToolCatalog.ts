@@ -5,6 +5,7 @@ import { formatCodeTool } from "./system/formatCodeTool";
 import { installPackageTool } from "./system/installPackageTool";
 import { listDirTool } from "./system/listDirTool";
 import { readFileTool } from "./system/readFileTool";
+import { applyWorkspaceEditsTool } from "./system/applyWorkspaceEditsTool";
 import { runBuildTool } from "./system/runBuildTool";
 import { searchCodeTool } from "./system/searchCodeTool";
 import { writeFileTool } from "./system/writeFileTool";
@@ -16,6 +17,7 @@ import { readLintsTool } from "./system/readLintsTool";
 const toolDefinitions: Record<string, ChatCompletionTool> = {
   write_file: writeFileTool,
   read_file: readFileTool,
+  apply_workspace_edits: applyWorkspaceEditsTool,
   edit_file: editFileTool,
   exec_shell: execShellTool,
   list_dir: listDirTool,

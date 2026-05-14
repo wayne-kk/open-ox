@@ -5,6 +5,7 @@ import type { ToolResult, ToolExecutor } from "./types";
 
 import { executeWriteFile } from "./system/writeFileTool";
 import { executeReadFile } from "./system/readFileTool";
+import { executeApplyWorkspaceEdits } from "./system/applyWorkspaceEditsTool";
 import { executeEditFile } from "./system/editFileTool";
 import { executeExecShell } from "./system/execShellTool";
 import { executeListDir } from "./system/listDirTool";
@@ -17,11 +18,13 @@ import { executeRevertFile } from "./system/revertFileTool";
 import { executeReadLints } from "./system/readLintsTool";
 import { trackFileRead, clearFileReadTracking } from "./system/fileReadTracker";
 import { clearFileWriteTracking } from "./system/fileWriteTracker";
+import { clearReadRevisionStore } from "./workspace/readRevisionStore";
 
 const executors: Record<string, ToolExecutor> = {
   write_file: executeWriteFile,
   read_file: executeReadFile,
   edit_file: executeEditFile,
+  apply_workspace_edits: executeApplyWorkspaceEdits,
   exec_shell: executeExecShell,
   list_dir: executeListDir,
   search_code: executeSearchCode,
@@ -41,6 +44,7 @@ export { clearFileWriteTracking } from "./system/fileWriteTracker";
 export function clearFileTracking(): void {
   clearFileReadTracking();
   clearFileWriteTracking();
+  clearReadRevisionStore();
 }
 
 // ── Tool Result Budget ──────────────────────────────────────────────────────

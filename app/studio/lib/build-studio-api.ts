@@ -5,6 +5,8 @@ interface BuildSiteCallbacks {
   onIntentTurn?: (turn: IntentAgentTurn) => void;
   onIntentCommit?: (mergedBrief: string) => void;
   onDone: (result: AiResponse) => void;
+  /** User-facing info (not treated as a fatal “流程出错” in the UI). */
+  onNotice?: (msg: string) => void;
   onError: (msg: string) => void;
 }
 
@@ -65,6 +67,46 @@ function projectPayloadToAiResponse(project: Record<string, unknown>): AiRespons
   };
 }
 
+async function recoverAfterSseDisconnected(
+  projectId: string,
+  callbacks: BuildSiteCallbacks,
+  signal?: AbortSignal
+): Promise<boolean> {
+  if (signal?.aborted) return false;
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, { signal });
+    if (!res.ok) return false;
+    const project = (await res.json()) as Record<string, unknown>;
+    const status = String(project.status ?? "");
+
+    if (status === "generating") {
+      callbacks.onNotice?.("与服务器的实时连接已断开，已改为轮询跟踪生成进度…");
+      await waitForBackgroundGeneration(projectId, callbacks, signal);
+      return true;
+    }
+
+    if (status === "ready" || status === "failed") {
+      callbacks.onDone(projectPayloadToAiResponse(project));
+      return true;
+    }
+
+    if (status === "awaiting_input") {
+      const msg =
+        "与服务器的事件连接已中断（常见于服务重启或网络波动）。项目仍在「等待补充信息」，请重新发送上一条消息。";
+      if (callbacks.onNotice) {
+        callbacks.onNotice(msg);
+      } else {
+        callbacks.onError(msg);
+      }
+      return true;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 async function waitForBackgroundGeneration(
   projectId: string,
   callbacks: BuildSiteCallbacks,
@@ -103,7 +145,7 @@ async function waitForBackgroundGeneration(
     }
   } catch (e) {
     if ((e as Error).name === "AbortError") {
-      callbacks.onError("Aborted");
+      callbacks.onError("已取消");
     } else {
       callbacks.onError(e instanceof Error ? e.message : String(e));
     }
@@ -239,6 +281,7 @@ export async function runBuildSite(
     const decoder = new TextDecoder();
     let buffer = "";
 
+    let sseReadError: unknown;
     try {
       while (true) {
         const { done, value } = await reader.read();
@@ -264,8 +307,36 @@ export async function runBuildSite(
           return;
         }
       }
-    } catch {
-      callbacks.onError("SSE stream aborted or failed.");
+    } catch (err) {
+      sseReadError = err;
+    } finally {
+      try {
+        reader.releaseLock();
+      } catch {
+        // already released or stream not locked
+      }
+    }
+
+    if (sseReadError !== undefined) {
+      const err = sseReadError;
+      const isAbort =
+        Boolean(signal?.aborted) ||
+        (err instanceof DOMException && err.name === "AbortError") ||
+        (err instanceof Error && err.name === "AbortError");
+      if (isAbort) {
+        callbacks.onError("已取消");
+        return;
+      }
+      const recoveryProjectId = options?.projectId ?? options?.retryProjectId;
+      if (recoveryProjectId && !signal?.aborted) {
+        const recovered = await recoverAfterSseDisconnected(recoveryProjectId, callbacks, signal);
+        if (recovered) return;
+      }
+      const detail = err instanceof Error ? err.message : String(err);
+      callbacks.onError(
+        `实时连接中断${detail ? `（${detail}）` : ""}。若刚确认过需求，后台可能仍在生成；请刷新页面或稍后查看项目列表。`
+      );
+      return;
     }
   } else if (contentType.includes("application/json")) {
     const raw = await res.json().catch(() => ({})) as {

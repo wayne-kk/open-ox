@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "fs";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import type { ToolResult, ToolExecutor } from "../types";
 import { resolvePath } from "./common";
+import { recordReadContentHash } from "../workspace/readRevisionStore";
 
 /** Max bytes returned to the LLM — prevents context blowout on large files (s06). */
 const MAX_READ_BYTES = 100_000;
@@ -11,7 +12,8 @@ export const readFileTool: ChatCompletionTool = {
   function: {
     name: "read_file",
     description:
-      "Read file content. Supports optional line range to avoid reading entire large files. Use start_line/end_line to focus on specific sections.",
+      "Read file content. Supports optional line range to avoid reading entire large files. Use start_line/end_line to focus on specific sections. " +
+      "On success, meta.contentHash (sha256:...) is the protocol snapshot hash — pass it as base_content_hash to apply_workspace_edits.",
     parameters: {
       type: "object",
       properties: {
@@ -55,7 +57,10 @@ export const executeReadFile: ToolExecutor = async (
       const lines = raw.split("\n");
       const start = Math.max(1, startLine ?? 1) - 1; // 0-indexed
       const end = Math.min(lines.length, endLine ?? lines.length);
-      content = lines.slice(start, end).map((l, i) => `${start + i + 1}: ${l}`).join("\n");
+      content = lines
+        .slice(start, end)
+        .map((l, i) => `${start + i + 1}: ${l.replace(/\r$/, "")}`)
+        .join("\n");
       if (content.length > MAX_READ_BYTES) {
         content = content.slice(0, MAX_READ_BYTES) + `\n...(truncated)`;
         truncated = true;
@@ -66,7 +71,13 @@ export const executeReadFile: ToolExecutor = async (
       content = truncated ? raw.slice(0, MAX_READ_BYTES) + `\n...(truncated, ${raw.length} bytes total)` : raw;
     }
 
-    return { success: true, output: content, meta: { path, truncated, totalLines } };
+    const contentHash = recordReadContentHash(path, raw);
+
+    return {
+      success: true,
+      output: content,
+      meta: { path, truncated, totalLines, contentHash },
+    };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }

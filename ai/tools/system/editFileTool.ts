@@ -7,6 +7,7 @@ import { hasFileBeenRead } from "./fileReadTracker";
 import { trackFileWrite } from "./fileWriteTracker";
 import { tryFormatSource } from "./prettierFormat";
 import { verifyWrittenSourceFile } from "../../flows/generate_project/shared/tsxDiagnostics";
+import { recordReadContentHash } from "../workspace/readRevisionStore";
 
 export const editFileTool: ChatCompletionTool = {
     type: "function",
@@ -104,6 +105,7 @@ export const executeEditFile: ToolExecutor = async (
     const formatted = await tryFormatSource(newContent, fullPath, extname(fullPath));
     writeFileSync(fullPath, formatted.content, "utf-8");
     trackFileWrite(filePath);
+    recordReadContentHash(filePath, readFileSync(fullPath, "utf-8"));
 
     const addedLines = newStr.split("\n").length;
     const removedLines = oldStr.split("\n").length;

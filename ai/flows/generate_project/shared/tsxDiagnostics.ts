@@ -585,3 +585,172 @@ export function buildScopedTypecheckStepTrace(
     },
   };
 }
+
+const LANGUAGE_SERVICE_FORMAT_SETTINGS: ts.FormatCodeSettings = {
+  indentSize: 2,
+  tabSize: 2,
+  newLineCharacter: "\n",
+  convertTabsToSpaces: true,
+};
+
+/**
+ * Apply one TypeScript language-service quick fix (whatever `getCodeFixesAtPosition` returns first).
+ * Does not use error-code tables.
+ */
+export async function applyOneRoundOfTypeScriptCodeFixes(
+  checkedRelativePaths: string[]
+): Promise<{ applied: boolean; touchedFiles: string[]; detail: string }> {
+  if (!isSectionTscCheckEnabled()) {
+    return { applied: false, touchedFiles: [], detail: "DISABLE_SECTION_TSC=1" };
+  }
+  const siteRoot = getSiteRoot();
+  const unique = Array.from(
+    new Set(checkedRelativePaths.filter((p) => Boolean(p) && isGeneratedTypeScriptPath(p)))
+  ).sort();
+  if (unique.length === 0) {
+    return { applied: false, touchedFiles: [], detail: "no verifiable paths" };
+  }
+
+  const { service, files } = getService(siteRoot);
+
+  for (const rel of unique) {
+    const abs = path.join(siteRoot, rel);
+    if (!fs.existsSync(abs)) continue;
+    const content = fs.readFileSync(abs, "utf-8");
+    const existing = files.get(abs);
+    files.set(abs, {
+      version: (existing?.version ?? 0) + 1,
+      content,
+    });
+  }
+
+  const preferences: ts.UserPreferences = {};
+
+  const diagnostics: ts.Diagnostic[] = [];
+  for (const rel of unique) {
+    const abs = path.join(siteRoot, rel);
+    if (!fs.existsSync(abs)) continue;
+    diagnostics.push(
+      ...service.getSyntacticDiagnostics(abs).filter((d) => !isIgnorableDiagnostic(d)),
+      ...service.getSemanticDiagnostics(abs).filter((d) => !isIgnorableDiagnostic(d))
+    );
+  }
+
+  diagnostics.sort((a, b) => {
+    const fa = a.file?.fileName ?? "";
+    const fb = b.file?.fileName ?? "";
+    if (fa !== fb) return fa.localeCompare(fb);
+    return (a.start ?? 0) - (b.start ?? 0);
+  });
+
+  for (const diag of diagnostics) {
+    if (diag.start === undefined || !diag.file || diag.category !== ts.DiagnosticCategory.Error) {
+      continue;
+    }
+
+    const fileName = diag.file.fileName;
+    const start = diag.start;
+    const length = diag.length ?? 1;
+    const end = start + length;
+
+    const fixes = service.getCodeFixesAtPosition(
+      fileName,
+      start,
+      end,
+      [diag.code as number],
+      LANGUAGE_SERVICE_FORMAT_SETTINGS,
+      preferences
+    );
+
+    if (!fixes || fixes.length === 0) {
+      continue;
+    }
+
+    const chosen = fixes[0];
+    const touched = new Set<string>();
+
+    for (const fileChange of chosen.changes) {
+      const fn = fileChange.fileName;
+      let text = files.get(fn)?.content;
+      if (text === undefined) {
+        if (!fs.existsSync(fn)) continue;
+        text = fs.readFileSync(fn, "utf-8");
+        files.set(fn, { version: 1, content: text });
+      }
+
+      const ordered = [...fileChange.textChanges].sort((a, b) => b.span.start - a.span.start);
+      for (const tc of ordered) {
+        const { start, length } = tc.span;
+        text = `${text.slice(0, start)}${tc.newText}${text.slice(start + length)}`;
+      }
+
+      const prev = files.get(fn);
+      files.set(fn, {
+        version: (prev?.version ?? 0) + 1,
+        content: text,
+      });
+      fs.writeFileSync(fn, text, "utf-8");
+      touched.add(path.relative(siteRoot, fn).replace(/\\/g, "/"));
+    }
+
+    if (touched.size > 0) {
+      const summary = chosen.description ?? chosen.fixName ?? "code fix";
+      return {
+        applied: true,
+        touchedFiles: Array.from(touched),
+        detail: summary,
+      };
+    }
+  }
+
+  return { applied: false, touchedFiles: [], detail: "no code fixes available for current diagnostics" };
+}
+
+/**
+ * Repeatedly apply language-service fixes until diagnostics clear or fixes stall.
+ */
+export async function tryTypeScriptCodeFixUntilResolved(
+  relativePaths: string[],
+  maxRounds = 25
+): Promise<{ resolved: boolean; touchedFiles: string[]; lastDetail: string }> {
+  const aggregated = new Set<string>();
+  let lastDetail = "";
+  const roots = Array.from(new Set(relativePaths.filter(Boolean))).sort();
+
+  if (roots.length === 0 || !isSectionTscCheckEnabled()) {
+    return { resolved: false, touchedFiles: [], lastDetail: "disabled or empty paths" };
+  }
+
+  for (let r = 0; r < maxRounds; r += 1) {
+    const scoped = await checkGeneratedTypeScriptFiles(roots);
+    lastDetail = scoped.errorCount === 0 ? "no errors" : `${scoped.errorCount} error(s)`;
+
+    if (scoped.skipped) {
+      return { resolved: scoped.passed, touchedFiles: Array.from(aggregated), lastDetail };
+    }
+    if (scoped.passed || scoped.errorCount === 0) {
+      return { resolved: true, touchedFiles: Array.from(aggregated), lastDetail };
+    }
+
+    const one = await applyOneRoundOfTypeScriptCodeFixes(scoped.checkedFiles);
+    lastDetail = one.detail;
+
+    if (!one.applied) {
+      return {
+        resolved: false,
+        touchedFiles: Array.from(aggregated),
+        lastDetail,
+      };
+    }
+
+    for (const f of one.touchedFiles) {
+      aggregated.add(f);
+    }
+  }
+
+  return {
+    resolved: false,
+    touchedFiles: Array.from(aggregated),
+    lastDetail: lastDetail || `exhausted ${maxRounds} code-fix rounds`,
+  };
+}

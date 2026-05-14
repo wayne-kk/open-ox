@@ -1,11 +1,13 @@
 /**
- * Local preview: default `next dev` on `127.0.0.1` with iframe URL `http://127.0.0.1:<port>` (same machine only).
+ * Local preview: `next dev` binds `127.0.0.1` by default; the URL returned to the browser prefers the
+ * loopback host from `NEXT_PUBLIC_SITE_URL` when it is localhost/127.0.0.1 (see `buildLocalPreviewUrl`).
+ * Generated sites must include `allowedDevOrigins` in `next.config.ts` (template) so Next.js 16 dev does not
+ * block `/_next/` from a cross-loopback Studio iframe ("未发送任何数据" in Chrome).
  *
  * For LAN teammates: set `OPEN_OX_PREVIEW_PUBLIC_HOST`, **or** set `NEXT_PUBLIC_SITE_URL` to a private IP / `.local`
  * host (e.g. `http://192.168.x.x:3000`) — preview URLs and bind address will use that host automatically.
  * Optional `OPEN_OX_PREVIEW_PORT` for a fixed port (firewall). Cloud: `OPEN_OX_PREVIEW_BACKEND=e2b`.
  */
-
 import fs from "fs/promises";
 import type { ChildProcess } from "node:child_process";
 import { execFile, spawn } from "node:child_process";
@@ -136,12 +138,28 @@ function previewBindHost(): string {
   return previewPublicHost() ? "0.0.0.0" : "127.0.0.1";
 }
 
+/**
+ * Prefer the same loopback spelling as Studio (`NEXT_PUBLIC_SITE_URL`), so the primary document hostname
+ * often matches how users open Open-Ox. Child `allowedDevOrigins` still lists both localhost and 127.0.0.1.
+ */
+function loopbackPreviewUrlHostname(): string {
+  const site = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (!site) return "127.0.0.1";
+  try {
+    const h = new URL(site).hostname;
+    if (h === "localhost" || h === "127.0.0.1") return h;
+  } catch {
+    /* ignore */
+  }
+  return "127.0.0.1";
+}
+
 function buildLocalPreviewUrl(port: number): string {
   const host = previewPublicHost();
   if (host) {
     return `http://${host}:${port}`;
   }
-  return `http://127.0.0.1:${port}`;
+  return `http://${loopbackPreviewUrlHostname()}:${port}`;
 }
 
 /** Health checks from this machine: always loopback (works when next dev binds 0.0.0.0). */
@@ -165,6 +183,27 @@ function syncRegistryPublicUrl(projectId: string, reg: LocalInstance): LocalInst
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** One-time upgrade when old sites lack Next.js dev cross-origin allowances for Studio iframe embedding. */
+async function ensurePreviewNextConfigAllowsStudioEmbed(projectDir: string): Promise<void> {
+  const dest = path.join(projectDir, "next.config.ts");
+  try {
+    const content = await fs.readFile(dest, "utf-8");
+    if (content.includes("allowedDevOrigins")) return;
+  } catch {
+    return;
+  }
+  const templateConfig = path.join(SITES_TEMPLATE_DIR, "next.config.ts");
+  try {
+    await fs.copyFile(templateConfig, dest);
+    console.warn(
+      "[local preview] Replaced site's next.config.ts with template copy (missing allowedDevOrigins). " +
+        "If you customized next.config.ts, restore from git and merge allowedDevOrigins from sites/template/next.config.ts."
+    );
+  } catch (err) {
+    console.warn("[local preview] Could not sync next.config.ts from template:", err);
+  }
 }
 
 /**
@@ -564,6 +603,8 @@ export async function startLocalDevServer(
       hadLiveChild ? "sleptMs=1200" : "sleptMs=0"
     );
 
+    await ensurePreviewNextConfigAllowsStudioEmbed(projectDir);
+
     await runInstallIfNeeded(projectDir, "start", projectId);
     const tPort = performance.now();
     const port = await allocatePreviewPort();
@@ -663,6 +704,8 @@ export async function rebuildLocalDevServer(
   await fs.rm(path.join(projectDir, ".next"), { recursive: true, force: true });
   timingLog(projectId, "rebuild.rmDotNext", tRm);
 
+  await ensurePreviewNextConfigAllowsStudioEmbed(projectDir);
+
   await runInstallIfNeeded(projectDir, "rebuild", projectId);
 
   const tPort = performance.now();
@@ -720,6 +763,8 @@ export async function ensureLocalDevServerAlive(
   const wallRestart = performance.now();
   console.log(`[local preview] ensureLocalDevServerAlive RESTART_AFTER_DOWN projectId=${projectId}`);
   try {
+    await ensurePreviewNextConfigAllowsStudioEmbed(projectDir);
+
     await runInstallIfNeeded(projectDir, "ensureAlive", projectId);
     const tp = performance.now();
     const port = await allocatePreviewPort();

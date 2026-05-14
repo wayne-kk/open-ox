@@ -748,8 +748,14 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
               }
             }
           },
+          onNotice: (msg) => {
+            appendConversationMessage({ role: "assistant", content: msg });
+          },
           onError: (msg) => {
             finishBuildLiveState();
+            if (msg === "已取消" || msg === "Aborted") {
+              return;
+            }
             appendConversationMessage({ role: "assistant", content: `流程出错：${msg}` });
             setResponse({ content: "", error: msg });
           },
@@ -854,8 +860,14 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
               }
             }
           },
+          onNotice: (msg) => {
+            appendConversationMessage({ role: "assistant", content: msg });
+          },
           onError: (msg) => {
             finishBuildLiveState();
+            if (msg === "已取消" || msg === "Aborted") {
+              return;
+            }
             setResponse({ content: "", error: msg });
           },
         },
@@ -956,8 +968,14 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
               }
             }
           },
+          onNotice: (msg) => {
+            appendConversationMessage({ role: "assistant", content: msg });
+          },
           onError: (msg) => {
             finishBuildLiveState();
+            if (msg === "已取消" || msg === "Aborted") {
+              return;
+            }
             appendConversationMessage({ role: "assistant", content: `流程出错：${msg}` });
             setResponse({ content: "", error: msg });
           },

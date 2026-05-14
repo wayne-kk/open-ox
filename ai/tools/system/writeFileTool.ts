@@ -1,10 +1,11 @@
-import { existsSync, mkdirSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { extname } from "path";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import type { ToolResult, ToolExecutor } from "../types";
 import { resolvePath } from "./common";
 import { tryFormatSource } from "./prettierFormat";
 import { trackFileWrite } from "./fileWriteTracker";
+import { recordReadContentHash } from "../workspace/readRevisionStore";
 import { verifyWrittenSourceFile } from "../../flows/generate_project/shared/tsxDiagnostics";
 
 export const writeFileTool: ChatCompletionTool = {
@@ -47,6 +48,7 @@ export const executeWriteFile: ToolExecutor = async (
   const formatted = await tryFormatSource(content, fullPath, extname(fullPath));
   writeFileSync(fullPath, formatted.content, "utf-8");
   trackFileWrite(path);
+  recordReadContentHash(path, readFileSync(fullPath, "utf-8"));
 
   const note = formatted.formatted ? " (auto-formatted)" : "";
   const verification = await verifyWrittenSourceFile(path);
