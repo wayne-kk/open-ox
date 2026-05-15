@@ -64,14 +64,24 @@ function selectRepairTargets(buildOutput: string, generatedFiles: string[]): str
   return unique(preferred.length > 0 ? preferred : generatedFiles).slice(-3);
 }
 
-/** Repair tools: read → apply_workspace_edits (preferred) → edit fallback; read_lints. */
+/**
+ * Repair tools — exploration + verify aligned with modify loop (search/list/build),
+ * plus precise LSP patches for generated sites.
+ */
 const REPAIR_TOOLS = [
   "read_file",
+  "search_code",
+  "list_dir",
   "apply_workspace_edits",
   "edit_file",
   "write_file",
   "read_lints",
+  "run_build",
+  "think",
 ];
+
+/** Search + read + patch + optional build needs more turns than the old read-only repair loop. */
+const REPAIR_MAX_TOOL_ITERATIONS = 24;
 
 export async function stepRepairBuild({
   blueprint,
@@ -131,7 +141,7 @@ Fix the build error using **apply_workspace_edits** with 0-based lines/character
       userMessage,
       tools,
       temperature: 0.1,
-      maxIterations: 10,
+      maxIterations: REPAIR_MAX_TOOL_ITERATIONS,
       model: getModelForStep("repair_build"),
       langfusePhase: LfToolPhase.repairBuild,
     });

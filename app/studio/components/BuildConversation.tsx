@@ -17,7 +17,6 @@ import {
   stripRecoverablePrefixForDisplay,
 } from "@/lib/generationRecovery";
 import type { BuildStudioState, ModifyRecord, ModifyDiff } from "../hooks/useBuildStudio";
-import type { IntentProgressEvent } from "../types/build-studio";
 
 function formatMs(ms: number): string {
     if (ms < 1000) return `${ms}ms`;
@@ -35,47 +34,6 @@ function buildFileTree(files: string[]): string {
 
 function buildIndentedList(values: string[]): string {
     return values.map((value) => `  - ${value}`).join("\n");
-}
-
-function IntentAnalysisStep({ evt }: { evt: IntentProgressEvent }) {
-    if (evt.kind === "tool") {
-        return (
-            <div className="space-y-1 border-l-2 border-primary/30 pl-2">
-                <div>
-                    <span className="text-foreground/90">{evt.toolName}</span>
-                    <span className="text-muted-foreground"> · 第 {evt.iteration + 1} 轮</span>
-                </div>
-                <pre className="whitespace-pre-wrap break-words text-[10px] leading-relaxed opacity-90">
-                    {evt.resultPreview}
-                </pre>
-            </div>
-        );
-    }
-    if (evt.kind === "reasoning") {
-        return (
-            <div className="space-y-1 border-l-2 border-violet-500/35 pl-2">
-                <div className="text-[10px] font-medium text-violet-300/90">思考</div>
-                <pre className="whitespace-pre-wrap break-words text-[10px] leading-relaxed">
-                    {evt.text}
-                </pre>
-            </div>
-        );
-    }
-    return (
-        <div className="space-y-1 border-l-2 border-white/15 pl-2">
-            <div className="text-[10px] text-muted-foreground">
-                模型第 {evt.iteration + 1} 轮
-                {evt.toolCallNames.length > 0 ? (
-                    <span className="text-foreground/80"> → {evt.toolCallNames.join(", ")}</span>
-                ) : null}
-            </div>
-            {evt.textPreview ? (
-                <pre className="whitespace-pre-wrap break-words text-[10px] leading-relaxed opacity-85">
-                    {evt.textPreview}
-                </pre>
-            ) : null}
-        </div>
-    );
 }
 
 function GeneratedFilesList({ files }: { files: string[] }) {
@@ -369,7 +327,6 @@ export function BuildConversation({
     modifyError,
     pendingModifyInstruction,
     pendingModifyImage,
-    intentProgressLog,
 }: BuildStudioState) {
     const chatRef = useRef<HTMLDivElement>(null);
     const [slashHint, setSlashHint] = useState<string | null>(null);
@@ -445,7 +402,7 @@ export function BuildConversation({
         if (isNearBottomRef.current && chatRef.current) {
             chatRef.current.scrollTop = chatRef.current.scrollHeight;
         }
-    }, [response, conversationMessages, loading, modifying, modifyToolCalls, modifyThinking, modifySteps, modifyDiffs, modifyError, modifyHistory, intentProgressLog]);
+    }, [response, conversationMessages, loading, modifying, modifyToolCalls, modifyThinking, modifySteps, modifyDiffs, modifyError, modifyHistory]);
 
     return (
         <aside className="flex h-full min-h-0 w-full shrink-0 flex-col overflow-hidden lg:w-[540px] lg:max-h-full scrollbar-hidden">
@@ -512,22 +469,6 @@ export function BuildConversation({
                                     )}
                                 </div>
 
-                                {message.role === "assistant" && message.activityLog && message.activityLog.length > 0 ? (
-                                    <details
-                                        className="rounded-xl border border-white/8 bg-black/15 px-3 py-2"
-                                        open={message.id === latestAssistantMessageId}
-                                    >
-                                        <summary className="cursor-pointer select-none text-[11px] text-muted-foreground">
-                                            分析过程（{message.activityLog.length} 步）
-                                        </summary>
-                                        <div className="scrollbar-unified mt-2 max-h-[min(52vh,320px)] space-y-3 overflow-y-auto pr-1">
-                                            {message.activityLog.map((evt, i) => (
-                                                <IntentAnalysisStep key={`${message.id}-act-${i}`} evt={evt} />
-                                            ))}
-                                        </div>
-                                    </details>
-                                ) : null}
-
                                 {/* Brief draft — always visible so the confirmed structure stays in the conversation */}
                                 {message.role === "assistant" && message.intentPayload?.briefDraftMarkdown ? (
                                     <div className="rounded-2xl border border-white/8 bg-black/20 px-4 py-3 text-muted-foreground">
@@ -576,21 +517,8 @@ export function BuildConversation({
                         <ChatBubble role="assistant">
                             <div className="text-[11px] font-medium text-foreground">意图助手</div>
                             <div className="mt-2 space-y-3">
-                                {intentProgressLog.length > 0 ? (
-                                    <LogSection title="分析进行中">
-                                        <div className="scrollbar-unified max-h-[min(44vh,280px)] space-y-3 overflow-y-auto pr-1">
-                                            {intentProgressLog.map((evt, i) => (
-                                                <IntentAnalysisStep key={`live-act-${i}`} evt={evt} />
-                                            ))}
-                                        </div>
-                                    </LogSection>
-                                ) : null}
                                 <div className="text-[13px] leading-7 text-foreground">
-                                    <p className="text-muted-foreground">
-                                        {intentProgressLog.length > 0
-                                            ? "正在分析需求与参考资料（上方为实时步骤）…"
-                                            : "正在理解你的需求..."}
-                                    </p>
+                                    <p className="text-muted-foreground">正在理解你的需求...</p>
                                 </div>
                             </div>
                         </ChatBubble>

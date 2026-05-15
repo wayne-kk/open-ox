@@ -63,8 +63,6 @@ export interface BuildStudioState {
   intentAgent: IntentAgentTurn | null;
   mergedBrief: string | null;
   conversationMessages: ConversationMessage[];
-  /** Live intent analysis trace (tools / rounds / reasoning) during the current request. */
-  intentProgressLog: IntentProgressEvent[];
   lastRunInput: string | null;
   elapsed: number;
   flowStart: number;
@@ -275,26 +273,6 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
   const modifyDiffsRef = useRef<ModifyDiff[]>([]);
   const modifyThinkingRef = useRef<string[]>([]);
   const modifyToolCallsRef = useRef<ModifyToolCall[]>([]);
-
-  const intentProgressLogRef = useRef<IntentProgressEvent[]>([]);
-  const [intentProgressLog, setIntentProgressLog] = useState<IntentProgressEvent[]>([]);
-
-  const clearIntentProgress = useCallback(() => {
-    intentProgressLogRef.current = [];
-    setIntentProgressLog([]);
-  }, []);
-
-  const appendIntentProgress = useCallback((evt: IntentProgressEvent) => {
-    intentProgressLogRef.current = [...intentProgressLogRef.current, evt];
-    setIntentProgressLog(intentProgressLogRef.current);
-  }, []);
-
-  const takeIntentProgressSnapshot = useCallback((): IntentProgressEvent[] => {
-    const snap = intentProgressLogRef.current;
-    intentProgressLogRef.current = [];
-    setIntentProgressLog([]);
-    return snap;
-  }, []);
 
   const finishBuildLiveState = useCallback((totalDuration?: number) => {
     if (typeof totalDuration === "number" && Number.isFinite(totalDuration) && totalDuration >= 0) {
@@ -649,7 +627,6 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     setStartedAt(t0);
     setElapsed(0);
     setLoading(true);
-    clearIntentProgress();
     // Preserve existing buildSteps to avoid topology flash.
     // New SSE steps will upsert into the existing array.
     setResponse((prev) => prev
@@ -680,23 +657,20 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       await runBuildSite(
         outboundInput,
         {
-          onIntentProgress: appendIntentProgress,
           onIntentTurn: (turn) => {
             setIntentAgent(turn);
-            const activityLog = takeIntentProgressSnapshot();
             const assistantContent =
               turn.yieldPayload?.message ??
               turn.assistantText ??
               turn.errorMessage ??
               "";
-            if (assistantContent || activityLog.length > 0) {
+            // commit_generate has no user-facing copy here; `onIntentCommit` appends the single
+            // confirmation line. Skipping avoids an extra bubble if the payload ever carries stray text.
+            if (turn.status !== "commit_generate" && assistantContent) {
               appendConversationMessage({
                 role: "assistant",
-                content:
-                  assistantContent ||
-                  (activityLog.length > 0 ? "（见下方「分析过程」）" : ""),
+                content: assistantContent,
                 intentPayload: turn.yieldPayload,
-                ...(activityLog.length > 0 ? { activityLog } : {}),
               });
             }
             setResponse((prev) => ({
@@ -719,11 +693,9 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
           onIntentCommit: (brief) => {
             const cleanBrief = brief.trim();
             setMergedBrief(cleanBrief || null);
-            const activityLog = takeIntentProgressSnapshot();
             appendConversationMessage({
               role: "assistant",
               content: "需求已确认，开始生成项目...",
-              ...(activityLog.length > 0 ? { activityLog } : {}),
             });
             setResponse((prev) => ({
               content: "需求已确认，开始生成项目...",
@@ -736,7 +708,6 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
           onStep: handleStepEvent,
           onDone: (result) => {
             finishBuildLiveState(result.buildTotalDuration);
-            clearIntentProgress();
             setIntentAgent(result.intentAgent ?? null);
             setMergedBrief(result.mergedBriefFromAgent ?? result.mergedBrief ?? null);
             // done payload carries the authoritative final buildSteps from the server.
@@ -759,7 +730,6 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
           },
           onError: (msg) => {
             finishBuildLiveState();
-            clearIntentProgress();
             if (msg === "已取消" || msg === "Aborted") {
               return;
             }
@@ -1312,7 +1282,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       : startedAt ?? 0;
 
   return {
-    input, setInput, loading, clearing, response, intentAgent, mergedBrief, conversationMessages, intentProgressLog, lastRunInput, elapsed, flowStart,
+    input, setInput, loading, clearing, response, intentAgent, mergedBrief, conversationMessages, lastRunInput, elapsed, flowStart,
     handleRun, handleClear, handleRetry,
     generationSeemsStuck,
     recoveryUnlocking,
