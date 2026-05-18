@@ -49,8 +49,15 @@ async function screenshotHomeViewport(previewEntryUrl: string): Promise<Buffer> 
       },
       deviceScaleFactor: 1,
     });
-    const home =
-      previewEntryUrl.endsWith("/") ? previewEntryUrl : `${previewEntryUrl}/`;
+    const home = (() => {
+      try {
+        const u = new URL(previewEntryUrl);
+        if (u.pathname.toLowerCase().endsWith(".html")) return previewEntryUrl;
+      } catch {
+        /* fall through */
+      }
+      return previewEntryUrl.endsWith("/") ? previewEntryUrl : `${previewEntryUrl}/`;
+    })();
     await page.goto(home, { waitUntil: "load", timeout: 120_000 });
     await page.evaluate(() => window.scrollTo(0, 0));
     await sleep(1200);

@@ -32,12 +32,12 @@ const allowedDevOrigins = [...new Set([
  * Aligns file tracing with the repo root so Next does not infer the wrong project root
  * (reduces "multiple lockfiles / inferred workspace root" noise during `pnpm run build`).
  */
-/** Set by Open-OX static preview sync only (`OPEN_OX_STATIC_BASE_PATH=/p/{projectId}`). */
-const staticBasePath = process.env.OPEN_OX_STATIC_BASE_PATH?.trim();
+/** Full URL (no trailing slash) to the folder where `index.html` will live on Supabase Storage — set only for Storage preview build (see `staticSitePreview.ts`). */
+const staticAssetPrefix = process.env.OPEN_OX_STATIC_ASSET_PREFIX?.trim();
 
 const nextConfig: NextConfig = {
   allowedDevOrigins,
-  ...(staticBasePath ? { basePath: staticBasePath } : {}),
+  ...(staticAssetPrefix ? { assetPrefix: staticAssetPrefix } : {}),
   output: "export",
   outputFileTracingRoot: path.join(__dirname, "../.."),
   images: {

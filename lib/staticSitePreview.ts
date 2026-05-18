@@ -1,7 +1,7 @@
 /**
- * Static site preview: `next build` with OPEN_OX_STATIC_BASE_PATH=/p/{projectId}, upload `out/` to
- * Supabase Storage bucket `site-previews`, public URL
- * {SUPABASE_URL}/storage/v1/object/public/site-previews/p/{projectId}/...
+ * Static site preview: `next build` with OPEN_OX_STATIC_ASSET_PREFIX = full Storage URL to the site root
+ * (…/public/site-previews/p/{projectId}, no trailing slash) so `_next` chunks load from the same origin path
+ * as `index.html`. Upload flat `out/*` to keys `p/{projectId}/*`.
  *
  * Env: OPEN_OX_PREVIEW_BACKEND=storage, NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
  */
@@ -53,10 +53,15 @@ export function getSitePreviewsObjectBase(): string {
   return `${base}/storage/v1/object/public/${SITE_PREVIEWS_BUCKET}`;
 }
 
-/** User-facing preview origin (fixed prefix), trailing slash for iframe / screenshots. */
+/**
+ * Public URL of `index.html` (Supabase object key `p/{projectId}/index.html`).
+ * Must match `storage.from(bucket).getPublicUrl(...)` — do not hand-roll paths (encoding + API shape).
+ */
 export function getStaticPreviewUrl(projectId: string): string {
-  const base = getSitePreviewsObjectBase();
-  return `${base}/p/${encodeURIComponent(projectId)}/`;
+  const client = createSupabaseServiceRoleClient();
+  const objectPath = `p/${projectId}/index.html`;
+  const { data } = client.storage.from(SITE_PREVIEWS_BUCKET).getPublicUrl(objectPath);
+  return data.publicUrl;
 }
 
 function contentTypeForRelPath(rel: string): string {
@@ -87,28 +92,13 @@ async function collectOutRelativePaths(uploadRoot: string): Promise<string[]> {
   return files.map((f) => f.split(path.sep).join("/"));
 }
 
-/**
- * With `basePath: /p/{projectId}`, Next static export writes to `out/p/{projectId}/`.
- * Upload must use that folder as the root so Storage keys are `p/{id}/index.html`, not `p/{id}/p/{id}/...`.
- */
-async function resolveStaticExportUploadRoot(
-  outDir: string,
-  projectId: string
-): Promise<string> {
-  const nested = path.join(outDir, "p", projectId);
-  try {
-    await fs.access(path.join(nested, "index.html"));
-    return nested;
-  } catch {
-    /* flat export */
-  }
+/** Static export with `assetPrefix` writes `out/index.html` and `out/_next/...` at the top level. */
+async function resolveFlatOutRoot(outDir: string): Promise<string> {
   try {
     await fs.access(path.join(outDir, "index.html"));
     return outDir;
   } catch {
-    throw new Error(
-      `[staticPreview] No index.html after build — checked ${nested} and ${outDir}`
-    );
+    throw new Error(`[staticPreview] No out/index.html after build (check OPEN_OX_STATIC_ASSET_PREFIX / next.config)`);
   }
 }
 
@@ -128,7 +118,7 @@ async function uploadOutDir(
   projectId: string,
   outDir: string
 ): Promise<void> {
-  const uploadRoot = await resolveStaticExportUploadRoot(outDir, projectId);
+  const uploadRoot = await resolveFlatOutRoot(outDir);
   const rels = await collectOutRelativePaths(uploadRoot);
   if (rels.length === 0) {
     throw new Error("Static export produced an empty upload root");
@@ -168,8 +158,11 @@ async function removeLocalOutDir(projectDir: string): Promise<void> {
   await fs.rm(outDir, { recursive: true, force: true });
 }
 
-/** Older `sites/{id}` trees may predate template `basePath` support; inject a no-op spread when env unset. */
-async function ensurePreviewBasePathInNextConfig(projectDir: string): Promise<void> {
+/**
+ * Ensure `next.config` includes conditional `assetPrefix` for Storage preview builds.
+ * Migrates older repos that only had `OPEN_OX_STATIC_BASE_PATH` / `basePath` (broken for Supabase URLs).
+ */
+async function ensurePreviewAssetPrefixInNextConfig(projectDir: string): Promise<void> {
   const configPath = path.join(projectDir, "next.config.ts");
   let s: string;
   try {
@@ -177,20 +170,41 @@ async function ensurePreviewBasePathInNextConfig(projectDir: string): Promise<vo
   } catch {
     return;
   }
-  if (s.includes("OPEN_OX_STATIC_BASE_PATH")) return;
-  const replaced = s.replace(
+  if (s.includes("OPEN_OX_STATIC_ASSET_PREFIX")) {
+    if (s.includes("OPEN_OX_STATIC_BASE_PATH")) {
+      const stripped = s
+        .replace(
+          /\n*\.\.\.\(process\.env\.OPEN_OX_STATIC_BASE_PATH\?\.trim\(\)\s*\n\s*\?\s*\{\s*basePath:\s*process\.env\.OPEN_OX_STATIC_BASE_PATH\.trim\(\)\s*\}\s*:\s*\{\s*\}\),?/g,
+          ""
+        )
+        .replace(/\nconst staticBasePath = process\.env\.OPEN_OX_STATIC_BASE_PATH[^;]*;\n/g, "\n");
+      if (stripped !== s) {
+        await fs.writeFile(configPath, stripped, "utf-8");
+      }
+    }
+    return;
+  }
+
+  // Legacy inject: basePath-only block → remove before adding assetPrefix
+  let working = s.replace(
+    /\n*\.\.\.\(process\.env\.OPEN_OX_STATIC_BASE_PATH\?\.trim\(\)\s*\n\s*\?\s*\{\s*basePath:\s*process\.env\.OPEN_OX_STATIC_BASE_PATH\.trim\(\)\s*\}\s*:\s*\{\s*\}\),?/g,
+    ""
+  );
+  working = working.replace(/\nconst staticBasePath = process\.env\.OPEN_OX_STATIC_BASE_PATH[^;]*;\n/g, "\n");
+
+  const replaced = working.replace(
     /const nextConfig:\s*NextConfig\s*=\s*\{/,
     `const nextConfig: NextConfig = {
-  ...(process.env.OPEN_OX_STATIC_BASE_PATH?.trim()
-    ? { basePath: process.env.OPEN_OX_STATIC_BASE_PATH.trim() }
+  ...(process.env.OPEN_OX_STATIC_ASSET_PREFIX?.trim()
+    ? { assetPrefix: process.env.OPEN_OX_STATIC_ASSET_PREFIX.trim() }
     : {}),`
   );
-  if (replaced === s) return;
+  if (replaced === working) return;
   await fs.writeFile(configPath, replaced, "utf-8");
 }
 
 async function runStaticExportBuild(projectId: string, projectDir: string): Promise<void> {
-  const basePath = `/p/${projectId}`;
+  const assetPrefix = `${getSitePreviewsObjectBase()}/p/${projectId}`;
   let stdout = "";
   let stderr = "";
   try {
@@ -202,7 +216,7 @@ async function runStaticExportBuild(projectId: string, projectDir: string): Prom
         env: {
           ...process.env,
           NODE_ENV: "production",
-          OPEN_OX_STATIC_BASE_PATH: basePath,
+          OPEN_OX_STATIC_ASSET_PREFIX: assetPrefix,
         },
         maxBuffer: 12 * 1024 * 1024,
       }
@@ -273,7 +287,7 @@ export async function syncStaticSitePreview(
     }
 
     await ensureGlobalErrorFromTemplateForProject(projectId);
-    await ensurePreviewBasePathInNextConfig(projectDir);
+    await ensurePreviewAssetPrefixInNextConfig(projectDir);
 
     const currentHash = await computeProjectFingerprint(projectId);
     const savedHash = await getSavedFingerprint(db, projectId);
@@ -337,10 +351,9 @@ export async function ensureStaticPreviewAlive(
   _db: SupabaseClient,
   projectId: string
 ): Promise<{ status: "ok" | "down"; url?: string }> {
-  const url = getStaticPreviewUrl(projectId);
-  const indexUrl = `${url}index.html`;
+  const indexUrl = getStaticPreviewUrl(projectId);
   if (await remoteIndexHtmlReachable(indexUrl)) {
-    return { status: "ok", url };
+    return { status: "ok", url: indexUrl };
   }
   return { status: "down" };
 }
@@ -349,7 +362,7 @@ export async function getStaticPreviewStatus(
   db: SupabaseClient,
   projectId: string
 ): Promise<{ status: "running" | "stopped"; url?: string }> {
-  const url = getStaticPreviewUrl(projectId);
+  const indexUrl = getStaticPreviewUrl(projectId);
   const { data } = await db
     .from("projects")
     .select("static_preview_synced_at, static_preview_last_error")
@@ -365,13 +378,12 @@ export async function getStaticPreviewStatus(
   }
 
   try {
-    const indexUrl = `${url}index.html`;
-    if (await remoteIndexHtmlReachable(indexUrl)) return { status: "running", url };
+    if (await remoteIndexHtmlReachable(indexUrl)) return { status: "running", url: indexUrl };
   } catch {
     /* */
   }
   if (row?.static_preview_synced_at) {
-    return { status: "running", url };
+    return { status: "running", url: indexUrl };
   }
   return { status: "stopped" };
 }
