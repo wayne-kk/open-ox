@@ -66,7 +66,7 @@ export function getStaticPreviewUrl(projectId: string): string {
 
 function contentTypeForRelPath(rel: string): string {
   const lower = rel.toLowerCase();
-  if (lower.endsWith(".html")) return "text/html; charset=utf-8";
+  if (lower.endsWith(".html")) return "text/html";
   if (lower.endsWith(".css")) return "text/css; charset=utf-8";
   if (lower.endsWith(".js")) return "application/javascript; charset=utf-8";
   if (lower.endsWith(".json")) return "application/json; charset=utf-8";
@@ -128,13 +128,20 @@ async function uploadOutDir(
 
   const uploadOne = async (rel: string): Promise<void> => {
     const localPath = path.join(uploadRoot, ...rel.split("/"));
-    const body = await fs.readFile(localPath);
+    const raw = await fs.readFile(localPath);
     const storagePath = `p/${projectId}/${rel}`;
     const contentType = contentTypeForRelPath(rel);
     let lastMessage = "";
 
+    /**
+     * Prefer Blob so storage-js uses multipart upload; part media type becomes the object Content-Type.
+     * Raw Buffer + headers can leave public objects as text/plain — browsers then show HTML source instead of rendering.
+     */
+    const fileBody =
+      typeof Blob !== "undefined" ? new Blob([raw], { type: contentType }) : raw;
+
     for (let attempt = 0; attempt <= UPLOAD_MAX_RETRIES; attempt += 1) {
-      const { error } = await admin.storage.from(SITE_PREVIEWS_BUCKET).upload(storagePath, body, {
+      const { error } = await admin.storage.from(SITE_PREVIEWS_BUCKET).upload(storagePath, fileBody, {
         upsert: true,
         contentType,
       });
