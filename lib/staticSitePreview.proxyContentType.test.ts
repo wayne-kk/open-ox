@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contentTypeForRelPath, resolveProxiedContentType } from "./staticSitePreview";
+import { contentTypeForRelPath, resolveProxiedContentType } from "./staticSitePreviewProxyMime";
 
 describe("resolveProxiedContentType", () => {
   it("uses path map for gif", () => {
