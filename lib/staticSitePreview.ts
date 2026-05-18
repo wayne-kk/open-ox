@@ -134,13 +134,25 @@ async function uploadOutDir(
     let lastMessage = "";
 
     /**
-     * Use Node `Buffer` (not `Blob`): storage-js wraps `Blob` in `FormData` and does not set
-     * `headers['content-type']` from `fileOptions.contentType` on that path. Supabase then stores
-     * the object as default `text/plain`, and `X-Content-Type-Options: nosniff` makes browsers show
-     * raw HTML. Passing a Buffer uses the raw-body branch which sets `content-type` on the upload request.
+     * Supabase Storage (multipart) resolves MIME as:
+     *   formData.fields.contentType?.value || formData.mimetype
+     * (@supabase/storage `fileUploadFromRequest`). `storage-js` Blob uploads only send cacheControl +
+     * the file part — no `contentType` field — so `formData.mimetype` often defaults to `text/plain`.
+     * Raw Buffer uploads rely on the request `content-type` header; that path can still misbehave behind
+     * some proxies. Building FormData with an explicit `contentType` field matches the server contract.
      */
+    const fileBytes = new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength);
+
+    const buildUploadForm = (): FormData => {
+      const f = new FormData();
+      f.append("cacheControl", "3600");
+      f.append("contentType", contentType);
+      f.append("", new Blob([fileBytes], { type: contentType }), path.basename(rel));
+      return f;
+    };
+
     for (let attempt = 0; attempt <= UPLOAD_MAX_RETRIES; attempt += 1) {
-      const { error } = await admin.storage.from(SITE_PREVIEWS_BUCKET).upload(storagePath, raw, {
+      const { error } = await admin.storage.from(SITE_PREVIEWS_BUCKET).upload(storagePath, buildUploadForm(), {
         upsert: true,
         contentType,
       });
