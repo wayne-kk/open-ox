@@ -134,14 +134,13 @@ async function uploadOutDir(
     let lastMessage = "";
 
     /**
-     * Prefer Blob so storage-js uses multipart upload; part media type becomes the object Content-Type.
-     * Raw Buffer + headers can leave public objects as text/plain — browsers then show HTML source instead of rendering.
+     * Use Node `Buffer` (not `Blob`): storage-js wraps `Blob` in `FormData` and does not set
+     * `headers['content-type']` from `fileOptions.contentType` on that path. Supabase then stores
+     * the object as default `text/plain`, and `X-Content-Type-Options: nosniff` makes browsers show
+     * raw HTML. Passing a Buffer uses the raw-body branch which sets `content-type` on the upload request.
      */
-    const fileBody =
-      typeof Blob !== "undefined" ? new Blob([raw], { type: contentType }) : raw;
-
     for (let attempt = 0; attempt <= UPLOAD_MAX_RETRIES; attempt += 1) {
-      const { error } = await admin.storage.from(SITE_PREVIEWS_BUCKET).upload(storagePath, fileBody, {
+      const { error } = await admin.storage.from(SITE_PREVIEWS_BUCKET).upload(storagePath, raw, {
         upsert: true,
         contentType,
       });
