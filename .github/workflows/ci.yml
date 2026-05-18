@@ -193,8 +193,17 @@ jobs:
             echo "==> Installing deps..."
             pnpm install --frozen-lockfile
 
-            echo "==> Restarting..."
+            echo "==> Playwright Chromium (cover capture / reference URLs; OK if already cached)..."
+            pnpm exec playwright install chromium
+
+            echo "==> Restarting apps (Next.js + generation worker)..."
+            export NODE_ENV=production
+
+            # Web: Next.js (existing process name for backward compatibility)
             pm2 restart open-ox || pm2 start pnpm --name open-ox -- start
+
+            # Background: claims generation_runs via claim_next_generation_run (needs SUPABASE_SERVICE_ROLE_KEY in .env.production)
+            pm2 restart open-ox-generation-worker || pm2 start pnpm --name open-ox-generation-worker -- run generation:worker
 
             pm2 save
             echo "==> Deploy complete!"

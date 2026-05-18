@@ -10,9 +10,12 @@ const nextConfig: NextConfig = {
   ...(allowedDevOrigins.length > 0 ? { allowedDevOrigins } : {}),
   output: "standalone",
   /**
-   * Cover capture uses dynamic `import("playwright")`. Standalone file tracing does not
-   * always pull in externals; without this, `.next/standalone/node_modules` omits playwright
-   * and production/Docker hits "Install playwright..." in cover_image_error.
+   * Production: use webpack (`pnpm build` → `next build --webpack`). Turbopack production builds
+   * turn `serverExternalPackages` like `playwright` into hashed import specifiers Node cannot resolve
+   * (ERR_MODULE_NOT_FOUND: playwright-…).
+   *
+   * Playwright is used for cover capture / reference URLs. Standalone tracing must include its files;
+   * without outputFileTracingIncludes, `.next/standalone/node_modules` may omit playwright.
    */
   outputFileTracingIncludes: {
     "/*": ["node_modules/playwright/**/*", "node_modules/playwright-core/**/*"],
