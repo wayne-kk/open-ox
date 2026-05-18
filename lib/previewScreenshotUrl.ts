@@ -20,6 +20,17 @@ export function previewUrlAllowedForScreenshot(urlString: string): URL {
     if (host.endsWith(".e2b.app") || host.endsWith(".e2b.dev")) {
       return u;
     }
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+    if (supabaseUrl) {
+      try {
+        const supaHost = new URL(supabaseUrl).hostname.toLowerCase();
+        if (supaHost && host === supaHost) {
+          return u;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
     const suffix = process.env.OPEN_OX_COVER_ALLOWED_HOST_SUFFIX?.trim().toLowerCase();
     if (suffix && host.endsWith(suffix)) {
       return u;

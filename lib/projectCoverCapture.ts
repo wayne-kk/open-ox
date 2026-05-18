@@ -33,8 +33,8 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function screenshotHomeViewport(previewOrigin: string): Promise<Buffer> {
-  previewUrlAllowedForScreenshot(previewOrigin);
+async function screenshotHomeViewport(previewEntryUrl: string): Promise<Buffer> {
+  previewUrlAllowedForScreenshot(previewEntryUrl);
 
   const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH?.trim();
   const browser = await chromium.launch({
@@ -49,7 +49,8 @@ async function screenshotHomeViewport(previewOrigin: string): Promise<Buffer> {
       },
       deviceScaleFactor: 1,
     });
-    const home = new URL("/", previewOrigin).toString();
+    const home =
+      previewEntryUrl.endsWith("/") ? previewEntryUrl : `${previewEntryUrl}/`;
     await page.goto(home, { waitUntil: "load", timeout: 120_000 });
     await page.evaluate(() => window.scrollTo(0, 0));
     await sleep(1200);

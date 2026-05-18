@@ -90,6 +90,7 @@ jobs:
             echo "NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}"
             echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY }}"
             echo "NEXT_PUBLIC_SITE_URL=${{ secrets.NEXT_PUBLIC_SITE_URL }}"
+            echo "OPEN_OX_PREVIEW_BACKEND=${{ secrets.OPEN_OX_PREVIEW_BACKEND }}"
             echo "SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}"
             echo "FEISHU_APP_ID=${{ secrets.FEISHU_APP_ID }}"
             echo "FEISHU_APP_SECRET=${{ secrets.FEISHU_APP_SECRET }}"

@@ -167,7 +167,9 @@ export async function collectFiles(dir: string, base: string): Promise<string[]>
 export async function computeProjectFingerprint(projectId: string): Promise<string> {
   const { createHash } = await import("crypto");
   const projectDir = getSiteRoot(projectId);
-  const files = await collectFiles(projectDir, projectDir);
+  const files = (await collectFiles(projectDir, projectDir)).filter(
+    (rel) => rel !== "out" && !rel.startsWith("out/")
+  );
   files.sort();
   const hash = createHash("sha256");
   for (const relPath of files) {

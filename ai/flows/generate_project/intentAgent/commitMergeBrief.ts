@@ -2,8 +2,9 @@ import type { BriefSubstanceClassification } from "./briefSubstanceClassifier";
 import type { ChatMessage } from "@/ai/shared/llm/types";
 
 /** Enough characters that the string is unlikely to be a pure confirmation cue. */
-const SUBSTANTIVE_MIN = 48;
-const DRAFT_FALLBACK_MIN = 24;
+export const SUBSTANTIVE_MIN = 48;
+/** When merged brief classifier LLM fails, treat tool `merged_brief` this long as substantive. */
+export const DRAFT_FALLBACK_MIN = 24;
 const TINY_HOLD_MIN = 16;
 
 /** Blueprint titles longer than this are almost never display names — skip DB rename. */

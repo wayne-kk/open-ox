@@ -2,8 +2,12 @@ import { composePromptBlocks, loadGuardrail, loadStepPrompt } from "@/ai/flows/g
 import { callLLMWithMeta, extractJSON } from "@/ai/flows/generate_project/shared/llm";
 import { lfPlain, LfPlain } from "@/lib/observability/langfuseGenerationCatalog";
 import { getModelForStep } from "@/lib/config/models";
+import { DRAFT_FALLBACK_MIN, SUBSTANTIVE_MIN } from "./commitMergeBrief";
 
 const INPUT_CLIP = 6000;
+
+/** Enough headroom when the step uses a reasoning/thinking-capable model (192 was truncating JSON). */
+const CLASSIFIER_OUTPUT_MAX_TOKENS = 4096;
 
 export interface BriefSubstanceClassification {
   mergedBriefFieldSubstantive: boolean;
@@ -28,6 +32,26 @@ export function parseBriefSubstanceClassification(parsed: unknown): BriefSubstan
     mergedBriefFieldSubstantive: root.mergedBriefSubstantive === true,
     tailSubstantive: root.tailSubstantive === true,
     bootstrapSubstantive: root.bootstrapSubstantive === true,
+  };
+}
+
+/**
+ * Length-only fallback when the classifier JSON is truncated or malformed.
+ * Mirrors {@link resolveCommitMergedBrief} gates so commits do not fail spuriously.
+ */
+export function briefSubstanceHeuristicLengths(params: {
+  mergedBriefRaw: string;
+  tailUserMessage: string;
+  bootstrapUserPrompt: string;
+}): BriefSubstanceClassification {
+  const raw = params.mergedBriefRaw.trim();
+  const tail = params.tailUserMessage.trim();
+  const boot = params.bootstrapUserPrompt.trim();
+
+  return {
+    mergedBriefFieldSubstantive: raw.length >= DRAFT_FALLBACK_MIN,
+    tailSubstantive: tail.length >= SUBSTANTIVE_MIN,
+    bootstrapSubstantive: boot.length >= SUBSTANTIVE_MIN,
   };
 }
 
@@ -63,20 +87,46 @@ export async function classifyBriefSubstanceForCommit(params: {
     original_bootstrap_prompt: clipForPrompt(boot),
   });
 
-  const meta = await callLLMWithMeta(systemPrompt, userPayload, 0.2, 192, model, {
+  const meta = await callLLMWithMeta(systemPrompt, userPayload, 0.2, CLASSIFIER_OUTPUT_MAX_TOKENS, model, {
     langfuseName: lfPlain(LfPlain.commitMergedBriefSubstance),
   });
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(extractJSON(meta.content));
+    const slice = extractJSON(meta.content);
+    parsed = JSON.parse(slice);
   } catch {
-    throw new Error(
-      `commit_merged_brief_classifier: failed to parse JSON.\nRaw output:\n${meta.content.slice(0, 4000)}`
-    );
+    return applySubstanceGate({
+      mergedBriefRaw: raw,
+      tailUserMessage: tail,
+      bootstrapUserPrompt: boot,
+      inner: briefSubstanceHeuristicLengths({
+        mergedBriefRaw: raw,
+        tailUserMessage: tail,
+        bootstrapUserPrompt: boot,
+      }),
+    });
   }
 
   const c = parseBriefSubstanceClassification(parsed);
+  return applySubstanceGate({
+    mergedBriefRaw: raw,
+    tailUserMessage: tail,
+    bootstrapUserPrompt: boot,
+    inner: c,
+  });
+}
+
+function applySubstanceGate(params: {
+  mergedBriefRaw: string;
+  tailUserMessage: string;
+  bootstrapUserPrompt: string;
+  inner: BriefSubstanceClassification;
+}): BriefSubstanceClassification {
+  const raw = params.mergedBriefRaw.trim();
+  const tail = params.tailUserMessage.trim();
+  const boot = params.bootstrapUserPrompt.trim();
+  const c = params.inner;
   return {
     mergedBriefFieldSubstantive: raw.length > 0 && c.mergedBriefFieldSubstantive,
     tailSubstantive: tail.length > 0 && c.tailSubstantive,

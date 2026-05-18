@@ -2,6 +2,7 @@
  * Dev Server Manager — static export preview
  *
  * Default: local `next dev` per project (see `localDevServerManager.ts`).
+ * Storage: set `OPEN_OX_PREVIEW_BACKEND=storage` — static export + Supabase bucket `site-previews` (see `staticSitePreview.ts`).
  * E2B: set `OPEN_OX_PREVIEW_BACKEND=e2b`. Flow in cloud:
  *   1. Check Supabase for existing sandboxId → try reconnect
  *   2. Create sandbox from custom template (large memory)
@@ -17,7 +18,8 @@ import path from "path";
 import { Sandbox } from "e2b";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import * as localPreview from "./localDevServerManager";
-import { isPreviewE2B } from "./previewMode";
+import { isPreviewE2B, isPreviewStorage } from "./previewMode";
+import * as staticSitePreview from "./staticSitePreview";
 import { getSavedFingerprint, saveFingerprint } from "./previewFingerprintDb";
 import {
   collectFiles,
@@ -374,6 +376,9 @@ export async function startDevServer(
   db: SupabaseClient,
   projectId: string
 ): Promise<{ url: string; port: number }> {
+  if (isPreviewStorage()) {
+    return staticSitePreview.syncStaticSitePreview(db, projectId);
+  }
   if (!isPreviewE2B()) {
     return localPreview.startLocalDevServer(db, projectId);
   }
@@ -385,7 +390,7 @@ export async function getExistingLocalPreviewUrl(
   db: SupabaseClient,
   projectId: string
 ): Promise<{ url: string; port: number } | null> {
-  if (isPreviewE2B()) return null;
+  if (isPreviewE2B() || isPreviewStorage()) return null;
   return localPreview.getExistingLocalPreviewUrl(db, projectId);
 }
 
@@ -542,6 +547,9 @@ async function startE2BDevServer(
 }
 
 export async function stopDevServer(db: SupabaseClient, projectId: string): Promise<void> {
+  if (isPreviewStorage()) {
+    return;
+  }
   if (!isPreviewE2B()) {
     await localPreview.stopLocalDevServer(projectId);
     return;
@@ -593,6 +601,10 @@ export async function hotRefreshDevServer(
   projectId: string,
   changedFiles: string[]
 ): Promise<{ url: string; port: number; mode: "hot" }> {
+  if (isPreviewStorage()) {
+    const r = await staticSitePreview.syncStaticSitePreview(db, projectId, { force: true });
+    return { ...r, mode: "hot" };
+  }
   if (!isPreviewE2B()) {
     return localPreview.hotRefreshLocalDevServer(db, projectId, changedFiles);
   }
@@ -657,6 +669,9 @@ export async function rebuildDevServer(
   db: SupabaseClient,
   projectId: string
 ): Promise<{ url: string; port: number }> {
+  if (isPreviewStorage()) {
+    return staticSitePreview.syncStaticSitePreview(db, projectId, { force: true });
+  }
   if (!isPreviewE2B()) {
     return localPreview.rebuildLocalDevServer(db, projectId);
   }
@@ -767,6 +782,9 @@ export async function ensureDevServerAlive(
   db: SupabaseClient,
   projectId: string
 ): Promise<{ status: "ok" | "down"; url?: string }> {
+  if (isPreviewStorage()) {
+    return staticSitePreview.ensureStaticPreviewAlive(db, projectId);
+  }
   if (!isPreviewE2B()) {
     return localPreview.ensureLocalDevServerAlive(db, projectId);
   }
@@ -826,6 +844,9 @@ export async function getDevServerStatus(
   db: SupabaseClient,
   projectId: string
 ): Promise<{ status: "running" | "stopped"; url?: string }> {
+  if (isPreviewStorage()) {
+    return staticSitePreview.getStaticPreviewStatus(db, projectId);
+  }
   if (!isPreviewE2B()) {
     return localPreview.getLocalDevServerStatus(db, projectId);
   }

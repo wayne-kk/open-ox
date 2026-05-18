@@ -58,7 +58,7 @@ Important directories:
 - **Framework**: Next.js (App Router), React, TypeScript
 - **Styling**: Tailwind CSS v4, shadcn/radix ecosystem
 - **Data**: Supabase (Postgres + Storage)
-- **Sandbox runtime**: E2B
+- **Sandbox runtime**: E2B (optional; only if `OPEN_OX_PREVIEW_BACKEND=e2b`)
 - **LLM access**: OpenAI-compatible API interfaces
 
 ## Quick Start
@@ -83,8 +83,11 @@ NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 SUPABASE_SERVICE_ROLE_KEY=...
 
-# E2B preview
+# E2B preview (optional; set OPEN_OX_PREVIEW_BACKEND=e2b)
 E2B_API_KEY=...
+
+# Static preview: public URLs via Supabase Storage (no E2B). Apply migration `020_site_previews_bucket.sql`.
+# OPEN_OX_PREVIEW_BACKEND=storage
 ```
 
 ### 3) Run
@@ -109,7 +112,7 @@ pnpm lint       # lint codebase
 1. Create a project prompt in Studio.
 2. Generation pipeline runs with streamed step events.
 3. Generated project files are validated and stored.
-4. Preview is started or rebuilt in E2B.
+4. Preview: local `next dev`, or **`OPEN_OX_PREVIEW_BACKEND=storage`** (static export → Supabase bucket `site-previews`), or E2B.
 5. Modify with natural language; inspect diffs and logs.
 
 ## Contributing
