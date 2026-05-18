@@ -20,7 +20,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import * as localPreview from "./localDevServerManager";
 import { isPreviewE2B, isPreviewStorage } from "./previewMode";
 import * as staticSitePreview from "./staticSitePreview";
-import { getSavedFingerprint, saveFingerprint } from "./previewFingerprintDb";
+import { getSavedFingerprint, parseProjectsFilesHash, saveFingerprint } from "./previewFingerprintDb";
 import {
   collectFiles,
   computeProjectFingerprint,
@@ -407,10 +407,10 @@ async function startE2BDevServer(
     throw new Error(`Project directory not found: ${projectDir}`);
   }
 
-  // Compute current file fingerprint
+  // Compute current file fingerprint (compare file part only — storage preview may store `files:origin` in files_hash)
   const currentHash = await computeProjectFingerprint(projectId);
-  const savedHash = await getSavedFingerprint(db, projectId);
-  const filesChanged = currentHash !== savedHash;
+  const savedParsed = parseProjectsFilesHash(await getSavedFingerprint(db, projectId));
+  const filesChanged = currentHash !== savedParsed.filesFingerprint;
 
   // 1. Try reconnecting to existing sandbox
   const existingSandboxId = await getSandboxId(db, projectId);

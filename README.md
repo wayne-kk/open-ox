@@ -112,7 +112,7 @@ pnpm lint       # lint codebase
 1. Create a project prompt in Studio.
 2. Generation pipeline runs with streamed step events.
 3. Generated project files are validated and stored.
-4. Preview: local `next dev`, or **`OPEN_OX_PREVIEW_BACKEND=storage`** (static export → Supabase bucket `site-previews`), or E2B.
+4. Preview: with **`pnpm dev`**, if `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, and `NEXT_PUBLIC_SITE_URL` are set and `OPEN_OX_PREVIEW_BACKEND` is unset, Studio uses **Storage + `/site-previews` proxy** (same as typical prod). Set **`OPEN_OX_PREVIEW_BACKEND=local`** for per-site `next dev` in iframe, **`storage`** to force explicitly, or **`e2b`** for sandboxes.
 5. Modify with natural language; inspect diffs and logs.
 
 ## Contributing

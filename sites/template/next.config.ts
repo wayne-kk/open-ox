@@ -32,12 +32,12 @@ const allowedDevOrigins = [...new Set([
  * Aligns file tracing with the repo root so Next does not infer the wrong project root
  * (reduces "multiple lockfiles / inferred workspace root" noise during `pnpm run build`).
  */
-/** Full URL (no trailing slash) to the folder where `index.html` will live on Supabase Storage — set only for Storage preview build (see `staticSitePreview.ts`). */
-const staticAssetPrefix = process.env.OPEN_OX_STATIC_ASSET_PREFIX?.trim();
+/** Path prefix (leading slash, no trailing slash) for Storage static export — `{NEXT_PUBLIC_SITE_URL}/site-previews/{url-encoded projectId}` so `/_next` resolves under the preview proxy; set only for that build (see `staticSitePreview.ts`). Public `public/*` URLs still use `/…` in HTML; the build post-process rewrites those to sit under this basePath. */
+const staticBasePath = process.env.OPEN_OX_STATIC_BASE_PATH?.trim();
 
 const nextConfig: NextConfig = {
   allowedDevOrigins,
-  ...(staticAssetPrefix ? { assetPrefix: staticAssetPrefix } : {}),
+  ...(staticBasePath ? { basePath: staticBasePath } : {}),
   output: "export",
   outputFileTracingRoot: path.join(__dirname, "../.."),
   images: {
@@ -45,6 +45,10 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       { protocol: "https", hostname: "images.unsplash.com" },
       { protocol: "https", hostname: "**.unsplash.com" },
+      { protocol: "https", hostname: "picsum.photos" },
+      { protocol: "https", hostname: "**.picsum.photos" },
+      { protocol: "https", hostname: "placehold.co" },
+      { protocol: "https", hostname: "**.placehold.co" },
     ],
   },
 };

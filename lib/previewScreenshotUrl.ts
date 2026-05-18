@@ -31,6 +31,17 @@ export function previewUrlAllowedForScreenshot(urlString: string): URL {
         /* ignore */
       }
     }
+    const siteUrlHttps = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+    if (siteUrlHttps) {
+      try {
+        const siteHost = new URL(siteUrlHttps).hostname.toLowerCase();
+        if (siteHost && host === siteHost) {
+          return u;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
     const suffix = process.env.OPEN_OX_COVER_ALLOWED_HOST_SUFFIX?.trim().toLowerCase();
     if (suffix && host.endsWith(suffix)) {
       return u;
