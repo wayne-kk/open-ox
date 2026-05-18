@@ -77,14 +77,39 @@ function contentTypeForRelPath(rel: string): string {
   return "application/octet-stream";
 }
 
-async function collectOutRelativePaths(outDir: string): Promise<string[]> {
+async function collectOutRelativePaths(uploadRoot: string): Promise<string[]> {
   try {
-    await fs.access(outDir);
+    await fs.access(uploadRoot);
   } catch {
     return [];
   }
-  const files = await collectFiles(outDir, outDir);
+  const files = await collectFiles(uploadRoot, uploadRoot);
   return files.map((f) => f.split(path.sep).join("/"));
+}
+
+/**
+ * With `basePath: /p/{projectId}`, Next static export writes to `out/p/{projectId}/`.
+ * Upload must use that folder as the root so Storage keys are `p/{id}/index.html`, not `p/{id}/p/{id}/...`.
+ */
+async function resolveStaticExportUploadRoot(
+  outDir: string,
+  projectId: string
+): Promise<string> {
+  const nested = path.join(outDir, "p", projectId);
+  try {
+    await fs.access(path.join(nested, "index.html"));
+    return nested;
+  } catch {
+    /* flat export */
+  }
+  try {
+    await fs.access(path.join(outDir, "index.html"));
+    return outDir;
+  } catch {
+    throw new Error(
+      `[staticPreview] No index.html after build — checked ${nested} and ${outDir}`
+    );
+  }
 }
 
 async function runInBatches<T>(
@@ -103,15 +128,16 @@ async function uploadOutDir(
   projectId: string,
   outDir: string
 ): Promise<void> {
-  const rels = await collectOutRelativePaths(outDir);
+  const uploadRoot = await resolveStaticExportUploadRoot(outDir, projectId);
+  const rels = await collectOutRelativePaths(uploadRoot);
   if (rels.length === 0) {
-    throw new Error("Static export produced an empty `out` directory");
+    throw new Error("Static export produced an empty upload root");
   }
 
   const admin = storage;
 
   const uploadOne = async (rel: string): Promise<void> => {
-    const localPath = path.join(outDir, ...rel.split("/"));
+    const localPath = path.join(uploadRoot, ...rel.split("/"));
     const body = await fs.readFile(localPath);
     const storagePath = `p/${projectId}/${rel}`;
     const contentType = contentTypeForRelPath(rel);

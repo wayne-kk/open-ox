@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Generated per-project workspaces (dev/build output must never be linted)
+    "sites/**/.next/**",
+    "sites/**/node_modules/**",
+    "sites/**/out/**",
   ]),
 ]);
 
