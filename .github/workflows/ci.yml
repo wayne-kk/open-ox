@@ -200,10 +200,13 @@ jobs:
             export NODE_ENV=production
 
             # Web: Next.js (existing process name for backward compatibility)
-            pm2 restart open-ox || pm2 start pnpm --name open-ox -- start
+            # --cwd: PM2 stores cwd on first start; without it, a process started from e.g. /root keeps ERR_PNPM_NO_IMPORTER_MANIFEST_FOUND forever on restart.
+            pm2 restart open-ox || pm2 start pnpm --cwd "$APP" --name open-ox -- start
 
-            # Background: claims generation_runs via claim_next_generation_run (needs SUPABASE_SERVICE_ROLE_KEY in .env.production)
-            pm2 restart open-ox-generation-worker || pm2 start pnpm --name open-ox-generation-worker -- run generation:worker
+            # Background: claims generation_runs via claim_next_generation_run (needs SUPABASE_SERVICE_ROLE_KEY in .env.production).
+            # Always delete + start so a previously wrong cwd (e.g. /root) is corrected; worker tolerates a short restart gap.
+            pm2 delete open-ox-generation-worker 2>/dev/null || true
+            pm2 start pnpm --cwd "$APP" --name open-ox-generation-worker -- run generation:worker
 
             pm2 save
             echo "==> Deploy complete!"

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
-import { listProjectOwnerOptions } from "@/lib/projectManager";
+import { listProjectOwnerOptions } from "@/lib/projectOwnerOptions";
 
 export async function GET() {
   try {
