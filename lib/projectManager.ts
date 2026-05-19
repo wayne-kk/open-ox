@@ -66,8 +66,8 @@ export interface ProjectMetadata {
   /** Set when row includes ownership columns */
   ownerUserId?: string;
   ownerUsername?: string | null;
-  /** Desktop-first-viewport screenshot in Storage (.open-ox-cover/cover.jpg) */
-  coverImageStatus?: ProjectCoverImageStatus;
+  /** Desktop-first-viewport screenshot in Storage (.open-ox-cover/cover.jpg). `null` = never set / unknown (JSON keeps key). */
+  coverImageStatus?: ProjectCoverImageStatus | null;
   coverImageStoragePath?: string | null;
   coverImageError?: string | null;
   coverImageUpdatedAt?: string;
@@ -129,7 +129,7 @@ function rowToMetadata(row: ProjectRow): ProjectMetadata {
           ownerUsername: row.owner_username ?? undefined,
         }
       : {}),
-    coverImageStatus: row.cover_image_status ?? undefined,
+    coverImageStatus: row.cover_image_status ?? null,
     coverImageStoragePath: row.cover_image_storage_path ?? undefined,
     coverImageError: row.cover_image_error ?? undefined,
     coverImageUpdatedAt: row.cover_image_updated_at ?? undefined,
@@ -241,7 +241,7 @@ export async function listProjectsSummary(
     modificationHistory: [],
     ownerUserId: row.user_id ?? undefined,
     ownerUsername: row.owner_username ?? undefined,
-    coverImageStatus: row.cover_image_status ?? undefined,
+    coverImageStatus: row.cover_image_status ?? null,
   }));
 }
 

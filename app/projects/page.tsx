@@ -32,7 +32,7 @@ interface ProjectMetadata {
   modificationHistory: unknown[];
   ownerUserId?: string;
   ownerUsername?: string | null;
-  coverImageStatus?: "pending" | "ready" | "failed";
+  coverImageStatus?: "pending" | "ready" | "failed" | null;
 }
 
 interface ProjectFolder {
@@ -148,7 +148,7 @@ function hashColor(str: string): { bg: string; text: string; accent: string } {
 }
 
 function ProjectCard({
-  project, onDelete, onClick, deleting, canDelete, showOwner,
+  project, onDelete, onClick, deleting, canDelete, showOwner, isGuest,
 }: {
   project: ProjectMetadata;
   onDelete: (e: React.MouseEvent) => void;
@@ -156,6 +156,8 @@ function ProjectCard({
   deleting: boolean;
   canDelete: boolean;
   showOwner: boolean;
+  /** 未登录：普通点击会在新标签打开预览 */
+  isGuest?: boolean;
 }) {
   const isReady = project.status === "ready";
   const isFailed = project.status === "failed";
@@ -219,9 +221,13 @@ function ProjectCard({
       onMouseLeave={handleMouseLeave}
       title={
         isClickable
-          ? isGenerating
-            ? "点击进入 Studio 查看生成进度（也可 ⌘/Ctrl 点击在新标签打开预览）"
-            : "点击进入 Studio；⌘/Ctrl 点击或鼠标中键在新标签打开站点预览"
+          ? isGuest
+            ? isGenerating
+              ? "点击在新标签页打开预览（生成中可查看进度）"
+              : "点击在新标签页打开站点预览；⌘/Ctrl 或中键同样打开预览"
+            : isGenerating
+              ? "点击进入 Studio 查看生成进度（也可 ⌘/Ctrl 点击在新标签打开预览）"
+              : "点击进入 Studio；⌘/Ctrl 点击或鼠标中键在新标签打开站点预览"
           : undefined
       }
       className={cn(
@@ -476,7 +482,7 @@ export default function ProjectsPage() {
 function ProjectsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user: authUser } = useAuthUser();
+  const { user: authUser, ready: authReady } = useAuthUser();
   const folderParamForView = (searchParams.get("folder") || "all").trim() || "all";
   const isMineView =
     searchParams.get("mine") === "1" ||
@@ -556,7 +562,9 @@ function ProjectsPageContent() {
         }
         const res = await fetch(`/api/projects?${params.toString()}`);
         if (res.status === 401) {
-          router.push(`/auth?redirect=${encodeURIComponent("/projects")}`);
+          if (isMineView) {
+            router.push(`/auth?redirect=${encodeURIComponent("/projects")}`);
+          }
           return null;
         }
         if (!res.ok) return null;
@@ -617,8 +625,15 @@ function ProjectsPageContent() {
   }, [fetchProjectsPage, projects.length]);
 
   useEffect(() => {
-    void loadFolders();
-  }, [loadFolders]);
+    if (!authReady) return;
+    if (!authUser && isMineView) {
+      router.replace("/projects", { scroll: false });
+    }
+  }, [authReady, authUser, isMineView, router]);
+
+  useEffect(() => {
+    if (authUser) void loadFolders();
+  }, [authUser, loadFolders]);
 
   useEffect(() => {
     let active = true;
@@ -786,6 +801,21 @@ function ProjectsPageContent() {
     isMineView && folderFilter !== "all" && folderFilter !== "uncategorized"
       ? `/?folder=${folderFilter}`
       : "/";
+
+  const createProjectLinkHref = authUser
+    ? newProjectHref
+    : `/auth?redirect=${encodeURIComponent("/")}`;
+
+  const openProject = useCallback(
+    (projectId: string) => {
+      if (authUser) {
+        router.push(`/studio/${projectId}`);
+        return;
+      }
+      window.open(`/projects/${projectId}/preview-launch`, "_blank", "noopener,noreferrer");
+    },
+    [authUser, router]
+  );
 
   const goGlobalGallery = () => {
     setListSearch("");
@@ -1035,7 +1065,7 @@ function ProjectsPageContent() {
 
             <div className="grid items-stretch gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
               <Link
-                href={newProjectHref}
+                href={createProjectLinkHref}
                 className="group flex min-h-[200px] flex-col items-center justify-center gap-3 self-stretch rounded-2xl border border-dashed border-white/[0.12]
                   bg-gradient-to-b from-white/[0.025] to-transparent p-6 shadow-[0_4px_20px_-8px_rgba(0,0,0,0.5)]
                   transition-[box-shadow,border-color] duration-200 ease-out hover:border-primary/35 hover:shadow-[0_10px_32px_-12px_rgba(247,147,26,0.15)]"
@@ -1052,7 +1082,7 @@ function ProjectsPageContent() {
                 <ProjectCard
                   key={project.id}
                   project={project}
-                  onClick={() => router.push(`/studio/${project.id}`)}
+                  onClick={() => openProject(project.id)}
                   onDelete={(e) => handleDeleteClick(e, project.id)}
                   deleting={deletingId === project.id}
                   canDelete={
@@ -1060,6 +1090,7 @@ function ProjectsPageContent() {
                     (project.ownerUserId === authUser.id || isAdmin)
                   }
                   showOwner
+                  isGuest={!authUser}
                 />
               ))}
             </div>
@@ -1092,7 +1123,7 @@ function ProjectsPageContent() {
           <>
             <div className="grid items-stretch gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
               <Link
-                href={newProjectHref}
+                href={createProjectLinkHref}
                 className="group flex min-h-[200px] flex-col items-center justify-center gap-3 self-stretch rounded-2xl border border-dashed border-white/[0.12]
                   bg-gradient-to-b from-white/[0.025] to-transparent p-6 shadow-[0_4px_20px_-8px_rgba(0,0,0,0.5)]
                   transition-[box-shadow,border-color] duration-200 ease-out hover:border-primary/35 hover:shadow-[0_10px_32px_-12px_rgba(247,147,26,0.15)]"
@@ -1109,11 +1140,15 @@ function ProjectsPageContent() {
                 <ProjectCard
                   key={project.id}
                   project={project}
-                  onClick={() => router.push(`/studio/${project.id}`)}
+                  onClick={() => openProject(project.id)}
                   onDelete={(e) => handleDeleteClick(e, project.id)}
                   deleting={deletingId === project.id}
-                  canDelete={!!authUser?.id}
+                  canDelete={
+                    !!authUser?.id &&
+                    (project.ownerUserId === authUser.id || isAdmin)
+                  }
                   showOwner={false}
+                  isGuest={!authUser}
                 />
               ))}
             </div>

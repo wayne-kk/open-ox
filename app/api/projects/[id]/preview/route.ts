@@ -9,6 +9,9 @@ import {
 } from "@/lib/devServerManager";
 import { getSessionUser } from "@/lib/auth/session";
 import { getProject } from "@/lib/projectManager";
+import { isPreviewStorage } from "@/lib/previewMode";
+import { getStaticPreviewUrl } from "@/lib/staticSitePreview";
+import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -43,12 +46,53 @@ export async function GET(_req: NextRequest, { params }: Params) {
 }
 
 export async function POST(_req: NextRequest, { params }: Params) {
-  const session = await getSessionUser();
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
-  }
-  const { supabase: db } = session;
   const { id } = await params;
+  const session = await getSessionUser();
+
+  if (!session) {
+    if (!isPreviewStorage()) {
+      return NextResponse.json(
+        {
+          error:
+            "访客仅支持静态站点预览（需 OPEN_OX_PREVIEW_BACKEND=storage）。请登录后使用完整预览与编辑。",
+          code: "PREVIEW_LOGIN_REQUIRED",
+        },
+        { status: 401 }
+      );
+    }
+    let admin;
+    try {
+      admin = createSupabaseServiceRoleClient();
+    } catch {
+      return NextResponse.json({ error: "Server misconfigured", code: "SERVICE_ROLE" }, { status: 503 });
+    }
+    const project = await getProject(admin, id);
+    if (!project) {
+      return NextResponse.json(
+        { error: "Project not found", code: "PROJECT_NOT_FOUND" },
+        { status: 404 }
+      );
+    }
+    if (project.status !== "ready") {
+      return NextResponse.json(
+        { error: "项目尚未就绪，无法预览", code: "PROJECT_NOT_READY" },
+        { status: 403 }
+      );
+    }
+    try {
+      const url = getStaticPreviewUrl(id);
+      return NextResponse.json({ url, mode: "storage-public" as const });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[POST /api/projects/[id]/preview] guest static url:", msg);
+      return NextResponse.json(
+        { error: "预览地址不可用（检查 NEXT_PUBLIC_SITE_URL）", code: "PREVIEW_URL_ERROR" },
+        { status: 503 }
+      );
+    }
+  }
+
+  const { supabase: db } = session;
   const project = await getProject(db, id);
   if (!project) {
     return NextResponse.json(

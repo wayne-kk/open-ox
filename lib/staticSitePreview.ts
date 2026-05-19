@@ -101,11 +101,12 @@ export function getStoragePreviewBasePath(projectId: string): string {
 }
 
 /**
- * Browser URL for `index.html` — proxied through this app so Storage’s CSP sandbox does not block scripts.
+ * Browser entry URL for static Storage preview — proxied through this app (no `index.html` in the path;
+ * `app/site-previews/.../route` serves `index.html` when the path segment is empty).
  */
 export function getStaticPreviewUrl(projectId: string): string {
   const origin = getStoragePreviewProxyOrigin();
-  return `${origin}${getStoragePreviewBasePath(projectId)}/index.html`;
+  return `${origin}${getStoragePreviewBasePath(projectId)}/`;
 }
 
 /** Stable 16-char hash of preview proxy origin (NEXT_PUBLIC_SITE_URL) for storage sync skip logic. */

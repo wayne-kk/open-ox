@@ -20,11 +20,11 @@ describe("previewUrlAllowedForScreenshot", () => {
     expect(() => previewUrlAllowedForScreenshot("file:///etc/passwd")).toThrow();
   });
 
-  it("allows https when host matches NEXT_PUBLIC_SITE_URL", () => {
+  it("allows https when host matches NEXT_PUBLIC_SITE_URL (no index.html in path)", () => {
     const prev = process.env.NEXT_PUBLIC_SITE_URL;
     process.env.NEXT_PUBLIC_SITE_URL = "https://myapp.example";
     try {
-      const u = previewUrlAllowedForScreenshot("https://myapp.example/site-previews/p1/index.html");
+      const u = previewUrlAllowedForScreenshot("https://myapp.example/site-previews/p1/");
       expect(u.hostname).toBe("myapp.example");
     } finally {
       process.env.NEXT_PUBLIC_SITE_URL = prev;

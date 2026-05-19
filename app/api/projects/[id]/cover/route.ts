@@ -16,33 +16,33 @@ function coverProxyBytesFlag(): boolean {
 }
 
 /**
- * Authenticated JPEG for project list thumbnails (Storage is private).
+ * Project list cover JPEG (Storage `project-files` bucket).
  *
- * Default: **302 redirect** to a short-lived signed Storage URL so the browser
- * downloads bytes directly from Supabase CDN — avoids piping every JPEG through
- * Node (which was slowing project grids and tying up server time).
+ * - **Logged in**: `getProject` via session client (RLS).
+ * - **Guest**: `getProject` via service role only after caller has no session — same data as public gallery; only served when `coverImageStatus === "ready"`.
  *
- * Set `OPEN_OX_COVER_PROXY_BYTES=1` to restore the old proxy (download in API route).
+ * Default: **302** to short-lived signed URL. `OPEN_OX_COVER_PROXY_BYTES=1` proxies bytes through this route.
  */
 export async function GET(_req: NextRequest, { params }: Params) {
-  const session = await getSessionUser();
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
-  }
   const { id } = await params;
-  const project = await getProject(session.supabase, id);
-  if (!project) {
-    return NextResponse.json({ error: "Project not found", code: "PROJECT_NOT_FOUND" }, { status: 404 });
-  }
-  if (project.coverImageStatus !== "ready" || !project.coverImageStoragePath?.trim()) {
-    return NextResponse.json({ error: "Cover not ready", code: "COVER_NOT_READY" }, { status: 404 });
-  }
+  const session = await getSessionUser();
 
   let admin;
   try {
     admin = createSupabaseServiceRoleClient();
   } catch {
     return NextResponse.json({ error: "Server misconfigured", code: "SERVICE_ROLE" }, { status: 503 });
+  }
+
+  const project = session
+    ? await getProject(session.supabase, id)
+    : await getProject(admin, id);
+
+  if (!project) {
+    return NextResponse.json({ error: "Project not found", code: "PROJECT_NOT_FOUND" }, { status: 404 });
+  }
+  if (project.coverImageStatus !== "ready" || !project.coverImageStoragePath?.trim()) {
+    return NextResponse.json({ error: "Cover not ready", code: "COVER_NOT_READY" }, { status: 404 });
   }
 
   const rel = project.coverImageStoragePath.trim().replace(/^\/+/, "");

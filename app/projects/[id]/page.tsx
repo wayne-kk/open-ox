@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Send, RefreshCw, Trash2, Loader2, AlertTriangle } from "lucide-react";
 import { HamsterLoader } from "@/components/ui/hamster-loader";
+import { useAuthUser } from "@/app/components/AuthHeaderActions";
 
 interface ModifyStep {
   name: string;
@@ -36,6 +37,15 @@ type PreviewState = "idle" | "starting" | "ready" | "error";
 export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const { user, ready } = useAuthUser();
+
+  useEffect(() => {
+    if (!ready) return;
+    if (!user) {
+      router.replace(`/projects/${id}/preview-launch`);
+    }
+  }, [ready, user, id, router]);
+
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewState, setPreviewState] = useState<PreviewState>("idle");
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -81,9 +91,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   };
 
   useEffect(() => {
+    if (!ready || !user) return;
     startPreview();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, ready, user]);
 
   const handleModify = async () => {
     if (!instruction.trim() || modifying) return;
@@ -148,6 +159,17 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       setModifying(false);
     }
   };
+
+  if (!ready || !user) {
+    return (
+      <main className="relative flex h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <HamsterLoader size="sm" />
+          <p className="font-mono text-[11px] text-muted-foreground">加载…</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="relative h-screen overflow-hidden bg-background flex flex-col">

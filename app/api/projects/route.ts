@@ -3,22 +3,18 @@ import type { GenerationMode, ProjectFolderFilter } from "@/lib/projectManager";
 import { createProject, listProjectsSummary } from "@/lib/projectManager";
 import { getSessionUser } from "@/lib/auth/session";
 import { getUserDisplayName } from "@/lib/auth/display-name";
+import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
+
+const ANON_LIST_MAX = 50;
 
 export async function GET(req: Request) {
   try {
-    const session = await getSessionUser();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
-    }
-    const { supabase: db } = session;
-
     const { searchParams } = new URL(req.url);
     const limitParam = Number(searchParams.get("limit"));
     const offsetParam = Number(searchParams.get("offset"));
     const folderParam = (searchParams.get("folder") || "all").trim() || "all";
     const mine = searchParams.get("mine") === "1";
     const ownerFilter = searchParams.get("owner");
-    const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.floor(limitParam) : undefined;
     const offset = Number.isFinite(offsetParam) && offsetParam >= 0 ? Math.floor(offsetParam) : 0;
 
     let folder: ProjectFolderFilter = "all";
@@ -30,6 +26,37 @@ export async function GET(req: Request) {
       mine ||
       folderParam === "uncategorized" ||
       (folderParam !== "all" && folderParam.length > 0);
+
+    const session = await getSessionUser();
+
+    if (!session) {
+      if (listMine) {
+        return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
+      }
+      let admin;
+      try {
+        admin = createSupabaseServiceRoleClient();
+      } catch {
+        return NextResponse.json(
+          { error: "Public project list is not configured", code: "SERVICE_ROLE" },
+          { status: 503 }
+        );
+      }
+      const rawLimit = Number.isFinite(limitParam) && limitParam > 0 ? Math.floor(limitParam) : undefined;
+      const limit =
+        rawLimit !== undefined ? Math.min(rawLimit, ANON_LIST_MAX) : undefined;
+      const projects = await listProjectsSummary(admin, {
+        filterOwnerUserId:
+          ownerFilter && /^[0-9a-f-]{36}$/i.test(ownerFilter) ? ownerFilter : null,
+        limit,
+        offset,
+      });
+      return NextResponse.json(projects);
+    }
+
+    const { supabase: db } = session;
+
+    const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.floor(limitParam) : undefined;
 
     const projects = await listProjectsSummary(db, {
       ...(listMine
