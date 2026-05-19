@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 
 import {
   SITE_PREVIEWS_BUCKET,
@@ -8,24 +7,30 @@ import {
 
 export const runtime = "nodejs";
 
+/**
+ * Build Supabase Storage public object URL with each path segment encoded.
+ * `getPublicUrl` can emit paths that break fetch/proxies when keys contain reserved URL characters.
+ */
 function publicStorageObjectUrl(keyUnderBucket: string): string {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
-  const publishable =
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY?.trim() ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ||
-    "";
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()?.replace(/\/$/, "");
   if (!supabaseUrl) {
     throw new Error("NEXT_PUBLIC_SUPABASE_URL is not configured");
   }
-  const { data } = createClient(supabaseUrl, publishable || "anon-placeholder").storage
-    .from(SITE_PREVIEWS_BUCKET)
-    .getPublicUrl(keyUnderBucket);
-  return data.publicUrl;
+  const encodedPath = keyUnderBucket
+    .split("/")
+    .filter((segment) => segment.length > 0)
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  return `${supabaseUrl}/storage/v1/object/public/${SITE_PREVIEWS_BUCKET}/${encodedPath}`;
 }
 
-function isSafePreviewSegments(segments: string[] | undefined): boolean {
-  if (!segments?.length) return true;
-  return segments.every((s) => s.length > 0 && !s.includes("..") && !s.includes("\\"));
+/** Drop empty segments from `//`, trailing slashes, etc. — avoids false "Invalid path" 400s. */
+function normalizePreviewPathSegments(path: string[] | undefined): string[] {
+  return (path ?? []).filter((s) => s.length > 0);
+}
+
+function isSafePreviewSegments(segments: string[]): boolean {
+  return segments.every((s) => !s.includes("..") && !s.includes("\\"));
 }
 
 async function proxyFromStorage(
@@ -80,20 +85,42 @@ async function proxyFromStorage(
 
 type Ctx = { params: Promise<{ projectId: string; path?: string[] }> };
 
-export async function GET(_req: Request, ctx: Ctx) {
-  const { projectId, path } = await ctx.params;
-  if (!isSafePreviewSegments(path)) {
-    return new NextResponse("Invalid path", { status: 400 });
-  }
-  const rel = path?.length ? path.join("/") : "index.html";
-  return proxyFromStorage(projectId, rel, "GET");
+function canonicalTrailingSlashRedirect(req: Request, segments: string[]): NextResponse | null {
+  if (segments.length > 0) return null;
+  const url = new URL(req.url);
+  if (url.pathname.endsWith("/")) return null;
+  const dest = `${url.pathname}/${url.search}`;
+  return NextResponse.redirect(new URL(dest, url.origin), 307);
 }
 
-export async function HEAD(_req: Request, ctx: Ctx) {
+export async function GET(req: Request, ctx: Ctx) {
   const { projectId, path } = await ctx.params;
-  if (!isSafePreviewSegments(path)) {
+  const id = projectId?.trim();
+  if (!id) {
+    return new NextResponse("Missing projectId", { status: 400 });
+  }
+  const segments = normalizePreviewPathSegments(path);
+  if (!isSafePreviewSegments(segments)) {
+    return new NextResponse("Invalid path", { status: 400 });
+  }
+  const redirect = canonicalTrailingSlashRedirect(req, segments);
+  if (redirect) return redirect;
+  const rel = segments.length ? segments.join("/") : "index.html";
+  return proxyFromStorage(id, rel, "GET");
+}
+
+export async function HEAD(req: Request, ctx: Ctx) {
+  const { projectId, path } = await ctx.params;
+  const id = projectId?.trim();
+  if (!id) {
     return new NextResponse(null, { status: 400 });
   }
-  const rel = path?.length ? path.join("/") : "index.html";
-  return proxyFromStorage(projectId, rel, "HEAD");
+  const segments = normalizePreviewPathSegments(path);
+  if (!isSafePreviewSegments(segments)) {
+    return new NextResponse(null, { status: 400 });
+  }
+  const redirect = canonicalTrailingSlashRedirect(req, segments);
+  if (redirect) return redirect;
+  const rel = segments.length ? segments.join("/") : "index.html";
+  return proxyFromStorage(id, rel, "HEAD");
 }
