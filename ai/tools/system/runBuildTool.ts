@@ -1,7 +1,7 @@
 import { execSync } from "child_process";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import type { ToolResult, ToolExecutor } from "../types";
-import { ensureProjectNodeModules } from "@/lib/projectManager";
+import { ensureProjectNodeModules } from "@/lib/ensureProjectNodeModules";
 import { getSiteRoot } from "./common";
 
 export const runBuildTool: ChatCompletionTool = {

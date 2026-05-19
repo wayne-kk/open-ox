@@ -19,7 +19,8 @@ import { promisify } from "node:util";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
-import { ensureProjectNodeModules, getSiteRoot } from "@/lib/projectManager";
+import { ensureProjectNodeModules } from "@/lib/ensureProjectNodeModules";
+import { getSiteRoot } from "@/lib/projectManager";
 import { restoreProjectFiles } from "@/lib/storage";
 import {
   computeProjectFingerprint,
