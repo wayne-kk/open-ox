@@ -41,43 +41,49 @@ function Callout({ type = "info", children }: { type?: "info" | "warn"; children
 }
 
 const STEPS = [
-  { n: "01", name: "clear_template", type: "fs", desc: "清理上次生成的文件。当提供了 projectId 时跳过（项目目录已初始化）。" },
-  { n: "02", name: "analyze_project_requirement", type: "llm+tool", desc: "将用户 prompt 解析为结构化的 ProjectBlueprint。配备 web_search。与步骤 03 并行。" },
-  { n: "03", name: "infer_design_intent", type: "llm", desc: "独立风格推理。与步骤 02 并行。" },
-  { n: "04", name: "plan_project", type: "llm", desc: "将蓝图细化为页面与 pageDesignPlan。与步骤 05 并行。" },
+  { n: "00", name: "validate_skill_prompts", type: "verify", desc: "启动前校验 ai 流程技能 Markdown 的 frontmatter；失败则中止，避免运行中途才发现技能损坏。" },
+  { n: "01", name: "project_intent_guide", type: "llm", desc: "可选（默认开启）。澄清建站意向；若需用户补充信息则提前结束并返回引导文案（不进入生成）。可用 enableIntentGuide=false 关闭。" },
+  { n: "02", name: "analyze_project_requirement", type: "llm+tool", desc: "解析 ProjectBlueprint，配备 web_search。与步骤 03 并行。" },
+  { n: "03", name: "infer_design_intent", type: "llm", desc: "独立风格/技术关键词推理；产物合并进设计系统输入与 blueprint.keywords。与步骤 02 并行。" },
+  { n: "04", name: "plan_project", type: "llm", desc: "扩展为 PlannedProjectBlueprint（pages、sections、pageDesignPlan）。与步骤 05a 并行。" },
   {
-    n: "05",
-    name: "match_design_system_skill · generate_project_design_system",
+    n: "05a",
+    name: "match_design_system_skill",
     type: "llm",
-    desc: "内置 design-system skill 匹配命中则落盘 design-system.md；否则 LLM 生成 design-system.md。与步骤 04 并行。",
+    desc: "与用户 prompt 比对内置 design-system skill；命中则直接使用 skill 正文作为 design-system.md。与步骤 04 并行（enableSkills=false 时跳过）。",
   },
-  { n: "06", name: "apply_project_design_tokens", type: "llm", desc: "设计系统 Markdown + 当前 globals → LLM 写出完整 globals.css。必须先于步骤 07–08，避免 Agent 覆盖。" },
+  {
+    n: "05b",
+    name: "generate_project_design_system",
+    type: "llm",
+    desc: "未命中内置 skill 时执行：根据 infer 文本 + 可选用户 styleGuide 生成 design-system.md。",
+  },
+  { n: "06", name: "apply_project_design_tokens", type: "llm", desc: "设计系统 Markdown + 当前 app/globals.css → LLM 产出完整 globals.css（保留模板结构意图）。须先于 Architect / Page Agent。" },
   {
     n: "07",
     name: "architect_agent",
     type: "llm+tool",
-    desc: "Architect：app/layout.tsx + components/chrome/**。先于步骤 08 串行完成，便于 Page Agent 读到定稿 chrome。",
+    desc: "单一 Agent 落盘 app/layout.tsx 与 components/chrome/**，作为全局 chrome 契约。",
   },
   {
     n: "08",
     name: "page_implement_agent ×M",
     type: "llm×M",
-    desc: "在步骤 07 完成之后多页并行落地 page.tsx / 页面组件；禁止写 layout/chrome/globals。",
+    desc: "每页一个工具闭环（读写文件、generate_image、page_implementation_complete 等），多页并行；不得修改 layout/chrome/globals。",
   },
   {
     n: "09",
-    name: "install_dependencies",
-    type: "npm",
-    desc: "等待异步图片就绪后安装缺失依赖；与其它生成文件的 import 扫描并行收尾。",
+    name: "await_images ∥ install_dependencies",
+    type: "mixed",
+    desc: "等待 Agent 触发的异步生图落盘；并与依赖扫描安装并行（npm），保证构建前图片与 node_modules 齐备。",
   },
   {
     n: "10",
     name: "typecheck_generated",
     type: "verify",
-    desc: "对本次生成涉及的 TS/TSX 做范围类型检查（非全仓 tsc）。失败可走 repair_build 前的修复链路。",
-  },
-  { n: "11", name: "run_build", type: "build", desc: "本地 next build。" },
-  { n: "12", name: "repair_build ×0-5", type: "llm+tool", desc: "构建失败时的 Agent 工具循环（read/edit/write + 增量验证）。" },
+    desc: "默认开启：对生成范围内的 TS/TSX 做语言服务级检查（非全仓 tsc）。失败时可触发 repair_build 打补丁。DISABLE_PREBUILD_TSC=1 跳过。" },
+  { n: "11", name: "run_build (+ TS codeFix 内循环)", type: "build", desc: "本地 next build；编译错误时可反复尝试 TypeScript code-fix 再构建（与 repair 轮次配合）。" },
+  { n: "12", name: "repair_build ×0-5", type: "llm+tool", desc: "构建仍失败时进入 Agent 修复循环（最多 5 轮）；定位错误日志相关文件并增量修改。" },
 ];
 
 const TOC = [
@@ -97,8 +103,8 @@ export default function PipelinePage() {
         </p>
         <h1 className="text-3xl font-bold tracking-tight">AI 生成流水线</h1>
         <p className="mt-3 text-[15px] leading-7 text-muted-foreground">
-          当前为主路径约 12 步的编排（按项目与 checkpoint 略有增减）；LLM Page Agent 仍为开放式工具闭环。
-          修改阶段沿用独立 Modify Agent。
+          下表为主路径步骤索引（含启动校验与可选意向引导）；checkpoint 恢复时会跳过已完成阶段。
+          页面代码由多路 <Code>page_implement_agent</Code> 并行落地；修改阶段仍走独立 Modify Agent。
         </p>
 
         <section id="steps" className="scroll-mt-24">
@@ -114,6 +120,7 @@ export default function PipelinePage() {
                       type === "build" ? "bg-green-500/15 text-green-400/80" :
                         type === "npm" ? "bg-blue-500/15 text-blue-400/80" :
                           type === "verify" ? "bg-violet-500/15 text-violet-300/80" :
+                            type === "mixed" ? "bg-cyan-500/12 text-cyan-300/85" :
                           "bg-white/8 text-muted-foreground/60"
                       }`}>{type}</span>
                   </div>
@@ -206,17 +213,19 @@ user message (page agent) =
             当 <Code>next build</Code> 失败后，修复步骤从错误输出中提取文件名，
             只将相关文件发送给 LLM 修复 — 而非整个代码库。
           </P>
-          <Pre>{`for (let attempt = 0; attempt <= 2; attempt++) {
-  const result = await stepRunBuild();
-  if (result.success) return { verificationStatus: "passed" };
+          <Pre>{`const maxRepairAttempts = 5;
+for (let repairRound = 0; repairRound <= maxRepairAttempts; repairRound++) {
+  const buildResult = await stepRunBuild();
+  if (buildResult.success) return { verificationStatus: "passed" };
 
-  const repair = await stepRepairBuild({
-    blueprint,
-    buildOutput: result.output,  // error log → file extraction
-    generatedFiles: result.generatedFiles,
-  });
-  // Re-install any new deps introduced by the fix
-  await autoInstallDependenciesForFiles({ files: repair.touchedFiles });
+  if (repairRound < maxRepairAttempts) {
+    await stepRepairBuild({
+      blueprint,
+      buildOutput: buildResult.output,
+      generatedFiles,
+    });
+    await autoInstallDependenciesForFiles(/* touched files */);
+  }
 }`}</Pre>
           <Callout type="warn">
             最多 5 轮修复。如果构建仍然失败，<Code>verificationStatus</Code> 设为

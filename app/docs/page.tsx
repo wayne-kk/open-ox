@@ -14,7 +14,7 @@ const CARDS = [
     icon: GitBranch,
     href: "/docs/pipeline",
     title: "AI 生成流水线",
-    desc: "13 步编排（8 个核心生成节点）— 并行执行、运行时 Skill 发现、构建自动修复。",
+    desc: "从校验技能到构建验证的主路径编排 — analyze ∥ infer、plan ∥ 设计系统匹配/生成、Architect → 多页 Page Agent、可选范围类型检查与最多 5 轮构建修复。",
     tag: "流水线",
     accent: "tertiary",
   },
@@ -46,7 +46,7 @@ const CARDS = [
     icon: LayoutTemplate,
     href: "/docs/section-generation",
     title: "Section 生成",
-    desc: "从 PlannedSectionSpec 到单文件 TSX：Prompt 分层、Skill 预选、并行批次与静态验证重试。",
+    desc: "当前由每页 page_implement_agent 工具闭环落地路由与组件；Hero 可选运行时 skill 发现；Architect 先定稿 layout/chrome。",
     tag: "生成",
     accent: "tertiary",
   },
@@ -54,7 +54,7 @@ const CARDS = [
     icon: Zap,
     href: "/docs/skills",
     title: "风格技能",
-    desc: "/minimal、/bold、/glassmorphism 技能系统 — 菜单与菜谱分离模式。",
+    desc: "用户 /skill 注入 styleGuide；内置 design-system skill 匹配；Hero 区运行时组件 skill 发现（菜单与正文分离）。",
     tag: "设计",
     accent: "primary",
   },
@@ -70,7 +70,7 @@ const CARDS = [
     icon: Eye,
     href: "/docs/preview",
     title: "预览沙箱",
-    desc: "E2B 云端沙箱、静态导出策略、沙箱重连与增量重建优化。",
+    desc: "三种后端：Storage 静态导出 + `/site-previews` 代理、本地每站点 next dev、或 E2B 沙箱（静态导出 + serve）。",
     tag: "基础设施",
     accent: "muted",
   },
@@ -88,7 +88,7 @@ const METRICS = [
   { value: "~90s", label: "端到端生成时间" },
   { value: "8", label: "核心流水线节点" },
   { value: "0", label: "用户需要写的代码" },
-  { value: "2", label: "最大自动修复轮次" },
+  { value: "5", label: "构建修复最多轮次" },
 ];
 
 export default function DocsPage() {
@@ -195,7 +195,7 @@ export default function DocsPage() {
       <div className="mt-10 border-t border-white/8 pt-8">
         <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground/40 mb-4">// 技术栈</p>
         <div className="flex flex-wrap gap-2">
-          {["Next.js 15", "TypeScript", "Tailwind CSS v4", "Supabase", "E2B Sandboxes", "OpenAI-compatible API"].map((t) => (
+          {["Next.js 16", "React 19", "TypeScript", "Tailwind CSS v4", "Supabase", "Preview: Storage / local / E2B", "OpenAI-compatible API"].map((t) => (
             <span key={t} className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 font-mono text-[11px] text-muted-foreground/70">
               {t}
             </span>

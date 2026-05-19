@@ -63,23 +63,25 @@ export default function DesignSystemPage() {
             再将其转化为 <Code>globals.css</Code> 中的 Tailwind v4 CSS 变量。
             后续所有 section 生成时都会读取这两个文件作为上下文。
           </P>
-          <Pre>{`// 流水线中的位置
-step 03: plan_project          ─┐ 并行
-step 04: generate_design_system ─┘
-step 05: apply_design_tokens   ← 读取 design-system.md → 写入 globals.css
-step 06: preselect_skills
-step 07: generate_section ×N   ← 每次都注入 design-system.md + globals.css`}</Pre>
+          <Pre>{`// 主路径编排（与设计系统相关的部分）
+analyze_project_requirement  ∥ infer_design_intent   // 第一层并行
+plan_project                 ∥ match_design_system_skill   // 第二层并行
+generate_project_design_system   // 仅当未命中内置 skill
+apply_project_design_tokens      // 先于一切页面写入
+architect_agent → page_implement_agent ×M`}</Pre>
           <Callout>
-            步骤 03 和 04 并行执行。设计系统不依赖规划结果，两者都只需要
-            <Code>ProjectBlueprint</Code> 作为输入。
+            若 <Code>match_design_system_skill</Code> 命中内置 Markdown，则跳过 LLM 生成设计系统但仍会落盘同一 artifacts；
+            <Code>infer_design_intent</Code> 的技术关键词会在其后合并进 blueprint，辅助 Hero skill 路由。
           </Callout>
         </section>
 
         <section id="generation" className="scroll-mt-24">
           <H2>生成流程</H2>
           <P>
-            <Code>generate_project_design_system</Code> 步骤接收 Blueprint 的
-            <Code>experience.designIntent</Code> 字段作为核心输入：
+            <Code>generate_project_design_system</Code> 的核心输入来自{" "}
+            <Code>infer_design_intent</Code> 的自然语言摘要（若 analyze 已带{" "}
+            <Code>experience.designIntent</Code> 亦可作为回退），并可叠加用户在前端选择的{" "}
+            <Code>styleGuide</Code>（截断至 1200 字符）。
           </P>
           <Pre>{`// experience.designIntent 示例
 {
@@ -134,10 +136,11 @@ step 07: generate_section ×N   ← 每次都注入 design-system.md + globals.c
   --duration-normal: 300ms;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }`}</Pre>
-          <H3>增量写入策略</H3>
+          <H3>整文件重写（保留结构意图）</H3>
           <P>
-            步骤不会覆盖整个 <Code>globals.css</Code>，而是提取现有的 <Code>@theme</Code> 块，
-            与新生成的 token 合并后写回。这样可以保留用户手动添加的自定义样式。
+            模型会收到<strong>完整的设计系统 Markdown</strong>以及<strong>当前的{" "}
+            <Code>app/globals.css</Code></strong>（过长会首尾截断）。输出应为<strong>完整的</strong>
+            <Code>globals.css</Code>，而非局部补丁；提示词要求保留 import、基础层样式等模板结构。
           </P>
           <Callout type="warn">
             如果 LLM 生成的 token 名称与 Tailwind 内置变量冲突（如 <Code>--color-red-500</Code>），
@@ -148,18 +151,10 @@ step 07: generate_section ×N   ← 每次都注入 design-system.md + globals.c
         <section id="propagation" className="scroll-mt-24">
           <H2>向下传播</H2>
           <P>
-            设计系统通过两个渠道传播给每个 section 生成步骤：
-          </P>
-          <Pre>{`// section 生成的 user message 结构
-user message =
-  design-system.md (完整内容)   ← 人类可读规范
-  + globals.css (前 1000 字符)  ← 实际 CSS 变量
-  + project context
-  + section spec`}</Pre>
-          <P>
-            LLM 在生成 TSX 时会参考 <Code>design-system.md</Code> 中的颜色名称和间距规范，
-            并直接使用 <Code>globals.css</Code> 中定义的 CSS 变量（如 <Code>text-primary</Code>、
-            <Code>bg-surface</Code>）。这确保了所有 section 的视觉一致性。
+            设计系统通过两条只读快照传播给每个 <Code>page_implement_agent</Code>：
+            完整的 <Code>design-system.md</Code>，以及在 Agent user 消息中附带的{" "}
+            <Code>globals.css</Code> 全文（或截断说明）。Modify Agent 启动时同样读取 design-system，
+            以便用户口头修改 token 时有单一事实来源。
           </P>
           <H3>修改时的一致性</H3>
           <P>

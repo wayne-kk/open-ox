@@ -25,8 +25,10 @@ function Callout({ type = "info", children }: { type?: "info" | "warn"; children
 }
 
 const TOC = [
-  { id: "why-static", label: "为什么静态导出" },
-  { id: "startup", label: "启动流程" },
+  { id: "modes", label: "三种预览后端" },
+  { id: "why-static", label: "为何静态导出" },
+  { id: "storage-path", label: "Storage 路径" },
+  { id: "e2b-path", label: "E2B 路径" },
   { id: "rebuild", label: "增量重建" },
   { id: "trigger", label: "触发时机" },
   { id: "reconnect", label: "沙箱重连" },
@@ -39,12 +41,50 @@ export default function PreviewPage() {
         <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-primary mb-4">// docs / preview</p>
         <h1 className="text-3xl font-bold tracking-tight">预览沙箱</h1>
         <p className="mt-3 text-[15px] leading-7 text-muted-foreground">
-          基于 E2B Cloud Sandboxes 的云端预览系统。每个项目在隔离的 Node.js 环境中构建，
-          通过静态导出 + <Code>npx serve</Code> 提供稳定的预览 URL。
+          预览实现由 <Code>OPEN_OX_PREVIEW_BACKEND</Code> 与环境决定：<strong>local</strong>（每站点{" "}
+          <Code>next dev</Code>）、<strong>storage</strong>（静态导出上传到 Supabase bucket{" "}
+          <Code>site-previews</Code>，浏览器经本应用的 <Code>/site-previews/{"{projectId}"}</Code>{" "}
+          代理加载，避免 Storage 默认 CSP 阻断脚本），以及 <strong>e2b</strong>（云端沙箱内{" "}
+          <Code>next build</Code> + <Code>npx serve out</Code>）。本地开发若已配置 Service Role +
+          <Code>NEXT_PUBLIC_SITE_URL</Code> 且未显式设置 env，默认与典型生产一致走{" "}
+          <strong>storage</strong>。
         </p>
 
+        <section id="modes" className="scroll-mt-24">
+          <H2>三种预览后端</H2>
+          <div className="mt-4 overflow-hidden rounded-xl border border-white/8">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="border-b border-white/8 bg-white/[0.02]">
+                  <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">模式</th>
+                  <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">典型场景</th>
+                  <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">要点</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {[
+                  ["local", "强制 iframe 内 dev HMR", "`OPEN_OX_PREVIEW_BACKEND=local`，进程跑在宿主"],
+                  ["storage", "生产对齐 / 无 E2B", "syncStaticSitePreview：build → 上传 `out/` → 指纹跳过重复构建"],
+                  ["e2b", "隔离云端 Node", "`OPEN_OX_PREVIEW_BACKEND=e2b`，sandbox_id 持久化可重连"],
+                ].map(([mode, scene, note]) => (
+                  <tr key={mode} className="hover:bg-white/[0.015]">
+                    <td className="px-4 py-2.5 font-mono text-[11px] text-primary/80">{mode}</td>
+                    <td className="px-4 py-2.5 text-muted-foreground/70">{scene}</td>
+                    <td className="px-4 py-2.5 text-muted-foreground/70">{note}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Callout>
+            <Code>POST /api/projects/[id]/preview</Code>：已登录用户始终走{" "}
+            <Code>startDevServer</Code> 的分支逻辑；未登录且{" "}
+            <Code>OPEN_OX_PREVIEW_BACKEND=storage</Code> 时，可对就绪项目返回公开的静态预览 URL（无需沙箱）。
+          </Callout>
+        </section>
+
         <section id="why-static" className="scroll-mt-24">
-          <H2>为什么选择静态导出</H2>
+          <H2>为何静态导出（E2B / Storage 共通）</H2>
           <div className="mt-4 overflow-hidden rounded-xl border border-white/8">
             <table className="w-full text-[13px]">
               <thead>
@@ -71,12 +111,26 @@ export default function PreviewPage() {
             </table>
           </div>
           <P>
-            静态导出后用 <Code>npx serve out -l 3000</Code> 提供服务，URL 永久有效，资源占用极低。
+            Storage 与 E2B 路径最终都向浏览器提供<strong>静态 HTML + chunk</strong>。
+            相较长时间驻留的 <Code>next dev</Code>，导出站点 URL 稳定、宿主机占用更低；
+            <Code>local</Code> 后端仍保留 dev server 以便调试 HMR。
           </P>
         </section>
 
-        <section id="startup" className="scroll-mt-24">
-          <H2>启动流程</H2>
+        <section id="storage-path" className="scroll-mt-24">
+          <H2>Storage 路径</H2>
+          <P>
+            <Code>lib/staticSitePreview.ts</Code> 在宿主（或 CI worker）对{" "}
+            <Code>sites/{"{id}"}/</Code> 执行带 basePath 的静态导出，将{" "}
+            <Code>out/</Code> 同步至 bucket <Code>site-previews</Code>，对象键前缀{" "}
+            <Code>p/{"{projectId}"}/…</Code>。浏览器不直连 Storage，而是请求同源{" "}
+            <Code>/site-previews/{"{projectId}"}/…</Code>，由 App Router 代理响应并放宽 CSP，
+            以便 iframe 内脚本与 chunk 正常执行。
+          </P>
+        </section>
+
+        <section id="e2b-path" className="scroll-mt-24">
+          <H2>E2B 路径</H2>
           <Pre>{`startDevServer(projectId)
 │
 ├── 1. 查 Supabase sandbox_id → 尝试重连已有沙箱
@@ -107,7 +161,11 @@ export default function PreviewPage() {
 
         <section id="rebuild" className="scroll-mt-24">
           <H2>增量重建</H2>
-          <P>修改完成后触发 <Code>rebuildDevServer</Code>，复用已有沙箱：</P>
+          <P>
+            <Code>storage</Code> 后端下，同一路由会触发{" "}
+            <Code>syncStaticSitePreview</Code>：重新静态导出并上传（指纹未变时可跳过）。
+            <Code>e2b</Code> 后端则复用沙箱进程并按需全量/热更新上传。
+          </P>
           <Pre>{`rebuildDevServer(projectId)
 ├── 连接已有沙箱（不重建，节省 30s+）
 ├── kill 旧的 serve 进程
@@ -116,8 +174,7 @@ export default function PreviewPage() {
 ├── next build
 └── 重启 serve`}</Pre>
           <Callout>
-            重建复用已有沙箱是关键优化。创建新沙箱需要 30 秒以上（模板初始化 + 依赖安装），
-            而重连只需几百毫秒。
+            下图主要为 <Code>e2b</Code> 路径；<Code>storage</Code> 路径无常驻 serve 进程，依赖指纹跳过重复导出上传。
           </Callout>
         </section>
 
@@ -138,7 +195,7 @@ export default function PreviewPage() {
             ))}
           </div>
           <P>
-            这个设计避免了每次生成都启动 E2B 沙箱的资源浪费，只有用户真正需要预览时才消耗沙箱资源。
+            E2B 模式下按需创建沙箱可避免无谓开销；Storage 模式依赖指纹跳过未变更的导出上传。
           </P>
         </section>
 

@@ -35,7 +35,7 @@ const TOC = [
   { id: "overview", label: "概览" },
   { id: "available", label: "可用技能" },
   { id: "injection", label: "注入流程" },
-  { id: "preselect", label: "批量预选" },
+  { id: "routing", label: "三条风格通路" },
   { id: "custom", label: "自定义技能" },
 ];
 
@@ -53,14 +53,16 @@ export default function SkillsPage() {
         <section id="overview" className="scroll-mt-24">
           <H2>概览</H2>
           <P>
-            技能文件存放在 <Code>public/skills/</Code> 目录下。用户在首页 prompt 输入框中
-            输入 <Code>/</Code> 触发技能菜单，选择后技能内容会被注入生成流程。
+            技能文件存放在 <Code>public/skills/</Code> 目录下（远不止文档示例中的四个；
+            前端通过 <Code>/api/skills</Code> 枚举）。用户在首页 prompt 输入框中输入{" "}
+            <Code>/</Code> 触发技能菜单，选择后可将内容作为用户意图的一部分注入生成流程。
           </P>
           <Pre>{`public/skills/
-├── minimal.md       # 极简风格
-├── bold.md          # 大胆风格
-├── glassmorphism.md # 玻璃拟态
-└── brutalist.md     # 野兽派`}</Pre>
+├── minimal.md
+├── bold.md
+├── glassmorphism.md
+├── brutalist.md
+└── …（其余路由级风格模板，随仓库扩展）`}</Pre>
           <P>
             每个文件是纯 Markdown，包含三个部分：视觉方向（Visual Direction）、
             组件风格（Component Style）、色调描述（Tone）。
@@ -103,26 +105,36 @@ export default function SkillsPage() {
           </Callout>
         </section>
 
-        <section id="preselect" className="scroll-mt-24">
-          <H2>批量预选</H2>
+        <section id="routing" className="scroll-mt-24">
+          <H2>三条风格通路</H2>
           <P>
-            除了用户手动注入的 styleGuide，系统还有一套内部的 skill 预选机制。
-            <Code>preselect_skills</Code> 步骤为每个 section 从候选列表中选择最合适的组件级 skill。
+            当前管道里与「风格」相关的逻辑分成三类，切勿混淆：
           </P>
+          <div className="mt-4 space-y-2">
+            {[
+              {
+                title: "用户 styleGuide（public/skills + / 菜单）",
+                body: "提交时写入 styleGuide，截断后主要注入 generate_project_design_system，避免撑爆 analyze prompt。",
+              },
+              {
+                title: "match_design_system_skill",
+                body: "并行于 plan_project：用 LLM 判断是否命中 ai 流程内置的 design-system 技能正文；命中则跳过生成步骤直接采用该 Markdown。",
+              },
+              {
+                title: "Hero 运行时组件 skill",
+                body: "仅在 page_implement_agent 启动前、且策略命中时为该页 discoverAndSelectSkill；正文进入该页 Agent 的 user 消息，用于 Hero 特效级指引。",
+              },
+            ].map(({ title, body }) => (
+              <div key={title} className="rounded-xl border border-white/8 bg-white/[0.02] px-5 py-4">
+                <p className="text-[13px] font-semibold text-foreground/90">{title}</p>
+                <p className="mt-1 text-[12px] leading-5 text-muted-foreground/75">{body}</p>
+              </div>
+            ))}
+          </div>
           <H3>菜单与菜谱分离</H3>
-          <Pre>{`// 选择阶段 — 只传 metadata（菜单）
-sections: [{
-  fileName: "HeroSection",
-  type: "hero",
-  intent: "...",
-  candidates: [{ id: "component.hero.impactful", notes: "..." }]
-}]
-
-// 生成阶段 — 加载完整 prompt（菜谱）
-const skillPrompt = loadSkillPrompt(skillId);`}</Pre>
           <P>
-            这个设计大幅减少了选择阶段的 token 消耗。对于 8 个 section 的项目，
-            原来需要 8 次串行 LLM 调用（每次 ~2s），现在合并为 1 次（~3s）。
+            运行时选型阶段尽量只传技能的 metadata / 短摘要；只有在确定选中后才读取完整 Markdown 正文，
+            以降低 LLM 往返与重复 token。内置 design-system 技能遵循同一原则。
           </P>
         </section>
 

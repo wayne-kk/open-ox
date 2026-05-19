@@ -41,13 +41,16 @@ function Callout({ type = "info", children }: { type?: "info" | "warn"; children
 }
 
 const TOOLS = [
-  { name: "read_file", color: "text-blue-400/80", bg: "bg-blue-500/10", desc: "读取文件完整内容" },
+  { name: "read_file", color: "text-blue-400/80", bg: "bg-blue-500/10", desc: "读取文件完整内容（支持行范围）" },
   { name: "search_code", color: "text-primary/80", bg: "bg-primary/10", desc: "ripgrep 全项目搜索" },
   { name: "list_dir", color: "text-primary/80", bg: "bg-primary/10", desc: "列出目录内容" },
   { name: "edit_file", color: "text-amber-400/80", bg: "bg-amber-500/10", desc: "精确字符串替换（old_string → new_string）" },
-  { name: "write_file", color: "text-amber-400/80", bg: "bg-amber-500/10", desc: "创建新文件" },
+  { name: "write_file", color: "text-amber-400/80", bg: "bg-amber-500/10", desc: "创建或覆盖文件" },
   { name: "generate_image", color: "text-fuchsia-400/80", bg: "bg-fuchsia-500/10", desc: "AI 生图写入 public/images（与生成流水线相同；仅代码修改 intent 暴露）" },
   { name: "run_build", color: "text-green-400/80", bg: "bg-green-500/10", desc: "执行 next build 验证变更" },
+  { name: "exec_shell", color: "text-cyan-400/80", bg: "bg-cyan-500/10", desc: "受限 shell（诊断与脚手架；受策略与白名单约束）" },
+  { name: "think", color: "text-slate-400/80", bg: "bg-slate-500/10", desc: "无副作用推理草稿，压缩进 reasoning 轨迹" },
+  { name: "revert_file", color: "text-rose-400/80", bg: "bg-rose-500/10", desc: "按快照回滚单个文件" },
 ];
 
 const TOC = [

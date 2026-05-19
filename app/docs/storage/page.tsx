@@ -68,19 +68,18 @@ export default function StoragePage() {
                        │ 文件路径引用
 ┌──────────────────────▼──────────────────────────────┐
 │              Supabase Storage                       │
-│  bucket: project-files                              │
-│  路径: {projectId}/{relativePath}                   │
-│  内容: 所有生成的 TSX、CSS、配置文件                │
+│  bucket: project-files — 源码树快照（project-files/{projectId}/…）     │
+│  bucket: site-previews — 静态导出预览（site-previews/p/{projectId}/…） │
 └──────────────────────┬──────────────────────────────┘
                        │ 恢复到本地
 ┌──────────────────────▼──────────────────────────────┐
 │              本地 sites/ 目录                       │
 │  sites/{projectId}/                                 │
-│  AI 引擎读写、E2B 沙箱上传的工作区                  │
+│  AI 读写、预览构建的工作区                          │
 └─────────────────────────────────────────────────────┘`}</Pre>
           <P>
-            本地文件系统是临时工作区，服务器重启后可能丢失。
-            Storage 是持久化层，确保项目文件跨 session 可恢复。
+            本地 <Code>sites/</Code> 丢失时，从 <Code>project-files</Code> 桶恢复源码；
+            iframe 静态预览由 <Code>site-previews</Code> 桶 + 应用内代理共同提供（见预览文档）。
           </P>
         </section>
 

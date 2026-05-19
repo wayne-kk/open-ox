@@ -43,17 +43,18 @@ export default function ModelsPage() {
           <H2>三层优先级</H2>
           <P>模型选择按以下优先级从高到低解析：</P>
           <Pre>{`// 优先级 1：步骤级覆盖（最高）
-setStepModel("generate_section", "gpt-5.2")
-→ 仅 generate_section 步骤使用 gpt-5.2
+setStepModel("page_implement_agent", "gpt-5.2")
 
 // 优先级 2：请求级覆盖
 setRuntimeModelId("gemini-3.1-pro-preview")
-→ 本次请求全程使用此模型（除非被步骤级覆盖）
 
 // 优先级 3：全局默认（最低）
 DEFAULT_MODEL = "gemini-3-flash-preview"
-→ 环境变量 OPENAI_MODEL 可覆盖`}</Pre>
-          <Pre>{`// 解析逻辑
+→ 环境变量 OPENAI_MODEL 可覆盖
+
+// Modify Agent 默认（可与生成不同）
+MODIFY_DEFAULT_MODEL = "claude-opus-4-6"  // 或由 MODIFY_MODEL 覆盖
+`}</Pre>
 function getModelForStep(stepName: string): ModelId {
   return getStepModel(stepName)  // 步骤级
       ?? getModelId();            // 请求级 → 全局默认
@@ -105,13 +106,16 @@ function getModelForStep(stepName: string): ModelId {
               </thead>
               <tbody className="divide-y divide-white/5">
                 {[
-                  ["analyze_project_requirement", "需求分析"],
-                  ["plan_project", "项目规划"],
-                  ["generate_project_design_system", "设计系统"],
-                  ["apply_project_design_tokens", "设计 Token"],
-                  ["generate_section", "组件生成"],
-                  ["compose_page", "页面组合"],
-                  ["repair_build", "构建修复"],
+                  ["analyze_project_requirement", "需求分析（Blueprint）"],
+                  ["infer_design_intent", "风格 / 技术关键词推断"],
+                  ["plan_project", "站点与页面规划"],
+                  ["match_design_system_skill", "内置设计系统技能匹配"],
+                  ["generate_project_design_system", "设计系统 Markdown（未命中 skill 时）"],
+                  ["apply_project_design_tokens", "globals.css Token"],
+                  ["architect_agent", "全局 layout / chrome"],
+                  ["page_implement_agent", "单页工具闭环实现"],
+                  ["preselect_skills", "Hero 等场景的内部 skill 选型（复用步骤 id）"],
+                  ["repair_build", "构建失败修复 Agent"],
                 ].map(([id, label]) => (
                   <tr key={id} className="hover:bg-white/[0.015]">
                     <td className="px-4 py-2.5 font-mono text-[11px] text-primary/80">{id}</td>
@@ -130,9 +134,9 @@ function getModelForStep(stepName: string): ModelId {
           </P>
           <div className="mt-4 space-y-2">
             {[
-              { steps: "analyze + plan + design_system", model: "强模型", reason: "需要深度理解用户意图和产品逻辑" },
-              { steps: "generate_section", model: "快模型", reason: "数量最多（N 个并行），速度优先" },
-              { steps: "repair_build", model: "强模型", reason: "Agent 工具循环，需要理解构建错误并精确修复" },
+              { steps: "analyze + infer + plan + design_system + architect", model: "强模型", reason: "理解与结构设计成本高，错误代价大" },
+              { steps: "page_implement_agent（多页并行）", model: "快模型或均衡模型", reason: "调用次数与迭代深度最大，需在质量与延迟间权衡" },
+              { steps: "repair_build", model: "强模型", reason: "需读懂编译日志并精确改文件" },
             ].map(({ steps, model, reason }) => (
               <div key={steps} className="rounded-lg border border-white/6 bg-white/[0.02] px-4 py-3">
                 <div className="flex items-center gap-3">
@@ -144,8 +148,8 @@ function getModelForStep(stepName: string): ModelId {
             ))}
           </div>
           <Callout>
-            对于 8 个 section 的项目，<Code>generate_section</Code> 步骤会并行发起 8 次 LLM 调用。
-            使用快模型（如 gemini-flash）可以将这个步骤从 ~40s 压缩到 ~15s。
+            多页场景下，每个 slug 各有一套 <Code>page_implement_agent</Code> 会话；将<strong>快模型</strong>配给该步骤通常比配给已移除的{" "}
+            <Code>generate_section</Code> 批量路径更能缩小墙钟时间。
           </Callout>
         </section>
 
@@ -155,12 +159,17 @@ function getModelForStep(stepName: string): ModelId {
             通过 <Code>model_configs</Code> 表可以添加任意 OpenAI-compatible 模型。
             添加后会出现在前端的模型选择器中。
           </P>
-          <Pre>{`// ModelConfig 接口
-interface ModelConfig {
-  id: string;           // 模型 ID（传给 API 的 model 字段）
-  displayName: string;  // 前端显示名称
-  contextWindow: number; // 上下文窗口大小
+          <Pre>{`interface ModelConfig {
+  id: string;
+  displayName: string;
+  contextWindow: number;
+  supportsThinking?: boolean; // 网关可按模型能力开启 reasoning
 }`}</Pre>
+          <P>
+            步骤级覆盖持久化在 <Code>step_model_configs</Code> 表（含可选{" "}
+            <Code>thinking_level</Code> 列），启动生成前由{" "}
+            <Code>loadStepModelsFromDB()</Code> 装载。
+          </P>
           <P>
             由于使用原生 fetch 而非 OpenAI SDK，只要提供商兼容 <Code>/chat/completions</Code> 接口，
             就可以无缝接入 — 包括 Gemini、Anthropic（via proxy）、本地 Ollama 等。

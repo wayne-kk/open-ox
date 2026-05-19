@@ -12,6 +12,19 @@ interface ChangeEntry {
 
 const CHANGELOG: ChangeEntry[] = [
   {
+    version: "v1.6",
+    date: "2026-05-19",
+    tag: "minor",
+    title: "文档与预览说明对齐当前实现",
+    body: "技术文档、首页文档索引与 README 已与代码一致：主路径为 Architect → page_implement_agent；设计系统前增加 match_design_system_skill；预览支持 local / storage（默认 dev）/ e2b 三种后端；修正构建修复轮次与模型步骤表等过时描述。",
+    items: [
+      "docs：流水线步骤含 validate_skill_prompts、await_images、typecheck_generated；移除已废弃的全局 preselect_skills / generate_section 主路径描述",
+      "docs：预览沙箱页补充 Storage + `/site-previews` 代理与 OPEN_OX_PREVIEW_BACKEND 选型",
+      "docs：Section 生成页改为 Page Implement Agent + Hero 运行时 skill 发现；设计系统页对齐并行编排与 token 写入方式",
+      "README：Next.js 16 / React 19，预览与 Storage 双 bucket 架构简述",
+    ],
+  },
+  {
     version: "v1.5",
     date: "2026-05-11",
     tag: "perf",

@@ -58,23 +58,24 @@ export default function SectionGenerationPage() {
         </p>
         <h1 className="text-3xl font-bold tracking-tight">Section 生成</h1>
         <p className="mt-3 text-[15px] leading-7 text-muted-foreground">
-          Section 是站点里可组合的最小 UI 单元：每个 section 对应一个 React 组件文件（例如{" "}
-          <Code>HeroSection.tsx</Code>）。本文说明从蓝图中的规格到落盘 TSX 的实现路径，对应流水线中的{" "}
-          <Code>generate_section</Code> 步骤。
+          站点 UI 的主路径已收敛为：单一 <Code>architect_agent</Code> 拟定全局 chrome，
+          再由每个页面的 <Code>page_implement_agent</Code> 工具闭环编写{" "}
+          <Code>page.tsx</Code> 及页面级组件。下文描述该路径及与之配套的 Hero skill 发现；
+          历史上的「逐文件 generate_section 批量步骤」不再作为主路径。
         </p>
 
         <section id="overview" className="scroll-mt-24">
           <H2>概览</H2>
           <P>
-            生成一条 section 的本质是：在已确定的<strong>设计系统</strong>、<strong>全局样式</strong>和<strong>项目语境</strong>下，
-            让模型输出<strong>单个文件的完整 TSX</strong>，并写入站点目录。核心实现集中在{" "}
-            <Code>ai/flows/generate_project/steps/generateSection</Code> 中的{" "}
-            <Code>stepGenerateSection</Code>。
-          </P>
-          <P>
-            输入侧，每个 section 携带 <Code>type</Code>、<Code>intent</Code>、<Code>contentHints</Code>、
-            关联角色 / 能力 / 任务流 ID，以及规划阶段写好的 <Code>designPlan</Code>（布局意图、视觉意图、交互意图、约束等）。
-            若规划未写入 <Code>designPlan</Code>，会用 <Code>buildDefaultSectionDesignPlan</Code> 从项目语境推导一份默认值，避免生成步骤缺参。
+            核心实现见{" "}
+            <Code>ai/flows/generate_project/runGenerateProject.ts</Code> 中的{" "}
+            <Code>generatePages</Code> →{" "}
+            <Code>ai/flows/generate_project/steps/pageImplementAgent.ts</Code> 内的{" "}
+            <Code>runPageImplementAgent</Code>。
+            <Code>plan_project</Code> 已为每页写入 <Code>pageDesignPlan</Code>（叙事、层级、约束），
+            Agent 以 design-system、预读的 <Code>layout.tsx</Code> / <Code>globals.css</Code>、目录树与用户旨意为上下文，
+            自主决定拆分哪些组件文件，并以工具调用落盘；收尾必须调用{" "}
+            <Code>page_implementation_complete</Code>。
           </P>
         </section>
 
@@ -94,85 +95,68 @@ export default function SectionGenerationPage() {
         <section id="orchestration" className="scroll-mt-24">
           <H2>编排与并行</H2>
           <P>
-            在写入设计 Token（<Code>apply_project_design_tokens</Code>）之后，流水线会先执行{" "}
-            <Code>preselect_skills</Code>：用<strong>单次批量</strong> LLM 调用为所有 section 选好风格技能 ID，
-            避免在每个 <Code>stepGenerateSection</Code> 里再各打一次选型电话。实现见{" "}
-            <Code>runGenerateProject.ts</Code> 中的 <Code>preselectSkillsForSections</Code>。
+            <Code>apply_project_design_tokens</Code> 与 <Code>architect_agent</Code> 必须<strong>先于</strong>
+            任意 <Code>page_implement_agent</Code> 完成，以避免 globals / layout 竞态。
+            全部页面的 Page Agent 在 Architect 结束后用 <Code>Promise.all</Code> 并行启动；
+            每页步骤名为 <Code>page_implement_agent:{"{slug}"}</Code>，拓扑与日志中可按 slug 区分。
           </P>
+          <H3>Hero 运行时 Skill</H3>
           <P>
-            所有待生成的 section（含 layout 与各页）被收集为一批 <Code>SectionBatchItem</Code>，通过{" "}
-            <Code>runSectionBatch</Code> 用 <Code>Promise.allSettled</Code> 并行调用 <Code>stepGenerateSection</Code>。
-            任一项失败会在聚合后抛出汇总错误，便于日志与制品记录逐步名{" "}
-            <Code>{"generate_section:{scope}:{fileName}"}</Code>。
+            当策略判定需要为首页 Hero 注入额外特效指引时，会在该页 Agent 启动前调用{" "}
+            <Code>discoverAndSelectSkill</Code>（内部候选来自技能清单 + 关键词 fallback），
+            仅将选中技能的<strong>正文</strong>注入该页 Agent 的 user 消息；这不是全局步骤，也不替代用户在前端选择的{" "}
+            <Code>styleGuide</Code>（后者走设计系统生成）。
           </P>
-          <Pre>{`// runGenerateProject.ts — 并行生成一批 section
-const results = await Promise.allSettled(
-  items.map((item) =>
-    stepGenerateSection({
-      designSystem,
-      projectContext: runtimeContext,
-      section: item.section,
-      outputFileRelative: item.outputFileRelative,
-      pageContext: item.pageContext,
-      sectionDesignBrief: item.sectionDesignBrief ?? "",
-    })
+          <Pre>{`// runGenerateProject.ts — 每页并行
+const pageOutcomes = await Promise.all(
+  blueprint.site.pages.map((page) =>
+    runPageImplementAgent({ page, designSystem, projectContext, heroSkillPrompt, ... })
   )
 );`}</Pre>
         </section>
 
         <section id="prompt" className="scroll-mt-24">
-          <H2>单次生成的 Prompt</H2>
+          <H2>单次页面的 Prompt</H2>
           <H3>System：分层拼接</H3>
           <P>
-            <Code>buildSystemPrompt</Code> 按顺序拼接：前端基座（<Code>frontend.md</Code>）、
-            section 通用规则（<Code>section.default.md</Code>）、按类型可选的 <Code>{"section.{type}.md"}</Code>（
-            由 <Code>selectSectionPromptId</Code> 按约定文件名是否存在决定，无则回退 default）、
-            <Code>tailwindMappingGuide</Code> 与 <Code>skillIntegrationContract</Code> 规则、选中技能的完整 Markdown、
-            项目级 <Code>loadGuardrail(&quot;project.consistency&quot;)</Code> 与 <Code>loadGuardrail(&quot;project.accessibility&quot;)</Code>、
-            能力增强片段（<Code>capabilityAssistIds</Code>，若流程启用）以及 <Code>outputTsx</Code> / <Code>framerMotionVariants</Code>。
-            逐步骤对照表与 skill 预选细节见{" "}
+            Page Implement Agent 的 system 由 <Code>frontend.md</Code>、
+            <Code>steps/pageImplementAgent.md</Code> 以及{" "}
+            <Code>shared/agentRuleBundles.ts</Code> 指定的{" "}
+            <Code>prompts/rules/*.md</Code>（<Code>tailwindMappingGuide</Code>、<Code>section.default</Code>、
+            <Code>outputTsx</Code> 等）顺序拼接。可按环境变量{" "}
+            <Code>PAGE_IMPLEMENT_AGENT_EXTRA_RULES</Code> 追加规则 id。
+          </P>
+          <H3>User：契约 + 任务</H3>
+          <P>
+            User 消息包含完整 <Code>design-system.md</Code>、序列化后的{" "}
+            <Code>pageDesignPlan</Code>、站点路由与项目语境，以及预先注入的只读快照：
+            当前 <Code>app/layout.tsx</Code>、<Code>app/globals.css</Code>、
+            <Code>components/</Code> 与 <Code>app/</Code> 的目录树摘要。
+            若存在 Hero skill 正文，则一并附加。详见{" "}
             <Link href="/docs/generate-project-trace" className="text-foreground underline underline-offset-4 hover:text-primary transition-colors">
               Prompt 拼装 Trace
             </Link>
             。
-          </P>
-          <H3>User：语境 + 任务</H3>
-          <P>
-            <Code>buildUserMessage</Code> 注入整份 <Code>design-system.md</Code>、当前 <Code>app/globals.css</Code>（并明确禁止重复定义其中已有类与 keyframes）、
-            产品范围与语言（要求用户可见文案与项目语言一致）、按 section 过滤后的角色 / 任务流 / 能力列表、
-            全站合法路由列表（导航只允许这些路径）、页面语境或「layout section」说明，以及 section 规格与完整{" "}
-            <Code>designPlan</Code> 字段。最后要求生成完整的 <Code>{"{fileName}.tsx"}</Code>，并强调以 design plan 为准。
           </P>
         </section>
 
         <section id="validation" className="scroll-mt-24">
           <H2>验证与重试</H2>
           <P>
-            模型返回后，<Code>extractContent(..., &quot;tsx&quot;)</Code> 抽出代码块，写入文件并执行 <Code>formatSiteFile</Code>。
-            随后 <Code>validateSectionExports</Code> 做轻量静态检查（非 TypeScript 编译）：
-          </P>
-          <ul className="mt-3 list-disc pl-5 text-[14px] leading-7 text-muted-foreground space-y-1">
-            <li>内容非空</li>
-            <li>存在与组件名一致的 <Code>export function/const/class Name</Code>，或 <Code>export default</Code></li>
-            <li><Code>return</Code> 后存在 JSX</li>
-          </ul>
-          <P>
-            未通过时最多自动重试 1 次：在 system 侧追加截断/缺 export 的修复提示，并提醒控制体积以避免再次截断。
-            仍失败则抛出错误，该 section 步骤记为 error。
+            Agent 工具写入的文件仍会经过统一的格式化（如 Prettier）；路由级错误主要由后续的{" "}
+            <Code>typecheck_generated</Code>、<Code>run_build</Code> 与 <Code>repair_build</Code> 捕获。
           </P>
           <Callout type="warn">
-            这里的验证刻意保持廉价，真正的类型与构建错误交给后续的 <Code>next build</Code> 与{" "}
-            <Code>repair_build</Code> 处理。
+            这里的验证主要由 Agent 自身与后续构建网关承担；不要在页面 Agent 内重复跑完整{" "}
+            <Code>next build</Code>（除非排查具体错误），全局验证由流水线统一调度。
           </Callout>
         </section>
 
         <section id="downstream" className="scroll-mt-24">
           <H2>下游组装</H2>
           <P>
-            Section 文件生成完毕后，<Code>compose_page</Code> 按页并行，把该页各 section 组件 import 并组合进{" "}
-            <Code>page.tsx</Code>。根 <Code>app/layout.tsx</Code> 与 <Code>components/chrome/**</Code>{" "}
-            由 <Code>architect_agent</Code> 在 page agent 启动前一次性决定并落盘（read-only 契约），
-            page agent 只读不改。因此 section 生成步骤只负责「单文件正确导出 + JSX」，不负责页面级胶水逻辑（由后续 LLM 步骤完成）。
+            Page Agent 负责目标路由文件及其拆出的组件；全局 shell 已由 Architect 锁定。
+            流水线在全部页面完成后执行依赖安装、可选范围类型检查与生产构建。
           </P>
           <P>
             更完整的步骤序号与并行关系见{" "}

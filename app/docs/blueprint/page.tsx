@@ -40,8 +40,9 @@ export default function BlueprintPage() {
         <h1 className="text-3xl font-bold tracking-tight">项目蓝图</h1>
         <p className="mt-3 text-[15px] leading-7 text-muted-foreground">
           <Code>ProjectBlueprint</Code> 是整个系统的核心数据结构。用户的一句话 prompt 经过
-          <Code>analyze_project_requirement</Code> 步骤后，被转化为这个结构化的蓝图，
-          后续所有步骤都以它为输入。
+          <Code>analyze_project_requirement</Code> 步骤后，被转化为这个结构化的蓝图；
+          风格关键词还可由并行的 <Code>infer_design_intent</Code> 补强并写入后续规划。
+          后续所有步骤都以归一化后的蓝图为输入。
         </p>
 
         <section id="structure" className="scroll-mt-24">
@@ -133,6 +134,11 @@ export default function BlueprintPage() {
           <Callout>
             <Code>fileName</Code> 会被转为 PascalCase 并加上 scope 前缀，
             最终生成如 <Code>home_HeroSection.tsx</Code>、<Code>layout_NavSection.tsx</Code> 的文件。
+          </Callout>
+          <Callout>
+            今日主路径里 <Code>analyze_project_requirement</Code> 与 <Code>infer_design_intent</Code>{" "}
+            并行执行：前者保证结构化蓝图，后者补充 mood / 技术关键词；最终在{" "}
+            <Code>normalizeBlueprint</Code> 之后合并进规划与设计系统输入。
           </Callout>
         </section>
 

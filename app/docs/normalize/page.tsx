@@ -81,6 +81,11 @@ export default function NormalizePage() {
             在 prompt 中反复强调"必须输出完整 JSON"会增加 token 消耗，但并不能完全消除这些问题。
             防御性解析比 prompt 工程更可靠。
           </Callout>
+          <Callout>
+            与结构化 Blueprint 并行执行的 <Code>infer_design_intent</Code> 产出自由文本设计意图；
+            流水线在规划完成后会把其中的 <Code>technicalKeywords</Code> 并入{" "}
+            <Code>experience.designIntent.keywords</Code>，以便下游 skill 路由获取 analyze JSON 未覆盖的信号。
+          </Callout>
         </section>
 
         <section id="three-formats" className="scroll-mt-24">

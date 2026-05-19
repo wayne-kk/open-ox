@@ -6,9 +6,9 @@ Unlike demo generators that output snippets, Open-OX ships a complete delivery p
 
 - requirement analysis and planning,
 - design-system synthesis,
-- section-level parallel code generation,
+- per-page **page implement agents** (tool loop) after a single **architect** pass,
 - build verification with auto-repair,
-- cloud preview in isolated E2B sandboxes,
+- preview via **static export to Storage + `/site-previews` proxy** (default in local dev when Storage env is configured), optional **per-site `next dev`**, or **E2B** sandboxes,
 - iterative modification via conversational agent loops.
 
 ## Why Open-OX
@@ -16,7 +16,7 @@ Unlike demo generators that output snippets, Open-OX ships a complete delivery p
 - **Production-oriented output**: generates real project files, not screenshots or pseudo-code.
 - **Transparent pipeline**: every stage is streamed and traceable in the studio UI.
 - **Modification-first workflow**: users keep iterating with natural language after initial generation.
-- **Preview reliability**: each project runs in isolated sandbox infrastructure for reproducible previews.
+- **Preview reliability**: static export previews avoid long-lived dev servers; optional E2B when `OPEN_OX_PREVIEW_BACKEND=e2b`.
 
 ## Core Capabilities
 
@@ -41,8 +41,8 @@ Unlike demo generators that output snippets, Open-OX ships a complete delivery p
 Browser (Studio UI)
    -> Next.js API Routes (SSE orchestration)
       -> AI Flows (generate_project / modify_project)
-      -> Supabase (project registry + storage)
-      -> E2B Sandboxes (build + preview runtime)
+      -> Supabase (project registry + Storage: `project-files` + `site-previews`)
+      -> Preview runtime: `/site-previews` proxy (storage) | local `next dev` | E2B sandboxes
 ```
 
 Important directories:
@@ -50,15 +50,15 @@ Important directories:
 - `ai/flows/generate_project`: end-to-end generation pipeline
 - `ai/flows/modify_project`: iterative agent-based modification pipeline
 - `app/studio`: build studio UI (topology, trace, modify conversation)
-- `lib/devServerManager.ts`: E2B preview orchestration
+- `lib/devServerManager.ts` + `lib/staticSitePreview.ts` + `lib/previewMode.ts`: preview backend selection (local / storage / e2b)
 - `sites/`: per-project generated code workspaces
 
 ## Tech Stack
 
-- **Framework**: Next.js (App Router), React, TypeScript
+- **Framework**: Next.js 16 (App Router), React 19, TypeScript
 - **Styling**: Tailwind CSS v4, shadcn/radix ecosystem
 - **Data**: Supabase (Postgres + Storage)
-- **Sandbox runtime**: E2B (optional; only if `OPEN_OX_PREVIEW_BACKEND=e2b`)
+- **Preview runtime**: Supabase bucket `site-previews` + in-app proxy (default in dev when Storage env is set), or `OPEN_OX_PREVIEW_BACKEND=local` / `e2b`
 - **LLM access**: OpenAI-compatible API interfaces
 
 ## Quick Start

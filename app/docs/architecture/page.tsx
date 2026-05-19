@@ -74,7 +74,7 @@ export default function ArchitecturePage() {
 
         <h1 className="text-3xl font-bold tracking-tight">系统架构</h1>
         <p className="mt-3 text-[15px] leading-7 text-muted-foreground">
-          基于 Next.js 15 的全栈 AI 流水线。无需独立后端 — API Routes、AI 编排和前端全部在同一个仓库中。
+          基于 Next.js 16 App Router 的全栈 AI 流水线。无需独立后端 — API Routes、AI 编排和前端全部在同一个仓库中。
         </p>
 
         {/* ── Overview ── */}
@@ -90,12 +90,12 @@ export default function ArchitecturePage() {
         ├── POST /api/projects      → 创建 DB 记录，返回 projectId
         ├── POST /api/ai            → 启动生成流（SSE）
         ├── POST /api/.../modify    → 启动修改流（SSE）
-        └── POST /api/.../preview   → 启动 E2B 沙箱
+        └── POST /api/.../preview   → 启动/刷新预览（后端随 OPEN_OX_PREVIEW_BACKEND 分支）
 
 服务端（Next.js API Routes）
   ├── AI 流水线（generate_project / modify_project）
-  ├── Supabase 客户端（projects 表 + Storage）
-  └── E2B SDK（云端沙箱管理）`}</Pre>
+  ├── Supabase（projects 表 + project-files / site-previews Storage）
+  └── 预览：`OPEN_OX_PREVIEW_BACKEND` → local | storage | e2b`}</Pre>
           <Callout>
             <Code>projectId</Code> 在 AI 流水线启动之前就已创建。用户可以在生成过程中关闭浏览器，
             重新进入时通过 DB 中的增量 buildSteps 恢复进度。
@@ -116,11 +116,11 @@ export default function ArchitecturePage() {
               </thead>
               <tbody className="divide-y divide-white/5">
                 {[
-                  ["框架", "Next.js 15 App Router", "SSR + API Routes 合一，无需独立后端"],
+                  ["框架", "Next.js 16 App Router", "SSR + API Routes 合一，无需独立后端"],
                   ["语言", "TypeScript 严格模式", "AI 生成代码的类型安全保障"],
                   ["样式", "Tailwind CSS v4 + shadcn/ui", "CSS 变量驱动主题，AI 可直接操作"],
                   ["数据库", "Supabase (PostgreSQL)", "托管 Postgres + Storage + 实时订阅"],
-                  ["沙箱", "E2B Cloud", "隔离的 Node 环境，支持 next build"],
+                  ["沙箱 / 预览", "local · Storage · E2B", "预览后端可选：本地 dev、静态导出+代理、或云端沙箱"],
                   ["LLM", "OpenAI-compatible API", "可切换 Gemini / GPT / 任意提供商"],
                 ].map(([layer, tech, why]) => (
                   <tr key={layer} className="hover:bg-white/[0.015]">
@@ -182,7 +182,7 @@ export default function ArchitecturePage() {
               { method: "DELETE", path: "/api/projects/[id]", desc: "删除项目及文件（仅所有者）" },
               { method: "POST", path: "/api/ai", desc: "启动生成流水线（SSE 流）" },
               { method: "POST", path: "/api/projects/[id]/modify", desc: "启动修改 Agent（SSE 流）" },
-              { method: "POST", path: "/api/projects/[id]/preview", desc: "启动 E2B 沙箱（首次）" },
+              { method: "POST", path: "/api/projects/[id]/preview", desc: "启动或刷新预览（local/storage/e2b 由环境决定；storage 模式下访客可取得静态 URL）" },
               { method: "PUT", path: "/api/projects/[id]/preview", desc: "修改后重建预览" },
               { method: "GET", path: "/api/models", desc: "获取可用 LLM 模型列表" },
               { method: "GET", path: "/api/skills", desc: "获取可用风格技能列表" },
@@ -313,8 +313,9 @@ Phase 4: VERIFY  — run_build 验证编译`}</Pre>
             </table>
           </div>
           <P>
-            生成的文件同时存储在本地文件系统（<Code>sites/{"{projectId}"}/</Code>）
-            和 Supabase Storage 中。当服务器重启导致本地文件丢失时，E2B 预览会从 Storage 恢复。
+            源码持久化在 Storage 桶 <Code>project-files</Code>；静态预览产物在{" "}
+            <Code>site-previews</Code>（由 <Code>/site-previews/…</Code> 代理访问）。
+            本地丢失时从 <Code>project-files</Code> 恢复到 <Code>sites/</Code> 后再构建预览。
           </P>
         </Section>
 
@@ -335,8 +336,8 @@ Phase 4: VERIFY  — run_build 验证编译`}</Pre>
               body: "asProjectBlueprint() 对每个字段做 normalize 并提供 fallback。LLM 输出不一致时不会导致流水线崩溃。",
             },
             {
-              title: "E2B 预览使用静态导出",
-              body: "next build + npx serve 启动较慢，但产出稳定 URL 且资源占用极低。next dev 需要为每个项目维持一个持久进程。",
+              title: "静态预览默认走 Storage（本地开发）",
+              body: "配置 Service Role 与 NEXT_PUBLIC_SITE_URL 且未指定 OPEN_OX_PREVIEW_BACKEND 时，本地默认与生产一致使用静态导出 + 代理，避免 Dev Server 与 CSP 差异。",
             },
           ].map(({ title, body }) => (
             <div key={title} className="mt-4 rounded-xl border border-white/8 bg-white/[0.02] px-5 py-4">
