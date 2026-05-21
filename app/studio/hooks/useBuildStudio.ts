@@ -48,6 +48,8 @@ export interface ConversationMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
+  /** User-attached screenshot (data URL) shown in the conversation stream */
+  imageDataUrl?: string | null;
   intentPayload?: IntentAgentTurn["yieldPayload"];
   /** Snapshot of tool/reasoning steps for this assistant turn (session only). */
   activityLog?: IntentProgressEvent[];
@@ -75,6 +77,10 @@ export interface BuildStudioState {
   handleUnlockInterruptedGeneration: () => Promise<void>;
   /** After unlock / recoverable failed: resume preserving checkpoint */
   handleContinueFromCheckpoint: () => Promise<void>;
+
+  /** Pasted screenshot for intent / generate dialogue (Studio). */
+  intentImage: string | null;
+  setIntentImage: (v: string | null) => void;
 
   // Model
   selectedModel: string;
@@ -153,7 +159,10 @@ function readStoredConversationMessages(projectId: string): ConversationMessage[
           Boolean(message) &&
           typeof message.id === "string" &&
           (message.role === "user" || message.role === "assistant") &&
-          typeof message.content === "string"
+          typeof message.content === "string" &&
+          (message.imageDataUrl === undefined ||
+            message.imageDataUrl === null ||
+            typeof message.imageDataUrl === "string")
       )
       .slice(-50);
   } catch {
@@ -239,6 +248,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
 
   const [modifyInstruction, setModifyInstruction] = useState("");
   const [modifyImage, setModifyImage] = useState<string | null>(null);
+  const [intentImage, setIntentImage] = useState<string | null>(null);
   const [modifying, setModifying] = useState(false);
   const [modifySteps, setModifySteps] = useState<ModifyStep[]>([]);
   const [modifyPlan, setModifyPlan] = useState<ModifyPlan | null>(null);
@@ -293,10 +303,12 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         const last = prev[prev.length - 1];
         const sameActivity =
           JSON.stringify(last?.activityLog ?? []) === JSON.stringify(message.activityLog ?? []);
+        const sameImage = (last?.imageDataUrl ?? null) === (message.imageDataUrl ?? null);
         if (
           last?.role === message.role &&
           last.content === message.content &&
-          sameActivity
+          sameActivity &&
+          sameImage
         ) {
           return prev;
         }
@@ -346,6 +358,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
 
   type ProjectData = {
     id: string; status: string; userPrompt: string; modelId?: string;
+    referenceImageDataUrl?: string | null;
     buildSteps?: unknown[]; generatedFiles?: string[]; blueprint?: unknown;
     verificationStatus?: string; logDirectory?: string; error?: string;
     totalDuration?: number;
@@ -369,11 +382,20 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     const intentSteps = steps.filter((s) => s.step === "intent_agent");
     const messages: ConversationMessage[] = [];
     const up = project.userPrompt?.trim();
+    const heroImage = project.referenceImageDataUrl?.trim() || null;
     if (up) {
       messages.push({
         id: `${project.id}-initial-user`,
         role: "user",
         content: project.userPrompt,
+        ...(heroImage ? { imageDataUrl: heroImage } : {}),
+      });
+    } else if (heroImage) {
+      messages.push({
+        id: `${project.id}-initial-user-image`,
+        role: "user",
+        content: "（参考截图）",
+        imageDataUrl: heroImage,
       });
     }
     intentSteps.forEach((step, i) => {
@@ -433,8 +455,17 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         storedConversation.length > 0
           ? storedConversation
           : [
-            ...(project.userPrompt
-              ? [{ id: `${project.id}-initial-user`, role: "user" as const, content: project.userPrompt }]
+            ...(project.userPrompt?.trim() || project.referenceImageDataUrl?.trim()
+              ? [
+                  {
+                    id: `${project.id}-initial-user`,
+                    role: "user" as const,
+                    content: project.userPrompt?.trim() ? project.userPrompt : "（参考截图）",
+                    ...(project.referenceImageDataUrl?.trim()
+                      ? { imageDataUrl: project.referenceImageDataUrl.trim() }
+                      : {}),
+                  },
+                ]
               : []),
             {
               id: `${project.id}-awaiting-assistant`,
@@ -637,25 +668,42 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     setPreviewUrl(null);
     setPreviewState("idle");
 
+    const capturedIntentImage = intentImage;
     const explicitInput = (messageOverride ?? input).trim();
-    let outboundInput = explicitInput;
-    let displayPrompt = outboundInput;
-    if (!displayPrompt && projectId) {
+    let textForApi = explicitInput;
+    let displayPrompt = explicitInput;
+    if (!textForApi && !capturedIntentImage && projectId) {
       try {
         const r = await fetch(`/api/projects/${projectId}`);
-        if (r.ok) { const p = await r.json(); displayPrompt = p.userPrompt ?? ""; }
-      } catch { /* ignore */ }
+        if (r.ok) {
+          const p = await r.json();
+          const fromDb = (p.userPrompt ?? "").trim();
+          textForApi = fromDb;
+          displayPrompt = fromDb;
+        }
+      } catch {
+        /* ignore */
+      }
     }
-    if (!outboundInput) outboundInput = displayPrompt.trim();
-    setLastRunInput(displayPrompt || null);
+    setLastRunInput(displayPrompt || (capturedIntentImage ? "（参考截图）" : null));
     if (explicitInput) {
-      appendConversationMessage({ role: "user", content: outboundInput });
+      appendConversationMessage({
+        role: "user",
+        content: explicitInput,
+        imageDataUrl: capturedIntentImage ?? undefined,
+      });
       setInput("");
+    } else if (capturedIntentImage) {
+      appendConversationMessage({
+        role: "user",
+        content: "（参考截图）",
+        imageDataUrl: capturedIntentImage,
+      });
     }
 
     try {
       await runBuildSite(
-        outboundInput,
+        textForApi,
         {
           onIntentTurn: (turn) => {
             setIntentAgent(turn);
@@ -741,6 +789,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         {
           model: selectedModel,
           ...(projectId ? { projectId } : {}),
+          ...(capturedIntentImage ? { imageBase64: capturedIntentImage } : {}),
         }
       );
     } catch (err) {
@@ -751,6 +800,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       }
     } finally {
       sseActiveRef.current = false;
+      if (capturedIntentImage) setIntentImage(null);
       // Loading is usually stopped by onDone/onError to avoid UI lag after final SSE event.
       setLoading(false);
     }
@@ -1288,6 +1338,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     recoveryUnlocking,
     handleUnlockInterruptedGeneration,
     handleContinueFromCheckpoint,
+    intentImage, setIntentImage,
     selectedModel, setSelectedModel, availableModels,
     projectId, setProjectId, projectLoading,
     rightPanel, setRightPanel,

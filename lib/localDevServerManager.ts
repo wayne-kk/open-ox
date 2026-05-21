@@ -139,6 +139,18 @@ function previewBindHost(): string {
 }
 
 /**
+ * `OPEN_OX_STATIC_BASE_PATH` is only for Storage static-export builds (`next build`).
+ * If it is present in the **host** process env (shell export, shared `.env`, etc.), spawning `next dev` for a
+ * generated site makes `sites/template/next.config.ts` apply `basePath` while preview URLs stay at `/` —
+ * Chrome reports ERR_TOO_MANY_REDIRECTS.
+ */
+function envForLocalPreviewDevServer(): NodeJS.ProcessEnv {
+  const env = { ...process.env, NODE_ENV: "development" } as Record<string, string | undefined>;
+  delete env.OPEN_OX_STATIC_BASE_PATH;
+  return env as NodeJS.ProcessEnv;
+}
+
+/**
  * Prefer the same loopback spelling as Studio (`NEXT_PUBLIC_SITE_URL`), so the primary document hostname
  * often matches how users open Open-Ox. Child `allowedDevOrigins` still lists both localhost and 127.0.0.1.
  */
@@ -435,7 +447,7 @@ function startNextDevAndWait(
     const child = spawn("npx", ["next", "dev", "-H", previewBindHost(), "-p", String(port)], {
       cwd: projectDir,
       stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, NODE_ENV: "development" },
+      env: envForLocalPreviewDevServer(),
       shell,
     });
     let settled = false;

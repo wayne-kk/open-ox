@@ -73,6 +73,9 @@ export interface InformationArchitecture {
 /** PlannedSectionSpec is now identical to SectionSpec — kept as alias for downstream compat. */
 export type PlannedSectionSpec = SectionSpec;
 
+/** How an attached screenshot should influence generation (from user text + presence of image). */
+export type ScreenshotIntentMode = "none" | "extract_inspiration" | "replicate_layout";
+
 /** Scoring metadata for hero/component skill picker (LLM-assisted selection). */
 export type ComponentSkillScore = {
   id: string;
@@ -96,6 +99,10 @@ export type PageAgentProjectContext = {
     journeyStage: string;
   }>;
   designKeywords: string[];
+  /** When set, page/architect agents receive the same screenshot for layout-faithful implementation. */
+  referenceScreenshotDataUrl?: string | null;
+  /** Resolved from user wording when a reference image is present; drives screenshot guardrail + hero skill policy. */
+  screenshotIntentMode?: ScreenshotIntentMode;
 };
 
 export type PageAgentPageContext = {

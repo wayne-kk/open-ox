@@ -381,3 +381,42 @@ modified: '2026-04-17T09:50:57.141Z'
       - Broken grid
       - Emoji decoration
       - More is more
+
+  - name: apple
+    keywords:
+      - premium-luxury
+      - media-consumer-tech
+      - consumer-electronics
+      - photography-first
+      - minimalist-ui
+      - single-accent-blue
+      - light-dark-tile-rhythm
+      - sf-pro-typography
+      - pill-cta
+      - no-gradients-low-chrome
+
+  - name: bmw
+    keywords:
+      - premium-luxury
+      - automotive
+      - corporate-automotive
+      - engineered-precision
+      - single-accent-bmw-blue
+      - rectangular-zero-radius-ui
+      - dark-hero-light-canvas-contrast
+      - bmw-type-next-700-300-contrast
+      - model-card-grid
+      - no-shadow-photography-depth
+
+  - name: airbnb
+    keywords:
+      - e-commerce-retail
+      - travel-marketplace
+      - consumer-lifestyle
+      - warm-friendly
+      - photography-led
+      - single-accent-rausch
+      - pill-search-bar
+      - rounded-cards
+      - airy-whitespace
+      - soft-single-elevation

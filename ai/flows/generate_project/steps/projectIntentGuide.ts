@@ -1,5 +1,6 @@
 import { composePromptBlocks, loadGuardrail, loadStepPrompt } from "../shared/files";
-import { callLLMWithMeta, extractJSON } from "../shared/llm";
+import { callLLMWithMetaUserContent, extractJSON } from "../shared/llm";
+import { buildUserVisionContent, visionTraceUserLabel } from "../shared/userVisionContent";
 import { lfPlain, LfPlain } from "@/lib/observability/langfuseGenerationCatalog";
 import { stepTraceFromLlmCompletion } from "../shared/llmTrace";
 import type { ProjectIntentGuideResult, StepTrace } from "../types";
@@ -85,7 +86,8 @@ export function buildEffectiveUserPromptForGeneration(userInput: string, appendi
 }
 
 export async function stepProjectIntentGuide(
-  userInput: string
+  userInput: string,
+  options?: { imageBase64?: string | null }
 ): Promise<ProjectIntentGuideResult> {
   const model = getModelForStep("project_intent_guide");
   const systemPrompt = composePromptBlocks([
@@ -93,11 +95,14 @@ export async function stepProjectIntentGuide(
     loadGuardrail("outputJson"),
   ]);
 
-  const meta = await callLLMWithMeta(systemPrompt, userInput, 0.45, undefined, model, {
+  const userContent = buildUserVisionContent(userInput, options?.imageBase64 ?? null);
+  const traceLabel = visionTraceUserLabel(userInput, Boolean(options?.imageBase64?.trim()));
+
+  const meta = await callLLMWithMetaUserContent(systemPrompt, userContent, 0.45, undefined, model, {
     langfuseName: lfPlain(LfPlain.projectIntentGuide),
   });
   const raw = meta.content;
-  const trace: StepTrace = stepTraceFromLlmCompletion(systemPrompt, userInput, meta);
+  const trace: StepTrace = stepTraceFromLlmCompletion(systemPrompt, traceLabel, meta);
 
   let parsed: unknown;
   try {

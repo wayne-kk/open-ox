@@ -223,6 +223,10 @@ export async function executeGenerationRun(args: {
     let persistTail: Promise<void> = Promise.resolve();
 
     const projectForLiveSteps = await getProject(admin, projectId);
+    const resolvedReferenceScreenshot =
+      (typeof payload.initialImageBase64 === "string" && payload.initialImageBase64.trim()
+        ? payload.initialImageBase64.trim()
+        : null) ?? projectForLiveSteps?.referenceImageDataUrl?.trim() ?? null;
     const intentBaseSteps: BuildStep[] = ((projectForLiveSteps?.buildSteps ?? []) as BuildStep[]).filter(
       (s) => s.step === "intent_agent"
     );
@@ -420,6 +424,7 @@ export async function executeGenerationRun(args: {
           useDatabasePrompts,
           checkpoint,
           enableIntentGuide: payload.enableIntentGuide !== false,
+          userReferenceImageBase64: resolvedReferenceScreenshot ?? undefined,
           langfuseUserId: requestingUserId,
           langfuseSessionId: langfuseSessionKey,
           langfuseTraceTags: ["route:generation_worker"],
@@ -428,7 +433,10 @@ export async function executeGenerationRun(args: {
             retry: retryProjectId != null,
             preCreatedProjectId: preCreatedProjectId != null,
           },
-          langfuseTraceInput: { userPrompt: effectivePrompt },
+          langfuseTraceInput: {
+            userPrompt: effectivePrompt,
+            hasReferenceScreenshot: Boolean(resolvedReferenceScreenshot),
+          },
         })
     );
 

@@ -327,6 +327,8 @@ export function BuildConversation({
     modifyError,
     pendingModifyInstruction,
     pendingModifyImage,
+    intentImage,
+    setIntentImage,
 }: BuildStudioState) {
     const chatRef = useRef<HTMLDivElement>(null);
     const [slashHint, setSlashHint] = useState<string | null>(null);
@@ -463,7 +465,19 @@ export function BuildConversation({
                             <div className={message.role === "assistant" ? "mt-2 space-y-3" : "space-y-3"}>
                                 <div className="text-[13px] leading-7 text-foreground">
                                     {message.role === "user" ? (
-                                        <pre className="whitespace-pre-wrap font-body">{message.content}</pre>
+                                        <>
+                                            {message.imageDataUrl ? (
+                                                <div className="mb-3">
+                                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                    <img
+                                                        src={message.imageDataUrl}
+                                                        alt="用户参考截图"
+                                                        className="max-h-48 max-w-full rounded-xl border border-white/10 object-contain"
+                                                    />
+                                                </div>
+                                            ) : null}
+                                            <pre className="whitespace-pre-wrap font-body">{message.content}</pre>
+                                        </>
                                     ) : (
                                         <StudioMessageMarkdown content={message.content} />
                                     )}
@@ -924,14 +938,45 @@ export function BuildConversation({
                 ) : (
                     /* Intent / generate mode */
                     <div className="rounded-[20px] border border-white/10 bg-black/25 p-4">
+                        {intentImage && (
+                            <div className="mb-2 flex items-center gap-2">
+                                <div className="relative">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img src={intentImage} alt="intent reference" className="h-16 w-24 rounded-lg object-cover border border-white/10" />
+                                    <button
+                                        type="button"
+                                        onClick={() => setIntentImage(null)}
+                                        className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-background border border-white/20 text-muted-foreground hover:text-foreground text-[10px]"
+                                        aria-label="移除截图"
+                                    >
+                                        ×
+                                    </button>
+                                </div>
+                                <span className="font-mono text-[10px] text-muted-foreground/60">Intent 附图</span>
+                            </div>
+                        )}
                         <textarea
                             rows={2}
                             disabled={loading}
                             className="w-full resize-none border-0 bg-transparent px-1 py-1 font-body text-[14px] leading-7 text-foreground outline-none placeholder:text-white/50 max-h-[180px] overflow-y-auto scrollbar-hidden disabled:opacity-50"
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
+                            onPaste={(e) => {
+                                const items = Array.from(e.clipboardData.items);
+                                const imageItem = items.find((item) => item.type.startsWith("image/"));
+                                if (imageItem) {
+                                    e.preventDefault();
+                                    const file = imageItem.getAsFile();
+                                    if (!file) return;
+                                    const reader = new FileReader();
+                                    reader.onload = () => {
+                                        if (typeof reader.result === "string") setIntentImage(reader.result);
+                                    };
+                                    reader.readAsDataURL(file);
+                                }
+                            }}
                             onKeyDown={(e) => {
-                                if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !loading && input.trim()) {
+                                if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !loading && (input.trim() || intentImage)) {
                                     e.preventDefault();
                                     void handleRun();
                                 }
@@ -952,7 +997,7 @@ export function BuildConversation({
                             <button
                                 type="button"
                                 onClick={() => void handleRun()}
-                                disabled={loading || !input.trim()}
+                                disabled={loading || (!input.trim() && !intentImage)}
                                 className="defi-button flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 <Send className="h-4 w-4" />

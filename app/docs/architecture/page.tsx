@@ -95,7 +95,7 @@ export default function ArchitecturePage() {
 服务端（Next.js API Routes）
   ├── AI 流水线（generate_project / modify_project）
   ├── Supabase（projects 表 + project-files / site-previews Storage）
-  └── 预览：`OPEN_OX_PREVIEW_BACKEND` → local | storage | e2b`}</Pre>
+  └── 预览：OPEN_OX_PREVIEW_BACKEND env → local | storage | e2b`}</Pre>
           <Callout>
             <Code>projectId</Code> 在 AI 流水线启动之前就已创建。用户可以在生成过程中关闭浏览器，
             重新进入时通过 DB 中的增量 buildSteps 恢复进度。

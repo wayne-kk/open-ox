@@ -3,7 +3,7 @@ import { executeSystemTool } from "@/ai/tools";
 import type { ToolResult } from "@/ai/tools";
 import { chatCompletion } from "./gateway";
 import { throwClassifiedLLMError } from "./errorClassifier";
-import type { AgentToolCallRecord, ChatMessage } from "./types";
+import type { AgentToolCallRecord, ChatMessage, ChatMessageContent } from "./types";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { lfToolAgentRound } from "@/lib/observability/langfuseGenerationCatalog";
 
@@ -29,6 +29,8 @@ function resolveToolLoopPhase(
 export async function callLLMWithTools(params: {
   systemPrompt: string;
   userMessage: string;
+  /** When set, used as the first user turn instead of `userMessage` (for vision). */
+  userContent?: ChatMessageContent;
   tools: ChatCompletionTool[];
   temperature?: number;
   maxIterations?: number;
@@ -49,6 +51,7 @@ export async function callLLMWithTools(params: {
   const {
     systemPrompt,
     userMessage,
+    userContent,
     tools,
     temperature = 0.1,
     maxIterations = 8,
@@ -56,9 +59,10 @@ export async function callLLMWithTools(params: {
   } = params;
   const model = params.model || getModelId();
   let activeTools = tools;
+  const firstUserContent = userContent !== undefined ? userContent : userMessage;
   const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
-    { role: "user", content: userMessage },
+    { role: "user", content: firstUserContent },
   ];
   const toolCalls: AgentToolCallRecord[] = [];
   const emit = params.onMessage;

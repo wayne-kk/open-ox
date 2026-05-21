@@ -22,6 +22,8 @@ import { getModelForStep, getThinkingLevelForStep } from "@/lib/config/models";
 import { slugToPagePath } from "../shared/paths";
 import type { PlannedPageBlueprint, StepTrace, PageAgentProjectContext, BuildStep } from "../types";
 import { resolvePageImplementAgentRuleIds } from "../shared/agentRuleBundles";
+import { buildUserVisionContent } from "../shared/userVisionContent";
+import { screenshotGuardrailIdFromContext } from "../shared/screenshotIntentMode";
 
 export const PAGE_IMPLEMENTATION_COMPLETE = "page_implementation_complete";
 
@@ -215,15 +217,24 @@ ${heroSkillPrompt}`
 
 Do not invent extra top-level routes beyond this page.`;
 
+  const refShot = projectContext.referenceScreenshotDataUrl ?? null;
+  const refGuardId = screenshotGuardrailIdFromContext(
+    projectContext.screenshotIntentMode,
+    Boolean(refShot?.trim())
+  );
   const systemPrompt = composePromptBlocks([
     loadSystem("frontend"),
     loadStepPrompt("pageImplementAgent"),
+    ...(refGuardId ? [loadGuardrail(refGuardId)] : []),
     ...resolvePageImplementAgentRuleIds().map(loadGuardrail),
   ]);
 
   const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
-    { role: "user", content: userMessage },
+    {
+      role: "user",
+      content: buildUserVisionContent(userMessage, refShot),
+    },
   ];
 
   const { executor: imageExecutor, pendingImages } = createImageExecutor(

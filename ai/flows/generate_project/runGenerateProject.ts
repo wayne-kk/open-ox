@@ -61,6 +61,10 @@ import type { PendingImage } from "../../tools/system/generateImageTool";
 import { awaitPendingImages } from "../../tools/system/generateImageTool";
 import type { CheckpointResult } from "./shared/checkpoint";
 import { resetSectionTscCache } from "./shared/tsxDiagnostics";
+import {
+  resolveScreenshotIntentMode,
+  screenshotGuardrailIdForMode,
+} from "./shared/screenshotIntentMode";
 
 function getFileExtension(path: string, fallback = "txt"): string {
   const match = path.match(/\.([a-zA-Z0-9]+)$/);
@@ -268,8 +272,19 @@ async function runArchitectStep(params: {
   logger: StepLogger;
   trajectoryCollector?: import("./trajectoryCollector").GenerateTrajectoryCollector;
   onStep?: (step: BuildStep) => void;
+  referenceScreenshotDataUrl?: string | null;
+  screenshotGuardrailId?: string | null;
 }): Promise<{ files: string[] }> {
-  const { blueprint, designSystem, artifactLogger, logger, trajectoryCollector, onStep } = params;
+  const {
+    blueprint,
+    designSystem,
+    artifactLogger,
+    logger,
+    trajectoryCollector,
+    onStep,
+    referenceScreenshotDataUrl,
+    screenshotGuardrailId,
+  } = params;
   const onMessage = trajectoryCollector?.createEpisodeCollector(ARCHITECT_AGENT_STEP);
 
   const outcome = await logger.timed(
@@ -278,6 +293,8 @@ async function runArchitectStep(params: {
       runArchitectAgent({
         blueprint,
         designSystem,
+        referenceScreenshotDataUrl: referenceScreenshotDataUrl ?? null,
+        screenshotGuardrailId: screenshotGuardrailId ?? null,
         onMessage,
         onStep,
       }),
@@ -343,7 +360,13 @@ async function generatePages(params: {
             async () => {
               let heroSkillIdInner: string | null = null;
               let heroSkillPromptInner: string | undefined;
-              if (shouldOfferHeroSkillForAgentPage(page, runtimeContext.rawUserInput)) {
+              const screenshotBlocksHeroSkill =
+                Boolean(runtimeContext.referenceScreenshotDataUrl?.trim()) &&
+                runtimeContext.screenshotIntentMode === "replicate_layout";
+              if (
+                !screenshotBlocksHeroSkill &&
+                shouldOfferHeroSkillForAgentPage(page, runtimeContext.rawUserInput)
+              ) {
                 const virtualHero = buildVirtualHeroSectionForSkillSelection(page);
                 const sel = await discoverAndSelectSkill(
                   virtualHero,
@@ -526,6 +549,8 @@ export interface RunGenerateProjectOptions {
   langfuseTraceMetadata?: Record<string, unknown>;
   /** When set, replaces the default trace `input` snapshot for the root observation. */
   langfuseTraceInput?: unknown;
+  /** When set, passed into `project_intent_guide` vision (direct /api/ai or worker). */
+  userReferenceImageBase64?: string | null;
 }
 
 async function ensureLangfuseGenerateTrace<T>(
@@ -646,7 +671,9 @@ async function runGenerateProjectInner(
     if (options.enableIntentGuide !== false && !cp?.skipAnalyze) {
       logger.startStep("project_intent_guide");
       const intentResult = await withLangfuseSpan(LfSpanGen.intentGuide, () =>
-        stepProjectIntentGuide(userInput)
+        stepProjectIntentGuide(userInput, {
+          imageBase64: options.userReferenceImageBase64 ?? null,
+        })
       );
       logger.logStep(
         "project_intent_guide",
@@ -684,6 +711,13 @@ async function runGenerateProjectInner(
     }
 
     // ── Step: analyze_project_requirement ─────────────────────────────────
+    const referenceScreenshot = options.userReferenceImageBase64?.trim() || null;
+    const screenshotIntentMode = resolveScreenshotIntentMode(
+      effectiveUserInput,
+      Boolean(referenceScreenshot)
+    );
+    const screenshotGuardrailId = screenshotGuardrailIdForMode(screenshotIntentMode);
+
     let rawBlueprint!: ProjectBlueprint;
     let inferredDesignIntent: DesignIntentResult | null = null;
 
@@ -696,7 +730,11 @@ async function runGenerateProjectInner(
       } else {
         inferredDesignIntent = await logger.timed(
           "infer_design_intent",
-          () => stepInferDesignIntent(effectiveUserInput),
+          () =>
+            stepInferDesignIntent(effectiveUserInput, {
+              referenceImageBase64: referenceScreenshot,
+              screenshotGuardrailId,
+            }),
           (r) => ({ detail: r.text.slice(0, 80), trace: r.trace })
         );
         await persistTextArtifact(artifactLogger, "infer_design_intent", "output", inferredDesignIntent.text, "md");
@@ -706,16 +744,23 @@ async function runGenerateProjectInner(
         logger.startStep("analyze_project_requirement");
         logger.startStep("infer_design_intent");
         const [analyzeResult, inferResult] = await Promise.all([
-          stepAnalyzeProjectRequirement(effectiveUserInput, (name, args, result) => {
-            onStep?.({
-              step: `tool_call:${name}`,
-              status: "ok",
-              detail: JSON.stringify({ tool: name, args, result: result.slice(0, 500) }),
-              timestamp: Date.now(),
-              duration: 0,
-            });
+          stepAnalyzeProjectRequirement(
+            effectiveUserInput,
+            (name, args, result) => {
+              onStep?.({
+                step: `tool_call:${name}`,
+                status: "ok",
+                detail: JSON.stringify({ tool: name, args, result: result.slice(0, 500) }),
+                timestamp: Date.now(),
+                duration: 0,
+              });
+            },
+            { referenceImageBase64: referenceScreenshot, screenshotGuardrailId }
+          ),
+          stepInferDesignIntent(effectiveUserInput, {
+            referenceImageBase64: referenceScreenshot,
+            screenshotGuardrailId,
           }),
-          stepInferDesignIntent(effectiveUserInput),
         ]);
         logger.logStep(
           "analyze_project_requirement",
@@ -879,6 +924,10 @@ async function runGenerateProjectInner(
     result.blueprint = blueprint;
     const runtimeContext = buildProjectRuntimeContext(blueprint);
     runtimeContext.rawUserInput = effectiveUserInput;
+    runtimeContext.screenshotIntentMode = screenshotIntentMode;
+    if (referenceScreenshot) {
+      runtimeContext.referenceScreenshotDataUrl = referenceScreenshot;
+    }
     appendGeneratedFiles(result, ["design-system.md", "project-plan.json"]);
 
     // ── Step: apply_project_design_tokens, then UI generation (sequential) ──
@@ -935,6 +984,8 @@ async function runGenerateProjectInner(
           logger,
           trajectoryCollector,
           onStep,
+          referenceScreenshotDataUrl: referenceScreenshot,
+          screenshotGuardrailId,
         })
       );
       appendGeneratedFiles(result, architectResult.files);

@@ -101,6 +101,11 @@ export async function POST(req: Request) {
     const kind: "new" | "retry" | "resume" =
       retryProjectId != null ? (resumeFromCheckpoint ? "resume" : "retry") : "new";
 
+    const initialImage =
+      typeof body.imageBase64 === "string" && body.imageBase64.trim()
+        ? body.imageBase64.trim()
+        : undefined;
+
     const payload: GenerationRunPayloadBody = {
       requestingUserId: user.id,
       effectivePrompt,
@@ -115,6 +120,7 @@ export async function POST(req: Request) {
         ? { langfuseSessionId: body.langfuseSessionId }
         : {}),
       useDatabasePrompts: false,
+      ...(initialImage ? { initialImageBase64: initialImage } : {}),
     };
 
     const { runId, attached } = await enqueueGenerationJob({

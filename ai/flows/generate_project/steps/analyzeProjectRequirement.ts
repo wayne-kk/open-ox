@@ -1,5 +1,6 @@
-import { composePromptBlocks, loadStepPrompt } from "../shared/files";
+import { composePromptBlocks, loadGuardrail, loadStepPrompt } from "../shared/files";
 import { callLLMWithTools, extractJSON } from "../shared/llm";
+import { buildUserVisionContent, visionTraceUserLabel } from "../shared/userVisionContent";
 import { LfToolPhase } from "@/lib/observability/langfuseGenerationCatalog";
 import { webSearchTool, executeWebSearch } from "../../../tools/system/webSearchTool";
 import {
@@ -17,16 +18,33 @@ import { getModelForStep } from "@/lib/config/models";
 
 export async function stepAnalyzeProjectRequirement(
   userInput: string,
-  onToolCall?: (name: string, args: Record<string, unknown>, result: string) => void
+  onToolCall?: (name: string, args: Record<string, unknown>, result: string) => void,
+  options?: {
+    referenceImageBase64?: string | null;
+    /** When set with a reference image, selects screenshot handling rule (replicate vs extract). */
+    screenshotGuardrailId?: string | null;
+  }
 ): Promise<{ blueprint: ProjectBlueprint; trace: StepTrace }> {
+  const hasRef = Boolean(options?.referenceImageBase64?.trim());
+  const screenshotGr =
+    hasRef && options?.screenshotGuardrailId?.trim()
+      ? options.screenshotGuardrailId.trim()
+      : hasRef
+        ? "screenshotLayoutFidelity"
+        : null;
   const model = getModelForStep("analyze_project_requirement");
   const systemPrompt = composePromptBlocks([
     loadStepPrompt("analyzeProjectRequirement"),
+    ...(screenshotGr ? [loadGuardrail(screenshotGr)] : []),
   ]);
+
+  const userContent = buildUserVisionContent(userInput, options?.referenceImageBase64 ?? null);
+  const traceUserLabel = visionTraceUserLabel(userInput, hasRef);
 
   const { content: raw, toolCalls } = await callLLMWithTools({
     systemPrompt,
     userMessage: userInput,
+    userContent,
     tools: [referenceSiteDigestTool, fetchReferencePageTool, webSearchTool],
     temperature: 0.5,
     maxIterations: 8,
@@ -59,7 +77,7 @@ export async function stepAnalyzeProjectRequirement(
       llmCall: {
         model,
         systemPrompt,
-        userMessage: userInput,
+        userMessage: traceUserLabel,
         rawResponse: raw,
       },
       output: {

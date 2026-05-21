@@ -18,7 +18,16 @@ const nextConfig: NextConfig = {
    * without outputFileTracingIncludes, `.next/standalone/node_modules` may omit playwright.
    */
   outputFileTracingIncludes: {
-    "/*": ["node_modules/playwright/**/*", "node_modules/playwright-core/**/*"],
+    /**
+     * LLM prompts + design-system `skills.yaml` are read at runtime via `fs` + `process.cwd()` (see
+     * `matchDesignSystemSkill`). Standalone tracing does not infer these paths; include them explicitly
+     * or Docker/production may ship a build where catalog is missing or stale.
+     */
+    "/*": [
+      "node_modules/playwright/**/*",
+      "node_modules/playwright-core/**/*",
+      "ai/flows/generate_project/prompts/skills/**/*",
+    ],
   },
   serverExternalPackages: ["playwright", "playwright-core"],
   async redirects() {

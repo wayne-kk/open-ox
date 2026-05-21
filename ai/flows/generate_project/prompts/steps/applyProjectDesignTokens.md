@@ -51,6 +51,10 @@ Do not output JSON, do not output diffs, and do not provide any explanation outs
     color: theme(--color-foreground);
     font-family: theme(--font-body);
   }
+  /* Example: transitions live on :root → reference with var(), not theme() */
+  .interaction-surface {
+    transition: var(--transition-pop);
+  }
 }
 
 /* 5. @keyframes — referenced by @theme animations */
@@ -102,6 +106,11 @@ Tailwind v4 `@theme` tokens **automatically** generate utility classes. You MUST
 - **Do not** put custom `--transition-`* values in `@theme` if they are full shorthands like `all 0.6s cubic-bezier(...)` — Tailwind v4's theme compiler can throw **CssSyntaxError**. Put those on `:root` inside `@layer base` instead
 - Use direct color values (hex, oklch) — NOT `hsl(var(...))` pattern from v3
 
+**`theme()` vs `var()` (common build failure):**
+
+- `theme(--foo)` only resolves tokens **`@theme { --foo: ... }`**. Correct examples: `theme(--color-background)`, `theme(--font-body)`.
+- Names on **`:root` only** (e.g. `--transition-mechanical`, custom easings) must use **`var(--transition-mechanical)`**, never `theme(...)`. Otherwise Tailwind raises *Could not resolve value for theme function* and **`pnpm build` fails**.
+
 **@layer base:**
 
 - Keep shadcn/ui CSS variables (`--background`, `--foreground`, `--card`, etc.) using the same variable names but with direct values, NOT `hsl(number number% number%)` format — use hex or oklch
@@ -123,6 +132,7 @@ Tailwind v4 `@theme` tokens **automatically** generate utility classes. You MUST
 
 **Do NOT:**
 
+- Use `theme(--transition-*)` or `theme(--any-name)` unless that exact `--any-name:` is declared inside **`@theme`**. For `:root` transitions use `transition: var(--transition-xxx);`
 - Create mirrored utility classes that duplicate Tailwind auto-utilities from `@theme`
 - Output a JSON structure
 - Output anything outside the ````css` code block

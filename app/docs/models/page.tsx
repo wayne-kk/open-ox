@@ -54,7 +54,7 @@ DEFAULT_MODEL = "gemini-3-flash-preview"
 
 // Modify Agent 默认（可与生成不同）
 MODIFY_DEFAULT_MODEL = "claude-opus-4-6"  // 或由 MODIFY_MODEL 覆盖
-`}</Pre>
+
 function getModelForStep(stepName: string): ModelId {
   return getStepModel(stepName)  // 步骤级
       ?? getModelId();            // 请求级 → 全局默认

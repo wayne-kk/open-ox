@@ -73,6 +73,8 @@ export interface ProjectMetadata {
   coverImageUpdatedAt?: string;
   /** Active background generation run (`019_generation_runs`) */
   currentGenerationRunId?: string | null;
+  /** Data URL from pasted screenshot at create; consumed by intent / worker vision. */
+  referenceImageDataUrl?: string | null;
 }
 
 interface ProjectRow {
@@ -101,6 +103,7 @@ interface ProjectRow {
   cover_image_error: string | null;
   cover_image_updated_at: string | null;
   current_generation_run_id: string | null;
+  reference_image_data_url: string | null;
 }
 
 function rowToMetadata(row: ProjectRow): ProjectMetadata {
@@ -134,6 +137,7 @@ function rowToMetadata(row: ProjectRow): ProjectMetadata {
     coverImageError: row.cover_image_error ?? undefined,
     coverImageUpdatedAt: row.cover_image_updated_at ?? undefined,
     currentGenerationRunId: row.current_generation_run_id ?? undefined,
+    referenceImageDataUrl: row.reference_image_data_url ?? null,
   };
 }
 
@@ -251,6 +255,9 @@ export async function getProject(db: SupabaseClient, id: string): Promise<Projec
   return rowToMetadata(data as ProjectRow);
 }
 
+/** Max stored reference image (data URL) — ~6MB to stay within typical HTTP/DB limits */
+const REFERENCE_IMAGE_MAX_CHARS = 6_500_000;
+
 export async function createProject(
   db: SupabaseClient,
   args: {
@@ -260,6 +267,8 @@ export async function createProject(
     modelId?: string;
     folderId?: string | null;
     generationMode?: GenerationMode;
+    /** Optional pasted screenshot as data URL or raw base64 */
+    referenceImageDataUrl?: string | null;
   }
 ): Promise<ProjectMetadata> {
   const {
@@ -269,6 +278,7 @@ export async function createProject(
     modelId,
     folderId,
     generationMode = "web",
+    referenceImageDataUrl: rawImage,
   } = args;
   const now = new Date();
   const timestamp = now.toISOString().replace(/:/g, "-").replace(/\./g, "-");
@@ -289,6 +299,14 @@ export async function createProject(
   const slugSegment = latinSlug.length >= 2 ? latinSlug.slice(0, 80) : "project";
   const id = `${timestamp}_${slugSegment}`;
   const createdAt = now.toISOString();
+  let reference_image_data_url: string | null = null;
+  if (typeof rawImage === "string" && rawImage.trim()) {
+    const img = rawImage.trim();
+    const dataUrl = img.startsWith("data:") ? img : `data:image/png;base64,${img}`;
+    if (dataUrl.length <= REFERENCE_IMAGE_MAX_CHARS) {
+      reference_image_data_url = dataUrl;
+    }
+  }
   const row = {
     id,
     name: displayName,
@@ -302,6 +320,7 @@ export async function createProject(
     owner_username: ownerUsername,
     folder_id: folderId ?? null,
     modification_history: [],
+    reference_image_data_url,
   };
   const { data, error } = await db.from("projects").insert(row).select().single();
   if (error || !data) {
@@ -361,6 +380,17 @@ export async function updateProjectStatus(
   }
 
   throw new Error(`[projectManager] updateProjectStatus failed: ${lastMessage}`);
+}
+
+/** Clear pasted reference image after intent has persisted multimodal session (or on fatal paths, optional). */
+export async function clearProjectReferenceImage(db: SupabaseClient, id: string): Promise<void> {
+  const { error } = await db
+    .from("projects")
+    .update({ reference_image_data_url: null, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) {
+    console.warn("[projectManager] clearProjectReferenceImage:", error.message);
+  }
 }
 
 export async function updateProjectCoverState(

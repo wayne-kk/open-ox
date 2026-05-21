@@ -21,6 +21,8 @@
 @source not "../supabase";
 @source not "../patches";
 @source not "../example";
+/* Python / stray prompt dumps can contain prose like `bg-[url('…')]`; Tailwind v4 extracts it and webpack resolves `…` → Module not found. */
+@source not "../**/*.py";
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

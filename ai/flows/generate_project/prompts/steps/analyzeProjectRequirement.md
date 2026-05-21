@@ -17,6 +17,8 @@
 - 此步骤**不要**输出 `site.pages[].sections`；分页块在后续规划（或直接由页面 Agent 自组织）。
 - 此步骤**不要**输出任何「全局壳层」相关字段（不要写 `layoutSections` / `navigation` / `footer`）。layout 形态由下游 Architect Agent 根据产品形态决定——可能是顶 nav + footer，也可能是 sidebar + topbar，可能是工具栏 + 主舞台，也可能完全不需要任何全局 chrome。**这不是需求层的问题**。
 
+- 当用户消息附带**参考截图**（多模态）时，遵守同轮注入的 **截图处理约束**（`screenshotLayoutFidelity` = 版式对齐复刻，`screenshotExtractInspiration` = 提取配色/文案/气质并允许改编）：在 `brief` / `productScope` 中写清对应策略下的版面与约束。
+ 
 ### 可用工具（与生成配置一致）
 
 - **`reference_site_digest`**：用户 prompt 中有参考链接时**优先**调用：浏览器视口截图 + 可见文本 + 多模态摘要，再写入 `ProjectBlueprint` 可字段。

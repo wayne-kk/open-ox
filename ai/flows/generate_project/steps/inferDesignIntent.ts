@@ -1,5 +1,6 @@
-import { composePromptBlocks, loadStepPrompt } from "../shared/files";
-import { callLLMWithMeta } from "../shared/llm";
+import { composePromptBlocks, loadGuardrail, loadStepPrompt } from "../shared/files";
+import { callLLMWithMetaUserContent } from "../shared/llm";
+import { buildUserVisionContent, visionTraceUserLabel } from "../shared/userVisionContent";
 import { lfPlain, LfPlain } from "@/lib/observability/langfuseGenerationCatalog";
 import { stepTraceFromLlmCompletion } from "../shared/llmTrace";
 import { writeSiteFile } from "../shared/files";
@@ -42,23 +43,38 @@ function parseKeywordsLine(markdown: string): string[] {
  * Also saves the output as design-intent.md in the project directory.
  */
 export async function stepInferDesignIntent(
-  userInput: string
+  userInput: string,
+  options?: {
+    referenceImageBase64?: string | null;
+    screenshotGuardrailId?: string | null;
+  }
 ): Promise<DesignIntentResult> {
+  const hasRef = Boolean(options?.referenceImageBase64?.trim());
+  const screenshotGr =
+    hasRef && options?.screenshotGuardrailId?.trim()
+      ? options.screenshotGuardrailId.trim()
+      : hasRef
+        ? "screenshotLayoutFidelity"
+        : null;
   const systemPrompt = composePromptBlocks([
     loadStepPrompt("inferDesignIntent"),
+    ...(screenshotGr ? [loadGuardrail(screenshotGr)] : []),
   ]);
 
   const userMessage = `## User Requirement
 ${userInput}`;
 
+  const userContent = buildUserVisionContent(userMessage, options?.referenceImageBase64 ?? null);
+  const traceUserLabel = visionTraceUserLabel(userMessage, hasRef);
+
   const model = getModelForStep("infer_design_intent");
 
   try {
-    const meta = await callLLMWithMeta(systemPrompt, userMessage, 0.4, undefined, model, {
+    const meta = await callLLMWithMetaUserContent(systemPrompt, userContent, 0.4, undefined, model, {
       langfuseName: lfPlain(LfPlain.inferDesignIntent),
     });
     const text = meta.content.trim();
-    const trace = stepTraceFromLlmCompletion(systemPrompt, userMessage, meta);
+    const trace = stepTraceFromLlmCompletion(systemPrompt, traceUserLabel, meta);
     if (text) {
       await writeSiteFile("design-intent.md", text);
     }
@@ -73,7 +89,7 @@ ${userInput}`;
         llmCall: {
           model,
           systemPrompt,
-          userMessage,
+          userMessage: traceUserLabel,
           rawResponse: `[infer_design_intent failed]\n${message}`,
         },
       },

@@ -3,6 +3,7 @@ import { chatCompletion } from "@/ai/shared/llm/gateway";
 import { callLLMWithTools, callLLMWithToolsFromMessages } from "@/ai/shared/llm/toolLoop";
 import { throwClassifiedLLMError } from "@/ai/shared/llm/errorClassifier";
 import { lfPlain, LfPlain } from "@/lib/observability/langfuseGenerationCatalog";
+import type { ChatMessageContent } from "@/ai/shared/llm/types";
 
 export { extractContent, extractJSON } from "@/ai/shared/llm/contentExtractors";
 export type {
@@ -45,13 +46,35 @@ export async function callLLMWithMeta(
   model?: string,
   observability?: CallLLMObservability
 ): Promise<LLMCallResult> {
+  return callLLMWithMetaUserContent(
+    systemPrompt,
+    userMessage,
+    temperature,
+    maxTokens,
+    model,
+    observability
+  );
+}
+
+/**
+ * Like {@link callLLMWithMeta} but supports vision via multimodal `user` content.
+ * Langfuse/traces still receive string snapshots where needed.
+ */
+export async function callLLMWithMetaUserContent(
+  systemPrompt: string,
+  userContent: ChatMessageContent,
+  temperature = 0.7,
+  maxTokens?: number,
+  model?: string,
+  observability?: CallLLMObservability
+): Promise<LLMCallResult> {
   const resolvedModel = model || getModelId();
   try {
     const res = await chatCompletion({
       model: resolvedModel,
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: userMessage },
+        { role: "user", content: userContent },
       ],
       temperature,
       ...(maxTokens != null && maxTokens > 0 ? { max_tokens: maxTokens } : {}),

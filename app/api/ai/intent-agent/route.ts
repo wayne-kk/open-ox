@@ -31,6 +31,7 @@ import {
   runIntentAgentTurn,
   isSafeProjectId,
 } from "@/ai/flows/generate_project/intentAgent";
+import { normalizeReferenceImageDataUrl } from "@/ai/flows/generate_project/shared/userVisionContent";
 import type { GenerationRunPayloadBody } from "@/lib/generation/types";
 import {
   enqueueGenerationJob,
@@ -74,6 +75,7 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const projectId: unknown = body.projectId;
     const message: unknown = body.message;
+    const imageBase64Raw: unknown = body.imageBase64;
     const resetSession: boolean = body.resetSession === true;
     const enableIntentGuide: boolean = body.enableIntentGuide !== false;
     const runGenerateOnCommit: boolean = body.runGenerateOnCommit !== false;
@@ -83,9 +85,6 @@ export async function POST(req: Request) {
     if (!projectId || typeof projectId !== "string" || !isSafeProjectId(projectId)) {
       return NextResponse.json({ error: "Missing or invalid projectId" }, { status: 400 });
     }
-    if (!message || typeof message !== "string" || !message.trim()) {
-      return NextResponse.json({ error: "Missing or invalid message" }, { status: 400 });
-    }
 
     const meta = await getProject(db, projectId);
     if (!meta) {
@@ -93,6 +92,22 @@ export async function POST(req: Request) {
     }
     if (meta.ownerUserId && meta.ownerUserId !== user.id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const messageText = typeof message === "string" ? message : "";
+    let clientImage: string | null = null;
+    if (typeof imageBase64Raw === "string" && imageBase64Raw.trim()) {
+      const raw = imageBase64Raw.trim();
+      clientImage = raw.startsWith("data:") ? raw : `data:image/png;base64,${raw}`;
+    }
+    const storedImage = meta.referenceImageDataUrl?.trim() || null;
+    const imageForTurn = clientImage || storedImage;
+
+    if (!messageText.trim() && !imageForTurn) {
+      return NextResponse.json(
+        { error: "Missing or invalid message (or paste an image)" },
+        { status: 400 }
+      );
     }
 
     if (modelOverride) {
@@ -124,7 +139,7 @@ export async function POST(req: Request) {
             const taskId = `intent_agent:${projectId}`;
             const run = await createTrajectoryRun({
               task_id: taskId,
-              goal: `[intent-agent] ${String(message).trim()}`,
+              goal: `[intent-agent] ${messageText.trim() || "(reference image)"}`,
               task_spec_ref: "open-ox.intent-agent",
               environment: {
                 route: "/api/ai/intent-agent",
@@ -160,7 +175,7 @@ export async function POST(req: Request) {
                 resetSession,
                 runGenerateOnCommit,
               },
-              input: { message: message.trim() },
+              input: { message: messageText, hasReferenceImage: Boolean(imageForTurn) },
             },
             async () => {
               await runWithSiteRoot(projectManagerGetSiteRoot(projectId), async () => {
@@ -189,7 +204,8 @@ export async function POST(req: Request) {
           const intentResult = await withLangfuseSpan(LfSpanIntent.agentTurn, () =>
             runIntentAgentTurn({
               projectId,
-              userMessage: message.trim(),
+              userMessage: messageText,
+              userImageBase64: imageForTurn,
               bootstrapUserPrompt: meta.userPrompt ?? null,
               resetSession,
               toolExtensions: intentToolExtensions,
@@ -274,6 +290,12 @@ export async function POST(req: Request) {
           }
 
           const mergedBrief = intentResult.mergedBrief!.trim();
+          let referenceForGeneration =
+            typeof imageForTurn === "string" && imageForTurn.trim() ? imageForTurn.trim() : null;
+          if (!referenceForGeneration) {
+            const row = await getProject(db, projectId);
+            referenceForGeneration = row?.referenceImageDataUrl?.trim() || null;
+          }
           const intentRunPayload: GenerationRunPayloadBody = {
             requestingUserId: user.id,
             effectivePrompt: mergedBrief,
@@ -287,6 +309,9 @@ export async function POST(req: Request) {
               ? { langfuseSessionId: body.langfuseSessionId }
               : {}),
             useDatabasePrompts: false,
+            ...(referenceForGeneration
+              ? { initialImageBase64: normalizeReferenceImageDataUrl(referenceForGeneration) }
+              : {}),
           };
 
           let runId: string;

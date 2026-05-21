@@ -235,6 +235,8 @@ export async function runBuildSite(
     retryProjectId?: string;
     resumeFromCheckpoint?: boolean;
     projectId?: string;
+    /** Pasted screenshot (data URL) — intent-agent only */
+    imageBase64?: string | null;
   }
 ): Promise<void> {
   const useIntentAgent = Boolean(options?.projectId && !options.retryProjectId);
@@ -247,6 +249,7 @@ export async function runBuildSite(
             projectId: options?.projectId,
             message: input,
             ...(options?.model ? { model: options.model } : {}),
+            ...(options?.imageBase64 ? { imageBase64: options.imageBase64 } : {}),
             runGenerateOnCommit: true,
           }
         : {

@@ -87,7 +87,7 @@
 - 禁止使用包装类：`py-32`、`py-40`、`md:py-32`、`md:py-40`、`lg:py-32`、`lg:py-40`。
 - 禁止在用户可见内容、标签或替代文本中使用 emoji。
 - 除非区块说明明确要求，禁止默认套用「三等分」通用功能卡片行。
-- 禁止使用 Tailwind 任意背景图工具类（如 `bg-[url('...')]` 写法）。请在 `style` 上用 CSS `background-image`。
+- 禁止使用 Tailwind 任意背景图工具类：`bg-[url('真实地址')]` 里若写占位符或省略号，会变成 `url('...')` 导致打包器按模块解析报错。请写完整可访问 URL、用 `<Image>`，或在 `style` 里设 `backgroundImage`。
 - **禁止**在 `<img>`、`<Image>` 或作为视觉主体的背景图层上使用「默认灰阶/强降饱和 + 悬停才恢复全彩/正常」的效果（例如 `grayscale`、`saturate-0` 搭配 `hover:grayscale-0`、`group-hover:grayscale-0`，或以 `brightness-*` 与上述滤镜组合实现同类观感）。配图默认须保持正常色彩与对比，不得以悬停作为「解锁原图」的前提。**禁止**对上述图片再叠 `hover:scale-*` / `group-hover:scale-*` 一类悬停放大（不配 `duration-500` 等长过渡做大范围动效）。
 
 ### 区块视觉节奏

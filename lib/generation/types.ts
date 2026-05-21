@@ -12,6 +12,8 @@ export type GenerationRunPayloadBody = {
   enableIntentGuide: boolean;
   langfuseSessionId?: string;
   useDatabasePrompts: boolean;
+  /** Data URL or raw base64 — worker passes to `project_intent_guide` vision when set */
+  initialImageBase64?: string;
 };
 
 export type GenerationRunRow = {

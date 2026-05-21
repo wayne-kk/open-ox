@@ -87,11 +87,12 @@ export async function POST(req: Request) {
     const { supabase: db, user } = session;
 
     const body = await req.json();
-    const { userPrompt, modelId, folderId, generationMode } = body as {
+    const { userPrompt, modelId, folderId, generationMode, imageBase64 } = body as {
       userPrompt: string;
       modelId?: string;
       folderId?: string | null;
       generationMode?: GenerationMode;
+      imageBase64?: string;
     };
     if (generationMode !== undefined && generationMode !== "web") {
       return NextResponse.json({ error: "Invalid generationMode" }, { status: 400 });
@@ -106,6 +107,9 @@ export async function POST(req: Request) {
       modelId,
       folderId: folderId ?? null,
       generationMode,
+      ...(typeof imageBase64 === "string" && imageBase64.trim()
+        ? { referenceImageDataUrl: imageBase64.trim() }
+        : {}),
     });
     return NextResponse.json({ projectId: project.id });
   } catch (err) {

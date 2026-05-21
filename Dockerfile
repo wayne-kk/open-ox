@@ -49,6 +49,8 @@ RUN groupadd --system --gid 1001 nodejs \
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+# Runtime `fs` reads under ai/flows/generate_project/prompts/skills (design-system catalog); not always traced into standalone alone.
+COPY --from=builder --chown=nextjs:nodejs /app/ai/flows/generate_project/prompts/skills ./ai/flows/generate_project/prompts/skills
 
 USER nextjs
 EXPOSE 3000

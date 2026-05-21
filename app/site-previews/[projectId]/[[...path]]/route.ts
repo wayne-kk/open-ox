@@ -85,13 +85,11 @@ async function proxyFromStorage(
 
 type Ctx = { params: Promise<{ projectId: string; path?: string[] }> };
 
-function canonicalTrailingSlashRedirect(req: Request, segments: string[]): NextResponse | null {
-  if (segments.length > 0) return null;
-  const url = new URL(req.url);
-  if (url.pathname.endsWith("/")) return null;
-  const dest = `${url.pathname}/${url.search}`;
-  return NextResponse.redirect(new URL(dest, url.origin), 307);
-}
+/**
+ * Do NOT 307-redirect `/site-previews/id` → `/site-previews/id/`.
+ * Next.js defaults to `trailingSlash: false`, which redirects the slash URL back to the no-slash
+ * URL — combined with the above you get ERR_TOO_MANY_REDIRECTS. Serve `index.html` for both shapes.
+ */
 
 export async function GET(req: Request, ctx: Ctx) {
   const { projectId, path } = await ctx.params;
@@ -103,8 +101,6 @@ export async function GET(req: Request, ctx: Ctx) {
   if (!isSafePreviewSegments(segments)) {
     return new NextResponse("Invalid path", { status: 400 });
   }
-  const redirect = canonicalTrailingSlashRedirect(req, segments);
-  if (redirect) return redirect;
   const rel = segments.length ? segments.join("/") : "index.html";
   return proxyFromStorage(id, rel, "GET");
 }
@@ -119,8 +115,6 @@ export async function HEAD(req: Request, ctx: Ctx) {
   if (!isSafePreviewSegments(segments)) {
     return new NextResponse(null, { status: 400 });
   }
-  const redirect = canonicalTrailingSlashRedirect(req, segments);
-  if (redirect) return redirect;
   const rel = segments.length ? segments.join("/") : "index.html";
   return proxyFromStorage(id, rel, "HEAD");
 }

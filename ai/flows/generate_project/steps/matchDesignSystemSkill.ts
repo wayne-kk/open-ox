@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "fs";
-import { join } from "path";
+import { dirname, join, resolve as resolvePath } from "path";
+import { fileURLToPath } from "url";
 import matter from "gray-matter";
 import { composePromptBlocks, loadStepPrompt, writeSiteFile, loadGuardrail } from "../shared/files";
 import { callLLMWithMeta, extractJSON } from "../shared/llm";
@@ -32,9 +33,40 @@ interface MatchLLMResponse {
 const SKILLS_YAML_FILENAME = "skills.yaml";
 const DESIGN_SYSTEM_SKILL_DIR = "design-system";
 
+/**
+ * Prefer catalog path anchored to **this module's location** (`…/steps/matchDesignSystemSkill.ts`).
+ * Falling back only to `{cwd}/ai/flows/…` keeps older behaviour but fixes local/worker setups where
+ * `process.cwd()` is not the open-ox repo root (different terminal cwd, spawned process, tool wrapper).
+ */
+function resolveDesignSystemSkillDir(): string {
+  const besideThisFile = resolvePath(
+    dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "prompts",
+    "skills",
+    DESIGN_SYSTEM_SKILL_DIR
+  );
+  const besideCwd = join(
+    process.cwd(),
+    "ai",
+    "flows",
+    "generate_project",
+    "prompts",
+    "skills",
+    DESIGN_SYSTEM_SKILL_DIR
+  );
+
+  if (existsSync(join(besideThisFile, SKILLS_YAML_FILENAME))) {
+    return besideThisFile;
+  }
+  if (existsSync(join(besideCwd, SKILLS_YAML_FILENAME))) {
+    return besideCwd;
+  }
+  return besideThisFile;
+}
+
 export function getDesignSystemSkillDir(): string {
-  const root = process.cwd();
-  return join(root, "ai", "flows", "generate_project", "prompts", "skills", DESIGN_SYSTEM_SKILL_DIR);
+  return resolveDesignSystemSkillDir();
 }
 
 /**
@@ -69,13 +101,19 @@ function loadSkillsYamlRaw(): string {
   return stripFrontmatter(raw);
 }
 
+/**
+ * Extract `- name: skillId` lines from the catalog YAML (not full YAML parse — avoids dependency on
+ * comment headers like `# styles:`). Uses a regex so indentation and spacing are tolerant.
+ */
 function extractSkillNamesFromYaml(rawYaml: string): string[] {
-  return rawYaml
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.startsWith("- name:"))
-    .map((line) => line.slice("- name:".length).trim())
-    .filter(Boolean);
+  const names: string[] = [];
+  for (const line of rawYaml.split(/\r?\n/)) {
+    const m = line.match(/^\s*-\s*name:\s*(.+?)\s*$/);
+    if (!m?.[1]) continue;
+    const id = m[1].trim();
+    if (id.length > 0) names.push(id);
+  }
+  return names;
 }
 
 /**

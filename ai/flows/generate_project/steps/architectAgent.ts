@@ -24,6 +24,7 @@ import { getSystemToolDefinitions } from "@/ai/tools/systemToolCatalog";
 import { getModelForStep, getThinkingLevelForStep } from "@/lib/config/models";
 import type { BuildStep, PlannedProjectBlueprint, StepTrace } from "../types";
 import { resolveArchitectAgentRuleIds } from "../shared/agentRuleBundles";
+import { buildUserVisionContent } from "../shared/userVisionContent";
 
 export const ARCHITECT_AGENT_STEP = "architect_agent";
 export const ARCHITECT_COMPLETE = "architect_complete";
@@ -124,6 +125,10 @@ export default function RootLayout({
 export interface RunArchitectAgentParams {
   blueprint: PlannedProjectBlueprint;
   designSystem: string;
+  /** Same reference as generate pipeline — global chrome should match visible shell in screenshot */
+  referenceScreenshotDataUrl?: string | null;
+  /** When image present: `screenshotLayoutFidelity` vs `screenshotExtractInspiration`. */
+  screenshotGuardrailId?: string | null;
   onMessage?: (msg: ChatMessage) => void;
   onStep?: (step: BuildStep) => void;
 }
@@ -141,7 +146,14 @@ export interface ArchitectAgentResult {
 export async function runArchitectAgent(
   params: RunArchitectAgentParams
 ): Promise<ArchitectAgentResult> {
-  const { blueprint, designSystem, onMessage, onStep } = params;
+  const {
+    blueprint,
+    designSystem,
+    referenceScreenshotDataUrl,
+    screenshotGuardrailId,
+    onMessage,
+    onStep,
+  } = params;
   const model = getModelForStep(ARCHITECT_AGENT_STEP);
   const thinking = getThinkingLevelForStep(ARCHITECT_AGENT_STEP);
 
@@ -219,15 +231,25 @@ Hard rules:
 - Do **not** call \`format_code\` on files you wrote — \`write_file\`/\`edit_file\` auto-format on save.
 - If the product is a fullscreen / minimal canvas form, leaving \`app/layout.tsx\` minimal is the right answer — do not pad chrome to feel productive.`;
 
+  const refGr =
+    referenceScreenshotDataUrl?.trim() && screenshotGuardrailId?.trim()
+      ? screenshotGuardrailId.trim()
+      : referenceScreenshotDataUrl?.trim()
+        ? "screenshotLayoutFidelity"
+        : null;
   const systemPrompt = composePromptBlocks([
     loadSystem("frontend"),
     loadStepPrompt("architectAgent"),
+    ...(refGr ? [loadGuardrail(refGr)] : []),
     ...resolveArchitectAgentRuleIds().map(loadGuardrail),
   ]);
 
   const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
-    { role: "user", content: userMessage },
+    {
+      role: "user",
+      content: buildUserVisionContent(userMessage, referenceScreenshotDataUrl ?? null),
+    },
   ];
 
   let architectComplete = false;

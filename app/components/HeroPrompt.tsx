@@ -127,6 +127,10 @@ export function HeroPrompt() {
           body: JSON.stringify({
             userPrompt: finalPrompt,
             ...(snapshot.folderId ? { folderId: snapshot.folderId } : {}),
+            ...(() => {
+              const img = snapshot.chips.find((c) => c.payload.imageBase64)?.payload.imageBase64;
+              return typeof img === "string" && img.trim() ? { imageBase64: img.trim() } : {};
+            })(),
           }),
         });
         if (res.status === 401) {

@@ -22,6 +22,7 @@ import type {
   IntentAgentYieldPayload,
   IntentProgressEvent,
 } from "./types";
+import { buildUserVisionContent, userTurnPlainTextForClassifier } from "../shared/userVisionContent";
 
 function truncatePreview(s: string, max: number): string {
   const t = s.trim();
@@ -104,6 +105,10 @@ export interface RunIntentAgentTurnParams {
    */
   toolExtensions?: IntentAgentToolExtensions;
   /**
+   * Pasted screenshot (data URL or base64) for this turn — sent as vision alongside `userMessage`.
+   */
+  userImageBase64?: string | null;
+  /**
    * Streamed while the intent tool loop runs: assistant rounds, optional model reasoning
    * text, and each completed tool (name + truncated args/result).
    */
@@ -123,7 +128,10 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
     onMessage,
     toolExtensions,
     onIntentProgress,
+    userImageBase64,
   } = params;
+  const hasUserImage = Boolean(userImageBase64?.trim());
+  const tailPlainForCommit = userTurnPlainTextForClassifier(userMessage, hasUserImage);
   const model = getModelForStep("intent_agent");
   const systemPrompt = composePromptBlocks([loadStepPrompt("projectIntentAgent")]);
   const tools = mergeIntentAgentTools({
@@ -143,7 +151,10 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
     messages[0] = { role: "system", content: systemPrompt };
   }
 
-  messages.push({ role: "user", content: userMessage.trim() });
+  messages.push({
+    role: "user",
+    content: buildUserVisionContent(userMessage, userImageBase64 ?? null),
+  });
 
   const turnCounter = (persisted?.turnCounter ?? 0) + 1;
   const toolCalls: AgentToolCallRecord[] = [];
@@ -167,7 +178,7 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
       const raw = typeof args.merged_brief === "string" ? args.merged_brief.trim() : "";
       const substance = await classifyBriefSubstanceForCommit({
         mergedBriefRaw: raw,
-        tailUserMessage: userMessage.trim(),
+        tailUserMessage: tailPlainForCommit,
         bootstrapUserPrompt: bootstrapUserPrompt ?? "",
       });
       box.resolution = {
@@ -175,7 +186,7 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
         mergedBrief: resolveCommitMergedBrief({
           mergedBriefRaw: raw,
           messages,
-          tailUserMessage: userMessage.trim(),
+          tailUserMessage: tailPlainForCommit,
           bootstrapUserPrompt,
           substance,
         }).trim(),
