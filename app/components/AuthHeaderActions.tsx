@@ -18,6 +18,7 @@ import {
   getUserDisplayName,
   isPlaceholderAccountEmail,
 } from "@/lib/auth/display-name";
+import { clearAuthProfileCache, loadAuthProfile } from "@/lib/auth/authProfileClient";
 
 export { getUserDisplayName, isPlaceholderAccountEmail };
 
@@ -41,6 +42,27 @@ export function useAuthUser() {
   }, []);
 
   return { user, ready };
+}
+
+/** Shared admin flag — one deduped `/api/auth/user` fetch per tab. */
+export function useAuthProfile() {
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void loadAuthProfile().then((profile) => {
+      if (active) {
+        setIsAdmin(profile.isAdmin);
+        setReady(true);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return { isAdmin, ready };
 }
 
 /** 用于菜单副标题：优先展示真实邮箱（含 metadata 里飞书返回的企业邮箱），不展示占位邮箱 */
@@ -103,25 +125,11 @@ export function UserMenuDropdown({
   const router = useRouter();
   const displayName = getUserDisplayName(user);
   const subtitle = getUserAccountSubtitle(user);
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    void fetch("/api/auth/user")
-      .then((res) => res.json())
-      .then((data: { isAdmin?: boolean }) => {
-        if (active) setIsAdmin(data.isAdmin === true);
-      })
-      .catch(() => {
-        if (active) setIsAdmin(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [user.id]);
+  const { isAdmin } = useAuthProfile();
 
   const signOut = async () => {
     const supabase = createSupabaseBrowserClient();
+    clearAuthProfileCache();
     // local：只清当前浏览器会话，不额外请求 Supabase 撤销 token，退出更快
     await supabase.auth.signOut({ scope: "local" });
     const target = afterSignOut === "auth" ? "/auth" : "/";

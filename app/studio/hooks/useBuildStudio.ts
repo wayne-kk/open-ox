@@ -42,6 +42,8 @@ export interface ModifyRecord {
   error: string | null;
   completedAt: string;
   isSystemMessage?: boolean;
+  /** From intent router SSE — 对话 / 问答 / 规划 / 修改 */
+  intentLabel?: string;
 }
 
 export interface ConversationMessage {
@@ -119,6 +121,7 @@ export interface BuildStudioState {
   modifyToolCalls: ModifyToolCall[];
   modifyThinking: string[];
   modifyError: string | null;
+  modifyIntentLabel: string;
   handleModify: () => Promise<void>;
   clearModifyHistory: () => void;
   modifyHistory: ModifyRecord[];
@@ -255,6 +258,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
   const [modifyDiffs, setModifyDiffs] = useState<ModifyDiff[]>([]);
   const [modifyToolCalls, setModifyToolCalls] = useState<ModifyToolCall[]>([]);
   const [modifyThinking, setModifyThinking] = useState<string[]>([]);
+  const [modifyIntentLabel, setModifyIntentLabel] = useState("修改");
   const [modifyError, setModifyError] = useState<string | null>(null);
   const [modifyHistory, setModifyHistory] = useState<ModifyRecord[]>([]);
   const [contextCleared, setContextCleared] = useState(false);
@@ -282,6 +286,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
   const modifyPlanRef = useRef<ModifyPlan | null>(null);
   const modifyDiffsRef = useRef<ModifyDiff[]>([]);
   const modifyThinkingRef = useRef<string[]>([]);
+  const modifyIntentLabelRef = useRef("修改");
   const modifyToolCallsRef = useRef<ModifyToolCall[]>([]);
 
   const finishBuildLiveState = useCallback((totalDuration?: number) => {
@@ -1175,11 +1180,13 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     setModifyDiffs([]);
     setModifyToolCalls([]);
     setModifyThinking([]);
+    setModifyIntentLabel("修改");
     setModifyError(null);
     modifyStepsRef.current = [];
     modifyPlanRef.current = null;
     modifyDiffsRef.current = [];
     modifyThinkingRef.current = [];
+    modifyIntentLabelRef.current = "修改";
     modifyToolCallsRef.current = [];
 
     // Track whether the done event was received (for history saving)
@@ -1189,7 +1196,11 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       if (!raw.startsWith("data: ")) return;
       try {
         const event = JSON.parse(raw.slice(6));
-        if (event.type === "step") {
+        if (event.type === "intent") {
+          const label = typeof event.label === "string" ? event.label : "修改";
+          setModifyIntentLabel(label);
+          modifyIntentLabelRef.current = label;
+        } else if (event.type === "step") {
           setModifySteps((prev) => {
             const idx = prev.findIndex((s: ModifyStep) => s.name === event.name);
             let next: ModifyStep[];
@@ -1228,6 +1239,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
             diffs: modifyDiffsRef.current,
             toolCalls: modifyToolCallsRef.current,
             thinking: modifyThinkingRef.current,
+            intentLabel: modifyIntentLabelRef.current,
             error: null,
             completedAt: new Date().toISOString(),
           }]);
@@ -1295,6 +1307,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
             diffs: modifyDiffsRef.current,
             toolCalls: modifyToolCallsRef.current,
             thinking: modifyThinkingRef.current,
+            intentLabel: modifyIntentLabelRef.current,
             error: null,
             completedAt: new Date().toISOString(),
           }]);
@@ -1315,6 +1328,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         diffs: modifyDiffsRef.current,
         toolCalls: modifyToolCallsRef.current,
         thinking: modifyThinkingRef.current,
+        intentLabel: modifyIntentLabelRef.current,
         error: msg,
         completedAt: new Date().toISOString(),
       }]);
@@ -1345,7 +1359,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     previewUrl, previewState, previewError, previewVersion, startPreview, rebuildPreview,
     autoPreviewAfterBuild, setAutoPreviewAfterBuild,
     modifyInstruction, setModifyInstruction, modifyImage, setModifyImage, modifying,
-    modifySteps, modifyPlan, modifyDiffs, modifyToolCalls, modifyThinking, modifyError, handleModify,
+    modifySteps, modifyPlan, modifyDiffs, modifyToolCalls, modifyThinking, modifyError, modifyIntentLabel, handleModify,
     clearModifyHistory: () => {
       setModifyHistory([{
         instruction: "/clear",

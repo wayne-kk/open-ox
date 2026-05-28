@@ -13,7 +13,10 @@ import path from "path";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import archiver from "archiver";
 import AdmZip from "adm-zip";
-import { supabase } from "./supabase";
+import { computeProjectFingerprint } from "./previewShared";
+import { parseProjectsFilesHash } from "./previewFingerprintDb";
+import { getProjectFilesStorageClient } from "./projectFilesStorageClient";
+import { createSupabaseServiceRoleClient } from "./supabase/service-role";
 import { getSiteRoot, WORKSPACE_ROOT } from "./projectManager";
 
 const BUCKET = "project-files";
@@ -90,7 +93,7 @@ export async function uploadProjectFileContent(
     if (options?.contentType) {
       uploadOpts.contentType = options.contentType;
     }
-    const { error } = await supabase.storage.from(BUCKET).upload(storagePath, body, uploadOpts);
+    const { error } = await getProjectFilesStorageClient().storage.from(BUCKET).upload(storagePath, body, uploadOpts);
 
     if (!error) {
       return;
@@ -227,7 +230,7 @@ async function buildProjectZipBuffer(projectRoot: string, relativePaths: string[
 }
 
 async function downloadStorageBlob(storagePath: string): Promise<Blob | null> {
-  const { data, error } = await supabase.storage.from(BUCKET).download(storagePath);
+  const { data, error } = await getProjectFilesStorageClient().storage.from(BUCKET).download(storagePath);
   if (error || !data) {
     return null;
   }
@@ -376,7 +379,7 @@ async function restoreFromManifestBatchedDownloads(
   const restored: string[] = [];
   await runInBatches(unique, MANIFEST_RESTORE_CONCURRENCY, async (relativePath) => {
     const storagePath = `${projectId}/${relativePath}`;
-    const { data, error } = await supabase.storage.from(BUCKET).download(storagePath);
+    const { data, error } = await getProjectFilesStorageClient().storage.from(BUCKET).download(storagePath);
     if (error || !data) return;
     const localPath = path.join(projectRoot, ...relativePath.split("/"));
     await fs.mkdir(path.dirname(localPath), { recursive: true });
@@ -386,6 +389,37 @@ async function restoreFromManifestBatchedDownloads(
   });
   restored.sort();
   return restored;
+}
+
+async function invalidateStaticPreviewIfSourcesChanged(projectId: string): Promise<void> {
+  try {
+    const db = createSupabaseServiceRoleClient();
+    const newFp = await computeProjectFingerprint(projectId);
+    const { data } = await db
+      .from("projects")
+      .select("files_hash, static_preview_synced_at")
+      .eq("id", projectId)
+      .single();
+    const row = data as { files_hash: string | null; static_preview_synced_at: string | null } | null;
+    if (!row?.static_preview_synced_at) return;
+
+    const saved = parseProjectsFilesHash(row.files_hash);
+    if (saved.filesFingerprint === newFp) return;
+
+    await db
+      .from("projects")
+      .update({
+        static_preview_synced_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", projectId);
+    console.log(
+      `[storage] static preview invalidated (sources changed) projectId=${projectId} ` +
+        `savedFp=${saved.filesFingerprint ?? "null"} newFp=${newFp}`
+    );
+  } catch {
+    /* non-fatal */
+  }
 }
 
 /** Upload the complete local project tree so cross-device restore is consistent */
@@ -427,6 +461,12 @@ export async function uploadFullProject(projectId: string): Promise<string[]> {
     await removeStoragePaths(staleStoragePaths);
   }
 
+  await invalidateStaticPreviewIfSourcesChanged(projectId);
+
+  console.log(
+    `[storage] uploadFullProject ok files=${files.length} manifest+zip projectId=${projectId}`
+  );
+
   return files;
 }
 
@@ -445,7 +485,7 @@ async function listAllFiles(prefix: string): Promise<string[]> {
   const result: string[] = [];
 
   async function walk(currentPrefix: string) {
-    const { data, error } = await supabase.storage
+    const { data, error } = await getProjectFilesStorageClient().storage
       .from(BUCKET)
       .list(currentPrefix, { limit: 1000 });
 
@@ -467,8 +507,38 @@ async function listAllFiles(prefix: string): Promise<string[]> {
   return result;
 }
 
+const restoreInFlight = new Map<string, Promise<string[]>>();
+
+/**
+ * Materialize `sites/{projectId}` from Storage only when `package.json` is missing locally.
+ */
+export async function ensureProjectSourcesOnDisk(projectId: string): Promise<void> {
+  const pkgPath = path.join(getSiteRoot(projectId), "package.json");
+  try {
+    await fs.access(pkgPath);
+    return;
+  } catch {
+    await restoreProjectFiles(projectId);
+  }
+}
+
 /** Download all files for a project from Storage to local sites/ directory */
 export async function restoreProjectFiles(projectId: string): Promise<string[]> {
+  const existing = restoreInFlight.get(projectId);
+  if (existing) {
+    return existing;
+  }
+
+  const promise = restoreProjectFilesInner(projectId);
+  restoreInFlight.set(projectId, promise);
+  try {
+    return await promise;
+  } finally {
+    restoreInFlight.delete(projectId);
+  }
+}
+
+async function restoreProjectFilesInner(projectId: string): Promise<string[]> {
   const totalStart = performance.now();
   const projectRoot = getSiteRoot(projectId);
   await fs.mkdir(projectRoot, { recursive: true });
@@ -541,7 +611,7 @@ export async function restoreProjectFiles(projectId: string): Promise<string[]> 
 
   await Promise.all(
     codePathsOnly.map(async (storagePath) => {
-      const { data, error } = await supabase.storage.from(BUCKET).download(storagePath);
+      const { data, error } = await getProjectFilesStorageClient().storage.from(BUCKET).download(storagePath);
 
       if (error || !data) return;
 
@@ -579,7 +649,7 @@ export async function listProjectFiles(projectId: string): Promise<string[]> {
 async function removeStoragePaths(storagePaths: string[]): Promise<void> {
   for (let i = 0; i < storagePaths.length; i += 1000) {
     const batch = storagePaths.slice(i, i + 1000);
-    const { error } = await supabase.storage.from(BUCKET).remove(batch);
+    const { error } = await getProjectFilesStorageClient().storage.from(BUCKET).remove(batch);
     if (error) {
       throw new Error(`[storage] Failed to delete ${batch.length} file(s): ${error.message}`);
     }

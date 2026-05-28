@@ -166,6 +166,7 @@ interface ProjectListRow {
   user_id: string | null;
   owner_username: string | null;
   cover_image_status: ProjectCoverImageStatus | null;
+  cover_image_storage_path: string | null;
 }
 
 export type ProjectFolderFilter = "all" | "uncategorized" | string;
@@ -192,7 +193,7 @@ export async function listProjectsSummary(
   let query = db
     .from("projects")
     .select(
-      "id,name,user_prompt,status,created_at,updated_at,completed_at,error,verification_status,model_id,generation_mode,folder_id,user_id,owner_username,cover_image_status"
+      "id,name,user_prompt,status,created_at,updated_at,completed_at,error,verification_status,model_id,generation_mode,folder_id,user_id,owner_username,cover_image_status,cover_image_storage_path"
     )
     .order("created_at", { ascending: false });
 
@@ -246,6 +247,7 @@ export async function listProjectsSummary(
     ownerUserId: row.user_id ?? undefined,
     ownerUsername: row.owner_username ?? undefined,
     coverImageStatus: row.cover_image_status ?? null,
+    coverImageStoragePath: row.cover_image_storage_path ?? undefined,
   }));
 }
 

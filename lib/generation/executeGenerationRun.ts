@@ -10,10 +10,7 @@ import {
   updateProjectStatus,
   renameProject,
 } from "@/lib/projectManager";
-import { scheduleUploadFullProject } from "@/lib/storage";
-import { scheduleCaptureProjectCover } from "@/lib/projectCoverCapture";
-import { scheduleStaticSitePreviewSync } from "@/lib/staticSitePreview";
-import { isPreviewStorage } from "@/lib/previewMode";
+import { schedulePostGenerationPreviewPipeline } from "@/lib/postGenerationPreviewPipeline";
 import { setRuntimeModelId, type ModelId } from "@/lib/config/models";
 import { loadStepModelsFromDB } from "@/lib/config/models";
 import {
@@ -468,11 +465,7 @@ export async function executeGenerationRun(args: {
       ) {
         await renameProject(admin, projectId, projectTitle.trim());
       }
-      scheduleUploadFullProject(projectId);
-      if (isPreviewStorage()) {
-        scheduleStaticSitePreviewSync(projectId);
-      }
-      scheduleCaptureProjectCover(projectId);
+      schedulePostGenerationPreviewPipeline(admin, projectId);
     } else if (result.intentGuideDeferred && result.intentGuide) {
       await updateProjectStatus(admin, projectId, "failed", {
         error: `[intent_guide] ${result.intentGuide.assistantMessage.slice(0, 480)}`,

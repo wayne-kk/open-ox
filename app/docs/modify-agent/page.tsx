@@ -114,14 +114,11 @@ export default function ModifyAgentPage() {
             ))}
           </div>
           <H3>自然语言 → 代码定位</H3>
-          <P>用户描述的是他们看到的东西，而非代码结构。Agent 负责翻译：</P>
-          <Pre>{`"那个极致性能的区块"  →  search "性能" → search "performance"
-"首页那个大标题"      →  home_HeroSection.tsx heading element
-"导航栏颜色不对"      →  app/layout.tsx 或 page agent 写出的 chrome 组件
-"底部版权信息"        →  app/layout.tsx 或 page 内的 footer 组件`}</Pre>
+          <P>
+            用户描述的是 UI/产品语言，不是文件路径。由 Agent 结合 file tree、预读文件和工具自行定位——编排层不做关键词切分或固定目录猜测。
+          </P>
           <Callout>
-            Agent 总是先尝试中文关键词搜索，然后再试英文等价词。
-            如果找到多个候选项，会向用户确认而非猜测。
+            入口 intent router（LLM）先分 <Code>conversation</Code> / <Code>read_only</Code> / <Code>plan_only</Code> / <Code>code_change</Code>，并可选输出 <Code>preloadPaths</Code>。
           </Callout>
         </section>
 
@@ -146,23 +143,19 @@ export default function ModifyAgentPage() {
           <H2>Stop Hook</H2>
           <P>
             当 LLM 停止调用工具时，stop hook 在允许循环退出前运行。
-            它按顺序检查四个门控：
+            它检查循环状态（是否探索过仓库、是否完成编辑/回答、类型错误、scoped tsc），并注入<strong>通用</strong> Agent 指令——不从用户句子里切关键词，也不硬编码搜索路径。
           </P>
-          <Pre>{`function runStopHook(state, instruction): string | null {
+          <Pre>{`function runStopHook(state, instruction, modifyMode, { profile }): string | null {
   if (!state.hasSearched && !state.hasEdited) {
-    const keywords = extractKeywords(instruction).slice(0, 5);
-    return \`You stopped without tools. Search first: \${keywords}\`;
+    return modifyMode === "read_only"
+      ? "Use read/search/list; answer in natural language; do not edit."
+      : "Explore with tools from the file tree, then edit_file.";
   }
-  if (!state.hasEdited) {
-    return "You searched but made no changes. Read files and edit.";
-  }
-  if (!state.hasBuild) {
-    return "Changes made but not verified. Call run_build.";
-  }
-  if (!state.buildPassed) {
-    return \`Build failed:\\n\${buildOutput}\\nFix the errors.\`;
-  }
-  return null; // all gates passed
+  if (modifyMode === "read_only" && state.hasSearched) return null;
+  if (modifyMode === "code_change" && !state.hasEdited) return "Make edits now…";
+  if (profile.verificationMode === "tsc_only") return null;
+  // optional: remind run_scoped_tsc before finish
+  return null;
 }`}</Pre>
           <div className="mt-4 overflow-hidden rounded-xl border border-white/8">
             <table className="w-full text-[13px]">

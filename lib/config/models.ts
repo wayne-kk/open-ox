@@ -49,7 +49,11 @@ export function getModelId(): ModelId {
 }
 
 /** Model used by the modify agent when no runtime override is set */
-export const MODIFY_DEFAULT_MODEL: ModelId = "claude-opus-4-6";
+export const MODIFY_DEFAULT_MODEL: ModelId = "gemini-3-flash-preview";
+
+/** Heavier model for broad modify (plan + multi-file) — override via MODIFY_COMPLEX_MODEL env */
+export const MODIFY_COMPLEX_MODEL: ModelId =
+  (process.env.MODIFY_COMPLEX_MODEL?.trim() as ModelId) || "gemini-3.1-pro-preview";
 
 export function getModifyModelId(): ModelId {
     if (_runtimeModelId) return _runtimeModelId;
@@ -104,6 +108,7 @@ export const GENERATION_STEPS = [
     { id: "reference_site_digest", label: "参考站截图+多模态摘要" },
     { id: "project_intent_guide", label: "建站意向引导" },
     { id: "modify_intent_router", label: "修改入口意图分类" },
+    { id: "modify_plan", label: "修改·广域变更规划" },
     { id: "commit_merged_brief_classifier", label: "确认生成·需求文本实质性（LLM）" },
     { id: "analyze_project_requirement", label: "需求分析" },
     { id: "infer_design_intent", label: "设计意图推断" },

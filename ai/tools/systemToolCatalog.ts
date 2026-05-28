@@ -13,6 +13,7 @@ import { thinkTool } from "./system/thinkTool";
 import { revertFileTool } from "./system/revertFileTool";
 import { generateImageTool } from "./system/generateImageTool";
 import { readLintsTool } from "./system/readLintsTool";
+import { runScopedTscTool } from "./system/runScopedTscTool";
 
 const toolDefinitions: Record<string, ChatCompletionTool> = {
   write_file: writeFileTool,
@@ -29,6 +30,7 @@ const toolDefinitions: Record<string, ChatCompletionTool> = {
   revert_file: revertFileTool,
   generate_image: generateImageTool,
   read_lints: readLintsTool,
+  run_scoped_tsc: runScopedTscTool,
 };
 
 export function getSystemToolDefinitions(names: string[]): ChatCompletionTool[] {

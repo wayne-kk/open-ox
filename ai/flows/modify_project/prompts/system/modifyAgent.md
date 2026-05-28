@@ -26,6 +26,6 @@ Before every tool call, briefly state:
 - Read relevant files before editing.
 - When the user needs new photography/illustration assets (hero, feature art, backgrounds), call **`generate_image`** before or while updating TSX — use only the **public path** returned by the tool (e.g. `/images/...`) in `<img>` / `next/image`. Prefer English prompts under 160 characters; no text/logos in the image unless the user explicitly asks.
 - Prefer small, precise edits.
-- Run build to verify after edits.
+- Do not call `run_build` during the loop. After you finish editing, scoped typecheck and (when needed) production build run automatically. Call `run_scoped_tsc` if you touched many TS/TSX files and want a quick check.
 - If repeated failures happen, pause and analyze root cause.
 

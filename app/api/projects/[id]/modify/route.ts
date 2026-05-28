@@ -16,9 +16,7 @@ import { SSE_RESPONSE_HEADERS } from "@/lib/sse-headers";
 import { getProject } from "@/lib/projectManager";
 import { runModifyProject } from "@/ai/flows/modify_project/runModifyProject";
 import type { ModifySSEEvent } from "@/ai/flows/modify_project/runModifyProject";
-import { scheduleUploadFullProject } from "@/lib/storage";
-import { scheduleStaticSitePreviewSync } from "@/lib/staticSitePreview";
-import { isPreviewStorage } from "@/lib/previewMode";
+import { schedulePostModifyPreviewPipeline } from "@/lib/postGenerationPreviewPipeline";
 import { classifyModificationScope } from "@/lib/devServerManager";
 import { getSessionUser } from "@/lib/auth/session";
 import { flushLangfuse, resolveLangfuseSessionId, runWithLangfuseTraceRoot } from "@/lib/observability/langfuseTracing";
@@ -134,10 +132,7 @@ export async function POST(
 
         const touchedFiles = collectedDiffs.map((d) => d.file);
         if (touchedFiles.length > 0) {
-          scheduleUploadFullProject(id);
-          if (isPreviewStorage() && buildPassed) {
-            scheduleStaticSitePreviewSync(id);
-          }
+          schedulePostModifyPreviewPipeline(db, id, { buildPassed });
         }
 
         const refreshMode = classifyModificationScope(collectedDiffs);

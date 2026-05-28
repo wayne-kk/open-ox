@@ -1,0 +1,26 @@
+# Agent-First Routing (No Local Intent Hacks)
+
+When classifying user intent, choosing files to preload, or deciding execution scope:
+
+## Do NOT
+
+- Parse user text with keyword/regex lists (`STYLE_KEYWORDS`, `PATH_HINTS`, `extractKeywords`, etc.)
+- Hardcode path allowlists/blocklists to infer scope (`STYLE_ALLOWED`, `components/sections` shortcuts)
+- Infer "style vs broad vs narrow" from instruction wording downstream of the intent router
+- Suggest search terms by splitting the user message into tokens in stop hooks or orchestration code
+
+## DO
+
+- Use an **LLM intent router** (or dedicated agent step) that outputs structured JSON: `category`, `scope`, `preloadPaths`, etc.
+- Map router output to **execution profiles** (tools allowed, verification mode, max iterations) — profile mapping is policy, not NLP
+- Let the **Agent** choose `search_code` patterns, `read_file` paths, and edits via tools + file tree in context
+- Use stop hooks only for **loop state** (no tools used, no edits when required, type errors remain) with generic agent-facing messages
+
+## Verification / preview
+
+- Skip or run production build based on **intent router profile** (`verificationMode`), not path-pattern guesses on touched files
+- Dev-server refresh (`classifyModificationScope` on diffs) is infrastructure — OK to stay path-based
+
+## Generate pipeline note
+
+Hero/skill YAML `keywords` are catalog metadata for skill discovery + LLM pick — not a substitute for bypassing agents in modify/chat flows.

@@ -1,6 +1,8 @@
 import fs from "fs/promises";
 import path from "path";
 import type { ChatMessage } from "@/ai/flows/generate_project/shared/llm";
+import type { ModifyIntentCategory } from "../intent/modifyIntentRouter";
+import { READ_ONLY_SYSTEM_PROMPT, SYSTEM_PROMPT } from "../prompt/systemPrompt";
 
 export async function tryReadFile(filePath: string): Promise<string | null> {
   try {
@@ -44,25 +46,54 @@ export function buildHistoryContext(
     : "";
 }
 
+function userMessageFooter(category: ModifyIntentCategory): string {
+  if (category === "read_only") {
+    return `Use read_file / search_code / list_dir to answer. Do NOT edit files. When done researching, respond with a complete answer in the user's language.`;
+  }
+  return `Use edit_file for surgical changes. Do not call run_build — scoped typecheck runs when you finish. Call run_scoped_tsc if you touched many TS/TSX files.`;
+}
+
 export function buildInitialMessages(params: {
-  systemPrompt: string;
+  modifyCategory: ModifyIntentCategory;
   userInstruction: string;
   historyContext: string;
   fileTree: string;
   designSystem: string;
   globalsCss: string;
   imageBase64?: string;
+  preloadedFiles?: Array<{ path: string; content: string }>;
+  planSummary?: string;
 }): ChatMessage[] {
+  const systemPrompt =
+    params.modifyCategory === "read_only" ? READ_ONLY_SYSTEM_PROMPT : SYSTEM_PROMPT;
+
+  const preloadBlock =
+    params.preloadedFiles && params.preloadedFiles.length > 0
+      ? `\n## Preloaded files (from intent router — prefer these paths)\n${params.preloadedFiles
+          .map(
+            (f) => `### ${f.path}\n\`\`\`\n${f.content}\n\`\`\``
+          )
+          .join("\n\n")}\n`
+      : "";
+
+  const planBlock = params.planSummary?.trim()
+    ? `\n## Approved plan (broad change)\n${params.planSummary.trim()}\n`
+    : "";
+
+  const scopeNote =
+    params.modifyCategory === "read_only"
+      ? "⚠️ MODE: Read-only Q&A — explain and answer; do not modify files.\n"
+      : "⚠️ SCOPE: Only modify files directly related to the instruction above. Do not change unrelated sections.\n";
+
   const userMessage = `## User Instruction
 ${params.userInstruction}
 ${params.historyContext}
-⚠️ SCOPE: Only modify files directly related to the instruction above. Do not change other sections or files.
-${params.imageBase64 ? "⚠️ IMAGE: Use the image only to identify the specific element mentioned in the instruction. Do not fix other things you see in the image.\n" : ""}
+${scopeNote}${params.imageBase64 ? "⚠️ IMAGE: Use the image only to identify the specific element mentioned in the instruction. Do not fix other things you see in the image.\n" : ""}
 ## Project File Tree
 \`\`\`
 ${params.fileTree}
 \`\`\`
-
+${preloadBlock}${planBlock}
 ## Design System
 ${params.designSystem.slice(0, 2000)}
 
@@ -71,10 +102,10 @@ ${params.designSystem.slice(0, 2000)}
 ${params.globalsCss.slice(0, 1000)}
 \`\`\`
 
-Please read the relevant files, make ONLY the requested changes, and verify with run_build.`;
+${userMessageFooter(params.modifyCategory)}`;
 
   return [
-    { role: "system", content: params.systemPrompt },
+    { role: "system", content: systemPrompt },
     {
       role: "user",
       content: params.imageBase64

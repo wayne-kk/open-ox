@@ -269,44 +269,29 @@ runModifyProject(projectId, userInstruction, imageBase64?)
 
 5.2 Agent 的自然语言理解
 
-用户描述的是他们"看到"的东西，而不是代码结构。Agent 的 system prompt 专门处理这种映射：
+用户描述的是他们「看到」的东西，而不是代码结构。由 **Agent 在工具循环中**自行搜索、读文件并定位——不在 orchestration 层做关键词切分或固定路径猜测。
 
-```
-用户说：                          Agent 理解为：
-"那个极致性能的区块"          →  搜索包含"性能"/"performance"的 section 文件
-"首页那个大标题太小了"        →  home_HeroSection.tsx 中的 heading 元素
-"导航栏的颜色不对"            →  layout_NavSection.tsx 或 app/layout.tsx
-"底部的版权信息"              →  layout_FooterSection.tsx
-```
-
-Agent 被要求先用中文关键词搜索，如果没有匹配再尝试英文等价词（性能→Performance，导航→Nav，标题→title/heading）。
+入口前先走 **LLM intent router**（`conversation` / `read_only` / `plan_only` / `code_change`），输出 `preloadPaths` 与 `scope`；下游只执行 router 的结构化决策，不再解析用户原文。
 
 5.3 Stop Hook 的设计哲学
 
-Stop Hook 解决了 LLM 的一个常见问题：在没有完成任务的情况下提前停止。
+Stop Hook 解决 LLM 提前停止的问题。它**只检查循环状态**（是否用过工具、是否完成编辑、是否还有类型错误），并注入通用 Agent 指令——**不**从用户句子里提取搜索关键词，**不**硬编码 `components/sections` 等路径。
+
+生产 `pnpm build` 在 loop 外由 `runFinalVerification` 执行；是否跳过 full build 由 intent router 映射的 `verificationMode` 决定，而非 touched-file 路径模式猜测。
 
 ```typescript
-function runStopHook(loopState: LoopState, userInstruction: string): string | null {
+// 示意 — 见 ai/flows/modify_project/engine/stopHooks.ts
+function runStopHook(loopState, userInstruction, modifyMode, { profile }) {
   if (!loopState.hasSearched && !loopState.hasEdited) {
-    // 提取关键词，给 LLM 具体的搜索建议
-    const keywords = userInstruction
-      .replace(/[，。！？、\s]+/g, " ")
-      .split(" ")
-      .filter(w => w.length >= 2)
-      .slice(0, 5);
-    return `You stopped without using any tools. MUST search first.
-    Try: search_code with keywords: ${keywords.map(k => `"${k}"`).join(", ")}`;
+    return modifyMode === "read_only"
+      ? "Use read/search/list tools; answer in natural language; do not edit."
+      : "Explore with tools from the file tree, then edit_file.";
   }
-  if (!loopState.hasEdited) {
-    return "You searched but didn't make any changes. Read the files and make edits.";
-  }
-  if (!loopState.hasBuild) {
-    return "You've made changes but haven't verified. Call run_build.";
-  }
-  if (!loopState.buildPassed) {
-    return `Build failed:\n${buildOutput}\nFix the errors.`;
-  }
-  return null; // 所有门控通过，允许停止
+  if (modifyMode === "read_only" && loopState.hasSearched) return null;
+  if (modifyMode === "code_change" && !loopState.hasEdited) return "Make edits now…";
+  if (profile.verificationMode === "tsc_only") return null; // router chose style scope
+  // … scoped tsc reminder when profile requires full verification
+  return null;
 }
 ```
 

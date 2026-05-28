@@ -16,7 +16,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useAuthUser } from "@/app/components/AuthHeaderActions";
+import { useAuthUser, useAuthProfile } from "@/app/components/AuthHeaderActions";
+import { fetchProjectGalleryDeduped } from "@/lib/projectGalleryClient";
 import { cn } from "@/lib/utils";
 
 interface ProjectMetadata {
@@ -33,6 +34,8 @@ interface ProjectMetadata {
   ownerUserId?: string;
   ownerUsername?: string | null;
   coverImageStatus?: "pending" | "ready" | "failed" | null;
+  /** Present when loaded via /api/projects/gallery — direct Storage signed URL. */
+  coverImageUrl?: string;
 }
 
 interface ProjectFolder {
@@ -263,12 +266,13 @@ function ProjectCard({
           )}
         >
           {hasCover ? (
-            /* eslint-disable-next-line @next/next/no-img-element -- API route JPEG with session cookie (no next/image optimizer) */
+            /* eslint-disable-next-line @next/next/no-img-element -- signed Storage URL or API fallback */
             <img
-              src={`/api/projects/${project.id}/cover`}
+              src={project.coverImageUrl ?? `/api/projects/${project.id}/cover`}
               alt=""
               className="relative z-0 h-full w-full object-contain object-center"
               loading="lazy"
+              decoding="async"
             />
           ) : (
             <>
@@ -483,6 +487,7 @@ function ProjectsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user: authUser, ready: authReady } = useAuthUser();
+  const { isAdmin } = useAuthProfile();
   const folderParamForView = (searchParams.get("folder") || "all").trim() || "all";
   const isMineView =
     searchParams.get("mine") === "1" ||
@@ -499,10 +504,11 @@ function ProjectsPageContent() {
   const [hasMore, setHasMore] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
   const [pendingDeleteFolderId, setPendingDeleteFolderId] = useState<string | null>(null);
   const [deletingFolder, setDeletingFolder] = useState(false);
   const [ownerOptionsFromApi, setOwnerOptionsFromApi] = useState<ProjectOwnerOption[]>([]);
+  const galleryRequestKeyRef = useRef<string>("");
+  const [listSearch, setListSearch] = useState("");
 
   const applyFolderFilter = useCallback(
     (next: string) => {
@@ -546,10 +552,13 @@ function ProjectsPageContent() {
     return o && /^[0-9a-f-]{36}$/i.test(o) ? o : null;
   }, [isMineView, searchParams]);
 
-  const [listSearch, setListSearch] = useState("");
+  type GalleryPagePayload = {
+    projects: ProjectMetadata[];
+    owners?: ProjectOwnerOption[];
+  };
 
   const fetchProjectsPage = useCallback(
-    async (offset: number, limit: number) => {
+    async (offset: number, limit: number): Promise<GalleryPagePayload | null> => {
       try {
         const params = new URLSearchParams();
         params.set("offset", String(offset));
@@ -560,7 +569,8 @@ function ProjectsPageContent() {
         } else if (globalOwnerParam) {
           params.set("owner", globalOwnerParam);
         }
-        const res = await fetch(`/api/projects?${params.toString()}`);
+        const galleryUrl = `/api/projects/gallery?${params.toString()}`;
+        const res = await fetchProjectGalleryDeduped(galleryUrl);
         if (res.status === 401) {
           if (isMineView) {
             router.push(`/auth?redirect=${encodeURIComponent("/projects")}`);
@@ -568,7 +578,7 @@ function ProjectsPageContent() {
           return null;
         }
         if (!res.ok) return null;
-        return (await res.json()) as ProjectMetadata[];
+        return (await res.json()) as GalleryPagePayload;
       } catch {
         return null;
       }
@@ -583,33 +593,32 @@ function ProjectsPageContent() {
     }
   }, []);
 
-  const loadProjectOwners = useCallback(async () => {
-    try {
-      const res = await fetch("/api/projects/owners");
-      if (!res.ok) return;
-      setOwnerOptionsFromApi((await res.json()) as ProjectOwnerOption[]);
-    } catch {
-      // Ignore: fallback to owners from currently loaded projects.
-    }
-  }, []);
-
   const loadInitialProjects = useCallback(async () => {
+    const requestKey = `${isMineView}|${folderQuery}|${globalOwnerParam ?? ""}|0|${PAGE_SIZE}`;
+    galleryRequestKeyRef.current = requestKey;
     setLoading(true);
-    const data = await fetchProjectsPage(0, PAGE_SIZE);
-    if (data) {
-      setProjects(data);
-      setHasMore(data.length === PAGE_SIZE);
+    const payload = await fetchProjectsPage(0, PAGE_SIZE);
+    if (galleryRequestKeyRef.current !== requestKey) return;
+    if (payload) {
+      setProjects(payload.projects);
+      setHasMore(payload.projects.length === PAGE_SIZE);
+      if (payload.owners) {
+        setOwnerOptionsFromApi(payload.owners);
+      }
     }
     setLoading(false);
-  }, [fetchProjectsPage]);
+  }, [fetchProjectsPage, folderQuery, globalOwnerParam, isMineView]);
 
   const loadMoreProjects = useCallback(async () => {
     if (loading || loadingMore || !hasMore) return;
     setLoadingMore(true);
-    const data = await fetchProjectsPage(projects.length, PAGE_SIZE);
-    if (data) {
-      setProjects((prev) => [...prev, ...data]);
-      setHasMore(data.length === PAGE_SIZE);
+    const payload = await fetchProjectsPage(projects.length, PAGE_SIZE);
+    if (payload) {
+      setProjects((prev) => [...prev, ...payload.projects]);
+      setHasMore(payload.projects.length === PAGE_SIZE);
+      if (payload.owners?.length) {
+        setOwnerOptionsFromApi(payload.owners);
+      }
     }
     setLoadingMore(false);
   }, [fetchProjectsPage, hasMore, loading, loadingMore, projects.length]);
@@ -617,10 +626,10 @@ function ProjectsPageContent() {
   const refreshLoadedProjects = useCallback(async () => {
     const loadedCount = projects.length;
     if (loadedCount === 0) return;
-    const data = await fetchProjectsPage(0, loadedCount);
-    if (data) {
-      setProjects(data);
-      setHasMore(data.length === loadedCount);
+    const payload = await fetchProjectsPage(0, loadedCount);
+    if (payload) {
+      setProjects(payload.projects);
+      setHasMore(payload.projects.length === loadedCount);
     }
   }, [fetchProjectsPage, projects.length]);
 
@@ -634,27 +643,6 @@ function ProjectsPageContent() {
   useEffect(() => {
     if (authUser) void loadFolders();
   }, [authUser, loadFolders]);
-
-  useEffect(() => {
-    let active = true;
-    void fetch("/api/auth/user")
-      .then((res) => res.json())
-      .then((data: { isAdmin?: boolean }) => {
-        if (active) setIsAdmin(data.isAdmin === true);
-      })
-      .catch(() => {
-        if (active) setIsAdmin(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!isMineView) {
-      void loadProjectOwners();
-    }
-  }, [isMineView, loadProjectOwners]);
 
   useEffect(() => {
     void loadInitialProjects();

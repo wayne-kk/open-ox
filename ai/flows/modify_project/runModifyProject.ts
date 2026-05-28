@@ -7,25 +7,67 @@ import { clearFileTracking } from "@/ai/tools";
 import { createArtifactLogger } from "@/ai/flows/generate_project/shared/logging";
 import { setRevertSnapshots, clearRevertSnapshots } from "@/ai/tools/system/revertFileTool";
 import { buildFileTree, buildHistoryContext, buildInitialMessages, tryReadFile } from "./context/buildContext";
+import { loadPreloadedFileContents } from "./context/loadPreloadedFileContents";
 import { FileSnapshotTracker, type DiffStats } from "./tracking/fileSnapshotTracker";
-import { runAgentLoop, MODIFY_AGENT_TOOLS_CORE, MODIFY_AGENT_TOOLS_WITH_IMAGE } from "./engine/loopEngine";
-import { SYSTEM_PROMPT } from "./prompt/systemPrompt";
+import { runAgentLoop } from "./engine/loopEngine";
+import { runFinalVerification } from "./engine/verification";
+import { runModifyPlanPhase } from "./engine/planPhase";
+import { resolveModifyProfile, withAllowedTargets, toolNamesForProfile } from "./profile/modifyProfile";
 import { appendTrajectoryEvent, findOrCreateTrajectoryRun } from "@/lib/trajectory/store";
 import type { TrajectoryData } from "./trajectory";
 import { withLangfuseSpan } from "@/lib/observability/langfuseTracing";
 import { LfSpanModify } from "@/lib/observability/langfuseTraceCatalog";
-import { stepModifyIntentRouter } from "./intent/modifyIntentRouter";
+import {
+  stepModifyIntentRouter,
+  type ModifyIntentCategory,
+} from "./intent/modifyIntentRouter";
 import { createImageExecutor, awaitPendingImages, type PendingImage } from "@/ai/tools/system/generateImageTool";
 import type { ToolExecutor } from "@/ai/tools/types";
+import type { ModifyPlan } from "./engine/planPhase";
 
 const MODIFY_INTENT_CONVERSATION_FALLBACK =
-  "我是修改助手：负责按你的描述修改当前项目并做构建检查。需要改页面或组件时，请说明要改哪里、改成什么样。";
+  "我是项目助手：可以回答关于当前站点的问题、帮你制定修改计划，或直接改代码。需要改页面时，请说明要改哪里、改成什么样。";
+
+function formatPlanOnlyAnalysis(plan: ModifyPlan): string {
+  const summary = plan.summary.trim();
+  const fileBlock =
+    plan.targetFiles.length > 0
+      ? `\n\n**建议涉及的文件：**\n${plan.targetFiles.map((f) => `- \`${f}\``).join("\n")}`
+      : "";
+  return `${summary}${fileBlock}\n\n---\n确认执行请说「按这个计划修改」，或指定要先做哪几项。`;
+}
+
+async function persistModifyRound(
+  db: SupabaseClient,
+  projectId: string,
+  existingHistory: ModificationRecord[],
+  record: ModificationRecord
+): Promise<void> {
+  await updateProjectStatus(db, projectId, "ready", {
+    modificationHistory: [...existingHistory, record],
+    verificationStatus: "passed",
+  });
+}
+
+function assistantLabel(category: ModifyIntentCategory): string {
+  switch (category) {
+    case "conversation":
+      return "对话";
+    case "read_only":
+      return "问答";
+    case "plan_only":
+      return "规划";
+    default:
+      return "修改";
+  }
+}
 
 type TrajectoryToolCall = NonNullable<TrajectoryData["messages"][number]["tool_calls"]>[number];
 
 export type ModifySSEEvent =
+  | { type: "intent"; category: ModifyIntentCategory; label: string }
   | { type: "step"; name: string; status: "running" | "done" | "error"; message?: string }
-  | { type: "plan"; plan: { analysis: string; changes: Array<{ path: string; action: string; reasoning: string }> } }
+  | { type: "plan"; plan: { analysis: string; changes: Array<{ path: string; action: string; reasoning: string }> }; intentCategory?: ModifyIntentCategory }
   | { type: "diff"; file: string; reasoning: string; patch: string; stats: DiffStats }
   | { type: "tool_call"; tool: string; args: Record<string, unknown>; result: string }
   | { type: "thinking"; content: string }
@@ -80,31 +122,39 @@ async function runModifyProjectInner(
   const projectDir = pmGetSiteRoot(projectId);
   onEvent({ type: "step", name: "resolve_project", status: "done" });
 
+  onEvent({ type: "step", name: "read_context", status: "running" });
+  const fileTree = await buildFileTree(projectDir);
+  const designSystem = (await tryReadFile(path.join(projectDir, "design-system.md"))) ?? "";
+  const globalsCss = (await tryReadFile(path.join(projectDir, "app/globals.css"))) ?? "";
+  onEvent({ type: "step", name: "read_context", status: "done" });
+
   onEvent({ type: "step", name: "intent_router", status: "running" });
   let routed: Awaited<ReturnType<typeof stepModifyIntentRouter>> = {
-    category: "code_change",
+    category: "read_only",
+    scope: "narrow",
+    preloadPaths: [],
     assistantMessage: "",
   };
   try {
     routed = await withLangfuseSpan(
       LfSpanModify.intentRouter,
-      () => stepModifyIntentRouter(userInstruction),
+      () => stepModifyIntentRouter(userInstruction, { fileTree }),
       { metadata: { projectId } }
     );
   } catch (err) {
-    console.warn("[modify] intent_router failed, defaulting to code_change:", err);
+    console.warn("[modify] intent_router failed, defaulting to read_only:", err);
+    routed = { category: "read_only", scope: "narrow", preloadPaths: [], assistantMessage: "" };
   }
+  onEvent({ type: "intent", category: routed.category, label: assistantLabel(routed.category) });
   onEvent({
     type: "step",
     name: "intent_router",
     status: "done",
-    message: routed.category,
+    message: `${routed.category} scope=${routed.scope}`,
   });
 
   if (routed.category === "conversation") {
     const reply = routed.assistantMessage.trim() || MODIFY_INTENT_CONVERSATION_FALLBACK;
-    onEvent({ type: "step", name: "read_context", status: "running" });
-    onEvent({ type: "step", name: "read_context", status: "done", message: "skipped (intent: conversation)" });
     onEvent({ type: "step", name: "agent_loop", status: "running" });
     onEvent({ type: "thinking", content: reply });
     onEvent({
@@ -115,10 +165,19 @@ async function runModifyProjectInner(
     });
     onEvent({
       type: "plan",
+      intentCategory: "conversation",
       plan: {
         analysis: reply,
         changes: [],
       },
+    });
+    await persistModifyRound(db, projectId, project.modificationHistory ?? [], {
+      instruction: userInstruction,
+      modifiedAt: new Date().toISOString(),
+      touchedFiles: [],
+      plan: { analysis: reply, changes: [] },
+      thinking: [reply],
+      image: imageBase64 ?? null,
     });
     await artifactLogger.writeJson("run", "result", {
       projectId,
@@ -133,7 +192,94 @@ async function runModifyProjectInner(
     return;
   }
 
+  const preloadedFiles = await loadPreloadedFileContents(projectDir, routed.preloadPaths, fileTree);
+
+  if (routed.category === "plan_only") {
+    onEvent({ type: "step", name: "modify_plan", status: "running" });
+    const plan = await withLangfuseSpan(
+      LfSpanModify.agentLoop,
+      () =>
+        runModifyPlanPhase({
+          userInstruction,
+          fileTree,
+          preloadedFiles,
+        }),
+      { metadata: { projectId, phase: "plan_only" } }
+    );
+    const analysis = formatPlanOnlyAnalysis(plan);
+    onEvent({
+      type: "step",
+      name: "modify_plan",
+      status: "done",
+      message: plan.targetFiles.join(", ") || "no targets",
+    });
+    onEvent({ type: "step", name: "agent_loop", status: "done", message: "0 iterations (plan only)" });
+    onEvent({
+      type: "plan",
+      intentCategory: "plan_only",
+      plan: {
+        analysis,
+        changes: plan.targetFiles.map((f) => ({
+          path: f,
+          action: "plan",
+          reasoning: "Planned target — not executed until you confirm",
+        })),
+      },
+    });
+    await persistModifyRound(db, projectId, project.modificationHistory ?? [], {
+      instruction: userInstruction,
+      modifiedAt: new Date().toISOString(),
+      touchedFiles: [],
+      plan: {
+        analysis,
+        changes: plan.targetFiles.map((f) => ({
+          path: f,
+          action: "plan",
+          reasoning: "Planned target",
+        })),
+      },
+      image: imageBase64 ?? null,
+    });
+    await artifactLogger.writeJson("run", "result", {
+      projectId,
+      instruction: userInstruction,
+      intent: "plan_only",
+      touchedFiles: [],
+      buildPassed: false,
+      iterations: 0,
+    });
+    clearRevertSnapshots();
+    clearFileTracking();
+    return;
+  }
+
   const modifyStopMode = routed.category === "read_only" ? "read_only" : "code_change";
+  let profile = resolveModifyProfile(routed);
+
+  let planSummary: string | undefined;
+  if (profile.usePlannedWideFlow) {
+    onEvent({ type: "step", name: "modify_plan", status: "running" });
+    const plan = await withLangfuseSpan(
+      LfSpanModify.agentLoop,
+      () =>
+        runModifyPlanPhase({
+          userInstruction,
+          fileTree,
+          preloadedFiles,
+        }),
+      { metadata: { projectId, phase: "plan" } }
+    );
+    planSummary = plan.summary;
+    if (plan.targetFiles.length > 0) {
+      profile = withAllowedTargets(profile, plan.targetFiles);
+    }
+    onEvent({
+      type: "step",
+      name: "modify_plan",
+      status: "done",
+      message: plan.targetFiles.join(", ") || "no targets",
+    });
+  }
 
   const taskId = `modify:${projectId}`;
   let trajectory: { runId: string; taskId: string } | null = null;
@@ -203,12 +349,6 @@ async function runModifyProjectInner(
     } catch (err) {
       console.warn("[modify] trajectory run creation failed:", err);
     }
-
-    onEvent({ type: "step", name: "read_context", status: "running" });
-    const fileTree = await buildFileTree(projectDir);
-    const designSystem = (await tryReadFile(path.join(projectDir, "design-system.md"))) ?? "";
-    const globalsCss = (await tryReadFile(path.join(projectDir, "app/globals.css"))) ?? "";
-    onEvent({ type: "step", name: "read_context", status: "done" });
 
     onEvent({ type: "step", name: "agent_loop", status: "running" });
     const tracker = new FileSnapshotTracker(projectDir);
@@ -341,17 +481,17 @@ async function runModifyProjectInner(
     const sessionHistory = conversationHistory ?? [];
     const historyContext = buildHistoryContext(dbHistory, sessionHistory);
     const messages = buildInitialMessages({
-      systemPrompt: SYSTEM_PROMPT,
+      modifyCategory: routed.category,
       userInstruction,
       historyContext,
       fileTree,
       designSystem,
       globalsCss,
       imageBase64,
+      preloadedFiles,
+      planSummary,
     });
 
-    const modifyToolNames =
-      modifyStopMode === "code_change" ? [...MODIFY_AGENT_TOOLS_WITH_IMAGE] : [...MODIFY_AGENT_TOOLS_CORE];
     let pendingImages: PendingImage[] = [];
     let toolOverrides: Record<string, ToolExecutor> | undefined;
     if (modifyStopMode === "code_change") {
@@ -370,15 +510,42 @@ async function runModifyProjectInner(
           userInstruction,
           modelOverride,
           modifyStopMode,
-          { toolOverrides, pendingImages, toolNames: modifyToolNames }
+          {
+            profile,
+            toolOverrides,
+            pendingImages,
+            includeImageTools: modifyStopMode === "code_change",
+          }
         ),
-      { metadata: { projectId } }
+      { metadata: { projectId, scope: profile.scope } }
     );
+
+    if (profile.allowEdits && loopState.hasEdited && loopState.touchedFiles.length > 0) {
+      onEvent({ type: "step", name: "final_verification", status: "running" });
+      const finalVerify = await runFinalVerification(profile, loopState.touchedFiles);
+      loopState.hasBuild = !finalVerify.skippedBuild;
+      loopState.buildPassed = finalVerify.buildPassed;
+      loopState.lastBuildOutput = finalVerify.buildOutput;
+      onEvent({
+        type: "step",
+        name: "final_verification",
+        status: finalVerify.buildPassed ? "done" : "error",
+        message: finalVerify.skippedBuild ? "scoped tsc only" : "full build",
+      });
+    }
+
     collectingOnEvent({
       type: "step",
       name: "agent_loop",
-      status: loopState.buildPassed ? "done" : loopState.hasEdited ? "error" : "done",
-      message: `${iterations} iterations, edited=${loopState.hasEdited}, build=${loopState.buildPassed ? "passed" : "failed"}`,
+      status:
+        modifyStopMode === "read_only"
+          ? "done"
+          : loopState.buildPassed
+            ? "done"
+            : loopState.hasEdited
+              ? "error"
+              : "done",
+      message: `${iterations} iterations, edited=${loopState.hasEdited}, build=${loopState.buildPassed ? "passed" : loopState.hasEdited ? "failed" : "skipped"}`,
     });
 
     if (pendingImages.length > 0) {
@@ -420,11 +587,14 @@ async function runModifyProjectInner(
       allRecordDiffs.length > 0
         ? `Agent made ${allRecordDiffs.length} file change(s) in ${iterations} iterations.`
         : allThinking.length > 0
-          ? allThinking.slice(0, 2000)
-          : `Agent ran ${iterations} iterations but made no changes. The LLM did not provide an explanation.`;
+          ? allThinking.slice(0, 4000)
+          : modifyStopMode === "read_only"
+            ? "未能生成回答，请尝试更具体地描述你想了解的内容或文件路径。"
+            : `Agent ran ${iterations} iterations but made no changes. The LLM did not provide an explanation.`;
 
     onEvent({
       type: "plan",
+      intentCategory: routed.category,
       plan: {
         analysis: analysisText,
         changes: allRecordDiffs.map((d) => ({
@@ -466,7 +636,10 @@ async function runModifyProjectInner(
     const existingHistory = project.modificationHistory ?? [];
     await updateProjectStatus(db, projectId, "ready", {
       modificationHistory: [...existingHistory, record],
-      verificationStatus: !loopState.hasEdited || loopState.buildPassed ? "passed" : "failed",
+      verificationStatus:
+        modifyStopMode === "read_only" || !loopState.hasEdited || loopState.buildPassed
+          ? "passed"
+          : "failed",
     });
     onEvent({
       type: "step",
@@ -513,7 +686,9 @@ async function runModifyProjectInner(
           projectId,
           instruction: userInstruction,
           model: modelOverride ?? "default",
-          tools: modifyToolNames,
+          tools: toolNamesForProfile(profile, {
+            includeImageTools: modifyStopMode === "code_change",
+          }),
           skills: [],
           iterations,
           buildPassed: loopState.buildPassed,

@@ -21,7 +21,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 import { ensureProjectNodeModules } from "@/lib/ensureProjectNodeModules";
 import { getSiteRoot } from "@/lib/projectManager";
-import { restoreProjectFiles } from "@/lib/storage";
+import { ensureProjectSourcesOnDisk } from "@/lib/storage";
 import {
   computeProjectFingerprint,
   ensureGlobalErrorFromTemplateForProject,
@@ -32,6 +32,7 @@ import {
   parseProjectsFilesHash,
   saveFingerprint,
 } from "@/lib/previewFingerprintDb";
+import { canUseInstantStaticPreview } from "@/lib/staticSitePreviewFastPath";
 import { rewriteExportedPublicRootPathsInText } from "@/lib/staticExportPublicPathRewrite";
 import {
   contentTypeForRelPath,
@@ -365,6 +366,67 @@ export type SyncStaticPreviewOptions = {
   force?: boolean;
 };
 
+type StaticPreviewRow = {
+  files_hash: string | null;
+  static_preview_synced_at: string | null;
+  static_preview_last_error: string | null;
+};
+
+async function loadStaticPreviewRow(
+  db: SupabaseClient,
+  projectId: string
+): Promise<StaticPreviewRow | null> {
+  const { data } = await db
+    .from("projects")
+    .select("files_hash, static_preview_synced_at, static_preview_last_error")
+    .eq("id", projectId)
+    .single();
+  return (data as StaticPreviewRow | null) ?? null;
+}
+
+/**
+ * Instant return when static export is already published — no Storage restore, no rebuild.
+ */
+export async function getExistingStoragePreviewUrl(
+  db: SupabaseClient,
+  projectId: string
+): Promise<{ url: string; port: number } | null> {
+  const row = await loadStaticPreviewRow(db, projectId);
+  if (
+    !canUseInstantStaticPreview({
+      filesHash: row?.files_hash ?? null,
+      staticPreviewSyncedAt: row?.static_preview_synced_at ?? null,
+      currentOriginFingerprint: storagePreviewOriginFingerprint(),
+    })
+  ) {
+    return null;
+  }
+
+  return { url: getStaticPreviewUrl(projectId), port: 0 };
+}
+
+async function tryInstantStaticPreviewReturn(
+  db: SupabaseClient,
+  projectId: string,
+  force: boolean
+): Promise<{ url: string; port: number; skipped: true } | null> {
+  const row = await loadStaticPreviewRow(db, projectId);
+  if (
+    !canUseInstantStaticPreview({
+      force,
+      filesHash: row?.files_hash ?? null,
+      staticPreviewSyncedAt: row?.static_preview_synced_at ?? null,
+      currentOriginFingerprint: storagePreviewOriginFingerprint(),
+    })
+  ) {
+    return null;
+  }
+
+  const url = getStaticPreviewUrl(projectId);
+  console.log(`[staticPreview] instant (skip restore+build) projectId=${projectId}`);
+  return { url, port: 0, skipped: true };
+}
+
 /**
  * Restore sources, optionally rebuild static export with basePath, upload `out/`, delete local `out/`,
  * update files_hash + DB sync columns.
@@ -381,8 +443,13 @@ export async function syncStaticSitePreview(
   }
 
   const promise = (async () => {
+    const instant = await tryInstantStaticPreviewReturn(db, projectId, force);
+    if (instant) {
+      return instant;
+    }
+
     const projectDir = getSiteRoot(projectId);
-    await restoreProjectFiles(projectId);
+    await ensureProjectSourcesOnDisk(projectId);
     try {
       await fs.access(path.join(projectDir, "package.json"));
     } catch {
@@ -405,6 +472,7 @@ export async function syncStaticSitePreview(
       saved.storageOriginFingerprint === originFp;
 
     if (skip) {
+      console.log(`[staticPreview] skip rebuild (fingerprint match) projectId=${projectId}`);
       return { url, port: 0, skipped: true };
     }
 
@@ -475,15 +543,7 @@ export async function getStaticPreviewStatus(
   projectId: string
 ): Promise<{ status: "running" | "stopped"; url?: string }> {
   const indexUrl = getStaticPreviewUrl(projectId);
-  const { data } = await db
-    .from("projects")
-    .select("static_preview_synced_at, static_preview_last_error")
-    .eq("id", projectId)
-    .single();
-  const row = data as {
-    static_preview_synced_at: string | null;
-    static_preview_last_error: string | null;
-  } | null;
+  const row = await loadStaticPreviewRow(db, projectId);
 
   if (row?.static_preview_last_error && !row?.static_preview_synced_at) {
     return { status: "stopped" };

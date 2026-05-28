@@ -186,6 +186,13 @@ function ModifyBubble({ record }: { record: ModifyRecord }) {
     );
 }
 
+function changeActionBadge(action: string): { label: string; className: string } {
+    if (action === "plan") return { label: "PLAN", className: "text-sky-400" };
+    if (action === "create") return { label: "NEW", className: "text-green-400" };
+    if (action === "delete") return { label: "DEL", className: "text-red-400" };
+    return { label: "MOD", className: "text-amber-300" };
+}
+
 function ModifyResultBubble({ record }: { record: ModifyRecord }) {
     if (record.isSystemMessage) {
         return (
@@ -203,26 +210,37 @@ function ModifyResultBubble({ record }: { record: ModifyRecord }) {
     const toolCalls = record.toolCalls ?? [];
     const hasTrace = dedupedThinking.length > 0 || toolCalls.length > 0;
 
+    const assistantTitle = record.intentLabel ? `${record.intentLabel}助手` : "修改助手";
+    const analysisTitle =
+        record.intentLabel === "问答" || record.intentLabel === "对话"
+            ? "回答"
+            : record.intentLabel === "规划"
+                ? "计划"
+                : "Analysis";
+
     return (
         <ChatBubble role="assistant">
-            <div className="text-[11px] font-medium text-foreground">修改助手</div>
+            <div className="text-[11px] font-medium text-foreground">{assistantTitle}</div>
             <div className="mt-3 space-y-3">
                 {record.plan && (
-                    <LogSection title="Analysis">
+                    <LogSection title={analysisTitle}>
                         <StudioMessageMarkdown content={record.plan.analysis} />
+                        {record.plan.changes.length > 0 && (
                         <div className="mt-2 space-y-1">
-                            {record.plan.changes.map((c) => (
+                            {record.plan.changes.map((c) => {
+                                const badge = changeActionBadge(c.action);
+                                return (
                                 <div key={c.path} className="flex items-start gap-2 font-mono text-[10px]">
-                                    <span className={c.action === "create" ? "text-green-400" : c.action === "delete" ? "text-red-400" : "text-amber-300"}>
-                                        {c.action === "create" ? "NEW" : c.action === "delete" ? "DEL" : "MOD"}
-                                    </span>
+                                    <span className={badge.className}>{badge.label}</span>
                                     <div>
                                         <span className="text-foreground/80">{c.path}</span>
                                         <p className="text-muted-foreground/60">{c.reasoning}</p>
                                     </div>
                                 </div>
-                            ))}
+                                );
+                            })}
                         </div>
+                        )}
                     </LogSection>
                 )}
 
@@ -325,6 +343,7 @@ export function BuildConversation({
     modifyDiffs,
     modifyPlan,
     modifyError,
+    modifyIntentLabel,
     pendingModifyInstruction,
     pendingModifyImage,
     intentImage,
@@ -730,8 +749,13 @@ export function BuildConversation({
                     {/* In-progress modify — assistant response */}
                     {modifying && (
                         <ChatBubble role="assistant">
-                            <div className="text-[11px] font-medium text-foreground">修改助手</div>
+                            <div className="text-[11px] font-medium text-foreground">{modifyIntentLabel}助手</div>
                             <div className="mt-3 space-y-3">
+                                {(modifyPlan?.analysis ?? "").trim() ? (
+                                    <LogSection title={modifyIntentLabel === "问答" || modifyIntentLabel === "对话" ? "回答" : modifyIntentLabel === "规划" ? "计划" : "Analysis"}>
+                                        <StudioMessageMarkdown content={(modifyPlan?.analysis ?? "").trim()} />
+                                    </LogSection>
+                                ) : null}
                                 {/* Steps */}
                                 {modifySteps.length > 0 && (
                                     <LogSection title="Steps">

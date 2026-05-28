@@ -1,31 +1,15 @@
 import { getSystemToolDefinitions } from "@/ai/tools/systemToolCatalog";
-import { executeSystemTool } from "@/ai/tools";
 import type { ToolExecutor } from "@/ai/tools/types";
 import { chatCompletion, type ChatMessage } from "@/ai/flows/generate_project/shared/llm";
 import { lfModifyAgentRound } from "@/lib/observability/langfuseGenerationCatalog";
-import { getModifyModelId } from "@/lib/config/models";
 import type { FileSnapshotTracker } from "../tracking/fileSnapshotTracker";
+import type { ModifyProfile } from "../profile/modifyProfile";
+import { toolNamesForProfile } from "../profile/modifyProfile";
 import { runStopHook, type LoopState, type ModifyStopMode } from "./stopHooks";
 import { compressContext } from "./contextCompression";
 import { awaitPendingImages, type PendingImage } from "@/ai/tools/system/generateImageTool";
+import { createProfiledToolExecutor } from "./toolGate";
 
-/** Core tools for modify (no image generation). */
-export const MODIFY_AGENT_TOOLS_CORE = [
-  "read_file",
-  "search_code",
-  "list_dir",
-  "edit_file",
-  "write_file",
-  "run_build",
-  "exec_shell",
-  "think",
-  "revert_file",
-] as const;
-
-/** Full tool list when code edits / assets are allowed (includes generate_image). */
-export const MODIFY_AGENT_TOOLS_WITH_IMAGE = [...MODIFY_AGENT_TOOLS_CORE, "generate_image"] as const;
-
-const MAX_ITERATIONS = 100;
 const MAX_STOP_HOOK_RETRIES = 5;
 
 type OnEvent = (event: {
@@ -34,25 +18,14 @@ type OnEvent = (event: {
 }) => void;
 
 export type RunAgentLoopOptions = {
+  profile: ModifyProfile;
   toolOverrides?: Record<string, ToolExecutor>;
   pendingImages?: PendingImage[];
-  /** Tool names passed to the model (defaults to WITH_IMAGE when overrides include generate_image logic — caller sets explicitly). */
-  toolNames?: string[];
+  includeImageTools?: boolean;
 };
 
-export async function runAgentLoop(
-  messages: ChatMessage[],
-  tracker: FileSnapshotTracker,
-  onEvent: OnEvent,
-  userInstruction: string,
-  modelOverride?: string,
-  modifyStopMode: ModifyStopMode = "code_change",
-  loopOptions?: RunAgentLoopOptions
-): Promise<{ messages: ChatMessage[]; loopState: LoopState; iterations: number }> {
-  const toolNameList = loopOptions?.toolNames ?? [...MODIFY_AGENT_TOOLS_WITH_IMAGE];
-  const model = modelOverride || getModifyModelId();
-  const tools = getSystemToolDefinitions(toolNameList);
-  const loopState: LoopState = {
+function createInitialLoopState(): LoopState {
+  return {
     hasEdited: false,
     hasSearched: false,
     hasBuild: false,
@@ -63,12 +36,48 @@ export async function runAgentLoop(
     consecutiveSameFileOps: 0,
     lastOperatedFile: null,
     phase: "orient",
+    touchedFiles: [],
+    openTypeErrors: 0,
+    hasScopedTsc: false,
+    scopedTscPassed: false,
   };
+}
+
+function countTypeErrorsFromToolResult(result: unknown): number {
+  if (typeof result !== "object" || !result) return 0;
+  const out = "output" in result && typeof result.output === "string" ? result.output : "";
+  const err = "error" in result && typeof result.error === "string" ? result.error : "";
+  const text = `${out}\n${err}`;
+  if (!/Type-check found|error TS\d+/i.test(text)) return 0;
+  if (typeof result === "object" && "success" in result && result.success === true) return 0;
+  return 1;
+}
+
+export async function runAgentLoop(
+  messages: ChatMessage[],
+  tracker: FileSnapshotTracker,
+  onEvent: OnEvent,
+  userInstruction: string,
+  modelOverride: string | undefined,
+  modifyStopMode: ModifyStopMode,
+  loopOptions: RunAgentLoopOptions
+): Promise<{ messages: ChatMessage[]; loopState: LoopState; iterations: number }> {
+  const profile = loopOptions.profile;
+  const toolNameList = toolNamesForProfile(profile, {
+    includeImageTools: loopOptions.includeImageTools === true,
+  });
+  const model = modelOverride || profile.modelId;
+  const tools = getSystemToolDefinitions(toolNameList);
+  const loopState = createInitialLoopState();
+  const touchedFiles = new Set<string>();
+  const profiledExecute = createProfiledToolExecutor(profile, touchedFiles);
+
   let iterations = 0;
   let stopHookRetries = 0;
   let lastTransition: "initial" | "stop_hook_retry" | "tool_execution" = "initial";
+  const maxIterations = profile.maxIterations;
 
-  while (iterations < MAX_ITERATIONS) {
+  while (iterations < maxIterations) {
     iterations++;
     compressContext(messages, loopState);
 
@@ -90,6 +99,7 @@ export async function runAgentLoop(
           langfuseGenerationMetadata: {
             modifyLoopIteration: iterations,
             llmAttempt: attempt,
+            modifyScope: profile.scope,
           },
         });
         break;
@@ -98,7 +108,10 @@ export async function runAgentLoop(
         const isRetryable = /400|429|500|502|503|504|ETIMEDOUT|ECONNRESET|Thought signature/i.test(errMsg);
         if (isRetryable && attempt < MAX_LLM_RETRIES) {
           const delayMs = 1000 * (attempt + 1);
-          onEvent({ type: "thinking", content: `[LLM Retry] Attempt ${attempt + 1} failed: ${errMsg.slice(0, 200)}. Retrying...` });
+          onEvent({
+            type: "thinking",
+            content: `[LLM Retry] Attempt ${attempt + 1} failed: ${errMsg.slice(0, 200)}. Retrying...`,
+          });
           await new Promise((r) => setTimeout(r, delayMs));
           continue;
         }
@@ -119,7 +132,8 @@ export async function runAgentLoop(
     }
 
     if (!msg.tool_calls || msg.tool_calls.length === 0) {
-      const blockingError = runStopHook(loopState, userInstruction, modifyStopMode);
+      loopState.touchedFiles = [...touchedFiles];
+      const blockingError = runStopHook(loopState, userInstruction, modifyStopMode, { profile });
       if (blockingError && stopHookRetries < MAX_STOP_HOOK_RETRIES) {
         stopHookRetries++;
         lastTransition = "stop_hook_retry";
@@ -142,12 +156,12 @@ export async function runAgentLoop(
         await tracker.capture(args.path as string);
       }
 
-      if (name === "run_build" && loopOptions?.pendingImages?.length) {
+      if (name === "run_scoped_tsc" && loopOptions.pendingImages?.length) {
         await awaitPendingImages(loopOptions.pendingImages);
       }
 
-      const overrideExec = loopOptions?.toolOverrides?.[name];
-      const result = overrideExec ? await overrideExec(args) : await executeSystemTool(name, args);
+      const overrideExec = loopOptions.toolOverrides?.[name];
+      const result = overrideExec ? await overrideExec(args) : await profiledExecute(name, args);
 
       if (name === "generate_image") {
         if (typeof result === "object" && result && "success" in result && result.success) {
@@ -156,10 +170,18 @@ export async function runAgentLoop(
       }
 
       if (name === "edit_file" || name === "write_file") {
-        if (typeof result === "object" ? result.success : true) loopState.hasEdited = true;
-        const filePath = args.path as string;
-        if (filePath) loopState.fileEditCounts.set(filePath, (loopState.fileEditCounts.get(filePath) ?? 0) + 1);
+        const ok = typeof result === "object" ? result.success : true;
+        if (ok) {
+          loopState.hasEdited = true;
+          const filePath = args.path as string;
+          if (filePath) {
+            const norm = filePath.replace(/\\/g, "/");
+            loopState.fileEditCounts.set(norm, (loopState.fileEditCounts.get(norm) ?? 0) + 1);
+            loopState.openTypeErrors += countTypeErrorsFromToolResult(result);
+          }
+        }
       }
+
       if (name === "search_code" || name === "list_dir" || name === "read_file" || name === "exec_shell") {
         loopState.hasSearched = true;
         if (name === "read_file" && args.path) {
@@ -167,20 +189,27 @@ export async function runAgentLoop(
           loopState.fileReadCounts.set(filePath, (loopState.fileReadCounts.get(filePath) ?? 0) + 1);
         }
       }
-      if (name === "run_build") {
-        loopState.hasBuild = true;
-        loopState.buildPassed = typeof result === "object" ? result.success : !String(result).includes("failed");
-        loopState.lastBuildOutput = typeof result === "object" ? (result.output ?? result.error ?? "") : String(result);
+
+      if (name === "run_scoped_tsc") {
+        loopState.hasScopedTsc = true;
+        loopState.scopedTscPassed = typeof result === "object" ? result.success : !String(result).includes("failed");
       }
 
-      const out = typeof result === "string" ? result : result.success ? result.output ?? "ok" : result.error ?? "failed";
+      const out =
+        typeof result === "string" ? result : result.success ? result.output ?? "ok" : result.error ?? "failed";
       onEvent({ type: "tool_call", tool: name, args, result: out.slice(0, 500) });
-      messages.push({ role: "tool", tool_call_id: tc.id, content: typeof result === "string" ? result : JSON.stringify(result) });
+      messages.push({
+        role: "tool",
+        tool_call_id: tc.id,
+        content: typeof result === "string" ? result : JSON.stringify(result),
+      });
     }
 
+    loopState.touchedFiles = [...touchedFiles];
     lastTransition = "tool_execution";
     stopHookRetries = 0;
   }
 
+  loopState.touchedFiles = [...touchedFiles];
   return { messages, loopState, iterations };
 }
