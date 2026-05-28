@@ -14,7 +14,7 @@
 
 1. `**page.tsx` 必须存在**：路径由用户消息给出（`home` → `app/page.tsx`）。
 2. **导出默认 React Server or Client Component**（与现有模板一致）；需要交互时用 `"use client"` 并按需下放 client 边界。
-3. **自行拆文件**：将页面专属组件放在 `components/` 下你自己的子树（例如 `components/home/`、`components/<page-feature>/`、`components/ui/`）；**勿**与不存在的「计划 section 清单」对齐。
+3. **自行拆文件**：将页面专属组件放在 `components/` 下你自己的子树（多页并行生成时优先 `components/<slug>/...`，亦可 `components/<page-feature>/...`、`components/ui/`）；**勿**与不存在的「计划 section 清单」对齐。
 4. **遵守设计系统**：`design-system.md` / tokens / Tailwind：颜色与间距对齐 token，不要为了抄参考站硬编码一整套色板。
 5. **layout / chrome / 全局样式是流水线与 Architect 专属（你只读 globals + 不动 layout/chrome）**：
    - **`app/globals.css`**：禁止 `write_file` / `edit_file`。该文件由流水线的 **apply_project_design_tokens**（LLM）写入；你只使用其中的 token / Tailwind 工具类。

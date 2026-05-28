@@ -19,6 +19,22 @@ type QueuedHandshake = {
   extras: Partial<AiResponse>;
 };
 
+type SSEProcessOutcome = {
+  queue?: QueuedHandshake;
+  /**
+   * When true, await a macrotask before reading the next SSE record.
+   * One TCP chunk often contains many `data:` lines — without this, React may batch
+   * all `setIntentLiveTrace` updates into a single paint so the UI feels non-streaming.
+   */
+  yieldUi?: boolean;
+};
+
+function nextMacrotask(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
+}
+
 function delay(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     const t = setTimeout(resolve, ms);
@@ -155,9 +171,9 @@ async function waitForBackgroundGeneration(
   }
 }
 
-function processSSEChunk(chunk: string, callbacks: BuildSiteCallbacks): QueuedHandshake | undefined {
+function processSSEChunk(chunk: string, callbacks: BuildSiteCallbacks): SSEProcessOutcome {
   const line = chunk.replace(/^data:\s*/, "").trim();
-  if (!line) return;
+  if (!line) return {};
 
   try {
     const event = JSON.parse(line) as {
@@ -175,22 +191,23 @@ function processSSEChunk(chunk: string, callbacks: BuildSiteCallbacks): QueuedHa
 
     if (event.type === "intent_agent_turn") {
       callbacks.onIntentTurn?.(event.turn as IntentAgentTurn);
-      return;
+      return { yieldUi: true };
     }
     if (event.type === "intent_progress") {
       const kind = event.kind;
       if (kind === "assistant_round" || kind === "reasoning" || kind === "tool") {
         callbacks.onIntentProgress?.(event as IntentProgressEvent);
+        return { yieldUi: true };
       }
-      return;
+      return {};
     }
     if (event.type === "intent_agent_commit") {
       callbacks.onIntentCommit?.(String(event.mergedBrief ?? ""));
-      return;
+      return { yieldUi: true };
     }
     if (event.type === "step") {
       callbacks.onStep(event as unknown as BuildStep);
-      return;
+      return {};
     }
     if (event.type === "done") {
       const phase = typeof event.phase === "string" ? event.phase : "";
@@ -208,14 +225,16 @@ function processSSEChunk(chunk: string, callbacks: BuildSiteCallbacks): QueuedHa
         if (typeof result.content === "string") extras.content = result.content;
 
         return {
-          kind: "generation_queued",
-          projectId: result.projectId,
-          extras,
+          queue: {
+            kind: "generation_queued",
+            projectId: result.projectId,
+            extras,
+          },
         };
       }
 
       callbacks.onDone(result as unknown as AiResponse);
-      return;
+      return {};
     }
     if (event.type === "error") {
       callbacks.onError(String(event.message));
@@ -223,7 +242,7 @@ function processSSEChunk(chunk: string, callbacks: BuildSiteCallbacks): QueuedHa
   } catch {
     // ignore malformed SSE chunks
   }
-  return undefined;
+  return {};
 }
 
 export async function runBuildSite(
@@ -296,19 +315,25 @@ export async function runBuildSite(
         buffer = lines.pop() ?? "";
 
         for (const chunk of lines) {
-          const handshake = processSSEChunk(chunk, callbacks);
-          if (handshake?.kind === "generation_queued") {
-            await handleQueuedHandshake(handshake);
+          const outcome = processSSEChunk(chunk, callbacks);
+          if (outcome.queue?.kind === "generation_queued") {
+            await handleQueuedHandshake(outcome.queue);
             return;
+          }
+          if (outcome.yieldUi) {
+            await nextMacrotask();
           }
         }
       }
 
       if (buffer.trim()) {
-        const handshake = processSSEChunk(buffer, callbacks);
-        if (handshake?.kind === "generation_queued") {
-          await handleQueuedHandshake(handshake);
+        const outcome = processSSEChunk(buffer, callbacks);
+        if (outcome.queue?.kind === "generation_queued") {
+          await handleQueuedHandshake(outcome.queue);
           return;
+        }
+        if (outcome.yieldUi) {
+          await nextMacrotask();
         }
       }
     } catch (err) {

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, CircleCheckBig, Play, Send, Wand2, RefreshCw } from "lucide-react";
+import { AlertTriangle, CircleCheckBig, Play, Send, Wand2, RefreshCw, ChevronRight } from "lucide-react";
 import { ChatBubble } from "./ui/ChatBubble";
 import { LogSection } from "./ui/LogSection";
 import { TermLine } from "./ui/TermLine";
@@ -13,9 +13,11 @@ import { StudioMessageMarkdown } from "./StudioMessageMarkdown";
 import { SlashMenu } from "@/app/components/ui/SlashMenu";
 import { useSlashMenu } from "@/app/hooks/useSlashMenu";
 import {
-  isRecoverableGenerationError,
-  stripRecoverablePrefixForDisplay,
+    isRecoverableGenerationError,
+    stripRecoverablePrefixForDisplay,
 } from "@/lib/generationRecovery";
+import type { IntentProgressEvent } from "@/ai/flows/generate_project/intentAgent/types";
+import { buildIntentExplorerMarkdown } from "@/app/studio/lib/intentExplorerNarrative";
 import type { BuildStudioState, ModifyRecord, ModifyDiff } from "../hooks/useBuildStudio";
 
 function formatMs(ms: number): string {
@@ -140,6 +142,129 @@ function filterThinkingDedupe(thinking: string[], primary: string): string[] {
     const p = normalizeMessageDedupe(primary);
     if (!p) return thinking;
     return thinking.filter((t) => normalizeMessageDedupe(t) !== p);
+}
+
+function intentAgentTraceHeadline(events: IntentProgressEvent[]): string {
+    if (events.length === 0) return "分析中…";
+    const last = events[events.length - 1]!;
+    if (last.kind === "assistant_round") {
+        const names = last.toolCallNames?.filter(Boolean).join(" · ") || "应答";
+        return `Round ${last.iteration + 1} · ${names}`;
+    }
+    if (last.kind === "reasoning") {
+        const t = last.text.trim().replace(/\s+/g, " ");
+        return t.length > 88 ? `${t.slice(0, 88)}…` : (t || "推理");
+    }
+    if (last.kind === "tool") {
+        const short = last.toolName.replace(/_/g, " ");
+        return `${short} · iter ${last.iteration + 1}`;
+    }
+    return "进行中";
+}
+
+/** Intent Task Agent：`intent_progress` — Cursor「Exploring」式叙述 + 可展开技术明细 */
+function IntentAgentTraceBlock({
+    events,
+    mode,
+    primaryDedupe,
+}: {
+    events: IntentProgressEvent[];
+    mode: "live" | "archived";
+    primaryDedupe?: string;
+}) {
+    if (!events || events.length === 0) return null;
+    const primary = normalizeMessageDedupe(primaryDedupe ?? "");
+    const headline = intentAgentTraceHeadline(events);
+    const narrative = buildIntentExplorerMarkdown(events, mode);
+
+    return (
+        <details
+            className="group/explorer mb-3 rounded-xl border border-white/8 bg-[#141618]/90 overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+            open={mode === "live"}
+        >
+            <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 select-none hover:bg-white/[0.04] [&::-webkit-details-marker]:hidden">
+                <ChevronRight className="mt-px h-3.5 w-3.5 shrink-0 text-muted-foreground/55 transition-transform duration-200 group-open/explorer:rotate-90" aria-hidden />
+                <span className="shrink-0 text-[12px] font-semibold tracking-tight text-foreground/92">
+                    Exploring
+                </span>
+                <span className="min-w-0 flex-1 truncate text-left text-[11px] text-muted-foreground/80">
+                    {headline}
+                </span>
+                <span className="shrink-0 font-mono text-[10px] text-muted-foreground/40">{events.length} evt</span>
+            </summary>
+            <div className="border-t border-white/[0.06] px-3 py-2.5 space-y-3">
+                <StudioMessageMarkdown
+                    content={narrative}
+                    className="intent-explorer-md [&>*:first-child]:mt-0 [&_p]:mb-2 [&_p]:last:mb-0 [&_p]:text-[12px] [&_p]:leading-6 [&_p]:text-muted-foreground/88 [&_strong]:text-foreground/90 [&_code]:rounded [&_code]:border [&_code]:border-white/8 [&_code]:bg-white/[0.06] [&_code]:px-1 [&_code]:py-px [&_code]:font-mono [&_code]:text-[11px] [&_code]:text-[#dbeafe]/95"
+                />
+
+                <details className="group/raw rounded-lg border border-white/[0.07] bg-black/30">
+                    <summary className="flex cursor-pointer list-none items-center gap-1.5 px-2.5 py-2 font-mono text-[10px] text-muted-foreground/70 hover:bg-white/[0.03] [&::-webkit-details-marker]:hidden">
+                        <ChevronRight className="h-3 w-3 shrink-0 opacity-55 transition-transform group-open/raw:rotate-90" />
+                        <span>技术明细</span>
+                        <span className="text-muted-foreground/40">raw trace</span>
+                    </summary>
+                    <div className="max-h-[min(42vh,360px)] space-y-3 overflow-y-auto border-t border-white/[0.05] px-2.5 py-2">
+                        {events.map((e, i) => {
+                            if (e.kind === "assistant_round") {
+                                return (
+                                    <div key={`ar-${i}`} className="font-mono text-[10px] leading-relaxed">
+                                        <div className="text-muted-foreground/55">
+                                            Round {e.iteration + 1}
+                                            {e.toolCallNames?.length ? (
+                                                <>
+                                                    {" "}
+                                                    →{" "}
+                                                    <span className="text-amber-200/85">{e.toolCallNames.join(" · ")}</span>
+                                                </>
+                                            ) : (
+                                                <span className="text-muted-foreground/45"> · 文本应答</span>
+                                            )}
+                                        </div>
+                                        {e.textPreview?.trim() ? (
+                                            <p className="mt-1 whitespace-pre-wrap break-words text-foreground/60">
+                                                {e.textPreview.trim().slice(0, 2_000)}
+                                                {e.textPreview.trim().length > 2_000 ? "…" : ""}
+                                            </p>
+                                        ) : null}
+                                    </div>
+                                );
+                            }
+                            if (e.kind === "reasoning") {
+                                const t = e.text.trim();
+                                if (!t) return null;
+                                if (primary && normalizeMessageDedupe(t) === primary) return null;
+                                return (
+                                    <div key={`rs-${i}`} className="rounded-lg border border-white/6 bg-black/35 px-2.5 py-2 font-mono text-[10px] leading-relaxed text-foreground/70">
+                                        <div className="mb-1 text-[9px] uppercase tracking-wide text-muted-foreground/55">
+                                            Thought · iter {e.iteration + 1}
+                                        </div>
+                                        <div className="max-h-[200px] overflow-y-auto whitespace-pre-wrap break-words">
+                                            {t.length > 14_000 ? `${t.slice(0, 14_000)}…` : t}
+                                        </div>
+                                    </div>
+                                );
+                            }
+                            return (
+                                <div key={`tl-${i}`} className="font-mono text-[10px] leading-relaxed">
+                                    <span className="text-emerald-300/85">{e.toolName}</span>
+                                    <span className="text-muted-foreground/50"> · i{e.iteration + 1}</span>
+                                    <pre className="mt-1 overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-black/40 px-2 py-1.5 text-foreground/60">
+                                        {e.argsPreview.length > 900 ? `${e.argsPreview.slice(0, 900)}…` : e.argsPreview}
+                                    </pre>
+                                    {e.resultPreview ? (
+                                        <pre className="mt-1 overflow-x-auto whitespace-pre-wrap break-words border-l border-white/10 pl-2 text-muted-foreground/55">
+                                            {e.resultPreview.length > 1_200 ? `${e.resultPreview.slice(0, 1_200)}…` : e.resultPreview}
+                                        </pre>
+                                    ) : null}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </details>
+            </div>
+        </details>
+    );
 }
 
 /** 模型逐步推理内容：默认折叠，避免与主摘要重复占屏。 */
@@ -299,6 +424,7 @@ export function BuildConversation({
     response,
     mergedBrief,
     conversationMessages,
+    intentLiveTrace,
     lastRunInput,
     elapsed,
     flowStart,
@@ -404,7 +530,7 @@ export function BuildConversation({
         if (isNearBottomRef.current && chatRef.current) {
             chatRef.current.scrollTop = chatRef.current.scrollHeight;
         }
-    }, [response, conversationMessages, loading, modifying, modifyToolCalls, modifyThinking, modifySteps, modifyDiffs, modifyError, modifyHistory]);
+    }, [response, conversationMessages, loading, modifying, modifyToolCalls, modifyThinking, modifySteps, modifyDiffs, modifyError, modifyHistory, intentLiveTrace]);
 
     return (
         <aside className="flex h-full min-h-0 w-full shrink-0 flex-col overflow-hidden lg:w-[540px] lg:max-h-full scrollbar-hidden">
@@ -483,6 +609,14 @@ export function BuildConversation({
                                     )}
                                 </div>
 
+                                {message.role === "assistant" && (message.activityLog?.length ?? 0) > 0 ? (
+                                    <IntentAgentTraceBlock
+                                        mode="archived"
+                                        events={message.activityLog!}
+                                        primaryDedupe={message.content}
+                                    />
+                                ) : null}
+
                                 {/* Brief draft — always visible so the confirmed structure stays in the conversation */}
                                 {message.role === "assistant" && message.intentPayload?.briefDraftMarkdown ? (
                                     <div className="rounded-2xl border border-white/8 bg-black/20 px-4 py-3 text-muted-foreground">
@@ -531,9 +665,13 @@ export function BuildConversation({
                         <ChatBubble role="assistant">
                             <div className="text-[11px] font-medium text-foreground">意图助手</div>
                             <div className="mt-2 space-y-3">
-                                <div className="text-[13px] leading-7 text-foreground">
-                                    <p className="text-muted-foreground">正在理解你的需求...</p>
-                                </div>
+                                {intentLiveTrace.length > 0 ? (
+                                    <IntentAgentTraceBlock mode="live" events={intentLiveTrace} />
+                                ) : (
+                                    <div className="text-[13px] leading-7 text-foreground">
+                                        <p className="text-muted-foreground">正在理解你的需求…</p>
+                                    </div>
+                                )}
                             </div>
                         </ChatBubble>
                     ) : null}

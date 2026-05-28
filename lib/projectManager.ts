@@ -382,6 +382,31 @@ export async function updateProjectStatus(
   throw new Error(`[projectManager] updateProjectStatus failed: ${lastMessage}`);
 }
 
+export async function setProjectReferenceScreenshot(
+  db: SupabaseClient,
+  id: string,
+  rawImage: string | null | undefined
+): Promise<void> {
+  if (typeof rawImage !== "string" || !rawImage.trim()) {
+    return;
+  }
+  const img = rawImage.trim();
+  const dataUrl = img.startsWith("data:") ? img : `data:image/png;base64,${img}`;
+  if (dataUrl.length > REFERENCE_IMAGE_MAX_CHARS) {
+    console.warn(
+      `[setProjectReferenceScreenshot] skip: image exceeds REFERENCE_IMAGE_MAX_CHARS (${REFERENCE_IMAGE_MAX_CHARS})`
+    );
+    return;
+  }
+  const { error } = await db
+    .from("projects")
+    .update({ reference_image_data_url: dataUrl, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) {
+    console.warn("[setProjectReferenceScreenshot]", error.message);
+  }
+}
+
 /** Clear pasted reference image after intent has persisted multimodal session (or on fatal paths, optional). */
 export async function clearProjectReferenceImage(db: SupabaseClient, id: string): Promise<void> {
   const { error } = await db

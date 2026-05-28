@@ -24,6 +24,7 @@ import type { PlannedPageBlueprint, StepTrace, PageAgentProjectContext, BuildSte
 import { resolvePageImplementAgentRuleIds } from "../shared/agentRuleBundles";
 import { buildUserVisionContent } from "../shared/userVisionContent";
 import { screenshotGuardrailIdFromContext } from "../shared/screenshotIntentMode";
+import { formatKnownRoutesMarkdown } from "../shared/knownRoutesPrompt";
 
 export const PAGE_IMPLEMENTATION_COMPLETE = "page_implementation_complete";
 
@@ -136,6 +137,25 @@ export async function runPageImplementAgent(
     2
   );
 
+  const refShot = projectContext.referenceScreenshotDataUrl ?? null;
+  const refGuardId = screenshotGuardrailIdFromContext(
+    projectContext.screenshotIntentMode,
+    Boolean(refShot?.trim())
+  );
+  const layoutReplicateScreenshot = refGuardId === "screenshotLayoutFidelity";
+
+  const screenshotReplicateIntro = layoutReplicateScreenshot
+    ? `## Reference screenshot — layout replicate (precedence)\n\nThe **attached image overrules** generic marketing patterns, empty \`pageDesignPlan.hierarchy\` boilerplate, and design-system vibes that would add unseen blocks. Implement **only** regions visible in the image (plus layout chrome owned by Architect). Tokens should match screenshot colors/contrast unless they conflict with \`globals.css\` tokens already applied — prefer reconciling Tailwind usage to screenshot.\n\n`
+    : "";
+
+  const planHeading = layoutReplicateScreenshot
+    ? "## Page design plan (secondary — screenshot wins on structure)"
+    : "## Page design plan (canonical)";
+
+  const imageStepInstruction = layoutReplicateScreenshot
+    ? `2. **Images**: Call \`generate_image\` **only** for bitmaps explicitly visible in the reference screenshot **or** placeholders for unreadable thumbnails that the screenshot implies. **Do not** invent hero photography, testimonials art, decorative blobs, or “marketing polish” visuals absent from the screenshot. Use flat color / CSS / Lucide placeholders where the image shows icons or simplified UI chrome.`
+    : `2. **Images first when needed**: If this page should show photography/illustrations (typical marketing/product site: hero visual, feature art, case study photo), call \`generate_image\` **before** writing TSX that references those assets — use only paths returned by the tool. Skip only if the brief/plan clearly implies a no-imagery / data-only UI.`;
+
   // Pre-warm context: read the chrome contract + globals + components tree
   // up front so the agent does NOT need to spend round-trips on read_file /
   // list_dir for the obvious things.
@@ -146,7 +166,7 @@ export async function runPageImplementAgent(
 
   const userMessage = `## Implement this Next.js route (App Router)
 
-**Target page file**: \`${targetPath}\`
+${screenshotReplicateIntro}**Target page file**: \`${targetPath}\`
 **Slug**: ${page.slug}
 **Page title**: ${page.title}
 
@@ -156,7 +176,7 @@ ${page.description}
 ## Journey stage
 ${page.journeyStage}
 
-## Page design plan (canonical)
+${planHeading}
 ${planJson}
 
 ## Pre-read context (already loaded for you — do NOT re-read these files)
@@ -194,6 +214,9 @@ ${componentsTree}
 - Language (bcp47): ${projectContext.language}
 - Design keywords: ${projectContext.designKeywords.join(", ")}
 
+${formatKnownRoutesMarkdown(projectContext.pages)}
+When this page links to another MVP route or exposes a persistent CTA to one, prefer \`next/link\` (\`<Link>\`) with an \`href\` copied **exactly** from the Known routes table (never invent undocumented top-level routes).
+
 ## Design system (reference — already loaded; \`design-system.md\` need not be re-read)
 ${designSystem}
 ${
@@ -208,20 +231,19 @@ ${heroSkillPrompt}`
 }
 
 ## Instructions (follow in order)
-1. **Decide structure**: review the pre-read context above; you can skip read_file for layout.tsx / globals.css / design-system / app tree / components tree. If you genuinely need a specific component file's contents, then \`read_file\` it.
-2. **Images first when needed**: If this page should show photography/illustrations (typical marketing/product site: hero visual, feature art, case study photo), call \`generate_image\` **before** writing TSX that references those assets — use only paths returned by the tool. Skip only if the brief/plan clearly implies a no-imagery / data-only UI.
+1. **Decide structure**: review the pre-read context above; you can skip read_file for layout.tsx / globals.css / design-system / app tree / components tree.${
+      layoutReplicateScreenshot
+        ? " When the screenshot is attached, derive the **ordered list of main UI blocks strictly from the image**."
+        : ""
+    } If you genuinely need a specific component file's contents, then \`read_file\` it.
+${imageStepInstruction}
 3. **Implement**: \`write_file\` / \`edit_file\` to create \`${targetPath}\` and extract page-local components under \`components/\` (your own subtree, e.g. \`components/<page-feature>/**\`). Respect design tokens. **Do not modify** \`app/layout.tsx\` or any file under \`components/chrome/**\`. Files are auto-formatted with Prettier on write — you do **not** need to call \`format_code\` afterwards.
 4. **Complete**: call **\`${PAGE_IMPLEMENTATION_COMPLETE}\`** with a summary of files and layout approach.
 
 ⚠️ Step 4 is mandatory. The pipeline fails if you do not call \`${PAGE_IMPLEMENTATION_COMPLETE}\`.
 
-Do not invent extra top-level routes beyond this page.`;
+Do not invent routes outside the Known routes table for this MVP.`;
 
-  const refShot = projectContext.referenceScreenshotDataUrl ?? null;
-  const refGuardId = screenshotGuardrailIdFromContext(
-    projectContext.screenshotIntentMode,
-    Boolean(refShot?.trim())
-  );
   const systemPrompt = composePromptBlocks([
     loadSystem("frontend"),
     loadStepPrompt("pageImplementAgent"),

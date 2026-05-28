@@ -106,6 +106,12 @@ export async function POST(req: Request) {
         ? body.imageBase64.trim()
         : undefined;
 
+    let referenceScreenshotCommitted = Boolean(initialImage);
+    if (!referenceScreenshotCommitted && preCreatedProjectId && !retryProjectId) {
+      const meta = await getProject(db, preCreatedProjectId);
+      referenceScreenshotCommitted = Boolean(meta?.referenceImageDataUrl?.trim());
+    }
+
     const payload: GenerationRunPayloadBody = {
       requestingUserId: user.id,
       effectivePrompt,
@@ -121,6 +127,7 @@ export async function POST(req: Request) {
         : {}),
       useDatabasePrompts: false,
       ...(initialImage ? { initialImageBase64: initialImage } : {}),
+      ...(referenceScreenshotCommitted ? { referenceScreenshotCommitted: true } : {}),
     };
 
     const { runId, attached } = await enqueueGenerationJob({

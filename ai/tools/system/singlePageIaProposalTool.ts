@@ -11,9 +11,10 @@ export const singlePageIaProposalTool: ChatCompletionTool = {
   function: {
     name: "single_page_ia_proposal",
     description:
-      "Propose a **single-page** information architecture (section order, purpose of each block, primary/secondary CTAs) for the user's product. " +
-      "Call when the user has stated a product goal but section structure is unclear. Output is Markdown for your reasoning only — present a clear summary to the user via `yield_to_user`. " +
-      "Respects pipeline: one `home` page only; do not promise extra routes.",
+      "When the user's product direction is known but **section order on the home route `/`** is still fuzzy, propose a landing-page IA (sections top→bottom, CTAs). " +
+      "Best for storytelling / marketing sites centered on one scroll on `/`. " +
+      "If the user clearly wants **multiple top-level routes** (e.g. dashboard + settings, docs tree, separate campaign pages), sketch those routes in conversation and `merged_brief`; do not tell the user the pipeline only supports one page. " +
+      "Output is Markdown for your reasoning only — compress for the user in `yield_to_user`.",
     parameters: {
       type: "object",
       properties: {
@@ -36,7 +37,9 @@ export const singlePageIaProposalTool: ChatCompletionTool = {
   },
 };
 
-const SYSTEM = `You plan a **single** marketing/home page (one URL) for Next.js. The downstream builder only creates one page slug \`home\` at /.
+const SYSTEM = `You plan **section order and messaging flow for the primary landing at /** (slug \`home\`) in a Next.js App Router site.
+
+The wider blueprint may later include **additional top-level routes** if the user's product needs them — this Markdown is **only** the main landing scroll. If the user's ask is inherently multi-route with no meaningful long landing at \`/\`, say so briefly in **Open decisions** and propose a minimal \`/\` stub only.
 
 Return Markdown only, with this structure:
 

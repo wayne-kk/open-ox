@@ -227,6 +227,8 @@ export async function executeGenerationRun(args: {
       (typeof payload.initialImageBase64 === "string" && payload.initialImageBase64.trim()
         ? payload.initialImageBase64.trim()
         : null) ?? projectForLiveSteps?.referenceImageDataUrl?.trim() ?? null;
+    const referenceScreenshotCommitted =
+      payload.referenceScreenshotCommitted === true || Boolean(resolvedReferenceScreenshot?.trim());
     const intentBaseSteps: BuildStep[] = ((projectForLiveSteps?.buildSteps ?? []) as BuildStep[]).filter(
       (s) => s.step === "intent_agent"
     );
@@ -425,6 +427,7 @@ export async function executeGenerationRun(args: {
           checkpoint,
           enableIntentGuide: payload.enableIntentGuide !== false,
           userReferenceImageBase64: resolvedReferenceScreenshot ?? undefined,
+          referenceScreenshotCommitted,
           langfuseUserId: requestingUserId,
           langfuseSessionId: langfuseSessionKey,
           langfuseTraceTags: ["route:generation_worker"],
@@ -435,7 +438,7 @@ export async function executeGenerationRun(args: {
           },
           langfuseTraceInput: {
             userPrompt: effectivePrompt,
-            hasReferenceScreenshot: Boolean(resolvedReferenceScreenshot),
+            hasReferenceScreenshot: referenceScreenshotCommitted,
           },
         })
     );

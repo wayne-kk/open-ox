@@ -47,7 +47,7 @@
 - 遵守 `design-system.md` 的 token / Tailwind 类（色板、间距、字体已经在 `app/globals.css` 里）。
 - 默认 RSC；只有必要时（hover / state / sticky 行为）才在具体 chrome 组件里加 `"use client"`，不要把 `app/layout.tsx` 整体变成 client。
 - 字体加载、`<html lang>`、`<body>` 的 className 等模板基础设施保留好。
-- chrome 组件应是**真实可用**的：导航项不是空的、按钮有 hover、间距对齐 token。但占位文案要克制（不要捏造"客户案例"等假内容）。
+- chrome 组件应是**真实可用**的：导航项不是空的、按钮有 hover、间距对齐 token；但占位文案要克制。**若用户消息中包含「Known routes」表且存在多条路由**：主导航与各页互链必须使用 `next/link` 的 `<Link>`，且 `href` 必须落在该表允许的 path 上——**禁止用 `href=\"#\"` 充数**。单页/`/` 仅占一条路由时也可用页内锚点。
 - **不要**重复定义 `globals.css` 已有的 CSS 变量、keyframes 或类。
 - **不要**在 `layout.tsx` 或 chrome 根容器上引入「装饰性全屏背景」类或内联样式（见上文「不能做什么」）；主内容区交给 `{children}`，由页面实现视觉层次。
 

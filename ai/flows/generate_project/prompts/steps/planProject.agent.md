@@ -24,6 +24,8 @@
 
 ### 输出示例（结构示意）
 
+**仅当上游 `site.pages.length === 1` 时使用单条：**
+
 ```json
 {
   "pages": [
@@ -45,10 +47,37 @@
 }
 ```
 
+**上游若给出多条路由，则示例（条数必须与上游一致）：**
+
+```json
+{
+  "pages": [
+    {
+      "title": "Landing",
+      "slug": "home",
+      "description": "与分析阶段 slug=home 一致",
+      "journeyStage": "entry",
+      "pageDesignPlan": { "pageGoal": "", "narrativeArc": "", "layoutStrategy": "", "hierarchy": ["..."], "constraints": ["..."] },
+      "sections": []
+    },
+    {
+      "title": "Science",
+      "slug": "science",
+      "description": "与分析阶段一致",
+      "journeyStage": "consider",
+      "pageDesignPlan": { "pageGoal": "", "narrativeArc": "", "layoutStrategy": "", "hierarchy": ["..."], "constraints": ["..."] },
+      "sections": []
+    }
+  ]
+}
+```
+
 字段规则（严格）：
 
+
 - 顶层必须且只包含：`pages`（除非你同时合法地附加 `site` 对象）。
-- `pages.length === 1`，且 `slug === "home"`。
+- `pages` 数组必须与上一步（需求分析）给出的 `site.pages` **一一对应**：**相同条数、相同 `slug` 顺序与取值**；**禁止**合并、丢弃或偷偷新增路由。
+- 仅当上游为**单页**站点时：`pages.length === 1` 且 `slug === "home"`。
 - 每个 `sections` **必须**存在且为 **空数组**。
 - `**pageDesignPlan`** 键固定：`pageGoal`、`narrativeArc`、`layoutStrategy`、`hierarchy`（非空字符串数组）、`constraints`（非空字符串数组）。
 

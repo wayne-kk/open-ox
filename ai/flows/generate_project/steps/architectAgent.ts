@@ -25,6 +25,7 @@ import { getModelForStep, getThinkingLevelForStep } from "@/lib/config/models";
 import type { BuildStep, PlannedProjectBlueprint, StepTrace } from "../types";
 import { resolveArchitectAgentRuleIds } from "../shared/agentRuleBundles";
 import { buildUserVisionContent } from "../shared/userVisionContent";
+import { formatKnownRoutesMarkdown } from "../shared/knownRoutesPrompt";
 
 export const ARCHITECT_AGENT_STEP = "architect_agent";
 export const ARCHITECT_COMPLETE = "architect_complete";
@@ -174,8 +175,25 @@ export async function runArchitectAgent(
   const componentsTree = listSiteTree("components", { maxDepth: 3, maxEntries: 160 });
   const appTree = listSiteTree("app", { maxDepth: 2, maxEntries: 80 });
 
-  const userMessage = `## Decide and scaffold the global chrome for this project
+  const refGr =
+    referenceScreenshotDataUrl?.trim() && screenshotGuardrailId?.trim()
+      ? screenshotGuardrailId.trim()
+      : referenceScreenshotDataUrl?.trim()
+        ? "screenshotLayoutFidelity"
+        : null;
 
+  const screenshotLayoutReplicateNote =
+    refGr === "screenshotLayoutFidelity"
+      ? `
+## Screenshot layout replicate (hard rule)
+
+The attached reference image is the **source of truth for global shell**: only implement **top nav / sidebar / footer / rails** that are **visibly present** in the screenshot. Do **not** add standard marketing chrome (extra nav bars, footer columns, announcement strips) that the image does not show. If the screenshot is a mostly flat page with a minimal header strip, mirror that — do not "complete" it with SaaS boilerplate chrome.
+
+`
+      : "";
+
+  const userMessage = `## Decide and scaffold the global chrome for this project
+${screenshotLayoutReplicateNote}
 ## Project
 - **Title**: ${blueprint.brief.projectTitle}
 - **Description**: ${blueprint.brief.projectDescription}
@@ -187,6 +205,8 @@ export async function runArchitectAgent(
 
 ## Page plans (downstream Page Agents will fill these)
 ${pagesSummary}
+
+${formatKnownRoutesMarkdown(blueprint.site.pages)}
 
 ## Pre-read context (already loaded for you — do NOT re-read these files)
 
@@ -226,17 +246,12 @@ ${truncate(designSystem, 10_000)}
 Hard rules:
 - Do **not** write any \`app/**/page.tsx\` — page content is owned by Page Agents.
 - Do **not** invent product features or fake content; chrome may have placeholder navigation labels but must not fabricate marketing claims, customer logos, etc.
+- **Navigation targets**: site-level links that navigate between routes MUST use \`next/link\` (\`<Link>\`) with \`href\` matching the **Known routes** table (\`/\` for \`home\`, otherwise \`/<slug>\`). **Never** ship primary chrome nav as \`href="#"\` placeholders when more than **one** Known route exists.
 - Do **not** add **decorative full-page / full-viewport backgrounds** on \`<body>\`, root layout wrappers, or chrome shells: no hero-style gradients, full-bleed images, mesh or noise textures, or ornamental patterns meant as "scene" backdrop. Keep the canvas **plain** (use existing \`globals.css\` / token background only). Nav/header/footer bars may use normal surface \`bg-*\` for the bar itself — not a site-wide mood layer. **Hero and section atmospherics** belong in **Page Agents** inside \`page.tsx\`.
 - Do **not** redefine CSS variables / keyframes already in \`globals.css\`.
 - Do **not** call \`format_code\` on files you wrote — \`write_file\`/\`edit_file\` auto-format on save.
 - If the product is a fullscreen / minimal canvas form, leaving \`app/layout.tsx\` minimal is the right answer — do not pad chrome to feel productive.`;
 
-  const refGr =
-    referenceScreenshotDataUrl?.trim() && screenshotGuardrailId?.trim()
-      ? screenshotGuardrailId.trim()
-      : referenceScreenshotDataUrl?.trim()
-        ? "screenshotLayoutFidelity"
-        : null;
   const systemPrompt = composePromptBlocks([
     loadSystem("frontend"),
     loadStepPrompt("architectAgent"),

@@ -50,7 +50,7 @@ const STEPS = [
     n: "05a",
     name: "match_design_system_skill",
     type: "llm",
-    desc: "与用户 prompt 比对内置 design-system skill；命中则直接使用 skill 正文作为 design-system.md。与步骤 04 并行（enableSkills=false 时跳过）。",
+    desc: "与用户 prompt 比对内置 design-system skill；命中则直接使用 skill 正文作为 design-system.md。与步骤 04 并行（enableSkills=false 或携带参考截图时跳过）。",
   },
   {
     n: "05b",

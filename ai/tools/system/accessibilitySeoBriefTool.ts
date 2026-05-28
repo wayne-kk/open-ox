@@ -11,7 +11,7 @@ export const accessibilitySeoBriefTool: ChatCompletionTool = {
   function: {
     name: "accessibility_and_seo_brief",
     description:
-      "Produce a **short** Markdown checklist for basic accessibility and on-page SEO tailored to the user's **single-page** site plan. " +
+      "Produce a **short** Markdown checklist for basic accessibility and on-page SEO tailored to the user's **planned Next.js routes** (often a single landing `/`, sometimes several top-level pages). " +
       "Call when the user cares about launch quality, SEO, or compliance-ish basics, or before `confirm_brief`. " +
       "Silent to the user until you summarize; do not treat this as legal advice.",
     parameters: {
@@ -36,16 +36,16 @@ export const accessibilitySeoBriefTool: ChatCompletionTool = {
   },
 };
 
-const SYSTEM = `You write a practical **checklist** for a single-page Next.js marketing site (one route /).
+const SYSTEM = `You write a practical **checklist** for a small Next.js site: often one marketing landing at \`/\`, but the user may outline **several top-level routes**. Cover shared patterns; if multiple routes were implied, add a short subsection on **per-route title/h1 discipline** and internal links.
 
 Output Markdown only:
 
 ## Page metadata suggestions
-- 2–3 candidate <title> patterns (not final law; user may edit)
+- 2–3 candidate <title> patterns for the **primary** page (not final law; user may edit); if multiple routes, one line each for key secondary pages
 - Meta description pattern (length hint)
 
 ## Heading structure
-- How to use a single h1; logical h2 order for the sections given
+- One logical \`h1\` **per route** (for a single-scroll landing that is still one page); sensible \`h2\`/order for the sections listed; if multiple routes, remind not to reuse the same topic as multiple h1s across pages unintentionally.
 
 ## Images & media
 - Alt text habits; decorative vs informative

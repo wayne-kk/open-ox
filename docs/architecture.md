@@ -118,7 +118,7 @@ Step 1:  project_intent_guide           ← 可选（默认开启）；可提前
 Step 2:  analyze_project_requirement    ← LLM + web_search ∥
 Step 3:  infer_design_intent             ← LLM（风格 / 技术关键词，与 Step 2 并行）
 Step 4:  plan_project                    ← LLM ─┐ 并行
-Step 5a: match_design_system_skill       ← LLM ─┘（enableSkills=false 时跳过）
+Step 5a: match_design_system_skill       ← LLM ─┘（enableSkills=false **或** 流水线携带参考截图时跳过）
 Step 5b: generate_project_design_system  ← 仅当 Step 5a 未命中内置 skill 时执行
 Step 6:  apply_project_design_tokens     ← LLM：design-system + 当前 globals → 完整 globals.css（须先于 Agent）
 Step 7:  architect_agent                 ← 工具闭环：app/layout.tsx + components/chrome/**
@@ -177,11 +177,12 @@ ProjectBlueprint {
 }
 ```
 
-Blueprint 的容错设计：`asProjectBlueprint()` 函数支持三种 LLM 输出格式（嵌套结构、扁平结构、单页结构），并对每个字段做 normalize，确保即使 LLM 输出不完整也能得到合法的 Blueprint。
+Blueprint 的容错设计：`asProjectBlueprint()` 函数支持三种 LLM 输出格式（嵌套结构、扁平结构、单页结构），并对每个字段做 normalize，确保即使 LLM 输出不完整也能得到合法的 Blueprint。**多顶层路由**：当 Analyze 产出多条 `site.pages` 时，normalize 会保留多页（`slug` 去重、`home`→`/`、`api` 等保留段避让），而不会合并为单页；单页仍为 `slug: "home"` 的常见形态。**护栏**：可选环境变量 `GENERATION_MAX_SITE_PAGES`（默认 24，范围 1–48）裁剪极端长列表；可选 `GENERATION_PAGE_IMPLEMENT_CONCURRENCY` 限制同时运行的 `page_implement_agent` 数以控制外部 API 并发。
 
 4.3 plan_project + match_design_system_skill + generate_project_design_system
 
 - **plan_project** 与 **match_design_system_skill** 在第一层并行：前者扩展 `PlannedProjectBlueprint`（`pageDesignPlan`、sections 等），后者判断用户 prompt 是否命中 **内置 design-system skill** 正文。
+- **若流水线存在参考截图**（payload / DB）：不匹配内置 design-system skill，直接进入 `generate_project_design_system`，避免模板风格盖住截图观感（是否与「版式复刻」或「提取灵感」无关；Hero 组件 skill 仍以 `replicate_layout` 为界单独关闭）。
 - 若匹配命中，直接使用 skill Markdown 作为 `design-system.md`，**跳过** LLM `generate_project_design_system`。
 - 若未命中，则调用 `generate_project_design_system`，输入主要来自 `infer_design_intent` 文本 + 可选用户 `styleGuide`（截断 1200 字符）。
 

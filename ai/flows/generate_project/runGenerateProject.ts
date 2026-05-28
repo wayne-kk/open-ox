@@ -137,6 +137,36 @@ function getPageImplementAgentStepName(slug: string): string {
   return `page_implement_agent:${slug}`;
 }
 
+/** When `GENERATION_PAGE_IMPLEMENT_CONCURRENCY` is unset or ≤0, pages run fully parallel (Promise.all). */
+function resolvedPageImplementConcurrency(pageCount: number): number {
+  const raw = Number(process.env.GENERATION_PAGE_IMPLEMENT_CONCURRENCY);
+  if (!Number.isFinite(raw) || raw <= 0) return 0;
+  return Math.min(pageCount, Math.max(1, Math.floor(raw)));
+}
+
+async function mapWithConcurrencyLimit<T, R>(
+  items: readonly T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const n = items.length;
+  if (n === 0) return [];
+  const cap = Math.min(Math.max(1, limit), n);
+  const results: R[] = new Array(n);
+  let nextIndex = 0;
+
+  async function runWorker(): Promise<void> {
+    while (true) {
+      const i = nextIndex;
+      nextIndex += 1;
+      if (i >= n) return;
+      results[i] = await worker(items[i], i);
+    }
+  }
+
+  await Promise.all(Array.from({ length: cap }, () => runWorker()));
+  return results;
+}
 
 function getBuildStepName(attempt: number): string {
   return attempt === 0 ? "run_build" : `run_build:retry_${attempt}`;
@@ -342,71 +372,76 @@ async function generatePages(params: {
   const collectedFiles: string[] = [];
   const collectedPendingImages: PendingImage[] = [];
 
-  const pageOutcomes = await Promise.all(
-    blueprint.site.pages.map(async (page) => {
-      const agentStepName = getPageImplementAgentStepName(page.slug);
-      if (skipImplementedPages?.has(page.slug)) {
-        const pagePathResume = slugToPagePath(page.slug);
-        logger.logStep(agentStepName, "ok", "resumed from checkpoint");
-        return { files: [pagePathResume], pendingImages: [] };
-      }
+  const runOnePageImplement = async (page: (typeof blueprint.site.pages)[number]) => {
+    const agentStepName = getPageImplementAgentStepName(page.slug);
+    if (skipImplementedPages?.has(page.slug)) {
+      const pagePathResume = slugToPagePath(page.slug);
+      logger.logStep(agentStepName, "ok", "resumed from checkpoint");
+      return { files: [pagePathResume], pendingImages: [] };
+    }
 
-      const onMessage = trajectoryCollector?.createEpisodeCollector(agentStepName);
-      const outcome = await logger.timed(
-        agentStepName,
-        async () =>
-          runWithLangfuseSpanBranch(
-            lfSpanGenPage(page.slug),
-            async () => {
-              let heroSkillIdInner: string | null = null;
-              let heroSkillPromptInner: string | undefined;
-              const screenshotBlocksHeroSkill =
-                Boolean(runtimeContext.referenceScreenshotDataUrl?.trim()) &&
-                runtimeContext.screenshotIntentMode === "replicate_layout";
-              if (
-                !screenshotBlocksHeroSkill &&
-                shouldOfferHeroSkillForAgentPage(page, runtimeContext.rawUserInput)
-              ) {
-                const virtualHero = buildVirtualHeroSectionForSkillSelection(page);
-                const sel = await discoverAndSelectSkill(
-                  virtualHero,
-                  runtimeContext.designKeywords,
-                  runtimeContext.rawUserInput,
-                );
-                heroSkillIdInner = sel.componentSkillId;
-                heroSkillPromptInner = sel.componentSkillPrompt || undefined;
-              }
-              return runPageImplementAgent({
-                page,
-                designSystem,
-                projectContext: runtimeContext,
-                heroSkillPrompt: heroSkillPromptInner,
-                heroSkillId: heroSkillIdInner,
-                onMessage,
-                onStep: params.onStep,
-              });
-            },
-            { metadata: { slug: page.slug, step: agentStepName } }
-          ),
-        (r) => ({
-          detail: r.summary.slice(0, 260),
-          trace: r.trace,
-          skillId: r.heroSkillId,
-        }),
-      );
+    const onMessage = trajectoryCollector?.createEpisodeCollector(agentStepName);
+    const outcome = await logger.timed(
+      agentStepName,
+      async () =>
+        runWithLangfuseSpanBranch(
+          lfSpanGenPage(page.slug),
+          async () => {
+            let heroSkillIdInner: string | null = null;
+            let heroSkillPromptInner: string | undefined;
+            const screenshotBlocksHeroSkill =
+              Boolean(runtimeContext.referenceScreenshotDataUrl?.trim()) &&
+              runtimeContext.screenshotIntentMode === "replicate_layout";
+            if (
+              !screenshotBlocksHeroSkill &&
+              shouldOfferHeroSkillForAgentPage(page, runtimeContext.rawUserInput)
+            ) {
+              const virtualHero = buildVirtualHeroSectionForSkillSelection(page);
+              const sel = await discoverAndSelectSkill(
+                virtualHero,
+                runtimeContext.designKeywords,
+                runtimeContext.rawUserInput,
+              );
+              heroSkillIdInner = sel.componentSkillId;
+              heroSkillPromptInner = sel.componentSkillPrompt || undefined;
+            }
+            return runPageImplementAgent({
+              page,
+              designSystem,
+              projectContext: runtimeContext,
+              heroSkillPrompt: heroSkillPromptInner,
+              heroSkillId: heroSkillIdInner,
+              onMessage,
+              onStep: params.onStep,
+            });
+          },
+          { metadata: { slug: page.slug, step: agentStepName } }
+        ),
+      (r) => ({
+        detail: r.summary.slice(0, 260),
+        trace: r.trace,
+        skillId: r.heroSkillId,
+      }),
+    );
 
-      await persistJsonArtifact(artifactLogger, agentStepName, "output", {
-        pagePath: outcome.pagePath,
-        summary: outcome.summary,
-        toolInvocations: outcome.toolCallRecords,
-        pendingImagesCount: outcome.pendingImages.length,
-        heroSkillId: outcome.heroSkillId,
-      });
-      await persistSiteFileArtifact(artifactLogger, agentStepName, outcome.pagePath, "page");
+    await persistJsonArtifact(artifactLogger, agentStepName, "output", {
+      pagePath: outcome.pagePath,
+      summary: outcome.summary,
+      toolInvocations: outcome.toolCallRecords,
+      pendingImagesCount: outcome.pendingImages.length,
+      heroSkillId: outcome.heroSkillId,
+    });
+    await persistSiteFileArtifact(artifactLogger, agentStepName, outcome.pagePath, "page");
 
-      return { files: [outcome.pagePath], pendingImages: outcome.pendingImages };
-    }),
-  );
+    return { files: [outcome.pagePath], pendingImages: outcome.pendingImages };
+  };
+
+  const pageList = blueprint.site.pages;
+  const conc = resolvedPageImplementConcurrency(pageList.length);
+  const pageOutcomes =
+    conc > 0 && conc < pageList.length
+      ? await mapWithConcurrencyLimit(pageList, conc, (page) => runOnePageImplement(page))
+      : await Promise.all(pageList.map((page) => runOnePageImplement(page)));
 
   for (const { files, pendingImages } of pageOutcomes) {
     collectedFiles.push(...files);
@@ -551,6 +586,11 @@ export interface RunGenerateProjectOptions {
   langfuseTraceInput?: unknown;
   /** When set, passed into `project_intent_guide` vision (direct /api/ai or worker). */
   userReferenceImageBase64?: string | null;
+  /**
+   * Gates built-in design-system skill matching when image bytes are absent from options but this
+   * run was marked screenshot-driven at enqueue time.
+   */
+  referenceScreenshotCommitted?: boolean;
 }
 
 async function ensureLangfuseGenerateTrace<T>(
@@ -714,9 +754,12 @@ async function runGenerateProjectInner(
     const referenceScreenshot = options.userReferenceImageBase64?.trim() || null;
     const screenshotIntentMode = resolveScreenshotIntentMode(
       effectiveUserInput,
-      Boolean(referenceScreenshot)
+      Boolean(referenceScreenshot) || options.referenceScreenshotCommitted === true
     );
     const screenshotGuardrailId = screenshotGuardrailIdForMode(screenshotIntentMode);
+    /** Do not use checkpoint-skip for plan+design when a ref image is present — cached DS may predate the no-skill policy or come from a matched built-in skill. */
+    const hasReferenceScreenshot =
+      Boolean(referenceScreenshot) || options.referenceScreenshotCommitted === true;
 
     let rawBlueprint!: ProjectBlueprint;
     let inferredDesignIntent: DesignIntentResult | null = null;
@@ -800,7 +843,7 @@ async function runGenerateProjectInner(
     let blueprint!: PlannedProjectBlueprint;
     let designSystem!: string;
 
-    if (cp?.skipPlanAndDesign && cp.cachedBlueprint && cp.cachedDesignSystem) {
+    if (cp?.skipPlanAndDesign && cp.cachedBlueprint && cp.cachedDesignSystem && !hasReferenceScreenshot) {
       blueprint = cp.cachedBlueprint;
       designSystem = cp.cachedDesignSystem;
       logger.logStep("plan_project", "ok", "resumed from checkpoint");
@@ -817,10 +860,16 @@ async function runGenerateProjectInner(
           return `## Design Intent\n- Mood: ${di.mood.join(", ")}\n- Color Direction: ${di.colorDirection}\n- Style: ${di.style}\n- Keywords: ${di.keywords.join(", ")}`;
         })();
 
-        // Phase 1: plan_project + (optionally) skill matching run in parallel
-        const skillMatchingEnabled = options.enableSkills !== false;
+        // Phase 1: plan_project + (optionally) skill matching run in parallel.
+        // **Any** reference screenshot in the pipeline: never run built-in `match_design_system_skill`.
+        // Template skills (botanical, professional, …) override what the image already shows; this is
+        // strictly forbidden for screenshot-driven builds (layout replicate *or* extract-inspiration).
+        // (Hero **component** skills are still gated by `replicate_layout` only; see `generatePages`.)
+        const skillMatchingEnabled = options.enableSkills !== false && !hasReferenceScreenshot;
 
-        const planPromise = stepPlanProject(normalizedBlueprint).then((out) => {
+        const planPromise = stepPlanProject(normalizedBlueprint, {
+          screenshotIntentMode,
+        }).then((out) => {
           logger.logStep("plan_project", "ok", "page-level blueprints prepared", undefined, out.trace);
           return out;
         });
@@ -846,10 +895,19 @@ async function runGenerateProjectInner(
           : Promise.resolve<DesignSystemMatchResult>({
             matched: false,
             skillId: null,
-            reason: "skill matching disabled by user",
+            reason:
+              options.enableSkills === false
+                ? "skill matching disabled by user"
+                : "skipped — reference screenshot present (no built-in design-system skill)",
             trace: {},
           }).then((result) => {
-            logger.logStep("match_design_system_skill", "ok", "skipped — disabled by user");
+            logger.logStep(
+              "match_design_system_skill",
+              "ok",
+              options.enableSkills === false
+                ? "skipped — disabled by user"
+                : "skipped — reference screenshot"
+            );
             return result;
           });
 

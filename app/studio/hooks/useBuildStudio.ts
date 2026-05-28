@@ -125,6 +125,8 @@ export interface BuildStudioState {
   pendingModifyInstruction: string | null;
   pendingModifyImage: string | null;
   iframeRef: React.RefObject<HTMLIFrameElement | null>;
+  /** Live intent-agent tool/reasoning trace (same turn as SSE `intent_progress`). */
+  intentLiveTrace: IntentProgressEvent[];
 }
 
 const AUTO_PREVIEW_STORAGE_KEY = "open-ox:studio:autoPreviewAfterBuild";
@@ -283,6 +285,9 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
   const modifyDiffsRef = useRef<ModifyDiff[]>([]);
   const modifyThinkingRef = useRef<string[]>([]);
   const modifyToolCallsRef = useRef<ModifyToolCall[]>([]);
+  /** Intent agent SSE `intent_progress` — copied into the next assistant bubble, then cleared. */
+  const intentLiveTraceRef = useRef<IntentProgressEvent[]>([]);
+  const [intentLiveTrace, setIntentLiveTrace] = useState<IntentProgressEvent[]>([]);
 
   const finishBuildLiveState = useCallback((totalDuration?: number) => {
     if (typeof totalDuration === "number" && Number.isFinite(totalDuration) && totalDuration >= 0) {
@@ -658,6 +663,8 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     setStartedAt(t0);
     setElapsed(0);
     setLoading(true);
+    intentLiveTraceRef.current = [];
+    setIntentLiveTrace([]);
     // Preserve existing buildSteps to avoid topology flash.
     // New SSE steps will upsert into the existing array.
     setResponse((prev) => prev
@@ -705,6 +712,13 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       await runBuildSite(
         textForApi,
         {
+          onIntentProgress: (evt) => {
+            setIntentLiveTrace((prev) => {
+              const next = [...prev, evt];
+              intentLiveTraceRef.current = next;
+              return next;
+            });
+          },
           onIntentTurn: (turn) => {
             setIntentAgent(turn);
             const assistantContent =
@@ -712,13 +726,27 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
               turn.assistantText ??
               turn.errorMessage ??
               "";
-            // commit_generate has no user-facing copy here; `onIntentCommit` appends the single
-            // confirmation line. Skipping avoids an extra bubble if the payload ever carries stray text.
+            const drainIntentTrace = (): IntentProgressEvent[] => {
+              const log = [...intentLiveTraceRef.current];
+              intentLiveTraceRef.current = [];
+              setIntentLiveTrace([]);
+              return log;
+            };
+            // commit_generate: trace is attached in `onIntentCommit` (same turn, two SSE events).
             if (turn.status !== "commit_generate" && assistantContent) {
+              const activityLog = drainIntentTrace();
               appendConversationMessage({
                 role: "assistant",
                 content: assistantContent,
                 intentPayload: turn.yieldPayload,
+                ...(activityLog.length > 0 ? { activityLog } : {}),
+              });
+            } else if (turn.status === "error" && turn.errorMessage?.trim()) {
+              const activityLog = drainIntentTrace();
+              appendConversationMessage({
+                role: "assistant",
+                content: turn.errorMessage.trim(),
+                ...(activityLog.length > 0 ? { activityLog } : {}),
               });
             }
             setResponse((prev) => ({
@@ -741,9 +769,13 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
           onIntentCommit: (brief) => {
             const cleanBrief = brief.trim();
             setMergedBrief(cleanBrief || null);
+            const activityLog = [...intentLiveTraceRef.current];
+            intentLiveTraceRef.current = [];
+            setIntentLiveTrace([]);
             appendConversationMessage({
               role: "assistant",
               content: "需求已确认，开始生成项目...",
+              ...(activityLog.length > 0 ? { activityLog } : {}),
             });
             setResponse((prev) => ({
               content: "需求已确认，开始生成项目...",
@@ -1332,7 +1364,18 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       : startedAt ?? 0;
 
   return {
-    input, setInput, loading, clearing, response, intentAgent, mergedBrief, conversationMessages, lastRunInput, elapsed, flowStart,
+    input,
+    setInput,
+    loading,
+    clearing,
+    response,
+    intentAgent,
+    mergedBrief,
+    conversationMessages,
+    intentLiveTrace,
+    lastRunInput,
+    elapsed,
+    flowStart,
     handleRun, handleClear, handleRetry,
     generationSeemsStuck,
     recoveryUnlocking,

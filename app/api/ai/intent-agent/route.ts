@@ -7,6 +7,7 @@ import {
   getProject,
   initProjectDir,
   getSiteRoot as projectManagerGetSiteRoot,
+  setProjectReferenceScreenshot,
   updateProjectStatus,
 } from "@/lib/projectManager";
 import { setRuntimeModelId, type ModelId } from "@/lib/config/models";
@@ -77,7 +78,6 @@ export async function POST(req: Request) {
     const message: unknown = body.message;
     const imageBase64Raw: unknown = body.imageBase64;
     const resetSession: boolean = body.resetSession === true;
-    const enableIntentGuide: boolean = body.enableIntentGuide !== false;
     const runGenerateOnCommit: boolean = body.runGenerateOnCommit !== false;
     const modelOverride: string | undefined = typeof body.model === "string" ? body.model : undefined;
     const enableIntentAgentWebSearch: boolean = body.enableIntentAgentWebSearch === true;
@@ -99,6 +99,9 @@ export async function POST(req: Request) {
     if (typeof imageBase64Raw === "string" && imageBase64Raw.trim()) {
       const raw = imageBase64Raw.trim();
       clientImage = raw.startsWith("data:") ? raw : `data:image/png;base64,${raw}`;
+    }
+    if (clientImage?.trim()) {
+      await setProjectReferenceScreenshot(db, projectId, clientImage);
     }
     const storedImage = meta.referenceImageDataUrl?.trim() || null;
     const imageForTurn = clientImage || storedImage;
@@ -296,6 +299,10 @@ export async function POST(req: Request) {
             const row = await getProject(db, projectId);
             referenceForGeneration = row?.referenceImageDataUrl?.trim() || null;
           }
+          const referenceScreenshotCommitted =
+            Boolean(referenceForGeneration) ||
+            Boolean(clientImage?.trim()) ||
+            Boolean(storedImage?.trim());
           const intentRunPayload: GenerationRunPayloadBody = {
             requestingUserId: user.id,
             effectivePrompt: mergedBrief,
@@ -304,7 +311,10 @@ export async function POST(req: Request) {
             preCreatedProjectId: projectId,
             resumeFromCheckpoint: false,
             enableSkills: true,
-            enableIntentGuide,
+            // User already finished the Intent Task Agent (yield/commit). A second LLM gate
+            // (`project_intent_guide`) duplicates work and often defers builds for multi-route
+            // briefs that the agent already confirmed — skip it on this enqueue path.
+            enableIntentGuide: false,
             ...(typeof body.langfuseSessionId === "string"
               ? { langfuseSessionId: body.langfuseSessionId }
               : {}),
@@ -312,6 +322,7 @@ export async function POST(req: Request) {
             ...(referenceForGeneration
               ? { initialImageBase64: normalizeReferenceImageDataUrl(referenceForGeneration) }
               : {}),
+            ...(referenceScreenshotCommitted ? { referenceScreenshotCommitted: true } : {}),
           };
 
           let runId: string;

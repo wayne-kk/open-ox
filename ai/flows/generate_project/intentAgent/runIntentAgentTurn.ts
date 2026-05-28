@@ -1,7 +1,7 @@
 import { composePromptBlocks, loadStepPrompt } from "../shared/files";
 import { callLLMWithToolsFromMessages } from "@/ai/shared/llm/toolLoop";
 import type { AgentToolCallRecord, ChatMessage } from "@/ai/shared/llm/types";
-import { getModelForStep } from "@/lib/config/models";
+import { getModelForStep, getThinkingLevelForStep } from "@/lib/config/models";
 import { clearIntentAgentSession, loadIntentAgentSession, saveIntentAgentSession } from "./sessionStore";
 import { buildIntentAgentTools, PIPELINE_CONSTRAINTS_TEXT } from "./tools";
 import { mergeIntentAgentTools, INTENT_AGENT_RESERVED_TOOL_NAMES } from "./toolSurface";
@@ -61,7 +61,7 @@ export function parseYieldArgs(args: Record<string, unknown>): IntentAgentYieldP
   const message =
     typeof args.message === "string" && args.message.trim()
       ? args.message.trim()
-      : "请用一句话说明你希望做单页网站的**目标**与**主要内容**（面向谁、要展示/操作什么）。";
+      : "请用一句话说明你希望这个**站点**的**目标**与**主要内容**（面向谁、偏单页滚动还是也需要多个独立页面如专题/募捐/科普条线段等）。"
   const suggestedReplies = Array.isArray(args.suggested_replies)
     ? args.suggested_replies
         .filter((x): x is string => typeof x === "string")
@@ -133,6 +133,7 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
   const hasUserImage = Boolean(userImageBase64?.trim());
   const tailPlainForCommit = userTurnPlainTextForClassifier(userMessage, hasUserImage);
   const model = getModelForStep("intent_agent");
+  const thinkingLevel = getThinkingLevelForStep("intent_agent");
   const systemPrompt = composePromptBlocks([loadStepPrompt("projectIntentAgent")]);
   const tools = mergeIntentAgentTools({
     base: buildIntentAgentTools(),
@@ -212,6 +213,7 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
     temperature: 0.35,
     maxIterations: 14,
     model,
+    ...(thinkingLevel ? { thinkingLevel } : {}),
     executeToolOverrides,
     onMessage,
     shouldAbortAfterToolResults: () => box.resolution !== null,

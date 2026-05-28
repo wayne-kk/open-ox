@@ -7,8 +7,9 @@ import { competitiveLandscapeSnapshotTool } from "@/ai/tools/system/competitiveL
 
 export const PIPELINE_CONSTRAINTS_TEXT = `## open-ox 生成流水线（硬约束）
 
-- 产出为 Next.js **web** profile；MVP 约束为**单首页**：站点只有 **一个顶层页面**，slug 必须为 \`home\`（路由 \`/\`）。
-- 布局形态（是否有顶 nav、是否有 sidebar、是否有 footer、是否使用 nested layout 等）由下游实现 Agent 根据产品形态决定，**不在需求分析阶段表态**。
+- 产出为 Next.js **App Router** web profile。**顶层路由条数由需求分析阶段根据用户意图决定**：可以是 **只有首页**（单条 \`slug: home\`，路径 \`/\`，常见落地/滚动叙事），也可以是 **多条独立路由**（例如 \`/\`、\`/pricing\`、\`/about\`……），每条对应一个页面实现。**不要向用户捏造**流水线未实现的功能；也**不要为了「显得完整」强行多页**，或把明显需要多屏（控制台、文档站、多端流程）的需求压成单页叙事——除非用户明确要求单页落地。
+- 多路由蓝图约定：**必须有且仅有一条** \`slug: "home"\` 指向 \`/\`；全局导航必须用真实站内路径（由下游在对照蓝图落地）。单页蓝图则通常仅含 \`home\`。
+- 是否有顶栏/侧栏/footer、是否用 nested layout：**由下游 Architect 按产品形态决定**；意向对话阶段不必让用户敲定壳层细节。
 - 忠实用户已述需求：不擅自添加未提及的产品机制。`;
 
 export function buildIntentAgentTools(): ChatCompletionTool[] {
@@ -18,7 +19,7 @@ export function buildIntentAgentTools(): ChatCompletionTool[] {
       function: {
         name: "get_pipeline_constraints",
         description:
-          "读取当前代码生成流水线的硬约束（单首页、全局壳层约定等）。在回答能力问题或规划站点前应优先调用。",
+          "读取当前代码生成流水线的硬约束（可多顶层路由或可仅 `/`、全局壳层由下游决定等）。在回答能力问题或规划站点前应优先调用。",
         parameters: {
           type: "object",
           properties: {},

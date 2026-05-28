@@ -36,13 +36,33 @@ function getApiConfig() {
   return { apiKey, baseURL };
 }
 
+/**
+ * Gemini OpenAI-compatible endpoints often expect `max_completion_tokens` and ignore `max_tokens`,
+ * which makes long completions hit the provider default cap and return finish_reason=length with little or no `content`.
+ */
+function completionTokenLimitPayload(
+  model: string,
+  maxTokens: number | undefined
+): Record<string, number> {
+  if (maxTokens == null || maxTokens <= 0) return {};
+  const m = model.toLowerCase();
+  if (m.includes("gemini")) {
+    return { max_completion_tokens: maxTokens };
+  }
+  return { max_tokens: maxTokens };
+}
+
 export async function chatCompletion(params: ChatCompletionParams): Promise<ChatCompletionResponse> {
   const { apiKey, baseURL } = getApiConfig();
   const maxRetries = 2;
 
   const modelParameters: Record<string, string | number> = {};
   if (params.temperature !== undefined) modelParameters.temperature = params.temperature;
-  if (params.max_tokens !== undefined) modelParameters.max_tokens = params.max_tokens;
+  const limitBody = completionTokenLimitPayload(params.model, params.max_tokens);
+  if (limitBody.max_tokens !== undefined) modelParameters.max_tokens = limitBody.max_tokens;
+  if (limitBody.max_completion_tokens !== undefined) {
+    modelParameters.max_completion_tokens = limitBody.max_completion_tokens;
+  }
   if (params.thinking_level !== undefined)
     modelParameters.thinking_level = params.thinking_level;
 
@@ -70,7 +90,7 @@ export async function chatCompletion(params: ChatCompletionParams): Promise<Chat
       model: params.model,
       messages: params.messages,
       temperature: params.temperature,
-      ...(params.max_tokens ? { max_tokens: params.max_tokens } : {}),
+      ...completionTokenLimitPayload(params.model, params.max_tokens),
       ...(params.thinking_level ? { thinking_level: params.thinking_level } : {}),
       ...(params.tools
         ? {

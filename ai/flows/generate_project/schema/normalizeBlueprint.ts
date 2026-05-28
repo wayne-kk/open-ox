@@ -253,27 +253,78 @@ function normalizePageBlueprint(value: unknown, index: number): PageBlueprint {
   };
 }
 
-function uniqueStrings(values: string[]): string[] {
-  return Array.from(new Set(values.filter(Boolean)));
+/** Matches reserved App Router segments that must not collide with `app/<slug>/page.tsx`. */
+const RESERVED_ROUTE_SLUGS = new Set(["api", "_next", "rpc"]);
+
+/** Hard cap protects LLM bursts; override via GENERATION_MAX_SITE_PAGES (bounded 1–48). */
+function maxSitePages(): number {
+  const raw = Number(process.env.GENERATION_MAX_SITE_PAGES);
+  if (Number.isFinite(raw)) return Math.min(48, Math.max(1, Math.floor(raw)));
+  return 24;
 }
 
-function enforceSingleHomePage(pages: PageBlueprint[]): PageBlueprint[] {
-  if (pages.length === 0) {
-    return [
-      {
-        title: "Home",
-        slug: "home",
-        description: "Single-page marketing site.",
-        journeyStage: "entry",
-        primaryRoleIds: ["visitor"],
-        supportingCapabilityIds: [],
-        sections: [],
-      },
-    ];
+export const MULTI_ROUTE_NAVIGATION_MODEL_HINT =
+  "Multi-route site: chrome navigation MUST use Next.js <Link href> to routes in site.pages; slug `home` maps to `/`; do not use fake href values or undisclosed URLs.";
+
+function defaultHomeFallbackPage(): PageBlueprint {
+  return {
+    title: "Home",
+    slug: "home",
+    description: "Single-page marketing site.",
+    journeyStage: "entry",
+    primaryRoleIds: ["visitor"],
+    supportingCapabilityIds: [],
+    sections: [],
+  };
+}
+
+/** Normalizes slug for URL segments (kebab-case, safe charset). Falls back deterministically when empty. */
+function slugifyPageSlug(rawSlug: string, index: number): string {
+  const collapsed = rawSlug
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+  if (!collapsed) {
+    return index === 0 ? "home" : `page-${index + 1}`;
+  }
+  return collapsed;
+}
+
+function avoidReservedSegment(slug: string): string {
+  if (!RESERVED_ROUTE_SLUGS.has(slug)) return slug;
+  return `route-${slug}`;
+}
+
+function allocateUniqueSlug(preferredSlug: string, used: Set<string>): string {
+  let candidate = preferredSlug;
+  let suffix = 2;
+  while (used.has(candidate)) {
+    candidate = `${preferredSlug}-${suffix}`;
+    suffix += 1;
+  }
+  used.add(candidate);
+  return candidate;
+}
+
+/** Single page → always slug `home`. Multi-page → preserve IA from model output with validation/dedupe. */
+function normalizeSitePages(pagesRaw: PageBlueprint[]): PageBlueprint[] {
+  const cap = Math.max(1, maxSitePages());
+  const trimmed =
+    pagesRaw.length > cap
+      ? [...pagesRaw.slice(0, cap)]
+      : pagesRaw.length === 0
+        ? []
+        : [...pagesRaw];
+
+  if (trimmed.length === 0) {
+    return [defaultHomeFallbackPage()];
   }
 
-  if (pages.length === 1) {
-    const only = pages[0];
+  if (trimmed.length === 1) {
+    const only = trimmed[0];
     return [
       {
         ...only,
@@ -283,28 +334,20 @@ function enforceSingleHomePage(pages: PageBlueprint[]): PageBlueprint[] {
     ];
   }
 
-  const homeIdx = pages.findIndex((p) => p.slug === "home");
-  const base = homeIdx >= 0 ? pages[homeIdx] : pages[0];
-  const mergedDescription = uniqueStrings(pages.map((p) => p.description).filter(Boolean)).join(" ");
-  const primaryRoleIds = uniqueStrings(pages.flatMap((p) => p.primaryRoleIds));
-  const supportingCapabilityIds = uniqueStrings(pages.flatMap((p) => p.supportingCapabilityIds));
+  const staged = trimmed.map((page, index) => ({
+    ...page,
+    slug: avoidReservedSegment(slugifyPageSlug(page.slug, index)),
+  }));
 
-  return [
-    {
-      ...base,
-      slug: "home",
-      title: base.title?.trim() ? base.title : "Home",
-      description:
-        mergedDescription.length > 24
-          ? mergedDescription.slice(0, 800)
-          : base.description || mergedDescription || "Single-page brand site.",
-      journeyStage: base.journeyStage || "entry",
-      primaryRoleIds: primaryRoleIds.length > 0 ? primaryRoleIds : base.primaryRoleIds,
-      supportingCapabilityIds:
-        supportingCapabilityIds.length > 0 ? supportingCapabilityIds : base.supportingCapabilityIds,
-      sections: [],
-    },
-  ];
+  if (!staged.some((p) => p.slug === "home")) {
+    staged[0] = { ...staged[0], slug: "home" };
+  }
+
+  const used = new Set<string>();
+  return staged.map((page) => ({
+    ...page,
+    slug: allocateUniqueSlug(page.slug, used),
+  }));
 }
 
 function normalizeBrief(value: unknown): ProjectBrief {
@@ -382,8 +425,7 @@ function normalizeSite(value: unknown): ProjectSiteBlueprint {
   }
 
   const pagesRaw = candidate.pages.map((page, index) => normalizePageBlueprint(page, index));
-  const mergedFromMultiple = pagesRaw.length > 1;
-  const pages = enforceSingleHomePage(pagesRaw);
+  const pages = normalizeSitePages(pagesRaw);
 
   const baseIa = normalizeInformationArchitecture(candidate.informationArchitecture, pages);
   const pageMap: PageMapEntry[] = pages.map((page) => ({
@@ -395,12 +437,16 @@ function normalizeSite(value: unknown): ProjectSiteBlueprint {
     journeyStage: page.journeyStage,
   }));
 
+  const isMultiRouteSite = pages.length > 1;
+
   return {
     informationArchitecture: {
       ...baseIa,
       pageMap,
-      navigationModel: mergedFromMultiple
-        ? "Single-page site: all content on `/` (home). Primary navigation MUST use in-page anchor links (#section-id), not separate routes."
+      navigationModel: isMultiRouteSite
+        ? typeof baseIa.navigationModel === "string" && baseIa.navigationModel.trim().length > 0
+          ? `${MULTI_ROUTE_NAVIGATION_MODEL_HINT}\n\nUpstream note: ${baseIa.navigationModel.trim()}`
+          : MULTI_ROUTE_NAVIGATION_MODEL_HINT
         : baseIa.navigationModel,
     },
     pages,
