@@ -83,6 +83,18 @@ const REPAIR_TOOLS = [
 /** Search + read + patch + optional build needs more turns than the old read-only repair loop. */
 const REPAIR_MAX_TOOL_ITERATIONS = 24;
 
+/**
+ * TS language-service quick fixes run before the repair agent. Only skip the agent
+ * when fixes actually changed files — otherwise a CSS/config/prerender failure with
+ * clean TS diagnostics would "succeed" repair without invoking the LLM.
+ */
+export function shouldShortCircuitRepairAfterCodeFix(outcome: {
+  resolved: boolean;
+  touchedFiles: string[];
+}): boolean {
+  return outcome.resolved && outcome.touchedFiles.length > 0;
+}
+
 export async function stepRepairBuild({
   blueprint,
   buildOutput,
@@ -100,7 +112,7 @@ export async function stepRepairBuild({
   const codeFixOutcome = await tryTypeScriptCodeFixUntilResolved(generatedFiles, 25);
   const touchedFromCodeFix = [...codeFixOutcome.touchedFiles];
 
-  if (codeFixOutcome.resolved) {
+  if (shouldShortCircuitRepairAfterCodeFix(codeFixOutcome)) {
     return {
       success: true,
       output:
