@@ -25,6 +25,8 @@ import { getModelForStep, getThinkingLevelForStep } from "@/lib/config/models";
 import type { BuildStep, PlannedProjectBlueprint, StepTrace } from "../types";
 import { resolveArchitectAgentRuleIds } from "../shared/agentRuleBundles";
 import { buildUserVisionContent } from "../shared/userVisionContent";
+import { hasUserProvidedContent } from "../schema/normalizeUserProvidedContent";
+import { formatUserProvidedContentBlock } from "@/lib/content/userProvidedContentPipeline";
 
 export const ARCHITECT_AGENT_STEP = "architect_agent";
 export const ARCHITECT_COMPLETE = "architect_complete";
@@ -212,6 +214,11 @@ ${componentsTree}
 
 ## Design system (reference — \`design-system.md\` need not be re-read)
 ${truncate(designSystem, 10_000)}
+${
+  hasUserProvidedContent(blueprint.userProvidedContent)
+    ? `\n\n${formatUserProvidedContentBlock(blueprint.userProvidedContent)}\n`
+    : ""
+}
 
 ## Workflow (follow strictly)
 1. **Decide chrome form** based on product type + page plans (see system prompt for the reference table). The pre-read context above is enough — only \`read_file\` an existing component if you genuinely need its source.
@@ -241,6 +248,9 @@ Hard rules:
     loadSystem("frontend"),
     loadStepPrompt("architectAgent"),
     ...(refGr ? [loadGuardrail(refGr)] : []),
+    ...(hasUserProvidedContent(blueprint.userProvidedContent)
+      ? [loadGuardrail("providedContentFidelity")]
+      : []),
     ...resolveArchitectAgentRuleIds().map(loadGuardrail),
   ]);
 

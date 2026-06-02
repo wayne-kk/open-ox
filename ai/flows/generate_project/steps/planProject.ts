@@ -123,6 +123,7 @@ ${blueprint.site.pages
       informationArchitecture: blueprint.site.informationArchitecture,
       pages,
     },
+    ...(blueprint.userProvidedContent ? { userProvidedContent: blueprint.userProvidedContent } : {}),
   };
 
   return {

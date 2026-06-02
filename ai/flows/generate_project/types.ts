@@ -99,6 +99,8 @@ export type PageAgentProjectContext = {
     journeyStage: string;
   }>;
   designKeywords: string[];
+  /** Extracted user-provided facts/assets (after optional image prefetch). */
+  userProvidedContent?: UserProvidedContent;
   /** When set, page/architect agents receive the same screenshot for layout-faithful implementation. */
   referenceScreenshotDataUrl?: string | null;
   /** Resolved from user wording when a reference image is present; drives screenshot guardrail + hero skill policy. */
@@ -161,10 +163,58 @@ export interface ProjectSiteBlueprint {
   pages: PageBlueprint[];
 }
 
+/** Image the user explicitly provided in their prompt (URL + optional caption). */
+export interface UserProvidedImage {
+  url: string;
+  caption?: string;
+  role?: string;
+  /** Populated after prefetch — local public path e.g. /images/user-provided/foo.jpg */
+  localPath?: string;
+  assetSource?: "download" | "generated";
+}
+
+export interface UserProvidedTestimonial {
+  quote: string;
+  author?: string;
+  stars?: number | string;
+  relativeTime?: string;
+}
+
+export interface UserProvidedBusiness {
+  name?: string;
+  description?: string;
+  address?: string;
+  phone?: string;
+  website?: string;
+  rating?: string;
+  reviewCount?: string;
+}
+
+export interface UserProvidedLink {
+  label?: string;
+  url: string;
+}
+
+/**
+ * Facts/assets extracted from the user prompt during analyze.
+ * Optional — when absent or empty, generation behaves as before.
+ */
+export interface UserProvidedContent {
+  business?: UserProvidedBusiness;
+  hours?: string[];
+  palette?: string[];
+  menuItems?: string[];
+  testimonials?: UserProvidedTestimonial[];
+  images?: UserProvidedImage[];
+  links?: UserProvidedLink[];
+  notes?: string;
+}
+
 export interface ProjectBlueprint {
   brief: ProjectBrief;
   experience: ProjectExperience;
   site: ProjectSiteBlueprint;
+  userProvidedContent?: UserProvidedContent;
 }
 
 export interface PlannedProjectSiteBlueprint

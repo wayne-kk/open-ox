@@ -5,12 +5,10 @@
  * 调用方通过 pendingImages 收集所有 Promise，在需要图片就绪时（如 build 前）统一 await。
  */
 
-import { existsSync, mkdirSync, writeFileSync } from "fs";
-import { join } from "path";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import type { ToolResult, ToolExecutor } from "../types";
-import { getSiteRoot } from "./common";
 import { generateArkImageBase64 } from "@/lib/ark-image-generate";
+import { sanitizeImageFilename, writePublicImage } from "@/lib/content/siteImageAsset";
 
 // ── Concurrency limiter for Ark API ─────────────────────────────────────
 
@@ -74,12 +72,7 @@ export const generateImageTool: ChatCompletionTool = {
 };
 
 function sanitizeFilename(raw: string): string {
-  return raw
-    .replace(/\.png$/i, "")
-    .replace(/[^a-zA-Z0-9_-]/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 80) || "image";
+  return sanitizeImageFilename(raw);
 }
 
 function sanitizePrompt(raw: string): string {
@@ -147,13 +140,13 @@ export function createImageExecutor(componentName: string): {
         const b64 = await generateArkImageBase64({ prompt, size });
         const buf = Buffer.from(b64, "base64");
 
-        const siteRoot = getSiteRoot();
-        const imagesDir = join(siteRoot, "public", "images");
-        if (!existsSync(imagesDir)) {
-          mkdirSync(imagesDir, { recursive: true });
-        }
-
-        writeFileSync(join(imagesDir, `${filename}.png`), buf);
+        const publicPath = writePublicImage({
+          filenameBase: filename,
+          buffer: buf,
+          ext: "png",
+          subdir: "images",
+        });
+        pending.publicPath = publicPath;
         pending.durationMs = Date.now() - t0;
         pending.success = true;
         console.log(`[generate_image] Saved ${publicPath} (${buf.length} bytes, ${pending.durationMs}ms)`);

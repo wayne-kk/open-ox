@@ -29,6 +29,9 @@ import {
 } from "./steps/projectIntentGuide";
 import { stepApplyProjectDesignTokens } from "./steps/applyProjectDesignTokens";
 import { runArchitectAgent, ARCHITECT_AGENT_STEP } from "./steps/architectAgent";
+import { stepPrefetchUserProvidedAssets } from "./steps/prefetchUserProvidedAssets";
+import { extractImageUrlsFromPrompt } from "@/lib/content/userProvidedContentPipeline";
+import { hasUserProvidedContent } from "./schema/normalizeUserProvidedContent";
 import { stepGenerateProjectDesignSystem } from "./steps/generateProjectDesignSystem";
 import { stepMatchDesignSystemSkill, type DesignSystemMatchResult } from "./steps/matchDesignSystemSkill";
 import { stepInstallDependencies } from "./steps/installDependencies";
@@ -116,7 +119,9 @@ async function persistSiteFileArtifact(
 type ProjectRuntimeContext = PageAgentProjectContext;
 
 
-function buildProjectRuntimeContext(blueprint: PlannedProjectBlueprint): ProjectRuntimeContext {
+function buildProjectRuntimeContext(
+  blueprint: PlannedProjectBlueprint
+): ProjectRuntimeContext {
   return {
     projectTitle: blueprint.brief.projectTitle,
     projectDescription: blueprint.brief.projectDescription,
@@ -128,6 +133,7 @@ function buildProjectRuntimeContext(blueprint: PlannedProjectBlueprint): Project
       journeyStage: page.journeyStage,
     })),
     designKeywords: blueprint.experience.designIntent.keywords ?? [],
+    userProvidedContent: blueprint.userProvidedContent,
     rawUserInput: "",
   };
 }
@@ -794,6 +800,33 @@ async function runGenerateProjectInner(
       };
     }
 
+    // ── Prefetch user-provided assets when analyze extracted content or prompt has image URLs ──
+    if (!cp?.skipAnalyze) {
+      const mayHaveAssets =
+        hasUserProvidedContent(rawBlueprint.userProvidedContent) ||
+        extractImageUrlsFromPrompt(effectiveUserInput).length > 0;
+
+      if (mayHaveAssets) {
+        const prefetchResult = await logger.timed(
+          "prefetch_user_provided_assets",
+          () =>
+            stepPrefetchUserProvidedAssets({
+              content: rawBlueprint.userProvidedContent,
+              userInput: effectiveUserInput,
+            }),
+          (r) => ({
+            detail: r.trace.output
+              ? JSON.stringify((r.trace.output as { stats?: unknown }).stats)
+              : "done",
+            trace: r.trace,
+          })
+        );
+        if (prefetchResult.content && hasUserProvidedContent(prefetchResult.content)) {
+          rawBlueprint = { ...rawBlueprint, userProvidedContent: prefetchResult.content };
+        }
+      }
+    }
+
     const normalizedBlueprint = normalizeBlueprint(rawBlueprint);
 
     // ── Steps: plan_project + match/generate design system ──
@@ -929,6 +962,9 @@ async function runGenerateProjectInner(
       runtimeContext.referenceScreenshotDataUrl = referenceScreenshot;
     }
     appendGeneratedFiles(result, ["design-system.md", "project-plan.json"]);
+    if (blueprint.userProvidedContent && hasUserProvidedContent(blueprint.userProvidedContent)) {
+      appendGeneratedFiles(result, ["content/user-provided.json"]);
+    }
 
     // ── Step: apply_project_design_tokens, then UI generation (sequential) ──
     // Must not run architects / page agents in parallel with token application:

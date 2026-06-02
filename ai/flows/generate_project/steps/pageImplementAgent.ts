@@ -23,6 +23,8 @@ import { slugToPagePath } from "../shared/paths";
 import type { PlannedPageBlueprint, StepTrace, PageAgentProjectContext, BuildStep } from "../types";
 import { resolvePageImplementAgentRuleIds } from "../shared/agentRuleBundles";
 import { buildUserVisionContent } from "../shared/userVisionContent";
+import { hasUserProvidedContent } from "../schema/normalizeUserProvidedContent";
+import { formatUserProvidedContentBlock } from "@/lib/content/userProvidedContentPipeline";
 import { screenshotGuardrailIdFromContext } from "../shared/screenshotIntentMode";
 
 export const PAGE_IMPLEMENTATION_COMPLETE = "page_implementation_complete";
@@ -206,10 +208,19 @@ ${
 ${heroSkillPrompt}`
     : ""
 }
+${
+  hasUserProvidedContent(projectContext.userProvidedContent)
+    ? `\n\n${formatUserProvidedContentBlock(projectContext.userProvidedContent)}\n`
+    : ""
+}
 
 ## Instructions (follow in order)
 1. **Decide structure**: review the pre-read context above; you can skip read_file for layout.tsx / globals.css / design-system / app tree / components tree. If you genuinely need a specific component file's contents, then \`read_file\` it.
-2. **Images first when needed**: If this page should show photography/illustrations (typical marketing/product site: hero visual, feature art, case study photo), call \`generate_image\` **before** writing TSX that references those assets — use only paths returned by the tool. Skip only if the brief/plan clearly implies a no-imagery / data-only UI.
+2. **Images first when needed**: ${
+  hasUserProvidedContent(projectContext.userProvidedContent)
+    ? "User-provided images are already downloaded under `public/images/user-provided/` — use the `localPath` values above. Call `generate_image` **only** for visuals the user did not supply and the page still needs."
+    : "If this page should show photography/illustrations (typical marketing/product site: hero visual, feature art, case study photo), call `generate_image` **before** writing TSX that references those assets — use only paths returned by the tool. Skip only if the brief/plan clearly implies a no-imagery / data-only UI."
+}
 3. **Implement**: \`write_file\` / \`edit_file\` to create \`${targetPath}\` and extract page-local components under \`components/\` (your own subtree, e.g. \`components/<page-feature>/**\`). Respect design tokens. **Do not modify** \`app/layout.tsx\` or any file under \`components/chrome/**\`. Files are auto-formatted with Prettier on write — you do **not** need to call \`format_code\` afterwards.
 4. **Complete**: call **\`${PAGE_IMPLEMENTATION_COMPLETE}\`** with a summary of files and layout approach.
 
@@ -226,6 +237,9 @@ Do not invent extra top-level routes beyond this page.`;
     loadSystem("frontend"),
     loadStepPrompt("pageImplementAgent"),
     ...(refGuardId ? [loadGuardrail(refGuardId)] : []),
+    ...(hasUserProvidedContent(projectContext.userProvidedContent)
+      ? [loadGuardrail("providedContentFidelity")]
+      : []),
     ...resolvePageImplementAgentRuleIds().map(loadGuardrail),
   ]);
 

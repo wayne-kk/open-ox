@@ -14,6 +14,7 @@ import type {
 } from "../types";
 import { clampProjectListName } from "@/lib/projectDisplayName";
 import { isStringArray } from "../shared/typeGuards";
+import { normalizeUserProvidedContent } from "./normalizeUserProvidedContent";
 
 function isSectionSpecArray(value: unknown): value is SectionSpec[] {
   return Array.isArray(value);
@@ -407,6 +408,12 @@ function normalizeSite(value: unknown): ProjectSiteBlueprint {
   };
 }
 
+function attachUserProvidedContent(blueprint: ProjectBlueprint, raw: unknown): ProjectBlueprint {
+  const candidate = raw as { userProvidedContent?: unknown };
+  const userProvidedContent = normalizeUserProvidedContent(candidate.userProvidedContent);
+  return userProvidedContent ? { ...blueprint, userProvidedContent } : blueprint;
+}
+
 export function asProjectBlueprint(value: unknown): ProjectBlueprint {
   if (!value || typeof value !== "object") {
     throw new Error("analyze_project_requirement: output is not an object");
@@ -414,19 +421,25 @@ export function asProjectBlueprint(value: unknown): ProjectBlueprint {
 
   const candidate = value as Partial<ProjectBlueprint>;
   if (candidate.brief && candidate.experience && candidate.site) {
-    return {
-      brief: normalizeBrief(candidate.brief),
-      experience: normalizeExperience(candidate.experience),
-      site: normalizeSite(candidate.site),
-    };
+    return attachUserProvidedContent(
+      {
+        brief: normalizeBrief(candidate.brief),
+        experience: normalizeExperience(candidate.experience),
+        site: normalizeSite(candidate.site),
+      },
+      value
+    );
   }
 
   if (candidate.brief && candidate.site) {
-    return {
-      brief: normalizeBrief(candidate.brief),
-      experience: normalizeExperience(candidate.experience),
-      site: normalizeSite(candidate.site),
-    };
+    return attachUserProvidedContent(
+      {
+        brief: normalizeBrief(candidate.brief),
+        experience: normalizeExperience(candidate.experience),
+        site: normalizeSite(candidate.site),
+      },
+      value
+    );
   }
 
   const minimalNested = value as {
@@ -435,13 +448,16 @@ export function asProjectBlueprint(value: unknown): ProjectBlueprint {
     site?: unknown;
   };
   if (minimalNested.brief && minimalNested.designIntent && minimalNested.site) {
-    return {
-      brief: normalizeBrief(minimalNested.brief),
-      experience: normalizeExperience({
-        designIntent: minimalNested.designIntent,
-      }),
-      site: normalizeSite(minimalNested.site),
-    };
+    return attachUserProvidedContent(
+      {
+        brief: normalizeBrief(minimalNested.brief),
+        experience: normalizeExperience({
+          designIntent: minimalNested.designIntent,
+        }),
+        site: normalizeSite(minimalNested.site),
+      },
+      value
+    );
   }
 
   const flatCandidate = value as {
@@ -461,23 +477,26 @@ export function asProjectBlueprint(value: unknown): ProjectBlueprint {
     flatCandidate.designIntent &&
     Array.isArray(flatCandidate.pages)
   ) {
-    return {
-      brief: normalizeBrief({
-        projectTitle: flatCandidate.projectTitle,
-        projectDescription: flatCandidate.projectDescription,
-        productScope: flatCandidate.productScope,
-        roles: flatCandidate.roles,
-        taskLoops: flatCandidate.taskLoops,
-        capabilities: flatCandidate.capabilities,
-      }),
-      experience: normalizeExperience({
-        designIntent: flatCandidate.designIntent,
-      }),
-      site: normalizeSite({
-        informationArchitecture: flatCandidate.informationArchitecture,
-        pages: flatCandidate.pages,
-      }),
-    };
+    return attachUserProvidedContent(
+      {
+        brief: normalizeBrief({
+          projectTitle: flatCandidate.projectTitle,
+          projectDescription: flatCandidate.projectDescription,
+          productScope: flatCandidate.productScope,
+          roles: flatCandidate.roles,
+          taskLoops: flatCandidate.taskLoops,
+          capabilities: flatCandidate.capabilities,
+        }),
+        experience: normalizeExperience({
+          designIntent: flatCandidate.designIntent,
+        }),
+        site: normalizeSite({
+          informationArchitecture: flatCandidate.informationArchitecture,
+          pages: flatCandidate.pages,
+        }),
+      },
+      value
+    );
   }
 
   const singlePage = value as Partial<PageBlueprint & { designIntent: ProjectExperience["designIntent"] }>;
@@ -500,32 +519,35 @@ export function asProjectBlueprint(value: unknown): ProjectBlueprint {
       ),
     ];
 
-    return {
-      brief: (() => {
-        const projectTitle = clampProjectListName(singlePage.title);
-        if (!projectTitle.length) {
-          throw new Error(
-            "analyze_project_requirement: inferred projectTitle from page title is empty after normalization"
-          );
-        }
-        return {
-          projectTitle,
-          projectDescription: singlePage.description,
-          language: "en",
-          productScope: normalizeProductScope(undefined, singlePage.description),
-          roles: normalizedRoles,
-          taskLoops: normalizeTaskLoops(undefined, normalizedRoles),
-          capabilities: [],
-        };
-      })(),
-      experience: {
-        designIntent: singlePage.designIntent,
+    return attachUserProvidedContent(
+      {
+        brief: (() => {
+          const projectTitle = clampProjectListName(singlePage.title);
+          if (!projectTitle.length) {
+            throw new Error(
+              "analyze_project_requirement: inferred projectTitle from page title is empty after normalization"
+            );
+          }
+          return {
+            projectTitle,
+            projectDescription: singlePage.description,
+            language: "en",
+            productScope: normalizeProductScope(undefined, singlePage.description),
+            roles: normalizedRoles,
+            taskLoops: normalizeTaskLoops(undefined, normalizedRoles),
+            capabilities: [],
+          };
+        })(),
+        experience: {
+          designIntent: singlePage.designIntent,
+        },
+        site: {
+          informationArchitecture: normalizeInformationArchitecture(undefined, normalizedPages),
+          pages: normalizedPages,
+        },
       },
-      site: {
-        informationArchitecture: normalizeInformationArchitecture(undefined, normalizedPages),
-        pages: normalizedPages,
-      },
-    };
+      value
+    );
   }
 
   throw new Error("analyze_project_requirement: output does not match ProjectBlueprint");

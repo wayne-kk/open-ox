@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight } from "lucide-react";
-import { detectUrl, type InjectedChip } from "@/app/hooks/usePromptTriggers";
+import { type InjectedChip } from "@/app/hooks/usePromptTriggers";
 import { PromptChips } from "@/app/components/ui/PromptChips";
 import { QuickTemplates } from "@/app/components/ui/QuickTemplates";
 import { SparkleHoverButton } from "@/components/ui/sparkle-hover-button";
@@ -94,21 +94,6 @@ export function HeroPrompt() {
       setPhase("typing");
     }
   }, [phase, charIdx, placeholderIdx, focused, value]);
-
-  // ── URL auto-detection ─────────────────────────────────────────────────────
-  const lastDetectedUrl = useRef<string | null>(null);
-  useEffect(() => {
-    const url = detectUrl(value);
-    if (url && url !== lastDetectedUrl.current && !chips.some((c) => c.type === "url" && c.payload.referenceUrl === url)) {
-      lastDetectedUrl.current = url;
-      const domain = new URL(url).hostname.replace("www.", "");
-      setChips((prev) => [...prev, {
-        id: `url-${Date.now()}`, label: domain, type: "url",
-        payload: { referenceUrl: url },
-      }]);
-      setValue((v) => v.replace(url, "").trim());
-    }
-  }, [value, chips]);
 
   const removeChip = useCallback((id: string) => {
     setChips((prev) => prev.filter((c) => c.id !== id));
