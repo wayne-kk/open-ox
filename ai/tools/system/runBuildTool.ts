@@ -1,8 +1,12 @@
-import { execSync } from "child_process";
+import { execFile } from "child_process";
+import { promisify } from "util";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import type { ToolResult, ToolExecutor } from "../types";
 import { ensureProjectNodeModules } from "@/lib/ensureProjectNodeModules";
+import { withSiteBuildLock } from "@/lib/siteBuildLock";
 import { getSiteRoot } from "./common";
+
+const execFileAsync = promisify(execFile);
 
 export const runBuildTool: ChatCompletionTool = {
   type: "function",
@@ -27,15 +31,23 @@ export const executeRunBuild: ToolExecutor = async (
   args: Record<string, unknown>
 ): Promise<ToolResult | string> => {
   const script = (args.script as string) || "build";
+  const projectDir = getSiteRoot();
   try {
-    await ensureProjectNodeModules(getSiteRoot());
-    const output = execSync(`pnpm run ${script}`, {
-      cwd: getSiteRoot(),
-      encoding: "utf-8",
-      maxBuffer: 1024 * 1024,
-      env: { ...process.env, NODE_ENV: "production" },
+    await ensureProjectNodeModules(projectDir);
+    return await withSiteBuildLock(projectDir, async () => {
+      const { stdout, stderr } = await execFileAsync(
+        "pnpm",
+        ["run", script],
+        {
+          cwd: projectDir,
+          encoding: "utf8",
+          maxBuffer: 1024 * 1024,
+          env: { ...process.env, NODE_ENV: "production" },
+        }
+      );
+      const output = [stdout, stderr].filter(Boolean).join("\n").trim();
+      return { success: true, output };
     });
-    return { success: true, output: output?.trim() ?? "" };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return { success: false, error: msg };

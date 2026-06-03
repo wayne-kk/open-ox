@@ -20,6 +20,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 import { ensureProjectNodeModules } from "@/lib/ensureProjectNodeModules";
+import { withSiteBuildLock } from "@/lib/siteBuildLock";
 import { getSiteRoot } from "@/lib/projectManager";
 import { ensureProjectSourcesOnDisk } from "@/lib/storage";
 import {
@@ -309,33 +310,35 @@ async function ensurePreviewBasePathInNextConfig(projectDir: string): Promise<vo
 
 async function runStaticExportBuild(projectId: string, projectDir: string): Promise<void> {
   const basePath = getStoragePreviewBasePath(projectId);
-  let stdout = "";
-  let stderr = "";
-  try {
-    const result = await execFileAsync(
-      "pnpm",
-      ["run", "build"],
-      {
-        cwd: projectDir,
-        env: {
-          ...process.env,
-          NODE_ENV: "production",
-          OPEN_OX_STATIC_BASE_PATH: basePath,
-        },
-        maxBuffer: 12 * 1024 * 1024,
-      }
-    );
-    stdout = result.stdout?.toString() ?? "";
-    stderr = result.stderr?.toString() ?? "";
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    const ex = err as { stdout?: string; stderr?: string };
-    const tail = [ex.stderr, ex.stdout, msg].filter(Boolean).join("\n").slice(-4000);
-    throw new Error(`next build (static preview) failed: ${tail}`);
-  }
-  if (stderr && /error|failed/i.test(stderr) && !/compiled successfully/i.test(stdout)) {
-    console.warn("[staticPreview] build stderr:", stderr.slice(-2000));
-  }
+  await withSiteBuildLock(projectDir, async () => {
+    let stdout = "";
+    let stderr = "";
+    try {
+      const result = await execFileAsync(
+        "pnpm",
+        ["run", "build"],
+        {
+          cwd: projectDir,
+          env: {
+            ...process.env,
+            NODE_ENV: "production",
+            OPEN_OX_STATIC_BASE_PATH: basePath,
+          },
+          maxBuffer: 12 * 1024 * 1024,
+        }
+      );
+      stdout = result.stdout?.toString() ?? "";
+      stderr = result.stderr?.toString() ?? "";
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const ex = err as { stdout?: string; stderr?: string };
+      const tail = [ex.stderr, ex.stdout, msg].filter(Boolean).join("\n").slice(-4000);
+      throw new Error(`next build (static preview) failed: ${tail}`);
+    }
+    if (stderr && /error|failed/i.test(stderr) && !/compiled successfully/i.test(stdout)) {
+      console.warn("[staticPreview] build stderr:", stderr.slice(-2000));
+    }
+  });
 }
 
 async function persistSyncOk(db: SupabaseClient, projectId: string): Promise<void> {
