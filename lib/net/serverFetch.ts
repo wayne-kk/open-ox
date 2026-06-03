@@ -1,4 +1,10 @@
-import { Agent, ProxyAgent, fetch as undiciFetch, type Dispatcher } from "undici";
+import {
+  Agent,
+  ProxyAgent,
+  fetch as undiciFetch,
+  type Dispatcher,
+  type RequestInit as UndiciRequestInit,
+} from "undici";
 
 function parseTimeoutMs(raw: string | undefined, fallback: number): number {
   if (!raw) return fallback;
@@ -45,10 +51,11 @@ export async function serverFetch(
   input: string | URL,
   init?: RequestInit
 ): Promise<Response> {
-  const res = await undiciFetch(input, {
-    ...init,
+  const undiciInit: UndiciRequestInit = {
+    ...(init as UndiciRequestInit | undefined),
     dispatcher: getDispatcher(),
-  });
+  };
+  const res = await undiciFetch(input, undiciInit);
   return res as unknown as Response;
 }
 
