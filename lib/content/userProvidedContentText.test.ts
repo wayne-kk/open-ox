@@ -18,7 +18,7 @@ describe("formatUserProvidedContentAsText", () => {
     expect(text).toContain("# User-provided content");
     expect(text).toContain("Name: Best Intentions");
     expect(text).toContain("URL: https://example.com/a.jpg");
-    expect(text).toContain("use these URLs directly");
+    expect(text).toContain("each URL once as remote src");
     expect(text).toContain('"Great bar."');
     expect(text).not.toContain("{");
   });
