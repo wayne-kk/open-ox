@@ -4,8 +4,11 @@ import path from "path";
 
 const LOCKS_DIR = path.join(process.cwd(), ".open-ox", "site-build-locks");
 
-const POLL_MS = 2_000;
+const POLL_MS = 250;
 const DEFAULT_TIMEOUT_MS = 15 * 60_000;
+
+/** Same Node process: serialize before hitting the file lock (avoids stealing our own lock). */
+const inProcessChains = new Map<string, Promise<void>>();
 
 function lockFileForProjectDir(projectDir: string): string {
   const id = createHash("sha256").update(path.resolve(projectDir)).digest("hex").slice(0, 32);
@@ -37,44 +40,40 @@ export async function clearNextBuildDirLock(projectDir: string): Promise<void> {
   }
 }
 
-async function readLockPid(lockPath: string): Promise<number | null> {
+async function readLockPid(lockPath: string): Promise<number | "missing" | "unreadable"> {
   try {
     const raw = (await fs.readFile(lockPath, "utf8")).trim();
     const pid = Number(raw.split(/\s/)[0]);
-    return Number.isInteger(pid) && pid > 0 ? pid : null;
-  } catch {
-    return null;
+    if (!Number.isInteger(pid) || pid <= 0) return "unreadable";
+    return pid;
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") return "missing";
+    return "unreadable";
   }
 }
 
+/** Only remove lock files left by a dead process — never steal an active or unreadable lock. */
 async function tryReleaseStaleOpenOxLock(lockPath: string): Promise<void> {
   const pid = await readLockPid(lockPath);
-  if (pid != null && isPidAlive(pid)) return;
+  if (pid === "missing" || pid === "unreadable") return;
+  if (isPidAlive(pid)) return;
   await fs.unlink(lockPath).catch(() => undefined);
 }
 
-/**
- * Serialize `next build` for a site directory across generation worker, preview sync, and API.
- * Prevents "Unable to acquire lock at .next/lock" when verify-build and static preview overlap.
- */
-export async function withSiteBuildLock<T>(
+async function acquireFileBuildLock(
+  lockPath: string,
   projectDir: string,
-  fn: () => Promise<T>,
-  options?: { timeoutMs?: number }
-): Promise<T> {
-  const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const lockPath = lockFileForProjectDir(projectDir);
-  await fs.mkdir(LOCKS_DIR, { recursive: true });
-
+  timeoutMs: number
+): Promise<fs.FileHandle> {
   const started = Date.now();
-  let handle: fs.FileHandle | undefined;
 
   while (Date.now() - started < timeoutMs) {
     await tryReleaseStaleOpenOxLock(lockPath);
     try {
-      handle = await fs.open(lockPath, "wx");
+      const handle = await fs.open(lockPath, "wx");
       await handle.writeFile(`${process.pid}\n${Date.now()}\n`);
-      break;
+      return handle;
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
       if (code !== "EEXIST") throw err;
@@ -82,17 +81,59 @@ export async function withSiteBuildLock<T>(
     }
   }
 
-  if (!handle) {
-    throw new Error(
-      `Timed out waiting for site build lock (${Math.round(timeoutMs / 1000)}s): ${projectDir}`
-    );
-  }
+  throw new Error(
+    `Timed out waiting for site build lock (${Math.round(timeoutMs / 1000)}s): ${projectDir}`
+  );
+}
 
+async function withInProcessBuildQueue<T>(
+  projectDir: string,
+  fn: () => Promise<T>
+): Promise<T> {
+  const key = path.resolve(projectDir);
+  const previous = inProcessChains.get(key) ?? Promise.resolve();
+
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  inProcessChains.set(
+    key,
+    previous.then(() => current)
+  );
+
+  await previous;
   try {
-    await clearNextBuildDirLock(projectDir);
     return await fn();
   } finally {
-    await handle.close();
-    await fs.unlink(lockPath).catch(() => undefined);
+    release();
+    if (inProcessChains.get(key) === current) {
+      inProcessChains.delete(key);
+    }
   }
+}
+
+/**
+ * Serialize `next build` for a site directory across generation worker, preview sync, and API.
+ * In-process queue + file lock (cross-process).
+ */
+export async function withSiteBuildLock<T>(
+  projectDir: string,
+  fn: () => Promise<T>,
+  options?: { timeoutMs?: number }
+): Promise<T> {
+  return withInProcessBuildQueue(projectDir, async () => {
+    const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const lockPath = lockFileForProjectDir(projectDir);
+    await fs.mkdir(LOCKS_DIR, { recursive: true });
+
+    const handle = await acquireFileBuildLock(lockPath, projectDir, timeoutMs);
+    try {
+      await clearNextBuildDirLock(projectDir);
+      return await fn();
+    } finally {
+      await handle.close();
+      await fs.unlink(lockPath).catch(() => undefined);
+    }
+  });
 }
