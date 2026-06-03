@@ -39,8 +39,23 @@ export const ARCHITECT_AGENT_RULE_IDS_BASE: readonly string[] = [
   "framerMotionVariants",
 ];
 
-export function resolvePageImplementAgentRuleIds(): string[] {
-  return [...PAGE_IMPLEMENT_AGENT_RULE_IDS_BASE, ...parseExtraRuleIds(PAGE_EXTRA_ENV)];
+export function resolvePageImplementAgentRuleIds(opts?: {
+  userProvidedImageCount?: number;
+}): string[] {
+  const imageCount = opts?.userProvidedImageCount ?? 0;
+  const rest = PAGE_IMPLEMENT_AGENT_RULE_IDS_BASE.filter(
+    (id) => id !== "section.default" && id !== "tailwindMappingGuide"
+  );
+  const sectionRules =
+    imageCount > 0
+      ? ["section.userProvidedImages", "section.default"]
+      : ["section.default"];
+  return [
+    "tailwindMappingGuide",
+    ...sectionRules,
+    ...rest,
+    ...parseExtraRuleIds(PAGE_EXTRA_ENV),
+  ];
 }
 
 export function resolveArchitectAgentRuleIds(): string[] {

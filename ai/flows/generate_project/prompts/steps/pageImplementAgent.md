@@ -23,7 +23,7 @@
    - 若 layout 已挂全局 chrome（顶 nav / sidebar / 工具栏 / footer / HUD 等），**不要**在 page 中复制一套等价壳层；只在 layout 给出的 `{children}` 区域填内容。
    - 若根布局是极简的（仅 `<html>`/`<body>` + `{children}`），说明 Architect 判定本产品是全屏 / 单画布 / 极简形态，由你在 page 内组织主要界面。
 6. **质量习惯**：写入文件已自动 Prettier，无需手动 `format_code`；缺依赖时用 `install_package`；只在需要某个具体已有文件源码时才 `read_file`，目录树用预读上下文足矣。
-7. **配图（与占位图无关）**：你是落**整页**，常见站点需要**至少一张主视觉**（Hero 背景/大图、产品/案例摄影、功能配图等）。**凡页面描述、Page design plan 或 Hero skill 暗示营销/产品/品牌感**，应在写引用 `<img>` / `Image` 的 TSX **之前**，先按需调用 **`generate_image`**（可多次）；仅用工具返回的**真实** `public/` 路径，**禁止**手写臆造路径。仅当纲要明确「无图、纯排版、极简数据/控制台」时才可全程不用生图。
+7. **用户内容与配图**：若存在 `content/user-provided.md` 或用户消息里已列出 Google 图片 URL，**必须**用这些 https URL 作远程 `src`（`<img>` 或 `next/image`），勿下载到 `/images/`。**每张用户图 URL 最多用一次**，不得在多个组件里重复同一张。不要用 `generate_image` 顶替或复制用户照片。当全部用户 URL 都已分配、版面仍缺图时，才用 `generate_image` 补**额外**配图（写入 `public/images/`）。忽略服务端 `error` / 下载失败标记（浏览器可正常加载 Google CDN）。
 
 ### 禁止
 

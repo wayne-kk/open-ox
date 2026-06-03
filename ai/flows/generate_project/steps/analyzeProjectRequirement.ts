@@ -48,6 +48,7 @@ export async function stepAnalyzeProjectRequirement(
     tools: [referenceSiteDigestTool, fetchReferencePageTool, webSearchTool],
     temperature: 0.5,
     maxIterations: 8,
+    maxTokens: userInput.length > 2000 ? 16_384 : 8_192,
     model,
     executeToolOverrides: {
       fetch_reference_page: executeFetchReferencePage,

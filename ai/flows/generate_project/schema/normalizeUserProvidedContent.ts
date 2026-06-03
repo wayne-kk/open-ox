@@ -66,11 +66,9 @@ function normalizeImages(value: unknown): UserProvidedImage[] | undefined {
       url,
       caption: trimOrUndefined(c.caption),
       role: trimOrUndefined(c.role),
-      localPath: trimOrUndefined(c.localPath),
-      assetSource:
-        c.assetSource === "download" || c.assetSource === "generated"
-          ? c.assetSource
-          : undefined,
+      path: trimOrUndefined(c.path) ?? trimOrUndefined(c.localPath),
+      ...(c.source === "download" || c.source === "downloaded" ? { source: "download" as const } : {}),
+      error: trimOrUndefined(c.error) ?? trimOrUndefined(c.fetchError),
     });
   }
   return items.length > 0 ? items : undefined;

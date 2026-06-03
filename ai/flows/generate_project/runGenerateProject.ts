@@ -29,9 +29,10 @@ import {
 } from "./steps/projectIntentGuide";
 import { stepApplyProjectDesignTokens } from "./steps/applyProjectDesignTokens";
 import { runArchitectAgent, ARCHITECT_AGENT_STEP } from "./steps/architectAgent";
-import { stepPrefetchUserProvidedAssets } from "./steps/prefetchUserProvidedAssets";
-import { extractImageUrlsFromPrompt } from "@/lib/content/userProvidedContentPipeline";
+import { stepExtractUserProvidedContent } from "./steps/extractUserProvidedContent";
 import { hasUserProvidedContent } from "./schema/normalizeUserProvidedContent";
+import { USER_PROVIDED_CONTENT_PATH } from "@/lib/content/userProvidedContentText";
+import { prepareUserProvidedContentForPageAgent } from "./shared/userProvidedContentContext";
 import { stepGenerateProjectDesignSystem } from "./steps/generateProjectDesignSystem";
 import { stepMatchDesignSystemSkill, type DesignSystemMatchResult } from "./steps/matchDesignSystemSkill";
 import { stepInstallDependencies } from "./steps/installDependencies";
@@ -133,7 +134,9 @@ function buildProjectRuntimeContext(
       journeyStage: page.journeyStage,
     })),
     designKeywords: blueprint.experience.designIntent.keywords ?? [],
-    userProvidedContent: blueprint.userProvidedContent,
+    userProvidedContent: prepareUserProvidedContentForPageAgent(
+      blueprint.userProvidedContent
+    ),
     rawUserInput: "",
   };
 }
@@ -800,30 +803,35 @@ async function runGenerateProjectInner(
       };
     }
 
-    // ── Prefetch user-provided assets when analyze extracted content or prompt has image URLs ──
+    // ── Organize user query (after analyze, before plan) ──
     if (!cp?.skipAnalyze) {
-      const mayHaveAssets =
-        hasUserProvidedContent(rawBlueprint.userProvidedContent) ||
-        extractImageUrlsFromPrompt(effectiveUserInput).length > 0;
+      rawBlueprint = { ...rawBlueprint, userProvidedContent: undefined };
 
-      if (mayHaveAssets) {
-        const prefetchResult = await logger.timed(
-          "prefetch_user_provided_assets",
-          () =>
-            stepPrefetchUserProvidedAssets({
-              content: rawBlueprint.userProvidedContent,
-              userInput: effectiveUserInput,
-            }),
-          (r) => ({
-            detail: r.trace.output
-              ? JSON.stringify((r.trace.output as { stats?: unknown }).stats)
-              : "done",
-            trace: r.trace,
-          })
+      const extractResult = await logger.timed(
+        "extract_user_provided_content",
+        () =>
+          stepExtractUserProvidedContent({
+            userInput: effectiveUserInput,
+            referenceImageBase64: referenceScreenshot,
+          }),
+        (r) => ({
+          detail: r.content
+            ? `${r.content.images?.length ?? 0} images, address=${Boolean(r.content.business?.address)}`
+            : "none",
+          trace: r.trace,
+        })
+      );
+      if (extractResult.content && hasUserProvidedContent(extractResult.content)) {
+        rawBlueprint = {
+          ...rawBlueprint,
+          userProvidedContent: extractResult.content,
+        };
+        await persistJsonArtifact(
+          artifactLogger,
+          "extract_user_provided_content",
+          "output",
+          extractResult.content
         );
-        if (prefetchResult.content && hasUserProvidedContent(prefetchResult.content)) {
-          rawBlueprint = { ...rawBlueprint, userProvidedContent: prefetchResult.content };
-        }
       }
     }
 
@@ -963,7 +971,7 @@ async function runGenerateProjectInner(
     }
     appendGeneratedFiles(result, ["design-system.md", "project-plan.json"]);
     if (blueprint.userProvidedContent && hasUserProvidedContent(blueprint.userProvidedContent)) {
-      appendGeneratedFiles(result, ["content/user-provided.json"]);
+      appendGeneratedFiles(result, [USER_PROVIDED_CONTENT_PATH]);
     }
 
     // ── Step: apply_project_design_tokens, then UI generation (sequential) ──

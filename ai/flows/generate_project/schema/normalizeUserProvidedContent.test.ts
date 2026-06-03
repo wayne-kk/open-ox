@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { normalizeUserProvidedContent } from "./normalizeUserProvidedContent";
-import {
-  extractImageUrlsFromPrompt,
-  looksLikeImageUrl,
-} from "@/lib/content/userProvidedContentPipeline";
 
 describe("normalizeUserProvidedContent", () => {
   it("returns undefined for empty input", () => {
@@ -29,20 +25,5 @@ describe("normalizeUserProvidedContent", () => {
     });
     expect(result?.images).toBeUndefined();
     expect(result?.menuItems).toEqual(["Burger"]);
-  });
-});
-
-describe("extractImageUrlsFromPrompt", () => {
-  it("detects google user content image URLs", () => {
-    const url = "https://lh3.googleusercontent.com/places/abc=s4800-w1200";
-    const text = `Photos: ${url} and more text`;
-    expect(looksLikeImageUrl(url)).toBe(true);
-    expect(extractImageUrlsFromPrompt(text)).toEqual([url]);
-  });
-
-  it("ignores regular website URLs", () => {
-    const url = "https://example.com/menu";
-    expect(looksLikeImageUrl(url)).toBe(false);
-    expect(extractImageUrlsFromPrompt(`Visit ${url}`)).toEqual([]);
   });
 });

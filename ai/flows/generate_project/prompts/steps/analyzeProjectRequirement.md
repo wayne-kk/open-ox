@@ -97,48 +97,9 @@
 
 一句话；目标用户 + home 的承诺；与用户抽象层级一致。
 
-### 4) `userProvidedContent`（可选 — 仅抽取用户**明确给出**的内容）
+### 4) `userProvidedContent`
 
-当用户在 prompt 中提供了具体事实、链接、图片、评价、菜单、营业时间、配色等，输出可选对象 `userProvidedContent`。**没有则省略整个字段**（不要输出空对象）。
-
-**规则：**
-- **只抽取用户明确写出的内容** — 不要猜测、不要补全、不要编造。
-- 评价 `quote` 必须从用户原文**逐字拷贝**（保留换行与标点）。
-- 图片 `url` 必须是用户给出的完整 `https://` 链接；`caption` 用用户附带的说明（如有）。
-- 不确定的字段**留空或省略**，不要为了“完整”而填充。
-- 用户提供的图片/评价/菜单**优先于**任何参考站抓取结果。
-
-```json
-"userProvidedContent": {
-  "business": {
-    "name": "（可选）",
-    "description": "（可选）",
-    "address": "（可选，原文）",
-    "phone": "（可选，原文）",
-    "website": "（可选，原文）",
-    "rating": "（可选）",
-    "reviewCount": "（可选）"
-  },
-  "hours": ["Monday: Closed", "Tuesday: 5:00 PM – 2:00 AM"],
-  "palette": ["#4B2E20 — deep brown", "#F7E13A — neon yellow"],
-  "menuItems": ["Pickle beer", "Old fashioned"],
-  "testimonials": [
-    {
-      "quote": "（用户原文，verbatim）",
-      "author": "（可选）",
-      "stars": 5,
-      "relativeTime": "（可选）"
-    }
-  ],
-  "images": [
-    { "url": "https://…", "caption": "（可选）", "role": "（可选，如 hero / gallery）" }
-  ],
-  "links": [{ "label": "（可选）", "url": "https://…" }],
-  "notes": "（可选）用户特别强调的规则或约束"
-}
-```
-
-
+**不要在本步骤输出 `userProvidedContent`。** 下游 **extract_user_provided_content**（Analyze 之后、Plan 之前）整理用户 query；图片保留 Google URL，由 Page Agent 直接使用。
 - 未指定站点语言时，`language` 对齐 **userMessage** 语言（BCP-47）。
 - `productType` 必须为英文；其他面向用户的字符串跟随 `language`。
 

@@ -34,6 +34,10 @@ export async function callLLMWithTools(params: {
   tools: ChatCompletionTool[];
   temperature?: number;
   maxIterations?: number;
+  /** Cap completion tokens per round (avoids truncated JSON on long userProvidedContent). */
+  maxTokens?: number;
+  /** When false, the model may only call one tool per turn (helps long URL tool args). */
+  parallelToolCalls?: boolean;
   model?: string;
   thinkingLevel?: string;
   executeToolOverrides?: Record<string, (args: Record<string, unknown>) => Promise<ToolResult | string>>;
@@ -75,6 +79,10 @@ export async function callLLMWithTools(params: {
         model,
         messages,
         temperature,
+        ...(params.maxTokens != null && params.maxTokens > 0
+          ? { max_tokens: params.maxTokens }
+          : {}),
+        ...(params.parallelToolCalls === false ? { parallel_tool_calls: false } : {}),
         tools: activeTools.length > 0 ? activeTools : undefined,
         tool_choice: activeTools.length > 0 ? "auto" : undefined,
         ...(params.thinkingLevel ? { thinking_level: params.thinkingLevel } : {}),

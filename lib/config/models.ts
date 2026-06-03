@@ -111,6 +111,7 @@ export const GENERATION_STEPS = [
     { id: "modify_plan", label: "修改·广域变更规划" },
     { id: "commit_merged_brief_classifier", label: "确认生成·需求文本实质性（LLM）" },
     { id: "analyze_project_requirement", label: "需求分析" },
+    { id: "extract_user_provided_content", label: "用户 Query 整理" },
     { id: "infer_design_intent", label: "设计意图推断" },
     { id: "plan_project", label: "项目规划" },
     { id: "generate_project_design_system", label: "设计系统" },

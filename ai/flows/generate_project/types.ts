@@ -99,7 +99,7 @@ export type PageAgentProjectContext = {
     journeyStage: string;
   }>;
   designKeywords: string[];
-  /** Extracted user-provided facts/assets (after optional image prefetch). */
+  /** Organized user-provided facts (in-memory for pipeline; on disk see content/user-provided.md). */
   userProvidedContent?: UserProvidedContent;
   /** When set, page/architect agents receive the same screenshot for layout-faithful implementation. */
   referenceScreenshotDataUrl?: string | null;
@@ -163,14 +163,17 @@ export interface ProjectSiteBlueprint {
   pages: PageBlueprint[];
 }
 
-/** Image the user explicitly provided in their prompt (URL + optional caption). */
+/** Image the user provided in their prompt. After resolve, `path` is a project-relative URL like `/images/foo.png`. */
 export interface UserProvidedImage {
   url: string;
   caption?: string;
   role?: string;
-  /** Populated after prefetch — local public path e.g. /images/user-provided/foo.jpg */
-  localPath?: string;
-  assetSource?: "download" | "generated";
+  /** Project-relative path under public/images/ — same contract as generate_image. */
+  path?: string;
+  /** How `path` was obtained — only set after a successful download in resolve step. */
+  source?: "download";
+  /** Present when both download and generate failed. */
+  error?: string;
 }
 
 export interface UserProvidedTestimonial {

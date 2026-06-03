@@ -23,9 +23,20 @@ import { slugToPagePath } from "../shared/paths";
 import type { PlannedPageBlueprint, StepTrace, PageAgentProjectContext, BuildStep } from "../types";
 import { resolvePageImplementAgentRuleIds } from "../shared/agentRuleBundles";
 import { buildUserVisionContent } from "../shared/userVisionContent";
-import { hasUserProvidedContent } from "../schema/normalizeUserProvidedContent";
-import { formatUserProvidedContentBlock } from "@/lib/content/userProvidedContentPipeline";
 import { screenshotGuardrailIdFromContext } from "../shared/screenshotIntentMode";
+import { hasUserProvidedContent } from "../schema/normalizeUserProvidedContent";
+import {
+  prepareUserProvidedContentForPageAgent,
+  userProvidedContentFileHint,
+  userProvidedContentImagesBlock,
+  userProvidedImageCount,
+} from "../shared/userProvidedContentContext";
+import {
+  buildGenerateImageToolForPageAgent,
+  guardGenerateImageExecutor,
+  listUserProvidedImageUrls,
+} from "../shared/userProvidedImageEnforcement";
+import { USER_PROVIDED_CONTENT_PATH } from "@/lib/content/userProvidedContentText";
 
 export const PAGE_IMPLEMENTATION_COMPLETE = "page_implementation_complete";
 
@@ -125,6 +136,20 @@ export async function runPageImplementAgent(
   const model = getModelForStep("page_implement_agent");
   const thinking = getThinkingLevelForStep("page_implement_agent");
   const agentStepName = `page_implement_agent:${page.slug}`;
+  const userContent = prepareUserProvidedContentForPageAgent(projectContext.userProvidedContent);
+  const userImageUrls = listUserProvidedImageUrls(
+    userContent,
+    projectContext.rawUserInput ?? ""
+  );
+  const userImageCount = userImageUrls.length;
+  const userProvidedMd = (() => {
+    try {
+      const text = readSiteFile(USER_PROVIDED_CONTENT_PATH);
+      return text && !text.includes("(missing") ? text : "";
+    } catch {
+      return "";
+    }
+  })();
 
   const planJson = JSON.stringify(
     {
@@ -208,19 +233,26 @@ ${
 ${heroSkillPrompt}`
     : ""
 }
+${userProvidedContentFileHint(hasUserProvidedContent(userContent))}
+${userProvidedContentImagesBlock(userContent)}
 ${
-  hasUserProvidedContent(projectContext.userProvidedContent)
-    ? `\n\n${formatUserProvidedContentBlock(projectContext.userProvidedContent)}\n`
+  userProvidedMd
+    ? `
+
+## content/user-provided.md (on disk — use image URLs below)
+\`\`\`markdown
+${truncate(userProvidedMd, 12_000)}
+\`\`\``
     : ""
 }
 
 ## Instructions (follow in order)
 1. **Decide structure**: review the pre-read context above; you can skip read_file for layout.tsx / globals.css / design-system / app tree / components tree. If you genuinely need a specific component file's contents, then \`read_file\` it.
-2. **Images first when needed**: ${
-  hasUserProvidedContent(projectContext.userProvidedContent)
-    ? "User-provided images are already downloaded under `public/images/user-provided/` — use the `localPath` values above. Call `generate_image` **only** for visuals the user did not supply and the page still needs."
-    : "If this page should show photography/illustrations (typical marketing/product site: hero visual, feature art, case study photo), call `generate_image` **before** writing TSX that references those assets — use only paths returned by the tool. Skip only if the brief/plan clearly implies a no-imagery / data-only UI."
-}
+2. **User content & images**: If \`content/user-provided.md\` exists, \`read_file\` it. Use listed **https image URLs as remote src** (lh3.googleusercontent.com is allowed in next.config). Do **not** download user photos. **Each user URL at most once** — never reuse the same URL in two components. Do **not** use \`generate_image\` to stand in for a user photo.${
+    userImageCount > 0
+      ? ` You have ${userImageCount} user URL(s): assign them first; only after all are used, call \`generate_image\` for any remaining image slots.`
+      : " Use `generate_image` only when you need visuals with no user-provided URLs."
+  }
 3. **Implement**: \`write_file\` / \`edit_file\` to create \`${targetPath}\` and extract page-local components under \`components/\` (your own subtree, e.g. \`components/<page-feature>/**\`). Respect design tokens. **Do not modify** \`app/layout.tsx\` or any file under \`components/chrome/**\`. Files are auto-formatted with Prettier on write — you do **not** need to call \`format_code\` afterwards.
 4. **Complete**: call **\`${PAGE_IMPLEMENTATION_COMPLETE}\`** with a summary of files and layout approach.
 
@@ -237,10 +269,9 @@ Do not invent extra top-level routes beyond this page.`;
     loadSystem("frontend"),
     loadStepPrompt("pageImplementAgent"),
     ...(refGuardId ? [loadGuardrail(refGuardId)] : []),
-    ...(hasUserProvidedContent(projectContext.userProvidedContent)
-      ? [loadGuardrail("providedContentFidelity")]
-      : []),
-    ...resolvePageImplementAgentRuleIds().map(loadGuardrail),
+    ...resolvePageImplementAgentRuleIds({ userProvidedImageCount: userImageCount }).map(
+      loadGuardrail
+    ),
   ]);
 
   const messages: ChatMessage[] = [
@@ -251,9 +282,19 @@ Do not invent extra top-level routes beyond this page.`;
     },
   ];
 
-  const { executor: imageExecutor, pendingImages } = createImageExecutor(
+  const { executor: baseImageExecutor, pendingImages } = createImageExecutor(
     `page-${page.slug.replace(/[^a-zA-Z0-9_-]+/g, "-")}`
   );
+  const imageExecutor = guardGenerateImageExecutor(baseImageExecutor, userImageUrls);
+  const pageTools: ChatCompletionTool[] = [
+    ...getSystemToolDefinitions(
+      TOOL_NAMES.filter((name) => name !== "generate_image")
+    ),
+    ...(userImageCount > 0
+      ? [buildGenerateImageToolForPageAgent(userImageCount)]
+      : getSystemToolDefinitions(["generate_image"])),
+    completeTool,
+  ];
 
   let implementationComplete = false;
   let completeSummary = "";
@@ -265,7 +306,7 @@ Do not invent extra top-level routes beyond this page.`;
 
   const { content, toolCalls } = await callLLMWithToolsFromMessages({
     messages,
-    tools: [...getSystemToolDefinitions([...TOOL_NAMES]), completeTool],
+    tools: pageTools,
     temperature: 0.5,
     maxIterations,
     model,

@@ -7,8 +7,12 @@
 
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import type { ToolResult, ToolExecutor } from "../types";
-import { generateArkImageBase64 } from "@/lib/ark-image-generate";
-import { sanitizeImageFilename, writePublicImage } from "@/lib/content/siteImageAsset";
+import {
+  generateProjectImage,
+  projectImagePath,
+  sanitizeImageFilename,
+  sanitizeImagePrompt,
+} from "@/lib/content/siteImageAsset";
 
 // ── Concurrency limiter for Ark API ─────────────────────────────────────
 
@@ -76,8 +80,7 @@ function sanitizeFilename(raw: string): string {
 }
 
 function sanitizePrompt(raw: string): string {
-  const normalized = raw.replace(/\s+/g, " ").trim();
-  return normalized.length > 160 ? normalized.slice(0, 160) : normalized;
+  return sanitizeImagePrompt(raw);
 }
 
 // ── Pending image tracking ──────────────────────────────────────────────
@@ -108,7 +111,7 @@ export function createImageExecutor(componentName: string): {
     const filename = sanitizeFilename(`${componentName}-${rawName}`);
     const prompt = sanitizePrompt(String(args.prompt ?? ""));
     const size = "1k";
-    const publicPath = `/images/${filename}.png`;
+    const publicPath = projectImagePath(filename, "png");
 
     if (!prompt.trim()) {
       return { success: false, error: "prompt is required" };
@@ -137,19 +140,16 @@ export function createImageExecutor(componentName: string): {
       const t0 = Date.now();
       try {
         console.log(`[generate_image] Generating "${filename}" (size=${size})...`);
-        const b64 = await generateArkImageBase64({ prompt, size });
-        const buf = Buffer.from(b64, "base64");
-
-        const publicPath = writePublicImage({
-          filenameBase: filename,
-          buffer: buf,
-          ext: "png",
-          subdir: "images",
-        });
-        pending.publicPath = publicPath;
+        const result = await generateProjectImage({ filenameBase: filename, prompt });
+        if (!result.ok) {
+          throw new Error(result.error);
+        }
+        pending.publicPath = result.path;
         pending.durationMs = Date.now() - t0;
         pending.success = true;
-        console.log(`[generate_image] Saved ${publicPath} (${buf.length} bytes, ${pending.durationMs}ms)`);
+        console.log(
+          `[generate_image] Saved ${result.path} (${result.bytes} bytes, ${pending.durationMs}ms)`
+        );
       } catch (err) {
         pending.durationMs = Date.now() - t0;
         pending.success = false;
