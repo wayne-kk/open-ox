@@ -452,7 +452,7 @@ export async function syncStaticSitePreview(
     }
 
     const projectDir = getSiteRoot(projectId);
-    await ensureProjectSourcesOnDisk(projectId);
+    await ensureProjectSourcesOnDisk(projectId, { db });
     try {
       await fs.access(path.join(projectDir, "package.json"));
     } catch {

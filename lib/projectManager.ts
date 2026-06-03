@@ -562,6 +562,14 @@ export async function initProjectDir(db: SupabaseClient, projectId: string): Pro
 
     await writeDefaultRootLayout(projectDir);
 
+    const templateGlobals = path.join(templateDir, "app/globals.css");
+    const projectGlobals = path.join(projectDir, "app/globals.css");
+    try {
+      await fs.copyFile(templateGlobals, projectGlobals);
+    } catch {
+      throw new Error(`Template globals.css not found: ${templateGlobals}`);
+    }
+
     await ensureProjectNodeModules(projectDir);
   } catch (err: unknown) {
     await fs.rm(projectDir, { recursive: true, force: true });

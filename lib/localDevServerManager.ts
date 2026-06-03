@@ -16,7 +16,7 @@ import { promisify } from "node:util";
 import net from "node:net";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSiteRoot, WORKSPACE_ROOT } from "./projectManager";
-import { restoreProjectFiles } from "./storage";
+import { ensureProjectSourcesOnDisk } from "./storage";
 import { saveFingerprint } from "./previewFingerprintDb";
 import { computeProjectFingerprint, getTemplateDepMap, readProjectPackageJson, SITES_TEMPLATE_DIR } from "./previewShared";
 
@@ -512,27 +512,17 @@ function stopDevInRegistry(projectId: string): void {
   }
 }
 
-async function ensureProjectDirExists(projectId: string): Promise<string> {
+async function ensureProjectDirExists(
+  projectId: string,
+  db: SupabaseClient
+): Promise<string> {
   const projectDir = getSiteRoot(projectId);
   const pkgPath = path.join(projectDir, "package.json");
 
-  let pkgExisted = false;
-  try {
-    await fs.access(pkgPath);
-    pkgExisted = true;
-  } catch {
-    pkgExisted = false;
-  }
-
-  /** Full Storage restore is 30s–several minutes; skip when the worker already materialized the site locally. */
   const tRestore = performance.now();
-  if (!pkgExisted) {
-    await fs.mkdir(projectDir, { recursive: true });
-    await restoreProjectFiles(projectId);
-    timingLog(projectId, "restoreProjectFiles(full)", tRestore);
-  } else {
-    timingLog(projectId, "restoreProjectFiles(skipped)", tRestore, "package.json already on disk");
-  }
+  await fs.mkdir(projectDir, { recursive: true });
+  await ensureProjectSourcesOnDisk(projectId, { db });
+  timingLog(projectId, "ensureProjectSourcesOnDisk", tRestore);
 
   const tVerify = performance.now();
   try {
@@ -587,7 +577,7 @@ export async function startLocalDevServer(
     console.log(`[local preview] startLocalDevServer BEGIN projectId=${projectId}`);
 
     const tDir = performance.now();
-    const projectDir = await ensureProjectDirExists(projectId);
+    const projectDir = await ensureProjectDirExists(projectId, db);
     timingLog(projectId, "ensureProjectDirExists(total)", tDir);
 
     const tFp = performance.now();
@@ -711,7 +701,7 @@ export async function rebuildLocalDevServer(
   console.log(`[local preview] rebuildLocalDevServer BEGIN projectId=${projectId}`);
 
   const tEns = performance.now();
-  const projectDir = await ensureProjectDirExists(projectId);
+  const projectDir = await ensureProjectDirExists(projectId, db);
   timingLog(projectId, "rebuild.ensureProjectDirExists", tEns);
 
   const reg = localRegistry.get(projectId);

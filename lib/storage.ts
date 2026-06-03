@@ -14,7 +14,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import archiver from "archiver";
 import AdmZip from "adm-zip";
 import { computeProjectFingerprint } from "./previewShared";
-import { parseProjectsFilesHash } from "./previewFingerprintDb";
+import { getSavedFingerprint, parseProjectsFilesHash } from "./previewFingerprintDb";
 import { getProjectFilesStorageClient } from "./projectFilesStorageClient";
 import { createSupabaseServiceRoleClient } from "./supabase/service-role";
 import { getSiteRoot, WORKSPACE_ROOT } from "./projectManager";
@@ -509,17 +509,53 @@ async function listAllFiles(prefix: string): Promise<string[]> {
 
 const restoreInFlight = new Map<string, Promise<string[]>>();
 
-/**
- * Materialize `sites/{projectId}` from Storage only when `package.json` is missing locally.
- */
-export async function ensureProjectSourcesOnDisk(projectId: string): Promise<void> {
-  const pkgPath = path.join(getSiteRoot(projectId), "package.json");
+async function projectPackageJsonExists(projectId: string): Promise<boolean> {
   try {
-    await fs.access(pkgPath);
-    return;
+    await fs.access(path.join(getSiteRoot(projectId), "package.json"));
+    return true;
   } catch {
-    await restoreProjectFiles(projectId);
+    return false;
   }
+}
+
+/**
+ * True when local `sites/{id}` is out of date vs the last upload recorded in `projects.files_hash`.
+ * Canonical generated sources live in Storage after `uploadFullProject`; preview/build must match that tree.
+ */
+async function isLocalProjectOutOfSyncWithStorage(
+  db: SupabaseClient,
+  projectId: string
+): Promise<boolean> {
+  const saved = parseProjectsFilesHash(await getSavedFingerprint(db, projectId));
+  if (!saved.filesFingerprint) {
+    return false;
+  }
+  const localFp = await computeProjectFingerprint(projectId);
+  return localFp !== saved.filesFingerprint;
+}
+
+/**
+ * Ensure `sites/{projectId}` matches what we can build.
+ *
+ * - No `package.json` → restore full tree from Storage (or template base).
+ * - With `db`: if disk fingerprint ≠ `projects.files_hash` → restore (API disk stale vs worker upload).
+ *
+ * Without `db`, only the missing-package case runs (legacy callers).
+ */
+export async function ensureProjectSourcesOnDisk(
+  projectId: string,
+  options?: { db?: SupabaseClient }
+): Promise<void> {
+  const pkgExists = await projectPackageJsonExists(projectId);
+  const outOfSync = options?.db
+    ? await isLocalProjectOutOfSyncWithStorage(options.db, projectId)
+    : false;
+
+  if (pkgExists && !outOfSync) {
+    return;
+  }
+
+  await restoreProjectFiles(projectId);
 }
 
 /** Download all files for a project from Storage to local sites/ directory */
