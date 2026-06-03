@@ -116,6 +116,7 @@ export function guardGenerateImageExecutor(
           missing.join("\n"),
       };
     }
-    return baseExecutor(args);
+    const result = await baseExecutor(args);
+    return typeof result === "string" ? { success: true, output: result } : result;
   };
 }

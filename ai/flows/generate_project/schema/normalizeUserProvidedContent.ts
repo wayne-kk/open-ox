@@ -54,12 +54,19 @@ function normalizeTestimonials(value: unknown): UserProvidedTestimonial[] | unde
   return items.length > 0 ? items : undefined;
 }
 
+/** Legacy / pipeline aliases accepted when normalizing unknown JSON. */
+type RawUserProvidedImage = Partial<UserProvidedImage> & {
+  localPath?: string;
+  fetchError?: string;
+  source?: "download" | "downloaded";
+};
+
 function normalizeImages(value: unknown): UserProvidedImage[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const items: UserProvidedImage[] = [];
   for (const item of value) {
     if (!item || typeof item !== "object") continue;
-    const c = item as Partial<UserProvidedImage>;
+    const c = item as RawUserProvidedImage;
     const url = trimOrUndefined(c.url);
     if (!url || !/^https?:\/\//i.test(url)) continue;
     items.push({
@@ -67,7 +74,9 @@ function normalizeImages(value: unknown): UserProvidedImage[] | undefined {
       caption: trimOrUndefined(c.caption),
       role: trimOrUndefined(c.role),
       path: trimOrUndefined(c.path) ?? trimOrUndefined(c.localPath),
-      ...(c.source === "download" || c.source === "downloaded" ? { source: "download" as const } : {}),
+      ...(c.source === "download" || c.source === "downloaded"
+        ? { source: "download" as const }
+        : {}),
       error: trimOrUndefined(c.error) ?? trimOrUndefined(c.fetchError),
     });
   }
