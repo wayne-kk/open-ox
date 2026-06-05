@@ -58,32 +58,38 @@ const STEPS = [
     type: "llm",
     desc: "未命中内置 skill 时执行：根据 infer 文本 + 可选用户 styleGuide 生成 design-system.md。",
   },
-  { n: "06", name: "apply_project_design_tokens", type: "llm", desc: "设计系统 Markdown + 当前 app/globals.css → LLM 产出完整 globals.css（保留模板结构意图）。须先于 Architect / Page Agent。" },
+  { n: "06", name: "apply_project_design_tokens", type: "llm", desc: "设计系统 Markdown + 当前 app/globals.css → LLM 产出完整 globals.css（保留模板结构意图）。须先于 Chrome / Page Agent。" },
   {
     n: "07",
-    name: "architect_agent",
+    name: "architect_scaffold_agent",
     type: "llm+tool",
-    desc: "单一 Agent 落盘 app/layout.tsx 与 components/chrome/**，作为全局 chrome 契约。",
+    desc: "Chrome 搭壳 Agent：快速落盘 app/layout.tsx 与 components/chrome/**（结构完整，Nav 链接可占位），供 Page Agent 只读。",
   },
   {
     n: "08",
     name: "page_implement_agent ×M",
     type: "llm×M",
-    desc: "每页一个工具闭环（读写文件、generate_image、page_implementation_complete 等），多页并行；不得修改 layout/chrome/globals。",
+    desc: "每页一个工具闭环（读写文件、generate_image、page_implementation_complete 等），多页并行；不得修改 layout/chrome/globals。单页主区块须带 section id。",
   },
   {
     n: "09",
+    name: "chrome_optimize_agent",
+    type: "llm+tool",
+    desc: "Chrome 精修 Agent：全部页面落盘后，用工具勘察真实路由与锚点，校正 Nav/Footer 并 polish chrome。",
+  },
+  {
+    n: "10",
     name: "await_images ∥ install_dependencies",
     type: "mixed",
     desc: "等待 Agent 触发的异步生图落盘；并与依赖扫描安装并行（npm），保证构建前图片与 node_modules 齐备。",
   },
   {
-    n: "10",
+    n: "11",
     name: "typecheck_generated",
     type: "verify",
     desc: "默认开启：对生成范围内的 TS/TSX 做语言服务级检查（非全仓 tsc）。失败时可触发 repair_build 打补丁。DISABLE_PREBUILD_TSC=1 跳过。" },
-  { n: "11", name: "run_build (+ TS codeFix 内循环)", type: "build", desc: "本地 next build；编译错误时可反复尝试 TypeScript code-fix 再构建（与 repair 轮次配合）。" },
-  { n: "12", name: "repair_build ×0-5", type: "llm+tool", desc: "构建仍失败时进入 Agent 修复循环（最多 5 轮）；定位错误日志相关文件并增量修改。" },
+  { n: "12", name: "run_build (+ TS codeFix 内循环)", type: "build", desc: "本地 next build；编译错误时可反复尝试 TypeScript code-fix 再构建（与 repair 轮次配合）。" },
+  { n: "13", name: "repair_build ×0-5", type: "llm+tool", desc: "构建仍失败时进入 Agent 修复循环（最多 5 轮）；定位错误日志相关文件并增量修改。" },
 ];
 
 const TOC = [
@@ -192,7 +198,7 @@ const skillPrompt = loadSelectedSkillPrompt(selectedSkillId);`}</Pre>
             <Code>frontend</Code> + <Code>steps/pageImplementAgent.md</Code> +{" "}
             <Code>shared/agentRuleBundles.ts</Code>{" "}
             中列出的 <Code>prompts/rules/*.md</Code>（<Code>loadGuardrail</Code> 按序拼接）组成。
-            <Code>architect_agent</Code> 同理，另含 <Code>section.navigation</Code> 等。
+            <Code>architect_scaffold_agent</Code> / <Code>chrome_optimize_agent</Code> 同理，另含 <Code>section.navigation</Code> 等。
             可按环境变量 <Code>PAGE_IMPLEMENT_AGENT_EXTRA_RULES</Code> / <Code>ARCHITECT_AGENT_EXTRA_RULES</Code>（逗号分隔 id）追加规则。
           </P>
           <Pre>{`system prompt =

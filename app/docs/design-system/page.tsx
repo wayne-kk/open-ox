@@ -68,7 +68,7 @@ analyze_project_requirement  ∥ infer_design_intent   // 第一层并行
 plan_project                 ∥ match_design_system_skill   // 第二层并行
 generate_project_design_system   // 仅当未命中内置 skill
 apply_project_design_tokens      // 先于一切页面写入
-architect_agent → page_implement_agent ×M`}</Pre>
+architect_scaffold_agent → page_implement_agent ×M → chrome_optimize_agent`}</Pre>
           <Callout>
             若 <Code>match_design_system_skill</Code> 命中内置 Markdown，则跳过 LLM 生成设计系统但仍会落盘同一 artifacts；
             <Code>infer_design_intent</Code> 的技术关键词会在其后合并进 blueprint，辅助 Hero skill 路由。

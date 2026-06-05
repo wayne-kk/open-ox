@@ -12,6 +12,18 @@ interface ChangeEntry {
 
 const CHANGELOG: ChangeEntry[] = [
   {
+    version: "v1.7",
+    date: "2026-06-05",
+    tag: "minor",
+    title: "生成流水线 · Chrome 两阶段 Agent",
+    body: "全局 chrome 拆为 architect_scaffold_agent（快速搭壳、链接可占位）与 chrome_optimize_agent（全部页面落盘后勘察真实路由与 section id，精修 Nav/Footer）。Page Agent 全程只读 chrome。",
+    items: [
+      "编排：scaffold → page_implement_agent ×N → chrome_optimize → await_images / install_deps",
+      "checkpoint：skipScaffold / skipChromeOptimize；旧 architect_agent 完成记录视为 scaffold 已完成",
+      "Page Agent：单页主区块须带 section id；禁止在 page 内重复全局 Nav/Footer",
+    ],
+  },
+  {
     version: "v1.6",
     date: "2026-05-19",
     tag: "minor",

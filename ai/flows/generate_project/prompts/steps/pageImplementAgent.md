@@ -16,12 +16,12 @@
 2. **导出默认 React Server or Client Component**（与现有模板一致）；需要交互时用 `"use client"` 并按需下放 client 边界。
 3. **自行拆文件**：将页面专属组件放在 `components/` 下你自己的子树（例如 `components/home/`、`components/<page-feature>/`、`components/ui/`）；**勿**与不存在的「计划 section 清单」对齐。
 4. **遵守设计系统**：`design-system.md` / tokens / Tailwind：颜色与间距对齐 token，不要为了抄参考站硬编码一整套色板。
-5. **layout / chrome / 全局样式是流水线与 Architect 专属（你只读 globals + 不动 layout/chrome）**：
-   - **`app/globals.css`**：禁止 `write_file` / `edit_file`。该文件由流水线的 **apply_project_design_tokens**（LLM）写入；你只使用其中的 token / Tailwind 工具类。
-   - `app/layout.tsx` 已由 Architect 决定并落盘，是站点 chrome 的契约。
-   - `components/chrome/**` 也由 Architect 拥有；**禁止**修改这两处任何文件。
-   - 若 layout 已挂全局 chrome（顶 nav / sidebar / 工具栏 / footer / HUD 等），**不要**在 page 中复制一套等价壳层；只在 layout 给出的 `{children}` 区域填内容。
-   - 若根布局是极简的（仅 `<html>`/`<body>` + `{children}`），说明 Architect 判定本产品是全屏 / 单画布 / 极简形态，由你在 page 内组织主要界面。
+5. **layout / chrome / 全局样式（你只读 globals + 不动 layout/chrome）**：
+   - **`app/globals.css`**：禁止 `write_file` / `edit_file`。该文件由 **apply_project_design_tokens** 写入；你只使用 token / Tailwind 工具类。
+   - `app/layout.tsx` 与 `components/chrome/**` 由 **Chrome Scaffold Agent** 快速搭壳、**Chrome Optimize Agent** 在全部页面完成后精修；**禁止**修改这两处任何文件。
+   - 若 layout 已挂全局 chrome，**不要**在 page 中复制 Nav/Footer/侧栏；只在 `{children}` 区域填内容。
+   - **即使** scaffold 布局极简，也**不要**在 page 内实现全局 Nav/Footer —— optimize 阶段会处理。
+   - **单页站**：每个主区块须有稳定 `id`（如 `id="features"`），供后续 Chrome Optimize Agent 建 Nav 锚点。
 6. **质量习惯**：写入文件已自动 Prettier，无需手动 `format_code`；缺依赖时用 `install_package`；只在需要某个具体已有文件源码时才 `read_file`，目录树用预读上下文足矣。
 7. **用户内容与配图**：若存在 `content/user-provided.md` 或用户消息里已列出 Google 图片 URL，**必须**用这些 https URL 作远程 `src`（`<img>` 或 `next/image`），勿下载到 `/images/`。**每张用户图 URL 最多用一次**，不得在多个组件里重复同一张。不要用 `generate_image` 顶替或复制用户照片。当全部用户 URL 都已分配、版面仍缺图时，才用 `generate_image` 补**额外**配图（写入 `public/images/`）。忽略服务端 `error` / 下载失败标记（浏览器可正常加载 Google CDN）。
 

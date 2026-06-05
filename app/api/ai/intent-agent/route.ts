@@ -39,6 +39,7 @@ import {
 } from "@/lib/generation/enqueueGenerationJob";
 import fs from "fs/promises";
 import path from "path";
+import { formatIntentAgentTraceSummary } from "@/ai/flows/generate_project/intentAgent/formatIntentAgentTrace";
 
 export const runtime = "nodejs";
 
@@ -61,6 +62,10 @@ function serializeIntentTurn(
         }
       : undefined,
     toolCallNames: turn.toolCalls.map((t) => t.name),
+    inputProfile: turn.inputProfile,
+    llmRoundCount: turn.llmRoundCount,
+    trace: turn.trace,
+    traceSummary: formatIntentAgentTraceSummary(turn.trace),
   };
 }
 
@@ -77,7 +82,8 @@ export async function POST(req: Request) {
     const message: unknown = body.message;
     const imageBase64Raw: unknown = body.imageBase64;
     const resetSession: boolean = body.resetSession === true;
-    const enableIntentGuide: boolean = body.enableIntentGuide !== false;
+    /** Intent Agent already converged the brief — skip duplicate `project_intent_guide` in worker. */
+    const enableIntentGuide: boolean = body.enableIntentGuide === true;
     const runGenerateOnCommit: boolean = body.runGenerateOnCommit !== false;
     const modelOverride: string | undefined = typeof body.model === "string" ? body.model : undefined;
     const enableIntentAgentWebSearch: boolean = body.enableIntentAgentWebSearch === true;
@@ -221,17 +227,23 @@ export async function POST(req: Request) {
           send({ type: "intent_agent_turn", turn: serializeIntentTurn(intentResult) });
 
           if (intentResult.status !== "commit_generate") {
+            const traceBlock = formatIntentAgentTraceSummary(intentResult.trace);
+            const userFacing =
+              intentResult.yieldPayload?.message ??
+              intentResult.assistantText ??
+              intentResult.errorMessage ??
+              "awaiting user input";
+            const detail = traceBlock
+              ? `${userFacing}\n\n--- 意向分析轨迹 ---\n${traceBlock}`
+              : userFacing;
+
             await updateProjectStatus(db, projectId, "awaiting_input", {
               error: intentResult.status === "error" ? intentResult.errorMessage : undefined,
               buildSteps: [
                 {
                   step: "intent_agent",
                   status: intentResult.status === "error" ? "error" : "ok",
-                  detail:
-                    intentResult.yieldPayload?.message ??
-                    intentResult.assistantText ??
-                    intentResult.errorMessage ??
-                    "awaiting user input",
+                  detail,
                   timestamp: Date.now(),
                   duration: 0,
                 },

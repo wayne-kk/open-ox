@@ -7,7 +7,9 @@ import { cn } from "@/lib/utils";
 
 const components: Components = {
   p: ({ children }) => (
-    <p className="mb-3 text-[13px] leading-7 text-foreground/95 last:mb-0">{children}</p>
+    <p className="mb-3 break-words text-[13px] leading-7 text-foreground/95 [overflow-wrap:anywhere] last:mb-0">
+      {children}
+    </p>
   ),
   h1: ({ children }) => (
     <h1 className="mb-2 mt-4 text-[15px] font-semibold tracking-tight text-foreground first:mt-0">
@@ -35,13 +37,15 @@ const components: Components = {
       {children}
     </ol>
   ),
-  li: ({ children }) => <li className="leading-7 [&>p]:mb-0">{children}</li>,
+  li: ({ children }) => (
+    <li className="break-words leading-7 [overflow-wrap:anywhere] [&>p]:mb-0">{children}</li>
+  ),
   strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
   em: ({ children }) => <em className="italic text-foreground/90">{children}</em>,
   a: ({ href, children }) => (
     <a
       href={href}
-      className="text-primary underline underline-offset-2 hover:text-primary/85"
+      className="break-all text-primary underline underline-offset-2 hover:text-primary/85"
       target="_blank"
       rel="noopener noreferrer"
     >
@@ -55,14 +59,23 @@ const components: Components = {
   ),
   hr: () => <hr className="my-4 border-white/10" />,
   pre: ({ children }) => (
-    <pre className="mb-3 overflow-x-auto rounded-xl border border-white/10 bg-black/35 p-3 font-mono text-[11px] leading-5 text-muted-foreground last:mb-0">
+    <pre className="mb-3 max-w-full overflow-x-auto whitespace-pre-wrap break-all rounded-xl border border-white/10 bg-black/35 p-3 font-mono text-[11px] leading-5 text-muted-foreground last:mb-0">
       {children}
     </pre>
   ),
   code: ({ className, children }) => {
     const isBlock = Boolean(className?.includes("language-"));
     if (isBlock) {
-      return <code className={cn("font-mono text-[11px] text-muted-foreground", className)}>{children}</code>;
+      return (
+        <code
+          className={cn(
+            "block whitespace-pre-wrap break-all font-mono text-[11px] text-muted-foreground",
+            className
+          )}
+        >
+          {children}
+        </code>
+      );
     }
     return (
       <code className="rounded-md bg-primary/12 px-1 py-0.5 font-mono text-[12px] text-primary">
@@ -82,7 +95,9 @@ const components: Components = {
     <th className="border border-white/10 px-2.5 py-1.5 font-medium text-foreground">{children}</th>
   ),
   td: ({ children }) => (
-    <td className="border border-white/10 px-2.5 py-1.5 text-foreground/90">{children}</td>
+    <td className="break-words border border-white/10 px-2.5 py-1.5 text-foreground/90 [overflow-wrap:anywhere]">
+      {children}
+    </td>
   ),
 };
 
@@ -99,7 +114,12 @@ export function StudioMessageMarkdown({
   }
 
   return (
-    <div className={cn("studio-message-md [&>*:first-child]:mt-0", className)}>
+    <div
+      className={cn(
+        "studio-message-md min-w-0 max-w-full overflow-hidden [&>*:first-child]:mt-0",
+        className
+      )}
+    >
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
         {trimmed}
       </ReactMarkdown>

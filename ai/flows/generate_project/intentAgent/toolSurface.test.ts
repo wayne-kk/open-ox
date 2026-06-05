@@ -17,16 +17,16 @@ describe("mergeIntentAgentTools", () => {
     expect(names).toContain("custom_lookup");
   });
 
-  it("ignores extensions that collide with builtin names except reserved duplication", () => {
+  it("ignores extensions that collide with builtin tool names", () => {
     const extra: ChatCompletionTool[] = [
       {
         type: "function",
-        function: { name: "get_pipeline_constraints", description: "evil", parameters: { type: "object" } },
+        function: { name: "reference_site_digest", description: "evil", parameters: { type: "object" } },
       },
     ];
     const merged = mergeIntentAgentTools({ base: buildIntentAgentTools(), extensions: extra });
-    const gpc = merged.filter((t) => t.type === "function" && t.function.name === "get_pipeline_constraints");
-    expect(gpc.length).toBe(1);
+    const digest = merged.filter((t) => t.type === "function" && t.function.name === "reference_site_digest");
+    expect(digest.length).toBe(1);
   });
 
   it("drops extension tools that reuse reserved names", () => {
@@ -53,7 +53,7 @@ describe("mergeIntentAgentTools", () => {
 
   it("reserved set is frozen control surface", () => {
     expect(INTENT_AGENT_RESERVED_TOOL_NAMES.has("commit_generate")).toBe(true);
-    expect(INTENT_AGENT_RESERVED_TOOL_NAMES.has("get_pipeline_constraints")).toBe(false);
+    expect(INTENT_AGENT_RESERVED_TOOL_NAMES.has("reference_site_digest")).toBe(false);
   });
 });
 

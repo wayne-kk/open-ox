@@ -5,6 +5,7 @@ import { singlePageIaProposalTool } from "@/ai/tools/system/singlePageIaProposal
 import { accessibilitySeoBriefTool } from "@/ai/tools/system/accessibilitySeoBriefTool";
 import { competitiveLandscapeSnapshotTool } from "@/ai/tools/system/competitiveLandscapeSnapshotTool";
 
+/** Inlined in intent-agent system prompt — not a separate tool (avoids an extra LLM round). */
 export const PIPELINE_CONSTRAINTS_TEXT = `## open-ox 生成流水线（硬约束）
 
 - 产出为 Next.js **web** profile；MVP 约束为**单首页**：站点只有 **一个顶层页面**，slug 必须为 \`home\`（路由 \`/\`）。
@@ -13,19 +14,6 @@ export const PIPELINE_CONSTRAINTS_TEXT = `## open-ox 生成流水线（硬约束
 
 export function buildIntentAgentTools(): ChatCompletionTool[] {
   return [
-    {
-      type: "function",
-      function: {
-        name: "get_pipeline_constraints",
-        description:
-          "读取当前代码生成流水线的硬约束（单首页、全局壳层约定等）。在回答能力问题或规划站点前应优先调用。",
-        parameters: {
-          type: "object",
-          properties: {},
-          additionalProperties: false,
-        },
-      },
-    },
     referenceSiteDigestTool,
     brandKitFromUrlTool,
     singlePageIaProposalTool,

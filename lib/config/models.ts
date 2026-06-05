@@ -118,7 +118,8 @@ export const GENERATION_STEPS = [
     { id: "match_design_system_skill", label: "设计风格匹配" },
     { id: "apply_project_design_tokens", label: "设计 Token" },
     { id: "preselect_skills", label: "技能匹配" },
-    { id: "architect_agent", label: "站点架构 Agent" },
+    { id: "architect_scaffold_agent", label: "Chrome 搭壳 Agent" },
+    { id: "chrome_optimize_agent", label: "Chrome 精修 Agent" },
     { id: "page_implement_agent", label: "页面实现 Agent" },
     { id: "repair_build", label: "构建修复" },
 ] as const;

@@ -20,6 +20,24 @@ export interface IntentAgentYieldPayload {
 
 export type IntentAgentTurnStatus = "yield" | "commit_generate" | "implicit_yield" | "error";
 
+export type IntentAgentInputProfile = "sparse" | "substantive_brief" | "reference_site_focus";
+
+/** Ordered trace of one user message handling (LLM rounds + tools). */
+export type IntentAgentTraceStep =
+  | {
+      kind: "llm_round";
+      iteration: number;
+      toolCallNames: string[];
+      textPreview?: string | null;
+    }
+  | {
+      kind: "tool";
+      iteration: number;
+      toolName: string;
+      durationMs: number;
+      argsPreview?: string;
+    };
+
 export interface IntentAgentTurnResult {
   status: IntentAgentTurnStatus;
   yieldPayload?: IntentAgentYieldPayload;
@@ -28,6 +46,9 @@ export interface IntentAgentTurnResult {
   turnCounter: number;
   toolCalls: AgentToolCallRecord[];
   assistantText?: string;
+  inputProfile?: IntentAgentInputProfile;
+  trace?: IntentAgentTraceStep[];
+  llmRoundCount?: number;
 }
 
 /** Custom executor for merged tools — cannot override yield_to_user / commit_generate. */

@@ -75,6 +75,24 @@ export async function classifyBriefSubstanceForCommit(params: {
     };
   }
 
+  const heuristic = briefSubstanceHeuristicLengths({
+    mergedBriefRaw: raw,
+    tailUserMessage: tail,
+    bootstrapUserPrompt: boot,
+  });
+  if (
+    heuristic.mergedBriefFieldSubstantive &&
+    heuristic.bootstrapSubstantive &&
+    !heuristic.tailSubstantive
+  ) {
+    return applySubstanceGate({
+      mergedBriefRaw: raw,
+      tailUserMessage: tail,
+      bootstrapUserPrompt: boot,
+      inner: heuristic,
+    });
+  }
+
   const model = getModelForStep("commit_merged_brief_classifier");
   const systemPrompt = composePromptBlocks([
     loadStepPrompt("commitMergedBriefSubstance"),

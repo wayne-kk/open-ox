@@ -28,7 +28,15 @@ import {
   stepProjectIntentGuide,
 } from "./steps/projectIntentGuide";
 import { stepApplyProjectDesignTokens } from "./steps/applyProjectDesignTokens";
-import { runArchitectAgent, ARCHITECT_AGENT_STEP } from "./steps/architectAgent";
+import {
+  runArchitectScaffoldAgent,
+  ARCHITECT_SCAFFOLD_AGENT_STEP,
+} from "./steps/architectScaffoldAgent";
+import {
+  runChromeOptimizeAgent,
+  CHROME_OPTIMIZE_AGENT_STEP,
+  type PageImplementSummary,
+} from "./steps/chromeOptimizeAgent";
 import { stepExtractUserProvidedContent } from "./steps/extractUserProvidedContent";
 import { hasUserProvidedContent } from "./schema/normalizeUserProvidedContent";
 import { USER_PROVIDED_CONTENT_PATH } from "@/lib/content/userProvidedContentText";
@@ -238,11 +246,11 @@ async function autoInstallDependenciesForFiles(params: {
 }
 
 /**
- * On checkpoint resume we skip `architect_agent` but must still list chrome files
+ * On checkpoint resume we skip chrome scaffold/optimize but must still list chrome files
  * that already exist under `components/chrome/**` so dependency install / traces
  * see the full contract (not just `app/layout.tsx`).
  */
-function collectExistingArchitectOwnedRelativePaths(): string[] {
+function collectExistingChromeOwnedRelativePaths(): string[] {
   const siteRoot = getSiteRoot();
   const norm = (p: string) => p.replace(/\\/g, "/");
   const paths = new Set<string>(["app/layout.tsx"]);
@@ -270,11 +278,10 @@ interface BuildLifecycleResult {
 }
 
 /**
- * Run the Architect Agent — decides global chrome form and lands it as
- * `app/layout.tsx` + `components/chrome/**`. Page agents subsequently read
- * the layout as a chrome contract and never modify it.
+ * Chrome Scaffold Agent — fast provisional `app/layout.tsx` + `components/chrome/**`.
+ * Page agents read this as a read-only contract until chrome optimize runs.
  */
-async function runArchitectStep(params: {
+async function runArchitectScaffoldStep(params: {
   blueprint: PlannedProjectBlueprint;
   designSystem: string;
   artifactLogger: ArtifactLogger;
@@ -283,7 +290,7 @@ async function runArchitectStep(params: {
   onStep?: (step: BuildStep) => void;
   referenceScreenshotDataUrl?: string | null;
   screenshotGuardrailId?: string | null;
-}): Promise<{ files: string[] }> {
+}): Promise<{ files: string[]; summary: string; chromeForm: string }> {
   const {
     blueprint,
     designSystem,
@@ -294,12 +301,12 @@ async function runArchitectStep(params: {
     referenceScreenshotDataUrl,
     screenshotGuardrailId,
   } = params;
-  const onMessage = trajectoryCollector?.createEpisodeCollector(ARCHITECT_AGENT_STEP);
+  const onMessage = trajectoryCollector?.createEpisodeCollector(ARCHITECT_SCAFFOLD_AGENT_STEP);
 
   const outcome = await logger.timed(
-    ARCHITECT_AGENT_STEP,
+    ARCHITECT_SCAFFOLD_AGENT_STEP,
     () =>
-      runArchitectAgent({
+      runArchitectScaffoldAgent({
         blueprint,
         designSystem,
         referenceScreenshotDataUrl: referenceScreenshotDataUrl ?? null,
@@ -316,7 +323,7 @@ async function runArchitectStep(params: {
     })
   );
 
-  await persistJsonArtifact(artifactLogger, ARCHITECT_AGENT_STEP, "output", {
+  await persistJsonArtifact(artifactLogger, ARCHITECT_SCAFFOLD_AGENT_STEP, "output", {
     layoutPath: outcome.layoutPath,
     chromeForm: outcome.chromeForm,
     fellBackToMinimal: outcome.fellBackToMinimal,
@@ -324,7 +331,80 @@ async function runArchitectStep(params: {
     summary: outcome.summary,
     toolInvocations: outcome.toolCallRecords,
   });
-  await persistSiteFileArtifact(artifactLogger, ARCHITECT_AGENT_STEP, outcome.layoutPath, "layout");
+  await persistSiteFileArtifact(
+    artifactLogger,
+    ARCHITECT_SCAFFOLD_AGENT_STEP,
+    outcome.layoutPath,
+    "layout"
+  );
+
+  return {
+    files: outcome.files,
+    summary: outcome.summary,
+    chromeForm: outcome.chromeForm,
+  };
+}
+
+async function runChromeOptimizeStep(params: {
+  blueprint: PlannedProjectBlueprint;
+  designSystem: string;
+  scaffoldSummary: string;
+  scaffoldChromeForm: string;
+  pageSummaries: PageImplementSummary[];
+  artifactLogger: ArtifactLogger;
+  logger: StepLogger;
+  trajectoryCollector?: import("./trajectoryCollector").GenerateTrajectoryCollector;
+  onStep?: (step: BuildStep) => void;
+  referenceScreenshotDataUrl?: string | null;
+  screenshotGuardrailId?: string | null;
+}): Promise<{ files: string[] }> {
+  const {
+    blueprint,
+    designSystem,
+    scaffoldSummary,
+    scaffoldChromeForm,
+    pageSummaries,
+    artifactLogger,
+    logger,
+    trajectoryCollector,
+    onStep,
+    referenceScreenshotDataUrl,
+    screenshotGuardrailId,
+  } = params;
+  const onMessage = trajectoryCollector?.createEpisodeCollector(CHROME_OPTIMIZE_AGENT_STEP);
+
+  const outcome = await logger.timed(
+    CHROME_OPTIMIZE_AGENT_STEP,
+    () =>
+      runChromeOptimizeAgent({
+        blueprint,
+        designSystem,
+        scaffoldContext: { summary: scaffoldSummary, chromeForm: scaffoldChromeForm },
+        pageSummaries,
+        referenceScreenshotDataUrl: referenceScreenshotDataUrl ?? null,
+        screenshotGuardrailId: screenshotGuardrailId ?? null,
+        onMessage,
+        onStep,
+      }),
+    (r) => ({
+      detail: `chrome=${r.chromeForm} · files=${r.files.length}`,
+      trace: r.trace,
+    })
+  );
+
+  await persistJsonArtifact(artifactLogger, CHROME_OPTIMIZE_AGENT_STEP, "output", {
+    layoutPath: outcome.layoutPath,
+    chromeForm: outcome.chromeForm,
+    files: outcome.files,
+    summary: outcome.summary,
+    toolInvocations: outcome.toolCallRecords,
+  });
+  await persistSiteFileArtifact(
+    artifactLogger,
+    CHROME_OPTIMIZE_AGENT_STEP,
+    outcome.layoutPath,
+    "layout"
+  );
 
   return { files: outcome.files };
 }
@@ -338,7 +418,11 @@ async function generatePages(params: {
   skipImplementedPages?: Set<string>;
   trajectoryCollector?: import("./trajectoryCollector").GenerateTrajectoryCollector;
   onStep?: (step: BuildStep) => void;
-}): Promise<{ files: string[]; pendingImages: PendingImage[] }> {
+}): Promise<{
+  files: string[];
+  pendingImages: PendingImage[];
+  pageSummaries: PageImplementSummary[];
+}> {
   const {
     blueprint,
     designSystem,
@@ -350,14 +434,24 @@ async function generatePages(params: {
   } = params;
   const collectedFiles: string[] = [];
   const collectedPendingImages: PendingImage[] = [];
+  const collectedPageSummaries: PageImplementSummary[] = [];
 
   const pageOutcomes = await Promise.all(
     blueprint.site.pages.map(async (page) => {
       const agentStepName = getPageImplementAgentStepName(page.slug);
+      const pagePath = slugToPagePath(page.slug);
       if (skipImplementedPages?.has(page.slug)) {
-        const pagePathResume = slugToPagePath(page.slug);
         logger.logStep(agentStepName, "ok", "resumed from checkpoint");
-        return { files: [pagePathResume], pendingImages: [] };
+        return {
+          files: [pagePath],
+          pendingImages: [],
+          pageSummary: {
+            slug: page.slug,
+            title: page.title,
+            summary: "resumed from checkpoint",
+            pagePath,
+          },
+        };
       }
 
       const onMessage = trajectoryCollector?.createEpisodeCollector(agentStepName);
@@ -413,16 +507,30 @@ async function generatePages(params: {
       });
       await persistSiteFileArtifact(artifactLogger, agentStepName, outcome.pagePath, "page");
 
-      return { files: [outcome.pagePath], pendingImages: outcome.pendingImages };
+      return {
+        files: [outcome.pagePath],
+        pendingImages: outcome.pendingImages,
+        pageSummary: {
+          slug: page.slug,
+          title: page.title,
+          summary: outcome.summary,
+          pagePath: outcome.pagePath,
+        },
+      };
     }),
   );
 
-  for (const { files, pendingImages } of pageOutcomes) {
+  for (const { files, pendingImages, pageSummary } of pageOutcomes) {
     collectedFiles.push(...files);
     collectedPendingImages.push(...pendingImages);
+    collectedPageSummaries.push(pageSummary);
   }
 
-  return { files: collectedFiles, pendingImages: collectedPendingImages };
+  return {
+    files: collectedFiles,
+    pendingImages: collectedPendingImages,
+    pageSummaries: collectedPageSummaries,
+  };
 }
 
 async function runBuildWithRepair(params: {
@@ -1014,14 +1122,13 @@ async function runGenerateProjectInner(
       appendGeneratedFiles(result, tokenFiles);
     }
 
-    // ── Architect before page agents (sequential) ─────────────────────────────
-    // Globals are already finalized (`apply_project_design_tokens` finished above).
-    // Run architect_agent to completion first so each page_implement_agent reads an
-    // up-to-date `app/layout.tsx` snapshot and finalized `components/chrome/**`,
-    // avoiding duplicate in-page chrome from stale/minimal interim layouts.
-    if (!cp?.skipArchitect) {
-      const architectResult = await withLangfuseSpan(LfSpanGen.architectAgent, () =>
-        runArchitectStep({
+    // ── Chrome scaffold → pages → chrome optimize ─────────────────────────────
+    let scaffoldSummary = "";
+    let scaffoldChromeForm = "unspecified";
+
+    if (!cp?.skipScaffold) {
+      const scaffoldResult = await withLangfuseSpan(LfSpanGen.architectScaffoldAgent, () =>
+        runArchitectScaffoldStep({
           blueprint,
           designSystem,
           artifactLogger,
@@ -1032,9 +1139,13 @@ async function runGenerateProjectInner(
           screenshotGuardrailId,
         })
       );
-      appendGeneratedFiles(result, architectResult.files);
+      appendGeneratedFiles(result, scaffoldResult.files);
+      scaffoldSummary = scaffoldResult.summary;
+      scaffoldChromeForm = scaffoldResult.chromeForm;
     } else {
-      appendGeneratedFiles(result, collectExistingArchitectOwnedRelativePaths());
+      appendGeneratedFiles(result, collectExistingChromeOwnedRelativePaths());
+      scaffoldSummary = "resumed from checkpoint";
+      scaffoldChromeForm = "resumed";
     }
 
     const pageOutcome = await withLangfuseSpan(LfSpanGen.implementPages, () =>
@@ -1051,6 +1162,30 @@ async function runGenerateProjectInner(
     );
     appendGeneratedFiles(result, pageOutcome.files);
     const allPendingImages = pageOutcome.pendingImages;
+
+    const allPagesImplemented =
+      pageOutcome.pageSummaries.length === blueprint.site.pages.length;
+
+    if (allPagesImplemented && !cp?.skipChromeOptimize) {
+      const optimizeResult = await withLangfuseSpan(LfSpanGen.chromeOptimizeAgent, () =>
+        runChromeOptimizeStep({
+          blueprint,
+          designSystem,
+          scaffoldSummary,
+          scaffoldChromeForm,
+          pageSummaries: pageOutcome.pageSummaries,
+          artifactLogger,
+          logger,
+          trajectoryCollector,
+          onStep,
+          referenceScreenshotDataUrl: referenceScreenshot,
+          screenshotGuardrailId,
+        })
+      );
+      appendGeneratedFiles(result, optimizeResult.files);
+    } else if (cp?.skipChromeOptimize) {
+      appendGeneratedFiles(result, collectExistingChromeOwnedRelativePaths());
+    }
     // Await all background image generation before build — images must be on
     // disk for Next.js to bundle them. This runs in parallel with dependency
     // installation since they don't conflict.

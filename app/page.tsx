@@ -13,8 +13,9 @@ const AGENT_STEPS = [
   { id: "infer", label: "infer_design_intent", detail: "独立推理 · 视觉风格意图", color: "text-accent-tertiary" },
   { id: "plan", label: "plan_project", detail: "蓝图细化 · 页面级纲要（无固定 section 清单）", color: "text-primary" },
   { id: "design", label: "generate_design_system", detail: "色彩 · 字体 · 动效 · Token", color: "text-primary" },
-  { id: "architect", label: "architect_agent", detail: "全局 chrome 与 layout 契约", color: "text-accent-tertiary" },
+  { id: "scaffold", label: "architect_scaffold_agent", detail: "快速搭 chrome 骨架（链接可占位）", color: "text-accent-tertiary" },
   { id: "pages", label: "page_implement_agent ×N", detail: "每路由工具循环实现页面与组件", color: "text-primary" },
+  { id: "optimize", label: "chrome_optimize_agent", detail: "读真实页面，精修 Nav 与 chrome", color: "text-accent-tertiary" },
   { id: "build", label: "run_build", detail: "构建 · 类型检查 · 验证", color: "text-green-400" },
   { id: "repair", label: "repair_build", detail: "自动修复 · 最多 5 轮", color: "text-orange-400" },
 ];

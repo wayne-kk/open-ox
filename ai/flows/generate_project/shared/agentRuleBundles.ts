@@ -9,6 +9,9 @@
 
 /** Comma-separated optional extra rule ids appended after the base list. */
 const PAGE_EXTRA_ENV = "PAGE_IMPLEMENT_AGENT_EXTRA_RULES";
+const ARCHITECT_SCAFFOLD_EXTRA_ENV = "ARCHITECT_SCAFFOLD_AGENT_EXTRA_RULES";
+const CHROME_OPTIMIZE_EXTRA_ENV = "CHROME_OPTIMIZE_AGENT_EXTRA_RULES";
+/** @deprecated Use ARCHITECT_SCAFFOLD_AGENT_EXTRA_RULES */
 const ARCHITECT_EXTRA_ENV = "ARCHITECT_AGENT_EXTRA_RULES";
 
 function parseExtraRuleIds(envVar: string): string[] {
@@ -31,13 +34,24 @@ export const PAGE_IMPLEMENT_AGENT_RULE_IDS_BASE: readonly string[] = [
   "framerMotionVariants",
 ];
 
-/** Base stack for `runArchitectAgent` (after `frontend` + `architectAgent` step). */
-export const ARCHITECT_AGENT_RULE_IDS_BASE: readonly string[] = [
+/** Base stack for chrome scaffold agent. */
+export const ARCHITECT_SCAFFOLD_AGENT_RULE_IDS_BASE: readonly string[] = [
   "section.navigation",
   "section.footer",
   "outputTsx",
   "framerMotionVariants",
 ];
+
+/** Base stack for chrome optimize agent. */
+export const CHROME_OPTIMIZE_AGENT_RULE_IDS_BASE: readonly string[] = [
+  "section.navigation",
+  "section.footer",
+  "outputTsx",
+  "framerMotionVariants",
+];
+
+/** @deprecated Use ARCHITECT_SCAFFOLD_AGENT_RULE_IDS_BASE */
+export const ARCHITECT_AGENT_RULE_IDS_BASE = ARCHITECT_SCAFFOLD_AGENT_RULE_IDS_BASE;
 
 export function resolvePageImplementAgentRuleIds(opts?: {
   userProvidedImageCount?: number;
@@ -58,6 +72,19 @@ export function resolvePageImplementAgentRuleIds(opts?: {
   ];
 }
 
+export function resolveArchitectScaffoldAgentRuleIds(): string[] {
+  const extra = [
+    ...parseExtraRuleIds(ARCHITECT_SCAFFOLD_EXTRA_ENV),
+    ...parseExtraRuleIds(ARCHITECT_EXTRA_ENV),
+  ];
+  return [...ARCHITECT_SCAFFOLD_AGENT_RULE_IDS_BASE, ...extra];
+}
+
+export function resolveChromeOptimizeAgentRuleIds(): string[] {
+  return [...CHROME_OPTIMIZE_AGENT_RULE_IDS_BASE, ...parseExtraRuleIds(CHROME_OPTIMIZE_EXTRA_ENV)];
+}
+
+/** @deprecated Use resolveArchitectScaffoldAgentRuleIds */
 export function resolveArchitectAgentRuleIds(): string[] {
-  return [...ARCHITECT_AGENT_RULE_IDS_BASE, ...parseExtraRuleIds(ARCHITECT_EXTRA_ENV)];
+  return resolveArchitectScaffoldAgentRuleIds();
 }

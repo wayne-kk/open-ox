@@ -209,11 +209,12 @@ ${componentsTree}
 \`\`\`
 
 ## Layout contract (read-only)
-\`app/layout.tsx\` above is the **single source of truth** for global chrome. \`components/chrome/**\` (or wherever the architect placed shared chrome components) is owned by the Architect Agent and is **read-only** for you.
+\`app/layout.tsx\` and \`components/chrome/**\` were scaffolded before this step and will be optimized after all pages complete. They are **read-only** for you.
 
-- If layout.tsx already mounts global chrome (top nav, sidebar, topbar, footer, HUD, etc.), do **not** duplicate, replace, or remove that chrome inside this page route.
-- If it is intentionally minimal (only \`<html>\`/\`<body>\` with \`{children}\`), the architect decided this product is fullscreen / single-canvas / minimal — the page owns any chrome it needs.
-- **Do not edit** \`app/layout.tsx\` or any file under \`components/chrome/**\`. If something is genuinely missing for your page (rare), add a page-local solution inside this route's own subtree instead.
+- Do **not** duplicate global nav, footer, sidebar, or topbar inside this page — fill only the \`{children}\` region.
+- Do **not** add global chrome even if the scaffold layout looks minimal — Chrome Optimize Agent runs after pages.
+- For **single-page** sites: give each major block a stable \`id\` (e.g. \`id="features"\`) for downstream nav anchors.
+- **Do not edit** \`app/layout.tsx\` or \`components/chrome/**\`.
 
 ## Project
 - Title: ${projectContext.projectTitle}

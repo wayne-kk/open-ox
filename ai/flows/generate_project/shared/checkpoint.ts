@@ -44,6 +44,17 @@ function isPageImplementAgentDone(ctx: CheckpointContext, slug: string): boolean
   return stepCompleted(ctx.buildSteps, `page_implement_agent:${slug}`);
 }
 
+function isScaffoldDone(ctx: CheckpointContext): boolean {
+  if (stepCompleted(ctx.buildSteps, "architect_scaffold_agent")) {
+    return siteFileExists(ctx.siteRoot, "app/layout.tsx", 50);
+  }
+  // Legacy runs before two-phase chrome split
+  if (stepCompleted(ctx.buildSteps, "architect_agent")) {
+    return siteFileExists(ctx.siteRoot, "app/layout.tsx", 50);
+  }
+  return false;
+}
+
 const STEP_VALIDATORS: Record<string, StepValidator> = {
   analyze_project_requirement: (ctx) => {
     if (!stepCompleted(ctx.buildSteps, "analyze_project_requirement")) return false;
@@ -67,8 +78,10 @@ const STEP_VALIDATORS: Record<string, StepValidator> = {
     return siteFileExists(ctx.siteRoot, "app/globals.css", 100);
   },
 
-  architect_agent: (ctx) => {
-    if (!stepCompleted(ctx.buildSteps, "architect_agent")) return false;
+  architect_scaffold_agent: (ctx) => isScaffoldDone(ctx),
+
+  chrome_optimize_agent: (ctx) => {
+    if (!stepCompleted(ctx.buildSteps, "chrome_optimize_agent")) return false;
     return siteFileExists(ctx.siteRoot, "app/layout.tsx", 50);
   },
 };
@@ -77,7 +90,8 @@ export interface CheckpointResult {
   skipAnalyze: boolean;
   skipPlanAndDesign: boolean;
   skipDesignTokens: boolean;
-  skipArchitect: boolean;
+  skipScaffold: boolean;
+  skipChromeOptimize: boolean;
   /** Page slugs whose `page_implement_agent` step already completed successfully. */
   implementedPages: Set<string>;
   cachedBlueprint: PlannedProjectBlueprint | null;
@@ -95,7 +109,8 @@ export function detectCheckpoint(project: ProjectMetadata): CheckpointResult {
     skipAnalyze: false,
     skipPlanAndDesign: false,
     skipDesignTokens: false,
-    skipArchitect: false,
+    skipScaffold: false,
+    skipChromeOptimize: false,
     implementedPages: new Set(),
     cachedBlueprint: null,
     cachedDesignSystem: null,
@@ -129,8 +144,8 @@ export function detectCheckpoint(project: ProjectMetadata): CheckpointResult {
   }
   result.skipDesignTokens = true;
 
-  if (STEP_VALIDATORS.architect_agent(ctx)) {
-    result.skipArchitect = true;
+  if (STEP_VALIDATORS.architect_scaffold_agent(ctx)) {
+    result.skipScaffold = true;
   }
 
   const bp = result.cachedBlueprint;
@@ -142,10 +157,26 @@ export function detectCheckpoint(project: ProjectMetadata): CheckpointResult {
     }
   }
 
-  result.summary =
-    result.implementedPages.size > 0
-      ? `Resuming: skipping ${result.implementedPages.size} implemented page(s)`
-      : "Resuming from page implementation";
+  const allPagesDone =
+    bp != null &&
+    bp.site.pages.length > 0 &&
+    bp.site.pages.every((page) => result.implementedPages.has(page.slug));
+
+  if (allPagesDone && STEP_VALIDATORS.chrome_optimize_agent(ctx)) {
+    result.skipChromeOptimize = true;
+  }
+
+  if (result.implementedPages.size > 0 && !allPagesDone) {
+    result.summary = `Resuming: skipping ${result.implementedPages.size} implemented page(s)`;
+  } else if (allPagesDone && !result.skipChromeOptimize) {
+    result.summary = "Resuming: all pages done, running chrome optimize";
+  } else if (allPagesDone) {
+    result.summary = "Resuming from post-chrome build";
+  } else if (result.skipScaffold) {
+    result.summary = "Resuming from page implementation";
+  } else {
+    result.summary = "Resuming from chrome scaffold";
+  }
 
   return result;
 }

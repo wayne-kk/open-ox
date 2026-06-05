@@ -51,18 +51,46 @@ export function getStepNarrative(step: BuildStep): {
             note: step.detail ?? undefined,
         };
     }
+    if (s === "architect_scaffold_agent") {
+        return {
+            what: "Chrome Scaffold Agent 快速搭全局 chrome 骨架（layout + components/chrome），链接可为占位；页面 Agent 以此为只读契约填充内容。",
+            output: ok
+                ? "Chrome 搭壳完成；页面 Agent 开始并行实现各路由。"
+                : "Chrome 搭壳失败，根布局可能未就位。",
+            note: step.detail ?? undefined,
+        };
+    }
+    if (s.startsWith("architect_scaffold_agent_tool:")) {
+        return {
+            what: "Chrome Scaffold Agent 工具调用",
+            output: step.detail ?? "tool executed",
+        };
+    }
+    if (s === "chrome_optimize_agent") {
+        return {
+            what: "Chrome Optimize Agent 在全部页面落盘后，用工具勘察真实路由与 section id，精修 Nav/Footer 链接与 chrome 体验。",
+            output: ok
+                ? "Chrome 精修完成，导航链接已与真实页面对齐。"
+                : "Chrome 精修失败，导航链接可能仍为 scaffold 占位。",
+            note: step.detail ?? undefined,
+        };
+    }
+    if (s.startsWith("chrome_optimize_agent_tool:")) {
+        return {
+            what: "Chrome Optimize Agent 工具调用",
+            output: step.detail ?? "tool executed",
+        };
+    }
     if (s === "architect_agent") {
         return {
-            what: "Architect Agent 根据产品形态决定全局 chrome（顶栏 / 侧栏 / 工具栏 / HUD / 极简 等），并把 app/layout.tsx 与 components/chrome/** 真实落盘，作为页面 Agent 必须遵守的 chrome 契约。",
-            output: ok
-                ? "Architect 已写出根布局与 chrome 组件；页面 Agent 将以此为只读契约填充内容。"
-                : "Architect Agent 失败，根布局可能未就位。",
+            what: "（旧步骤）站点架构 Agent",
+            output: step.detail ?? (ok ? "completed" : "failed"),
             note: step.detail ?? undefined,
         };
     }
     if (s.startsWith("architect_agent_tool:")) {
         return {
-            what: "Architect Agent 工具调用",
+            what: "（旧步骤）Architect Agent 工具调用",
             output: step.detail ?? "tool executed",
         };
     }

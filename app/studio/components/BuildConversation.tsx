@@ -482,7 +482,7 @@ export function BuildConversation({
                                 <div className="text-[11px] font-medium text-foreground">意图助手</div>
                             ) : null}
                             <div className={message.role === "assistant" ? "mt-2 space-y-3" : "space-y-3"}>
-                                <div className="text-[13px] leading-7 text-foreground">
+                                <div className="min-w-0 max-w-full text-[13px] leading-7 text-foreground">
                                     {message.role === "user" ? (
                                         <>
                                             {message.imageDataUrl ? (
@@ -495,7 +495,9 @@ export function BuildConversation({
                                                     />
                                                 </div>
                                             ) : null}
-                                            <pre className="whitespace-pre-wrap font-body">{message.content}</pre>
+                                            <pre className="whitespace-pre-wrap break-all font-body [overflow-wrap:anywhere]">
+                                                {message.content}
+                                            </pre>
                                         </>
                                     ) : (
                                         <StudioMessageMarkdown content={message.content} />
@@ -504,7 +506,7 @@ export function BuildConversation({
 
                                 {/* Brief draft — always visible so the confirmed structure stays in the conversation */}
                                 {message.role === "assistant" && message.intentPayload?.briefDraftMarkdown ? (
-                                    <div className="rounded-2xl border border-white/8 bg-black/20 px-4 py-3 text-muted-foreground">
+                                    <div className="min-w-0 max-w-full overflow-hidden rounded-2xl border border-white/8 bg-black/20 px-4 py-3 text-muted-foreground">
                                         <StudioMessageMarkdown content={message.intentPayload.briefDraftMarkdown} />
                                     </div>
                                 ) : null}

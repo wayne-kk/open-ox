@@ -155,6 +155,8 @@ export async function callLLMWithToolsFromMessages(params: {
   tools: ChatCompletionTool[];
   temperature?: number;
   maxIterations?: number;
+  /** When false, the model may only call one tool per turn. */
+  parallelToolCalls?: boolean;
   model?: string;
   thinkingLevel?: string;
   executeToolOverrides?: Record<string, (args: Record<string, unknown>) => Promise<ToolResult | string>>;
@@ -233,6 +235,7 @@ export async function callLLMWithToolsFromMessages(params: {
         model,
         messages,
         temperature,
+        ...(params.parallelToolCalls === false ? { parallel_tool_calls: false } : {}),
         tools: activeTools.length > 0 ? activeTools : undefined,
         tool_choice: activeTools.length > 0 ? "auto" : undefined,
         ...(params.thinkingLevel ? { thinking_level: params.thinkingLevel } : {}),

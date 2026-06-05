@@ -23,6 +23,8 @@ import type {
   IntentProgressEvent,
 } from "./types";
 import { buildUserVisionContent, userTurnPlainTextForClassifier } from "../shared/userVisionContent";
+import { classifyIntentAgentInputProfile } from "./intentAgentInputProfile";
+import type { IntentAgentTraceStep } from "./types";
 
 function truncatePreview(s: string, max: number): string {
   const t = s.trim();
@@ -133,11 +135,17 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
   const hasUserImage = Boolean(userImageBase64?.trim());
   const tailPlainForCommit = userTurnPlainTextForClassifier(userMessage, hasUserImage);
   const model = getModelForStep("intent_agent");
-  const systemPrompt = composePromptBlocks([loadStepPrompt("projectIntentAgent")]);
+  const inputProfile = classifyIntentAgentInputProfile(userMessage);
+  const systemPrompt = composePromptBlocks([
+    loadStepPrompt("projectIntentAgent"),
+    PIPELINE_CONSTRAINTS_TEXT,
+  ]);
   const tools = mergeIntentAgentTools({
     base: buildIntentAgentTools(),
     extensions: toolExtensions?.tools,
   });
+  const trace: IntentAgentTraceStep[] = [];
+  let llmRoundCount = 0;
 
   const persisted = resetSession ? null : await loadIntentAgentSession(projectId);
 
@@ -165,16 +173,35 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
 
   const box: { resolution: TurnResolution | null } = { resolution: null };
 
+  let activeToolIteration = 0;
+
+  const wrapTimedTool = (
+    name: string,
+    fn: (args: Record<string, unknown>) => Promise<ToolResult | string>
+  ) => {
+    return async (args: Record<string, unknown>) => {
+      const t0 = Date.now();
+      const result = await fn(args);
+      trace.push({
+        kind: "tool",
+        iteration: activeToolIteration,
+        toolName: name,
+        durationMs: Date.now() - t0,
+        argsPreview: serializeArgsPreview(args).slice(0, 200),
+      });
+      return result;
+    };
+  };
+
   const executeToolOverrides: Record<
     string,
     (args: Record<string, unknown>) => Promise<ToolResult | string>
   > = {
-    get_pipeline_constraints: async () => PIPELINE_CONSTRAINTS_TEXT,
-    yield_to_user: async (args: Record<string, unknown>) => {
+    yield_to_user: wrapTimedTool("yield_to_user", async (args: Record<string, unknown>) => {
       box.resolution = { type: "yield", payload: parseYieldArgs(args) };
       return JSON.stringify({ ok: true, halted: true, action: "yield_to_user" });
-    },
-    commit_generate: async (args: Record<string, unknown>) => {
+    }),
+    commit_generate: wrapTimedTool("commit_generate", async (args: Record<string, unknown>) => {
       const raw = typeof args.merged_brief === "string" ? args.merged_brief.trim() : "";
       const substance = await classifyBriefSubstanceForCommit({
         mergedBriefRaw: raw,
@@ -192,13 +219,20 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
         }).trim(),
       };
       return JSON.stringify({ ok: true, halted: true, action: "commit_generate" });
-    },
-    reference_site_digest: (args: Record<string, unknown>) => executeReferenceSiteDigest(args),
-    brand_kit_from_url: (args: Record<string, unknown>) => executeBrandKitFromUrl(args),
-    single_page_ia_proposal: (args: Record<string, unknown>) => executeSinglePageIaProposal(args),
-    accessibility_and_seo_brief: (args: Record<string, unknown>) => executeAccessibilitySeoBrief(args),
-    competitive_landscape_snapshot: (args: Record<string, unknown>) =>
-      executeCompetitiveLandscapeSnapshot(args),
+    }),
+    reference_site_digest: wrapTimedTool("reference_site_digest", (args) =>
+      executeReferenceSiteDigest(args)
+    ),
+    brand_kit_from_url: wrapTimedTool("brand_kit_from_url", (args) => executeBrandKitFromUrl(args)),
+    single_page_ia_proposal: wrapTimedTool("single_page_ia_proposal", (args) =>
+      executeSinglePageIaProposal(args)
+    ),
+    accessibility_and_seo_brief: wrapTimedTool("accessibility_and_seo_brief", (args) =>
+      executeAccessibilitySeoBrief(args)
+    ),
+    competitive_landscape_snapshot: wrapTimedTool("competitive_landscape_snapshot", (args) =>
+      executeCompetitiveLandscapeSnapshot(args)
+    ),
   };
 
   for (const [name, fn] of Object.entries(toolExtensions?.toolHandlers ?? {})) {
@@ -225,16 +259,22 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
           });
         }
       : undefined,
-    onAssistantRound: onIntentProgress
-      ? ({ iteration, textPreview, toolCallNames }) => {
-          onIntentProgress({
-            kind: "assistant_round",
-            iteration,
-            textPreview,
-            toolCallNames,
-          });
-        }
-      : undefined,
+    onAssistantRound: ({ iteration, textPreview, toolCallNames }) => {
+      activeToolIteration = iteration;
+      llmRoundCount += 1;
+      trace.push({
+        kind: "llm_round",
+        iteration,
+        toolCallNames,
+        textPreview: textPreview ? truncatePreview(textPreview, 400) : null,
+      });
+      onIntentProgress?.({
+        kind: "assistant_round",
+        iteration,
+        textPreview,
+        toolCallNames,
+      });
+    },
     onToolCall: onIntentProgress
       ? ({ name, args, iteration, result }) => {
           onIntentProgress({
@@ -253,6 +293,11 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
   }
 
   const resolution = box.resolution;
+  const turnMeta = {
+    inputProfile,
+    trace: [...trace],
+    llmRoundCount,
+  };
 
   if (resolution?.type === "yield") {
     await saveIntentAgentSession({
@@ -267,6 +312,7 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
       yieldPayload: resolution.payload,
       turnCounter,
       toolCalls,
+      ...turnMeta,
     };
   }
 
@@ -285,6 +331,7 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
         errorMessage: "commit_generate invoked with empty merged_brief.",
         turnCounter,
         toolCalls,
+        ...turnMeta,
       };
     }
 
@@ -294,6 +341,7 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
       mergedBrief: merged,
       turnCounter,
       toolCalls,
+      ...turnMeta,
     };
   }
 
@@ -317,6 +365,7 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
       },
       turnCounter,
       toolCalls,
+      ...turnMeta,
     };
   }
 
@@ -332,5 +381,6 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
     errorMessage: "Intent agent stopped without yield, commit, or assistant text.",
     turnCounter,
     toolCalls,
+    ...turnMeta,
   };
 }

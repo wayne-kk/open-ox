@@ -27,11 +27,14 @@ export const LfSpanGen = {
   analyzeBlueprintParallel: `${OX_SPAN_PREFIX}.gen.02_analyze_blueprint_parallel`,
   planAndDesignSystem: `${OX_SPAN_PREFIX}.gen.03_plan_and_design_system`,
   applyDesignTokens: `${OX_SPAN_PREFIX}.gen.04_apply_design_tokens`,
-  architectAgent: `${OX_SPAN_PREFIX}.gen.05_architect_agent`,
+  architectScaffoldAgent: `${OX_SPAN_PREFIX}.gen.05_architect_scaffold_agent`,
   implementPages: `${OX_SPAN_PREFIX}.gen.06_implement_pages`,
-  installDependenciesAfterImplement: `${OX_SPAN_PREFIX}.gen.07_install_dependencies_post_pages`,
-  typescriptRepair: `${OX_SPAN_PREFIX}.gen.08_typescript_repair`,
-  buildVerifyAndRepair: `${OX_SPAN_PREFIX}.gen.09_build_verify_and_repair`,
+  chromeOptimizeAgent: `${OX_SPAN_PREFIX}.gen.07_chrome_optimize_agent`,
+  installDependenciesAfterImplement: `${OX_SPAN_PREFIX}.gen.08_install_dependencies_post_pages`,
+  typescriptRepair: `${OX_SPAN_PREFIX}.gen.09_typescript_repair`,
+  buildVerifyAndRepair: `${OX_SPAN_PREFIX}.gen.10_build_verify_and_repair`,
+  /** @deprecated Renamed to architectScaffoldAgent */
+  architectAgent: `${OX_SPAN_PREFIX}.gen.05_architect_scaffold_agent`,
 } as const;
 
 /** Per-page parallel branch under implement pages. */
@@ -43,7 +46,7 @@ export function lfSpanGenPage(slug: string): string {
 /** Scoped install-deps (e.g. template vs generated). */
 export function lfSpanGenInstallDeps(scope: string): string {
   const safe = scope.replace(/[^a-zA-Z0-9_-]+/g, "_").replace(/^_+|_+$/g, "") || "default";
-  return `${OX_SPAN_PREFIX}.gen.07a_install_deps__${safe}`;
+  return `${OX_SPAN_PREFIX}.gen.08a_install_deps__${safe}`;
 }
 
 /** Spans for {@link LfTrace.intentAgent}. */

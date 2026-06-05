@@ -49,7 +49,20 @@ const CORE_STEP_PROMPTS: CorePromptDefinition[] = [
     promptId: "applyProjectDesignTokens",
     label: "设计 Token 生成",
   },
-  { profile: "web", stepId: "architect_agent", kind: "step", promptId: "architectAgent", label: "站点架构 Agent" },
+  {
+    profile: "web",
+    stepId: "architect_scaffold_agent",
+    kind: "step",
+    promptId: "architectScaffoldAgent",
+    label: "Chrome 搭壳 Agent",
+  },
+  {
+    profile: "web",
+    stepId: "chrome_optimize_agent",
+    kind: "step",
+    promptId: "chromeOptimizeAgent",
+    label: "Chrome 精修 Agent",
+  },
   { profile: "web", stepId: "dependency_resolver", kind: "step", promptId: "dependencyResolver", label: "依赖修复" },
   { profile: "web", stepId: "repair_build", kind: "step", promptId: "repairBuild", label: "构建修复" },
 ];

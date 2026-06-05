@@ -76,6 +76,13 @@ export interface IntentAgentTurn {
         briefDraftMarkdown?: string;
     };
     toolCallNames?: string[];
+    inputProfile?: "sparse" | "substantive_brief" | "reference_site_focus";
+    llmRoundCount?: number;
+    traceSummary?: string;
+    trace?: Array<
+        | { kind: "llm_round"; iteration: number; toolCallNames: string[]; textPreview?: string | null }
+        | { kind: "tool"; iteration: number; toolName: string; durationMs: number; argsPreview?: string }
+    >;
 }
 
 export interface AiResponse {

@@ -13,6 +13,8 @@ const STAGE_MAP: Record<string, StageId> = {
   generate_project_design_system: "design",
   match_design_system_skill: "design",
   apply_project_design_tokens: "design",
+  architect_scaffold_agent: "compose",
+  chrome_optimize_agent: "compose",
   architect_agent: "compose",
   install_dependencies: "verify",
   /** Scoped in-process tsc on generated .tsx (ENABLE_PREBUILD_TSC), before `run_build` */
@@ -37,7 +39,16 @@ const STAGE_LABELS: Record<StageId, string> = {
 function inferStage(stepName: string): StageId {
   if (stepName.startsWith("page_implement_agent:")) return "generate";
   if (stepName.startsWith("page_agent_tool:")) return "generate";
-  if (stepName.startsWith("architect_agent_tool:") || stepName === "architect_agent") return "compose";
+  if (
+    stepName.startsWith("architect_scaffold_agent_tool:") ||
+    stepName === "architect_scaffold_agent" ||
+    stepName.startsWith("chrome_optimize_agent_tool:") ||
+    stepName === "chrome_optimize_agent" ||
+    stepName.startsWith("architect_agent_tool:") ||
+    stepName === "architect_agent"
+  ) {
+    return "compose";
+  }
   if (stepName.startsWith("intent_agent")) return "intent";
   if (stepName.startsWith("install_dependencies:")) return "verify";
   if (stepName.startsWith("typecheck_generated")) return "verify";
@@ -68,7 +79,16 @@ function inferKind(stepName: string, stage: StageId): GraphNode["kind"] {
   if (stepName.startsWith("describe_page_sections")) return "transform";
   if (stepName.startsWith("analyze_") || stepName.startsWith("plan_")) return "transform";
   if (stepName.startsWith("generate_project_design") || stepName.startsWith("apply_project")) return "transform";
-  if (stepName === "architect_agent" || stepName.startsWith("architect_agent_tool:")) return "generation";
+  if (
+    stepName === "architect_scaffold_agent" ||
+    stepName.startsWith("architect_scaffold_agent_tool:") ||
+    stepName === "chrome_optimize_agent" ||
+    stepName.startsWith("chrome_optimize_agent_tool:") ||
+    stepName === "architect_agent" ||
+    stepName.startsWith("architect_agent_tool:")
+  ) {
+    return "generation";
+  }
   return "transform";
 }
 
@@ -92,6 +112,22 @@ function formatStepLabel(step: string): string {
   }
   if (step.startsWith("page_implement_agent:")) {
     return `page agent:${step.replace("page_implement_agent:", "")}`;
+  }
+  if (step.startsWith("architect_scaffold_agent_tool:")) {
+    const parts = step.replace("architect_scaffold_agent_tool:", "").split(":");
+    const toolName = parts[0]?.replace(/_/g, " ") ?? "tool";
+    return `chrome scaffold ${toolName}`;
+  }
+  if (step === "architect_scaffold_agent") {
+    return "chrome scaffold";
+  }
+  if (step.startsWith("chrome_optimize_agent_tool:")) {
+    const parts = step.replace("chrome_optimize_agent_tool:", "").split(":");
+    const toolName = parts[0]?.replace(/_/g, " ") ?? "tool";
+    return `chrome optimize ${toolName}`;
+  }
+  if (step === "chrome_optimize_agent") {
+    return "chrome optimize";
   }
   if (step.startsWith("architect_agent_tool:")) {
     const parts = step.replace("architect_agent_tool:", "").split(":");

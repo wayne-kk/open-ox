@@ -121,12 +121,13 @@ Step 4:  plan_project                    ← LLM ─┐ 并行
 Step 5a: match_design_system_skill       ← LLM ─┘（enableSkills=false 时跳过）
 Step 5b: generate_project_design_system  ← 仅当 Step 5a 未命中内置 skill 时执行
 Step 6:  apply_project_design_tokens     ← LLM：design-system + 当前 globals → 完整 globals.css（须先于 Agent）
-Step 7:  architect_agent                 ← 工具闭环：app/layout.tsx + components/chrome/**
+Step 7:  architect_scaffold_agent        ← 快速搭壳：app/layout.tsx + components/chrome/**（链接可占位）
 Step 8:  page_implement_agent × M        ← 每页并行工具闭环；收尾 page_implementation_complete
-Step 9:  await_images ∥ install_dependencies ← 等生图落盘 + npm 依赖扫描安装（并行）
-Step 10: typecheck_generated             ← 默认开启：生成范围内 TS 诊断（DISABLE_PREBUILD_TSC=1 跳过）
-Step 11: run_build                       ← next build（内含 TS code-fix 重试内循环）
-Step 12: repair_build × 0–5             ← 构建仍失败则 Agent 增量修复（最多 5 轮）
+Step 9:  chrome_optimize_agent          ← 勘察真实路由/锚点，精修 Nav/Footer 与 chrome
+Step 10: await_images ∥ install_dependencies ← 等生图落盘 + npm 依赖扫描安装（并行）
+Step 11: typecheck_generated             ← 默认开启：生成范围内 TS 诊断（DISABLE_PREBUILD_TSC=1 跳过）
+Step 12: run_build                       ← next build（内含 TS code-fix 重试内循环）
+Step 13: repair_build × 0–5             ← 构建仍失败则 Agent 增量修复（最多 5 轮）
 ```
 
 说明：`clear_template` 属于项目脚手架 / 首次初始化逻辑，不计入上述 SSE 步骤枚举；checkpoint 恢复时会跳过已完成阶段。
@@ -679,7 +680,8 @@ plan_project	站点 / 页面规划	强模型
 match_design_system_skill	内置设计系统 skill 匹配	快或均衡模型
 generate_project_design_system	Markdown 设计系统（未命中 skill）	强模型
 apply_project_design_tokens	globals.css 重写	中等模型
-architect_agent	全局 chrome	强模型
+architect_scaffold_agent	Chrome 搭壳	可配轻模型
+chrome_optimize_agent	Chrome 精修	强模型
 page_implement_agent	单页工具闭环（多页并行）	快模型倾向（调用次数多）
 repair_build	编译失败修复	强模型
 

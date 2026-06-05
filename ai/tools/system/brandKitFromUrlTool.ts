@@ -12,7 +12,7 @@ export const brandKitFromUrlTool: ChatCompletionTool = {
     name: "brand_kit_from_url",
     description:
       "When the user provides a brand or marketing site URL, capture the page (viewport + visible text) and return a Markdown **brand kit** brief: palette, typography vibe, tone, UI patterns, and differentiation hints. " +
-      "Use after `get_pipeline_constraints` when a URL is available. Silent to the user until you summarize via yield. " +
+      "Use when a brand/marketing site URL is available (not image CDN). Silent to the user until you summarize via yield. " +
       "If you already ran `reference_site_digest` on the **same** URL in this turn, prefer reusing that context instead of calling this again unless the user explicitly asks for brand tokens.",
     parameters: {
       type: "object",
