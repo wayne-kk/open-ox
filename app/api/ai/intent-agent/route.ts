@@ -15,7 +15,6 @@ import { SSE_RESPONSE_HEADERS } from "@/lib/sse-headers";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
 import { runWithSiteRoot } from "@/ai/tools/system/common";
-import { appendTrajectoryEvent, createRunEndEvent, createTrajectoryRun } from "@/lib/trajectory/store";
 import {
   flushLangfuse,
   resolveLangfuseSessionId,
@@ -130,7 +129,6 @@ export async function POST(req: Request) {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
         };
 
-        let trajectory: { runId: string; taskId: string } | null = null;
         try {
           const projectRoot = path.join(process.cwd(), "sites", projectId);
           await fs.mkdir(projectRoot, { recursive: true });
@@ -141,33 +139,10 @@ export async function POST(req: Request) {
             await initProjectDir(db, projectId);
           }
 
-          try {
-            const taskId = `intent_agent:${projectId}`;
-            const run = await createTrajectoryRun({
-              task_id: taskId,
-              goal: `[intent-agent] ${messageText.trim() || "(reference image)"}`,
-              task_spec_ref: "open-ox.intent-agent",
-              environment: {
-                route: "/api/ai/intent-agent",
-                project_id: projectId,
-              },
-              success_criteria: [
-                "intent agent turn completed or generation handed off",
-                "session state persisted on yield",
-              ],
-            }).catch(() => null);
-            if (run) {
-              trajectory = { runId: run.runId, taskId };
-            }
-          } catch {
-            trajectory = null;
-          }
-
           const langfuseSessionKey = resolveLangfuseSessionId({
             projectId,
             clientSessionId:
               typeof body.langfuseSessionId === "string" ? body.langfuseSessionId : undefined,
-            trajectoryRunId: trajectory?.runId,
           });
 
           await runWithLangfuseTraceRoot(
@@ -262,20 +237,6 @@ export async function POST(req: Request) {
                   "",
               },
             });
-            if (trajectory) {
-              await appendTrajectoryEvent(trajectory.runId, {
-                task_id: trajectory.taskId,
-                phase: "planning",
-                event_type: "checkpoint",
-                actor: "agent",
-                payload: { intent_status: intentResult.status },
-                meta: { source: "intent_agent" },
-              }).catch(() => null);
-              await createRunEndEvent(trajectory.runId, trajectory.taskId, "system", {
-                success: intentResult.status !== "error",
-                intent_status: intentResult.status,
-              }).catch(() => null);
-            }
             return;
           }
 

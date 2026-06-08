@@ -3,7 +3,8 @@
 import { use, useState, useEffect, useCallback } from "react";
 import { Suspense } from "react";
 import Link from "next/link";
-import { ArrowLeft, GitBranch, Monitor, RefreshCw, ExternalLink, PanelLeftClose, PanelLeftOpen, FileCode2, ImagePlus, Loader2 } from "lucide-react";
+import { GitBranch, Monitor, RefreshCw, ExternalLink, PanelLeftClose, PanelLeftOpen, FileCode2, ImagePlus, Loader2 } from "lucide-react";
+import { AppBackButton } from "@/app/components/AppBackButton";
 import { cn } from "@/lib/utils";
 import { HamsterLoader } from "@/components/ui/hamster-loader";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -115,12 +116,10 @@ function StudioInner({ projectId }: { projectId: string }) {
               <div className="flex items-center justify-between gap-3 px-4 py-0 h-12">
                 {/* Left: back + brand */}
                 <div className="flex items-center gap-3 min-w-0">
-                  <Link
-                    href="/"
+                  <AppBackButton
+                    fallback="/projects"
                     className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-white/10 bg-white/4 text-muted-foreground transition-colors hover:border-white/20 hover:text-foreground"
-                  >
-                    <ArrowLeft className="h-3.5 w-3.5" />
-                  </Link>
+                  />
 
                   <div className="flex items-center gap-2 min-w-0">
                     <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-primary/40 bg-primary/10">

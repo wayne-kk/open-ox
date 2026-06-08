@@ -44,7 +44,8 @@ const STEPS = [
   { n: "00", name: "validate_skill_prompts", type: "verify", desc: "启动前校验 ai 流程技能 Markdown 的 frontmatter；失败则中止，避免运行中途才发现技能损坏。" },
   { n: "01", name: "project_intent_guide", type: "llm", desc: "可选（默认开启）。澄清建站意向；若需用户补充信息则提前结束并返回引导文案（不进入生成）。可用 enableIntentGuide=false 关闭。" },
   { n: "02", name: "analyze_project_requirement", type: "llm+tool", desc: "解析 ProjectBlueprint，配备 web_search。与步骤 03 并行。" },
-  { n: "03", name: "infer_design_intent", type: "llm", desc: "独立风格/技术关键词推理；产物合并进设计系统输入与 blueprint.keywords。与步骤 02 并行。" },
+  { n: "03", name: "infer_design_intent", type: "llm", desc: "独立风格/技术关键词推理；产物合并进设计系统输入与 blueprint.keywords。与步骤 02、03b 并行。" },
+  { n: "03b", name: "extract_user_provided_content", type: "llm+tool", desc: "从用户 query 整理 userProvidedContent（地址、图片 URL、菜单等），写入 content/user-provided.md。与步骤 02、03 并行；Plan 之前合并进 blueprint。" },
   { n: "04", name: "plan_project", type: "llm", desc: "扩展为 PlannedProjectBlueprint（pages、sections、pageDesignPlan）。与步骤 05a 并行。" },
   {
     n: "05a",
@@ -140,10 +141,11 @@ export default function PipelinePage() {
         <section id="parallel" className="scroll-mt-24">
           <H2>并行策略</H2>
           <P>当前编排里与耗时相关的并行阶段大致如下：</P>
-          <Pre>{`// 第一层：analyze + infer_design_intent（当前实现）
+          <Pre>{`// 第一层：analyze + infer_design_intent + extract_user_provided_content（当前实现）
 await Promise.all([
   stepAnalyzeProjectRequirement(userInput),
   stepInferDesignIntent(userInput),
+  stepExtractUserProvidedContent({ userInput }),
 ]);
 
 // 第二层：plan_project + match/generate design system（当前实现）

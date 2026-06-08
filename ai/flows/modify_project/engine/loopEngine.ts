@@ -152,7 +152,10 @@ export async function runAgentLoop(
         args = {};
       }
 
-      if ((name === "edit_file" || name === "write_file") && args.path) {
+      if (
+        (name === "edit_file" || name === "write_file" || name === "apply_workspace_edits") &&
+        args.path
+      ) {
         await tracker.capture(args.path as string);
       }
 

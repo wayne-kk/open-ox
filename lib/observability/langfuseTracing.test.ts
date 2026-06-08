@@ -29,15 +29,8 @@ describe("langfuseTracing", () => {
       resolveLangfuseSessionId({
         projectId: "p1",
         clientSessionId: "  my-session  ",
-        trajectoryRunId: "traj-9",
       })
     ).toBe("my-session");
-    expect(
-      resolveLangfuseSessionId({
-        projectId: "p1",
-        trajectoryRunId: "run-abc",
-      })
-    ).toBe("p1");
     expect(resolveLangfuseSessionId({ projectId: "p1" })).toBe("p1");
   });
 });

@@ -9,6 +9,7 @@ import {
   AlertTriangle, FolderInput, Search, Users,
 } from "lucide-react";
 import { HamsterLoader } from "@/components/ui/hamster-loader";
+import { captureAppReturnTo } from "@/lib/navigation/appBack";
 import {
   Select,
   SelectContent,
@@ -797,6 +798,7 @@ function ProjectsPageContent() {
   const openProject = useCallback(
     (projectId: string) => {
       if (authUser) {
+        captureAppReturnTo();
         router.push(`/studio/${projectId}`);
         return;
       }

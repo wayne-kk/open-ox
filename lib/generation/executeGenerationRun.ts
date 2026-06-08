@@ -19,7 +19,6 @@ import {
 } from "@/lib/config/corePrompts";
 import { redactBuildStepForTransport } from "@/ai/flows/generate_project/shared/buildStepPayload";
 import { shouldSkipNamingFromBlueprintTitle } from "@/ai/flows/generate_project/intentAgent/commitMergeBrief";
-import { appendTrajectoryEvent, createRunEndEvent, createTrajectoryRun } from "@/lib/trajectory/store";
 import { flushLangfuse, resolveLangfuseSessionId } from "@/lib/observability/langfuseTracing";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -126,82 +125,6 @@ export async function executeGenerationRun(args: {
       }
     }
 
-    let trajectory: { runId: string; taskId: string } | null = null;
-    let trajectoryQueue: Promise<void> = Promise.resolve();
-
-    try {
-      const taskId = `project:${projectId}`;
-      const traj = await createTrajectoryRun({
-        task_id: taskId,
-        goal: effectivePrompt,
-        task_spec_ref: "open-ox.generate-project",
-        environment: {
-          route: "/api/generation-worker",
-          project_id: projectId,
-          mode: retryProjectId ? "retry" : preCreatedProjectId ? "precreated" : "new",
-        },
-        success_criteria: [
-          "generation completed",
-          "run has deterministic end state",
-          "build verification status recorded",
-        ],
-        meta: {
-          source: "generation-worker",
-          model: payload.effectiveModel ?? null,
-          generation_run_id: generationRunUuid,
-        },
-      });
-      trajectory = { runId: traj.runId, taskId };
-    } catch (err) {
-      console.warn("[generation-worker] trajectory run creation failed:", err);
-    }
-
-    const enqueueTrajectoryEvent = (
-      evt: Parameters<typeof appendTrajectoryEvent>[1]
-    ) => {
-      if (!trajectory) return;
-      const runId = trajectory.runId;
-      trajectoryQueue = trajectoryQueue
-        .then(async () => {
-          await appendTrajectoryEvent(runId, evt);
-        })
-        .catch((trajectoryErr: unknown) => {
-          console.warn("[generation-worker] trajectory append failed:", trajectoryErr);
-        });
-    };
-
-    let repairEpisodeSeq = 0;
-    let activeRepairEpisode: {
-      episodeId: string;
-      triggerStep: string;
-      errorDetail: string;
-      startedAt: number;
-    } | null = null;
-
-    const mapPhase = (stepName: string): "setup" | "planning" | "execution" | "verification" | "finalize" => {
-      if (
-        stepName.includes("analyze") ||
-        stepName.includes("plan") ||
-        stepName.includes("intent_guide") ||
-        stepName.includes("intent_agent")
-      ) {
-        return "planning";
-      }
-      if (stepName.includes("build") || stepName.includes("typecheck")) return "verification";
-      if (stepName.includes("clear") || stepName.includes("checkpoint")) return "setup";
-      if (stepName.includes("run")) return "finalize";
-      return "execution";
-    };
-    const isShellLikeStep = (stepName: string) =>
-      stepName.includes("build") ||
-      stepName.includes("install_dependencies") ||
-      stepName.includes("repair_build") ||
-      stepName.includes("typecheck");
-    const summarizeError = (detail?: string) => {
-      if (!detail) return "unknown_error";
-      return detail.split("\n")[0]?.slice(0, 240) || "unknown_error";
-    };
-
     if (payload.effectiveModel) {
       setRuntimeModelId(payload.effectiveModel as ModelId);
     }
@@ -214,7 +137,6 @@ export async function executeGenerationRun(args: {
     const langfuseSessionKey = resolveLangfuseSessionId({
       projectId,
       clientSessionId: payload.langfuseSessionId,
-      trajectoryRunId: trajectory?.runId,
     });
 
     let persistTail: Promise<void> = Promise.resolve();
@@ -263,148 +185,6 @@ export async function executeGenerationRun(args: {
 
       pipelineFoldedLive = upsertBuildStepByName(pipelineFoldedLive, step);
       scheduleLiveBuildSteps();
-
-      const phase = mapPhase(step.step);
-
-      if (step.status === "error" && isShellLikeStep(step.step)) {
-        const episodeId = `${projectId}-repair-${++repairEpisodeSeq}`;
-        activeRepairEpisode = {
-          episodeId,
-          triggerStep: step.step,
-          errorDetail: step.detail ?? "unknown_error",
-          startedAt: Date.now(),
-        };
-        enqueueTrajectoryEvent({
-          task_id: trajectory?.taskId ?? `project:${projectId}`,
-          phase: "execution",
-          event_type: "repair_episode_started",
-          actor: "system",
-          payload: {
-            episode_id: episodeId,
-            trigger_step: step.step,
-            error_summary: summarizeError(step.detail),
-            error_detail: step.detail ?? null,
-          },
-          meta: { source: "repair_episode" },
-        });
-      }
-
-      if (activeRepairEpisode && step.step === "repair_build" && step.status === "active") {
-        enqueueTrajectoryEvent({
-          task_id: trajectory?.taskId ?? `project:${projectId}`,
-          phase: "execution",
-          event_type: "repair_action_started",
-          actor: "agent",
-          payload: {
-            episode_id: activeRepairEpisode.episodeId,
-            action: "repair_build",
-            triggered_by: activeRepairEpisode.triggerStep,
-          },
-          meta: { source: "repair_episode" },
-        });
-      }
-
-      if (
-        activeRepairEpisode &&
-        step.step === "repair_build" &&
-        (step.status === "ok" || step.status === "error")
-      ) {
-        enqueueTrajectoryEvent({
-          task_id: trajectory?.taskId ?? `project:${projectId}`,
-          phase: "execution",
-          event_type: "repair_action_result",
-          actor: "agent",
-          payload: {
-            episode_id: activeRepairEpisode.episodeId,
-            action: "repair_build",
-            status: step.status,
-            detail: step.detail ?? null,
-            duration: step.duration,
-          },
-          meta: { source: "repair_episode" },
-        });
-      }
-
-      if (
-        activeRepairEpisode &&
-        step.step === "run_build" &&
-        (step.status === "ok" || step.status === "error")
-      ) {
-        enqueueTrajectoryEvent({
-          task_id: trajectory?.taskId ?? `project:${projectId}`,
-          phase: "verification",
-          event_type: "repair_verification_result",
-          actor: "system",
-          payload: {
-            episode_id: activeRepairEpisode.episodeId,
-            verification_step: "run_build",
-            status: step.status,
-            detail: step.detail ?? null,
-            duration: step.duration,
-          },
-          meta: { source: "repair_episode" },
-        });
-        enqueueTrajectoryEvent({
-          task_id: trajectory?.taskId ?? `project:${projectId}`,
-          phase: "finalize",
-          event_type: "repair_episode_finished",
-          actor: "system",
-          payload: {
-            episode_id: activeRepairEpisode.episodeId,
-            outcome: step.status === "ok" ? "resolved" : "unresolved",
-            trigger_step: activeRepairEpisode.triggerStep,
-            started_at: activeRepairEpisode.startedAt,
-            ended_at: Date.now(),
-          },
-          meta: { source: "repair_episode" },
-        });
-        activeRepairEpisode = null;
-      }
-
-      if (isShellLikeStep(step.step)) {
-        enqueueTrajectoryEvent({
-          task_id: trajectory?.taskId ?? `project:${projectId}`,
-          phase,
-          event_type: "shell_command",
-          actor: "tool",
-          payload: {
-            step: step.step,
-            status: step.status,
-            command: step.step,
-            cwd: `sites/${projectId}`,
-          },
-          meta: { source: "build_step_shell" },
-        });
-        enqueueTrajectoryEvent({
-          task_id: trajectory?.taskId ?? `project:${projectId}`,
-          phase,
-          event_type: "shell_result",
-          actor: "tool",
-          payload: {
-            step: step.step,
-            status: step.status,
-            stdout: step.status === "ok" ? (step.detail ?? "") : "",
-            stderr: step.status === "error" ? (step.detail ?? "") : "",
-            exit_code: step.status === "ok" ? 0 : step.status === "error" ? 1 : null,
-            duration: step.duration,
-          },
-          meta: { source: "build_step_shell" },
-        });
-      }
-      enqueueTrajectoryEvent({
-        task_id: trajectory?.taskId ?? `project:${projectId}`,
-        phase,
-        event_type: "checkpoint",
-        actor: "agent",
-        payload: {
-          step: step.step,
-          status: step.status,
-          detail: step.detail ?? null,
-          duration: step.duration,
-          timestamp: step.timestamp,
-        },
-        meta: { source: "build_step" },
-      });
     };
 
     const result = await withCorePromptRuntime(
@@ -484,33 +264,6 @@ export async function executeGenerationRun(args: {
         ),
         currentGenerationRunId: null,
       });
-    }
-
-    if (trajectory) {
-      enqueueTrajectoryEvent({
-        task_id: trajectory.taskId,
-        phase: result.verificationStatus === "passed" ? "verification" : "finalize",
-        event_type: result.verificationStatus === "passed" ? "test_result" : "error",
-        actor: "system",
-        payload: {
-          success: result.success,
-          verificationStatus: result.verificationStatus,
-          generatedFiles: result.generatedFiles.length,
-          error: result.error ?? null,
-        },
-        meta: { source: "generation_summary" },
-      });
-    }
-
-    if (trajectory) {
-      await trajectoryQueue;
-      await createRunEndEvent(trajectory.runId, trajectory.taskId, "system", {
-        success: result.success,
-        verificationStatus: result.verificationStatus,
-        error: result.error ?? null,
-        generatedFiles: result.generatedFiles.length,
-        projectId,
-      }).catch(() => null);
     }
 
     await finalizeRunRecord(admin, generationRunUuid, {

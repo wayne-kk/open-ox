@@ -8,6 +8,7 @@ import { PromptChips } from "@/app/components/ui/PromptChips";
 import { QuickTemplates } from "@/app/components/ui/QuickTemplates";
 import { SparkleHoverButton } from "@/components/ui/sparkle-hover-button";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { captureAppReturnTo } from "@/lib/navigation/appBack";
 
 /** Survives redirect to /auth so we can resume POST /api/projects after login. */
 const PENDING_BUILD_KEY = "open-ox:pending-project-build";
@@ -130,6 +131,7 @@ export function HeroPrompt() {
         }
         const data = await res.json() as { projectId?: string; error?: string };
         if (!data.projectId) throw new Error(data.error ?? "Failed to create project");
+        captureAppReturnTo();
         router.push(`/studio/${data.projectId}`);
       } catch (err) {
         console.error("[HeroPrompt] create project failed:", err);

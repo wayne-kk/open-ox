@@ -30,7 +30,7 @@ import {
   ensureGlobalErrorFromTemplateForProject,
 } from "./previewShared";
 import { getSiteRoot, WORKSPACE_ROOT } from "./projectManager";
-import { restoreProjectFiles } from "./storage";
+import { ensureProjectSourcesOnDisk } from "./storage";
 
 export { classifyModificationScope, type PreviewRefreshMode } from "./previewShared";
 
@@ -403,7 +403,7 @@ async function startE2BDevServer(
 ): Promise<{ url: string; port: number }> {
   const projectDir = getSiteRoot(projectId);
   console.log(`[devServerManager] Hydrating workspace for E2B preview: ${projectId}`);
-  await restoreProjectFiles(projectId);
+  await ensureProjectSourcesOnDisk(projectId, { db });
   try {
     await fs.access(path.join(projectDir, "package.json"));
   } catch {

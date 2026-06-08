@@ -5,11 +5,11 @@ import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import {
   composePromptBlocks,
   formatSiteFile,
-  listSiteTree,
   loadGuardrail,
   loadStepPrompt,
   loadSystem,
   readSiteFile,
+  writeSiteFile,
 } from "../shared/files";
 import { callLLMWithToolsFromMessages } from "@/ai/shared/llm/toolLoop";
 import { lfPageImplementPhaseSlug } from "@/lib/observability/langfuseGenerationCatalog";
@@ -29,24 +29,37 @@ import {
   prepareUserProvidedContentForPageAgent,
   userProvidedContentFileHint,
   userProvidedContentImagesBlock,
-  userProvidedImageCount,
 } from "../shared/userProvidedContentContext";
 import {
   buildGenerateImageToolForPageAgent,
   guardGenerateImageExecutor,
   listUserProvidedImageUrls,
 } from "../shared/userProvidedImageEnforcement";
-import { USER_PROVIDED_CONTENT_PATH } from "@/lib/content/userProvidedContentText";
+import {
+  buildPageAgentUserMessage,
+  PAGE_AGENT_HERO_SKILL_PATH,
+} from "../shared/pageAgentBrief";
+import {
+  compactPageAgentMessages,
+  createPageAgentSessionState,
+  executePageAgentListDir,
+  executePageAgentReadFile,
+  formatPageAgentToolResultForModel,
+  isPageAgentBatchFirstRoundEnabled,
+  pageAgentCompactFromIteration,
+  recordPageAgentToolCall,
+  resolvePageAgentMaxIterations,
+} from "../shared/pageAgentToolLoop";
 
 export const PAGE_IMPLEMENTATION_COMPLETE = "page_implementation_complete";
 
+/** S3 — format_code removed; write/edit auto-format on save. */
 const TOOL_NAMES = [
   "read_file",
   "write_file",
   "edit_file",
   "list_dir",
   "search_code",
-  "format_code",
   "read_lints",
   "think",
   "generate_image",
@@ -62,9 +75,8 @@ const completeTool: ChatCompletionTool = {
     description:
       "MANDATORY — call this tool exactly once as your final action after the page " +
       "is fully implemented. Preconditions: page.tsx exists with a default export, " +
-      "extracted components live under components/, imports resolve, and format_code " +
-      "has been applied to every .tsx you touched. After you call this, the global " +
-      "pipeline runs a production build — do NOT skip this tool.",
+      "extracted components live under components/, and imports resolve. " +
+      "After you call this, the global pipeline runs a production build — do NOT skip this tool.",
     parameters: {
       type: "object",
       properties: {
@@ -125,7 +137,6 @@ export async function runPageImplementAgent(
 ): Promise<PageImplementAgentResult> {
   const {
     page,
-    designSystem,
     projectContext,
     heroSkillPrompt,
     heroSkillId,
@@ -142,14 +153,7 @@ export async function runPageImplementAgent(
     projectContext.rawUserInput ?? ""
   );
   const userImageCount = userImageUrls.length;
-  const userProvidedMd = (() => {
-    try {
-      const text = readSiteFile(USER_PROVIDED_CONTENT_PATH);
-      return text && !text.includes("(missing") ? text : "";
-    } catch {
-      return "";
-    }
-  })();
+  const hasUserContent = hasUserProvidedContent(userContent);
 
   const planJson = JSON.stringify(
     {
@@ -163,103 +167,29 @@ export async function runPageImplementAgent(
     2
   );
 
-  // Pre-warm context: read the chrome contract + globals + components tree
-  // up front so the agent does NOT need to spend round-trips on read_file /
-  // list_dir for the obvious things.
-  const layoutTsx = readSiteFile("app/layout.tsx") || "(missing — fallback to minimal layout)";
-  const globalsCss = readSiteFile("app/globals.css");
-  const componentsTree = listSiteTree("components", { maxDepth: 3, maxEntries: 160 });
-  const appTree = listSiteTree("app", { maxDepth: 2, maxEntries: 80 });
-
-  const userMessage = `## Implement this Next.js route (App Router)
-
-**Target page file**: \`${targetPath}\`
-**Slug**: ${page.slug}
-**Page title**: ${page.title}
-
-## Page description
-${page.description}
-
-## Journey stage
-${page.journeyStage}
-
-## Page design plan (canonical)
-${planJson}
-
-## Pre-read context (already loaded for you — do NOT re-read these files)
-
-### \`app/layout.tsx\` — chrome contract (read-only, authored by Architect Agent)
-\`\`\`tsx
-${layoutTsx}
-\`\`\`
-
-### \`app/globals.css\` (truncated)
-\`\`\`css
-${truncate(globalsCss || "(empty)", 6_000)}
-\`\`\`
-
-### Existing \`app/\` tree (for context — only \`page.tsx\` files matter)
-\`\`\`
-${appTree}
-\`\`\`
-
-### Existing \`components/\` tree
-\`\`\`
-${componentsTree}
-\`\`\`
-
-## Layout contract (read-only)
-\`app/layout.tsx\` and \`components/chrome/**\` were scaffolded before this step and will be optimized after all pages complete. They are **read-only** for you.
-
-- Do **not** duplicate global nav, footer, sidebar, or topbar inside this page — fill only the \`{children}\` region.
-- Do **not** add global chrome even if the scaffold layout looks minimal — Chrome Optimize Agent runs after pages.
-- For **single-page** sites: give each major block a stable \`id\` (e.g. \`id="features"\`) for downstream nav anchors.
-- **Do not edit** \`app/layout.tsx\` or \`components/chrome/**\`.
-
-## Project
-- Title: ${projectContext.projectTitle}
-- Description: ${projectContext.projectDescription}
-- Language (bcp47): ${projectContext.language}
-- Design keywords: ${projectContext.designKeywords.join(", ")}
-
-## Design system (reference — already loaded; \`design-system.md\` need not be re-read)
-${designSystem}
-${
-  heroSkillPrompt
-    ? `
-
-## Hero / opening-section skill (canonical recipe — must follow when implementing the hero)
-> Skill id: \`${heroSkillId ?? "(unknown)"}\` — the design system above sets the global token palette; the recipe below sets the hero section's structure, motion, and component layout. Treat the recipe as the source of truth for the hero; never invent a different hero pattern when this skill is provided.
-
-${heroSkillPrompt}`
-    : ""
-}
-${userProvidedContentFileHint(hasUserProvidedContent(userContent))}
-${userProvidedContentImagesBlock(userContent)}
-${
-  userProvidedMd
-    ? `
-
-## content/user-provided.md (on disk — use image URLs below)
-\`\`\`markdown
-${truncate(userProvidedMd, 12_000)}
-\`\`\``
-    : ""
-}
-
-## Instructions (follow in order)
-1. **Decide structure**: review the pre-read context above; you can skip read_file for layout.tsx / globals.css / design-system / app tree / components tree. If you genuinely need a specific component file's contents, then \`read_file\` it.
-2. **User content & images**: If \`content/user-provided.md\` exists, \`read_file\` it. Use listed **https image URLs as remote src** (lh3.googleusercontent.com is allowed in next.config). Do **not** download user photos. **Each user URL at most once** — never reuse the same URL in two components. Do **not** use \`generate_image\` to stand in for a user photo.${
-    userImageCount > 0
-      ? ` You have ${userImageCount} user URL(s): assign them first; only after all are used, call \`generate_image\` for any remaining image slots.`
-      : " Use `generate_image` only when you need visuals with no user-provided URLs."
+  const heroSkillOnDisk = Boolean(heroSkillPrompt?.trim());
+  if (heroSkillOnDisk) {
+    writeSiteFile(PAGE_AGENT_HERO_SKILL_PATH, heroSkillPrompt!.trim());
   }
-3. **Implement**: \`write_file\` / \`edit_file\` to create \`${targetPath}\` and extract page-local components under \`components/\` (your own subtree, e.g. \`components/<page-feature>/**\`). Respect design tokens. **Do not modify** \`app/layout.tsx\` or any file under \`components/chrome/**\`. Files are auto-formatted with Prettier on write — you do **not** need to call \`format_code\` afterwards.
-4. **Complete**: call **\`${PAGE_IMPLEMENTATION_COMPLETE}\`** with a summary of files and layout approach.
 
-⚠️ Step 4 is mandatory. The pipeline fails if you do not call \`${PAGE_IMPLEMENTATION_COMPLETE}\`.
-
-Do not invent extra top-level routes beyond this page.`;
+  const userMessage = buildPageAgentUserMessage({
+    targetPath,
+    slug: page.slug,
+    pageTitle: page.title,
+    pageDescription: page.description,
+    journeyStage: page.journeyStage,
+    planJson,
+    projectTitle: projectContext.projectTitle,
+    projectDescription: projectContext.projectDescription,
+    language: projectContext.language,
+    designKeywords: projectContext.designKeywords,
+    heroSkillId,
+    heroSkillOnDisk,
+    userProvidedFileHint: userProvidedContentFileHint(hasUserContent),
+    userProvidedImagesBlock: userProvidedContentImagesBlock(userContent),
+    userImageCount,
+    completeToolName: PAGE_IMPLEMENTATION_COMPLETE,
+  });
 
   const refShot = projectContext.referenceScreenshotDataUrl ?? null;
   const refGuardId = screenshotGuardrailIdFromContext(
@@ -287,32 +217,42 @@ Do not invent extra top-level routes beyond this page.`;
     `page-${page.slug.replace(/[^a-zA-Z0-9_-]+/g, "-")}`
   );
   const imageExecutor = guardGenerateImageExecutor(baseImageExecutor, userImageUrls);
-  const pageTools: ChatCompletionTool[] = [
+
+  const imageTool =
+    userImageCount > 0
+      ? buildGenerateImageToolForPageAgent(userImageCount)
+      : getSystemToolDefinitions(["generate_image"])[0];
+
+  const fullPageTools: ChatCompletionTool[] = [
     ...getSystemToolDefinitions(
       TOOL_NAMES.filter((name) => name !== "generate_image")
     ),
-    ...(userImageCount > 0
-      ? [buildGenerateImageToolForPageAgent(userImageCount)]
-      : getSystemToolDefinitions(["generate_image"])),
+    ...(imageTool ? [imageTool] : []),
     completeTool,
+  ];
+
+  const batchFirstRound = isPageAgentBatchFirstRoundEnabled();
+  const batchWriteTools: ChatCompletionTool[] = [
+    ...getSystemToolDefinitions(["read_file", "list_dir", "write_file"]),
+    ...(imageTool ? [imageTool] : []),
   ];
 
   let implementationComplete = false;
   let completeSummary = "";
-
-  const maxIterations = Math.max(
-    12,
-    Math.min(96, Number(process.env.PAGE_IMPLEMENT_AGENT_MAX_ITERATIONS ?? 48))
-  );
+  const sessionState = createPageAgentSessionState();
+  const compactFromIter = pageAgentCompactFromIteration();
+  const maxIterations = resolvePageAgentMaxIterations();
 
   const { content, toolCalls } = await callLLMWithToolsFromMessages({
     messages,
-    tools: pageTools,
+    tools: fullPageTools,
     temperature: 0.5,
     maxIterations,
     model,
     ...(thinking ? { thinkingLevel: thinking } : {}),
     executeToolOverrides: {
+      read_file: executePageAgentReadFile,
+      list_dir: executePageAgentListDir,
       [PAGE_IMPLEMENTATION_COMPLETE]: async (
         args: Record<string, unknown>
       ): Promise<ToolResult> => {
@@ -322,10 +262,29 @@ Do not invent extra top-level routes beyond this page.`;
       },
       generate_image: imageExecutor,
     },
+    formatToolResultForModel: formatPageAgentToolResultForModel,
+    compactMessagesBeforeRound: ({ iteration, messages: msgs }) => {
+      if (iteration + 1 >= compactFromIter) {
+        compactPageAgentMessages(msgs, sessionState);
+      }
+    },
+    resolveToolsForIteration: (iteration, defaults) => {
+      if (batchFirstRound && iteration === 0) {
+        return batchWriteTools;
+      }
+      return defaults;
+    },
+    resolveToolChoiceForIteration: (iteration, toolsForRound) => {
+      if (batchFirstRound && iteration === 0 && toolsForRound.length > 0) {
+        return "required";
+      }
+      return "auto";
+    },
     onMessage,
     shouldAbortAfterToolResults: () => implementationComplete,
     requireTools: true,
     onToolCall: ({ name, args, iteration }) => {
+      recordPageAgentToolCall(sessionState, name, args);
       if (!onStep) return;
       if (VISIBLE_TOOL_NAMES.has(name)) {
         const filePath = String(args.path ?? "");
@@ -342,11 +301,9 @@ Do not invent extra top-level routes beyond this page.`;
           ? `reading ${String(args.path ?? "").split("/").pop() || "..."}`
           : name === "write_file" || name === "edit_file"
             ? `writing ${String(args.path ?? "").split("/").pop() || "..."}`
-            : name === "format_code"
-              ? `formatting ${String(args.path ?? "").split("/").pop() || "..."}`
-              : name === "install_package"
-                ? `installing ${String(args.package_name ?? args.packageName ?? "")}`
-                : undefined;
+            : name === "install_package"
+              ? `installing ${String(args.package_name ?? args.packageName ?? "")}`
+              : undefined;
       if (detail) {
         onStep({
           step: agentStepName,
@@ -365,7 +322,6 @@ Do not invent extra top-level routes beyond this page.`;
           `Wrap up now:\n` +
           `1. Ensure \`${targetPath}\` exists and has a \`export default\` component.\n` +
           `2. Call \`${PAGE_IMPLEMENTATION_COMPLETE}\` with a brief summary.\n` +
-          `Files are auto-formatted on write — no need to call format_code. ` +
           `Do NOT start new files or features — finalize what you have and call the completion tool.`,
       };
       msgs.push(nudge);
@@ -374,10 +330,6 @@ Do not invent extra top-level routes beyond this page.`;
     langfusePhase: lfPageImplementPhaseSlug(page.slug),
   });
 
-  // ── Completion validation ────────────────────────────────────────────────
-  // If the agent didn't explicitly call the completion tool, check whether it
-  // nevertheless produced a valid page file. This avoids a hard failure when
-  // the model does the right work but forgets the bookkeeping tool call.
   if (!implementationComplete) {
     const implicitTsx = readSiteFile(targetPath);
     const hasDefaultExport =
@@ -404,7 +356,6 @@ Do not invent extra top-level routes beyond this page.`;
     }
   }
 
-  // Validate the output regardless of explicit vs. implicit completion
   const tsx = readSiteFile(targetPath);
   if (!tsx) {
     throw new Error(

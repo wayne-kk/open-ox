@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { computeProjectFingerprint } from "./previewShared";
 
 /**
  * `projects.files_hash` may store:
@@ -44,4 +45,35 @@ export async function saveFingerprint(
     .from("projects")
     .update({ files_hash: hash, updated_at: new Date().toISOString() })
     .eq("id", projectId);
+}
+
+/**
+ * Build the `projects.files_hash` value for the current on-disk tree, preserving
+ * the static-preview origin suffix when already stored.
+ */
+export function formatLocalProjectFingerprintHash(
+  localFingerprint: string,
+  savedHash: string | null
+): string {
+  const saved = parseProjectsFilesHash(savedHash);
+  return saved.storageOriginFingerprint != null
+    ? `${localFingerprint}:${saved.storageOriginFingerprint}`
+    : localFingerprint;
+}
+
+/**
+ * After modify (or any local edit), mark disk as canonical so restore paths do
+ * not treat newer local files as stale vs Storage.
+ */
+export async function syncLocalProjectFingerprint(
+  db: SupabaseClient,
+  projectId: string
+): Promise<string> {
+  const localFp = await computeProjectFingerprint(projectId);
+  const hash = formatLocalProjectFingerprintHash(
+    localFp,
+    await getSavedFingerprint(db, projectId)
+  );
+  await saveFingerprint(db, projectId, hash);
+  return hash;
 }

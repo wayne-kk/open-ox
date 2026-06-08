@@ -7,6 +7,15 @@ import type { AgentToolCallRecord, ChatMessage, ChatMessageContent } from "./typ
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { lfToolAgentRound } from "@/lib/observability/langfuseGenerationCatalog";
 
+export type ToolLoopToolChoice = "required" | "auto" | "none";
+
+export interface FormatToolResultForModelParams {
+  name: string;
+  args: Record<string, unknown>;
+  result: ToolResult | string;
+  iteration: number;
+}
+
 function extractReasoningFromAssistantMessage(msg: unknown): string | null {
   if (!msg || typeof msg !== "object") return null;
   const o = msg as Record<string, unknown>;
@@ -41,7 +50,7 @@ export async function callLLMWithTools(params: {
   model?: string;
   thinkingLevel?: string;
   executeToolOverrides?: Record<string, (args: Record<string, unknown>) => Promise<ToolResult | string>>;
-  /** Optional: called for every message added to the conversation history. Use to collect full trajectory. */
+  /** Optional: called for every message added to the conversation history. */
   onMessage?: (msg: ChatMessage) => void;
   /**
    * Langfuse: stable phase slug for {@link lfToolAgentRound}, e.g.
@@ -198,6 +207,24 @@ export async function callLLMWithToolsFromMessages(params: {
   /** @deprecated Prefer `langfusePhase` */
   langfuseAgentLabel?: string;
   langfuseGenerationMetadata?: Record<string, unknown>;
+  /** Optional per-iteration tool subset (e.g. batch-write first round). */
+  resolveToolsForIteration?: (
+    iteration: number,
+    defaultTools: ChatCompletionTool[]
+  ) => ChatCompletionTool[];
+  /** Optional per-iteration tool_choice (defaults to auto when tools present). */
+  resolveToolChoiceForIteration?: (
+    iteration: number,
+    toolsForRound: ChatCompletionTool[]
+  ) => ToolLoopToolChoice | undefined;
+  /** Shrink tool role message content sent back to the model on the next turn. */
+  formatToolResultForModel?: (info: FormatToolResultForModelParams) => string;
+  /** Mutate messages before each LLM round (e.g. compact stale tool history). */
+  compactMessagesBeforeRound?: (context: {
+    iteration: number;
+    maxIterations: number;
+    messages: ChatMessage[];
+  }) => void;
 }): Promise<{ content: string; toolCalls: AgentToolCallRecord[] }> {
   const {
     messages,
@@ -219,6 +246,16 @@ export async function callLLMWithToolsFromMessages(params: {
   const limitThreshold = Math.floor(maxIterations * 0.8);
 
   for (let iteration = 0; iteration < maxIterations; iteration += 1) {
+    params.compactMessagesBeforeRound?.({ iteration, maxIterations, messages });
+
+    const toolsForRound = params.resolveToolsForIteration?.(iteration, tools) ?? tools;
+    activeTools = toolsForRound;
+
+    const toolChoice =
+      activeTools.length > 0
+        ? (params.resolveToolChoiceForIteration?.(iteration, activeTools) ?? "auto")
+        : undefined;
+
     // Fire the approaching-limit callback once
     if (
       onApproachingLimit &&
@@ -237,7 +274,7 @@ export async function callLLMWithToolsFromMessages(params: {
         temperature,
         ...(params.parallelToolCalls === false ? { parallel_tool_calls: false } : {}),
         tools: activeTools.length > 0 ? activeTools : undefined,
-        tool_choice: activeTools.length > 0 ? "auto" : undefined,
+        tool_choice: activeTools.length > 0 ? toolChoice : undefined,
         ...(params.thinkingLevel ? { thinking_level: params.thinkingLevel } : {}),
         langfuseGenerationName: lfToolAgentRound(
           resolveToolLoopPhase(params.langfusePhase, params.langfuseAgentLabel, "tool_prompt_messages"),
@@ -320,6 +357,7 @@ export async function callLLMWithToolsFromMessages(params: {
       emit,
       iteration,
       onToolCall: params.onToolCall,
+      formatToolResultForModel: params.formatToolResultForModel,
     });
 
     if (shouldAbortAfterToolResults?.()) {
@@ -403,10 +441,35 @@ async function dispatchToolCalls(params: {
     result: ToolResult | string;
     iteration: number;
   }) => void;
+  formatToolResultForModel?: (info: FormatToolResultForModelParams) => string;
 }): Promise<void> {
-  const { toolCalls, messages, message, executeToolOverrides, emit, onToolCall, iteration } = params;
+  const {
+    toolCalls,
+    messages,
+    message,
+    executeToolOverrides,
+    emit,
+    onToolCall,
+    iteration,
+    formatToolResultForModel,
+  } = params;
   const calls = (message.tool_calls ?? []).map(parseToolCall);
   if (calls.length === 0) return;
+
+  const serializeForModel = (
+    call: ParsedToolCall,
+    result: ToolResult | string
+  ): string => {
+    if (formatToolResultForModel) {
+      return formatToolResultForModel({
+        name: call.name,
+        args: call.args,
+        result,
+        iteration,
+      });
+    }
+    return typeof result === "string" ? result : JSON.stringify(result);
+  };
 
   const requiresSerial =
     calls.length === 1 || calls.some((c) => SERIAL_ONLY_TOOLS.has(c.name));
@@ -419,7 +482,7 @@ async function dispatchToolCalls(params: {
       const toolMsg: ChatMessage = {
         role: "tool",
         tool_call_id: call.id,
-        content: typeof result === "string" ? result : JSON.stringify(result),
+        content: serializeForModel(call, result),
       };
       messages.push(toolMsg);
       emit?.(toolMsg);
@@ -451,7 +514,7 @@ async function dispatchToolCalls(params: {
     const toolMsg: ChatMessage = {
       role: "tool",
       tool_call_id: call.id,
-      content: typeof result === "string" ? result : JSON.stringify(result),
+      content: serializeForModel(call, result),
     };
     messages.push(toolMsg);
     emit?.(toolMsg);

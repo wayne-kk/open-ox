@@ -539,6 +539,8 @@ async function isLocalProjectOutOfSyncWithStorage(
  *
  * - No `package.json` → restore full tree from Storage (or template base).
  * - With `db`: if disk fingerprint ≠ `projects.files_hash` → restore (API disk stale vs worker upload).
+ *   Callers that write locally (e.g. modify agent) must invoke `syncLocalProjectFingerprint` first so
+ *   newer on-disk edits are not mistaken for stale API copies.
  *
  * Without `db`, only the missing-package case runs (legacy callers).
  */

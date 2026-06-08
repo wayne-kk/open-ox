@@ -69,10 +69,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
         }
     }
 
-    /** Workspace listing matches local reads (`path` query); default remains Storage for API compat. */
+    /** Workspace listing reads local disk only — never restore from Storage (would overwrite un-synced modify edits). */
     if (listSource === "workspace") {
         try {
-            await restoreProjectFiles(id);
+            await fs.mkdir(projectDir, { recursive: true });
             const files = await collectFiles(projectDir, projectDir);
             files.sort((a, b) => a.localeCompare(b));
             return NextResponse.json({ files, count: files.length, source: "workspace" });

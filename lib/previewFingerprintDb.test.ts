@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseProjectsFilesHash } from "./previewFingerprintDb";
+import { formatLocalProjectFingerprintHash, parseProjectsFilesHash } from "./previewFingerprintDb";
 
 describe("parseProjectsFilesHash", () => {
   it("parses legacy file-only hash", () => {
@@ -32,5 +32,19 @@ describe("parseProjectsFilesHash", () => {
       filesFingerprint: null,
       storageOriginFingerprint: null,
     });
+  });
+});
+
+describe("formatLocalProjectFingerprintHash", () => {
+  it("preserves storage origin suffix when updating files fingerprint", () => {
+    expect(formatLocalProjectFingerprintHash("newlocalfp123456", "oldlocalfp123456:originfp99")).toBe(
+      "newlocalfp123456:originfp99"
+    );
+  });
+
+  it("uses file-only hash when no origin suffix was stored", () => {
+    expect(formatLocalProjectFingerprintHash("newlocalfp123456", "oldlocalfp123456")).toBe(
+      "newlocalfp123456"
+    );
   });
 });

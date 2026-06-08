@@ -3,6 +3,7 @@
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Loader2, RefreshCw } from "lucide-react";
+import { captureAppReturnTo } from "@/lib/navigation/appBack";
 
 type Phase = "starting" | "error";
 
@@ -88,6 +89,7 @@ export default function PreviewLaunchPage({ params }: { params: Promise<{ id: st
               </Link>
               <Link
                 href={`/studio/${id}`}
+                onClick={() => captureAppReturnTo("/projects")}
                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/12 px-4 py-2.5 text-[12px] font-medium text-white/75 hover:bg-white/[0.06]"
               >
                 进入 Studio

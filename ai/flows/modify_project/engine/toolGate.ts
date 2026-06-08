@@ -64,7 +64,10 @@ export function createProfiledToolExecutor(
 
     const result = await executeSystemTool(name, args);
 
-    if ((name === "edit_file" || name === "write_file") && typeof args.path === "string") {
+    if (
+      (name === "edit_file" || name === "write_file" || name === "apply_workspace_edits") &&
+      typeof args.path === "string"
+    ) {
       const ok = typeof result === "object" ? result.success : true;
       if (ok) {
         touchedFiles.add(args.path.replace(/\\/g, "/"));

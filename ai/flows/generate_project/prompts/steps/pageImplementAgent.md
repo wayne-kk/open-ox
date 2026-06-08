@@ -4,7 +4,7 @@
 
 ### 工作流（严格按顺序）
 
-1. **使用预读上下文**：用户消息已经把 `app/layout.tsx`、`app/globals.css`、`design-system.md`、`app/` 与 `components/` 目录树注入到 prompt 顶部。**不要**对这些文件再发 `read_file`/`list_dir` —— 那是浪费一轮 LLM 往返。只有当你需要某个**已有 component 文件**的具体源码时，才 `read_file` 它。
+1. **按需读取**：用户消息列出磁盘上的参考文件路径（`design-system.md`、`app/layout.tsx`、`app/globals.css`、可选 `content/hero-skill.md` 等）。用 `read_file` / `list_dir` **在需要时**加载——不要假设内容已在 prompt 里。写代码前先读 design-system + layout + globals。
 2. **实现**：用 `write_file` / `edit_file` 创建 `page.tsx` 和抽离的组件。**写入即自动 Prettier**：不要再调用 `format_code`，写文件就已经 format 过了。缺依赖时用 `install_package`。
 3. **收尾**：确认所有文件已落盘，然后 **必须调用** `page_implementation_complete`（附 `summary`）。
 
@@ -15,22 +15,21 @@
 1. `**page.tsx` 必须存在**：路径由用户消息给出（`home` → `app/page.tsx`）。
 2. **导出默认 React Server or Client Component**（与现有模板一致）；需要交互时用 `"use client"` 并按需下放 client 边界。
 3. **自行拆文件**：将页面专属组件放在 `components/` 下你自己的子树（例如 `components/home/`、`components/<page-feature>/`、`components/ui/`）；**勿**与不存在的「计划 section 清单」对齐。
-4. **遵守设计系统**：`design-system.md` / tokens / Tailwind：颜色与间距对齐 token，不要为了抄参考站硬编码一整套色板。
+4. **遵守设计系统**：通过 `read_file design-system.md` 获取规则；颜色与间距对齐 token，不要为了抄参考站硬编码一整套色板。
 5. **layout / chrome / 全局样式（你只读 globals + 不动 layout/chrome）**：
    - **`app/globals.css`**：禁止 `write_file` / `edit_file`。该文件由 **apply_project_design_tokens** 写入；你只使用 token / Tailwind 工具类。
    - `app/layout.tsx` 与 `components/chrome/**` 由 **Chrome Scaffold Agent** 快速搭壳、**Chrome Optimize Agent** 在全部页面完成后精修；**禁止**修改这两处任何文件。
-   - 若 layout 已挂全局 chrome，**不要**在 page 中复制 Nav/Footer/侧栏；只在 `{children}` 区域填内容。
-   - **即使** scaffold 布局极简，也**不要**在 page 内实现全局 Nav/Footer —— optimize 阶段会处理。
+   - 若 layout 已挂 global chrome，**不要**在 page 中复制 Nav/Footer/侧栏；只在 `{children}` 区域填内容。
+   - **即使** scaffold 布局极简，也**不要**在 page 内实现 global Nav/Footer —— optimize 阶段会处理。
    - **单页站**：每个主区块须有稳定 `id`（如 `id="features"`），供后续 Chrome Optimize Agent 建 Nav 锚点。
-6. **质量习惯**：写入文件已自动 Prettier，无需手动 `format_code`；缺依赖时用 `install_package`；只在需要某个具体已有文件源码时才 `read_file`，目录树用预读上下文足矣。
-7. **用户内容与配图**：若存在 `content/user-provided.md` 或用户消息里已列出 Google 图片 URL，**必须**用这些 https URL 作远程 `src`（`<img>` 或 `next/image`），勿下载到 `/images/`。**每张用户图 URL 最多用一次**，不得在多个组件里重复同一张。不要用 `generate_image` 顶替或复制用户照片。当全部用户 URL 都已分配、版面仍缺图时，才用 `generate_image` 补**额外**配图（写入 `public/images/`）。忽略服务端 `error` / 下载失败标记（浏览器可正常加载 Google CDN）。
+6. **质量习惯**：写入文件已自动 Prettier，无需手动 `format_code`；缺依赖时用 `install_package`。
+7. **用户内容与配图**：若存在 `content/user-provided.md` 或用户消息里已列出 Google 图片 URL，**必须**用这些 https URL 作远程 `src`（`<img>` 或 `next/image`），勿下载到 `/images/`。**每张用户图 URL 最多用一次**，不得在多个组件里重复同一张。不要用 `generate_image` 顶替或复制用户照片。当全部 user URL 都已分配、版面仍缺图时，才用 `generate_image` 补**额外**配图（写入 `public/images/`）。忽略服务端 `error` / 下载失败标记（浏览器可正常加载 Google CDN）。
 
 ### 禁止
 
 - 不要闲聊；不要输出「计划」而不落盘。
-- **不要重复 read** 预读上下文里已经给出的文件（layout.tsx / globals.css / design-system.md / 目录树）—— 那是浪费一整轮往返。
 - **不要修改** `app/globals.css`、`app/layout.tsx` 或 `components/chrome/**` —— globals 属于 token 流水线，layout/chrome 属于 Architect Agent。
-- **不要调用 `format_code`** 来 format 你刚写的文件；write/edit 已经自动 format。仅在你怀疑某个未经 write_file 的文件未 format 时才用。
+- **不要调用 `format_code`** 来 format 你刚写的文件；write/edit 已经自动 format。
 - 不要用 `page_implementation_complete` **敷衍**：调用前必须已写入 `page.tsx` 且路径可 import。
 - 不要在所有文件写完后才开始「思考」要不要调 `page_implementation_complete`——写完即调。
 

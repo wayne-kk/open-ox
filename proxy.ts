@@ -11,10 +11,8 @@ function safeRedirectTarget(pathWithQuery: string): string {
 
 const PROTECTED_PREFIXES = [
   "/studio",
-  "/trajectories",
   "/llm-test",
   "/test-image",
-  "/api/trajectories",
   "/api/llm-test",
   "/api/test-image",
 ];

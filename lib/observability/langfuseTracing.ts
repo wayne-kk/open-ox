@@ -101,16 +101,11 @@ export function getLangfuseRunContext(): LangfuseRunContext | undefined {
  *
  * - If the client sends `langfuseSessionId`, that wins (allows custom grouping).
  * - Otherwise uses **`projectId` only** — all traces for that site (intent / generate / modify)
- *   share one Session. (Trajectory run ids are intentionally **not** folded in, so each HTTP
- *   batch does not create a separate Session.)
- *
- * @param trajectoryRunId Unused; kept for call-site compatibility.
+ *   share one Session.
  */
 export function resolveLangfuseSessionId(params: {
   projectId: string;
   clientSessionId?: string | null;
-  /** @deprecated Ignored. Session is keyed by `projectId` unless `clientSessionId` is set. */
-  trajectoryRunId?: string | null;
 }): string {
   const client = params.clientSessionId?.trim();
   if (client) return client;

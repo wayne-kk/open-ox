@@ -3,7 +3,6 @@ import { join, relative } from "path";
 import { getSiteRoot as projectManagerGetSiteRoot } from "@/lib/projectManager";
 import { getSiteRoot, runWithSiteRoot } from "@/ai/tools/system/common";
 import { clearFileTracking } from "@/ai/tools";
-import { getModelId } from "@/lib/config/models";
 import { validateSkillFrontmatter } from "@/ai/shared/skillDiscovery";
 import { syncSiteValidationMarkers, readSiteFile, getSkillPromptsRoot } from "./shared/files";
 import {
@@ -286,7 +285,6 @@ async function runArchitectScaffoldStep(params: {
   designSystem: string;
   artifactLogger: ArtifactLogger;
   logger: StepLogger;
-  trajectoryCollector?: import("./trajectoryCollector").GenerateTrajectoryCollector;
   onStep?: (step: BuildStep) => void;
   referenceScreenshotDataUrl?: string | null;
   screenshotGuardrailId?: string | null;
@@ -296,13 +294,10 @@ async function runArchitectScaffoldStep(params: {
     designSystem,
     artifactLogger,
     logger,
-    trajectoryCollector,
     onStep,
     referenceScreenshotDataUrl,
     screenshotGuardrailId,
   } = params;
-  const onMessage = trajectoryCollector?.createEpisodeCollector(ARCHITECT_SCAFFOLD_AGENT_STEP);
-
   const outcome = await logger.timed(
     ARCHITECT_SCAFFOLD_AGENT_STEP,
     () =>
@@ -311,7 +306,6 @@ async function runArchitectScaffoldStep(params: {
         designSystem,
         referenceScreenshotDataUrl: referenceScreenshotDataUrl ?? null,
         screenshotGuardrailId: screenshotGuardrailId ?? null,
-        onMessage,
         onStep,
       }),
     (r) => ({
@@ -353,7 +347,6 @@ async function runChromeOptimizeStep(params: {
   pageSummaries: PageImplementSummary[];
   artifactLogger: ArtifactLogger;
   logger: StepLogger;
-  trajectoryCollector?: import("./trajectoryCollector").GenerateTrajectoryCollector;
   onStep?: (step: BuildStep) => void;
   referenceScreenshotDataUrl?: string | null;
   screenshotGuardrailId?: string | null;
@@ -366,12 +359,10 @@ async function runChromeOptimizeStep(params: {
     pageSummaries,
     artifactLogger,
     logger,
-    trajectoryCollector,
     onStep,
     referenceScreenshotDataUrl,
     screenshotGuardrailId,
   } = params;
-  const onMessage = trajectoryCollector?.createEpisodeCollector(CHROME_OPTIMIZE_AGENT_STEP);
 
   const outcome = await logger.timed(
     CHROME_OPTIMIZE_AGENT_STEP,
@@ -383,7 +374,6 @@ async function runChromeOptimizeStep(params: {
         pageSummaries,
         referenceScreenshotDataUrl: referenceScreenshotDataUrl ?? null,
         screenshotGuardrailId: screenshotGuardrailId ?? null,
-        onMessage,
         onStep,
       }),
     (r) => ({
@@ -416,7 +406,6 @@ async function generatePages(params: {
   artifactLogger: ArtifactLogger;
   logger: StepLogger;
   skipImplementedPages?: Set<string>;
-  trajectoryCollector?: import("./trajectoryCollector").GenerateTrajectoryCollector;
   onStep?: (step: BuildStep) => void;
 }): Promise<{
   files: string[];
@@ -430,7 +419,6 @@ async function generatePages(params: {
     artifactLogger,
     logger,
     skipImplementedPages,
-    trajectoryCollector,
   } = params;
   const collectedFiles: string[] = [];
   const collectedPendingImages: PendingImage[] = [];
@@ -454,7 +442,6 @@ async function generatePages(params: {
         };
       }
 
-      const onMessage = trajectoryCollector?.createEpisodeCollector(agentStepName);
       const outcome = await logger.timed(
         agentStepName,
         async () =>
@@ -485,7 +472,6 @@ async function generatePages(params: {
                 projectContext: runtimeContext,
                 heroSkillPrompt: heroSkillPromptInner,
                 heroSkillId: heroSkillIdInner,
-                onMessage,
                 onStep: params.onStep,
               });
             },
@@ -750,14 +736,6 @@ async function runGenerateProjectInner(
   const result = createInitialResult(logger);
   result.logDirectory = artifactLogger.runDirRelative;
 
-  // Trajectory collector — records conversation history from agent steps
-  const { GenerateTrajectoryCollector } = await import("./trajectoryCollector");
-  const trajectoryCollector = new GenerateTrajectoryCollector(
-    options.projectId,
-    userInput,
-    getModelId()
-  );
-
   const cp = options.checkpoint;
 
   const runPipeline = async (): Promise<void> => {
@@ -860,7 +838,8 @@ async function runGenerateProjectInner(
       await withLangfuseSpan(LfSpanGen.analyzeBlueprintParallel, async () => {
         logger.startStep("analyze_project_requirement");
         logger.startStep("infer_design_intent");
-        const [analyzeResult, inferResult] = await Promise.all([
+        logger.startStep("extract_user_provided_content");
+        const [analyzeResult, inferResult, extractResult] = await Promise.all([
           stepAnalyzeProjectRequirement(
             effectiveUserInput,
             (name, args, result) => {
@@ -878,6 +857,10 @@ async function runGenerateProjectInner(
             referenceImageBase64: referenceScreenshot,
             screenshotGuardrailId,
           }),
+          stepExtractUserProvidedContent({
+            userInput: effectiveUserInput,
+            referenceImageBase64: referenceScreenshot,
+          }),
         ]);
         logger.logStep(
           "analyze_project_requirement",
@@ -893,7 +876,28 @@ async function runGenerateProjectInner(
           undefined,
           inferResult.trace
         );
-        rawBlueprint = analyzeResult.blueprint;
+        logger.logStep(
+          "extract_user_provided_content",
+          "ok",
+          extractResult.content
+            ? `${extractResult.content.images?.length ?? 0} images, address=${Boolean(extractResult.content.business?.address)}`
+            : "none",
+          undefined,
+          extractResult.trace
+        );
+        rawBlueprint = { ...analyzeResult.blueprint, userProvidedContent: undefined };
+        if (extractResult.content && hasUserProvidedContent(extractResult.content)) {
+          rawBlueprint = {
+            ...rawBlueprint,
+            userProvidedContent: extractResult.content,
+          };
+          await persistJsonArtifact(
+            artifactLogger,
+            "extract_user_provided_content",
+            "output",
+            extractResult.content
+          );
+        }
         inferredDesignIntent = inferResult;
         await persistJsonArtifact(artifactLogger, "analyze_project_requirement", "output", rawBlueprint);
         await persistTextArtifact(artifactLogger, "infer_design_intent", "output", inferredDesignIntent.text, "md");
@@ -909,38 +913,6 @@ async function runGenerateProjectInner(
           keywords: ["clean", "professional", "focused", "confident", "modern"],
         },
       };
-    }
-
-    // ── Organize user query (after analyze, before plan) ──
-    if (!cp?.skipAnalyze) {
-      rawBlueprint = { ...rawBlueprint, userProvidedContent: undefined };
-
-      const extractResult = await logger.timed(
-        "extract_user_provided_content",
-        () =>
-          stepExtractUserProvidedContent({
-            userInput: effectiveUserInput,
-            referenceImageBase64: referenceScreenshot,
-          }),
-        (r) => ({
-          detail: r.content
-            ? `${r.content.images?.length ?? 0} images, address=${Boolean(r.content.business?.address)}`
-            : "none",
-          trace: r.trace,
-        })
-      );
-      if (extractResult.content && hasUserProvidedContent(extractResult.content)) {
-        rawBlueprint = {
-          ...rawBlueprint,
-          userProvidedContent: extractResult.content,
-        };
-        await persistJsonArtifact(
-          artifactLogger,
-          "extract_user_provided_content",
-          "output",
-          extractResult.content
-        );
-      }
     }
 
     const normalizedBlueprint = normalizeBlueprint(rawBlueprint);
@@ -1133,7 +1105,6 @@ async function runGenerateProjectInner(
           designSystem,
           artifactLogger,
           logger,
-          trajectoryCollector,
           onStep,
           referenceScreenshotDataUrl: referenceScreenshot,
           screenshotGuardrailId,
@@ -1156,7 +1127,6 @@ async function runGenerateProjectInner(
         artifactLogger,
         logger,
         skipImplementedPages: cp?.implementedPages,
-        trajectoryCollector,
         onStep,
       })
     );
@@ -1176,7 +1146,6 @@ async function runGenerateProjectInner(
           pageSummaries: pageOutcome.pageSummaries,
           artifactLogger,
           logger,
-          trajectoryCollector,
           onStep,
           referenceScreenshotDataUrl: referenceScreenshot,
           screenshotGuardrailId,
@@ -1383,13 +1352,6 @@ async function runGenerateProjectInner(
       dependencyInstallFailures: result.dependencyInstallFailures,
     });
     result.success = true;
-
-    // Save trajectory
-    trajectoryCollector.save(
-      result.generatedFiles,
-      result.verificationStatus === "passed",
-      result.steps?.length ?? 0
-    ).catch(err => console.warn("[trajectory] Generate trajectory save failed:", err));
   } catch (error) {
     result.error = error instanceof Error ? error.message : String(error);
     result.success = false;
