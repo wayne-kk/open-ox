@@ -17,14 +17,14 @@ describe("langfuseTraceCatalog", () => {
 
   it("orders generate spans with numeric segments", () => {
     expect(LfSpanGen.fullPipeline.includes(".gen.00_")).toBe(true);
-    expect(LfSpanGen.buildVerifyAndRepair.includes(".gen.09_")).toBe(true);
+    expect(LfSpanGen.buildVerifyAndRepair.includes(".gen.10_")).toBe(true);
     expect(LfSpanGen.implementPages < LfSpanGen.installDependenciesAfterImplement).toBe(true);
   });
 
   it("sanitizes dynamic span slugs", () => {
     expect(lfSpanGenPage("home")).toBe("ox.span.gen.06b_page__home");
     expect(lfSpanGenPage("About Us")).toBe("ox.span.gen.06b_page__About_Us");
-    expect(lfSpanGenInstallDeps("generated")).toBe("ox.span.gen.07a_install_deps__generated");
+    expect(lfSpanGenInstallDeps("generated")).toBe("ox.span.gen.08a_install_deps__generated");
   });
 
   it("exposes intent and modify spans", () => {
