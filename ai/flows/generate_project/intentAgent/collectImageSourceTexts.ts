@@ -1,5 +1,5 @@
 import type { ChatMessage } from "@/ai/shared/llm/types";
-import { userTurnPlainTextForClassifier } from "../shared/userVisionContent";
+import { plainTextFromUserMessageContent } from "../shared/userVisionContent";
 
 /** Bootstrap + user turns + yield drafts — used by extract_user_provided_content for image URL scan. */
 export function collectIntentAgentImageSourceTexts(params: {
@@ -12,7 +12,7 @@ export function collectIntentAgentImageSourceTexts(params: {
 
   for (const m of params.messages) {
     if (m.role === "user") {
-      const plain = userTurnPlainTextForClassifier(m.content);
+      const plain = plainTextFromUserMessageContent(m.content);
       if (plain.trim()) out.push(plain);
       continue;
     }

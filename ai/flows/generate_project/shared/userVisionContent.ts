@@ -33,6 +33,23 @@ export function buildUserVisionContent(
   return parts;
 }
 
+/** Extract plain text from persisted user message content (string or vision parts). */
+export function plainTextFromUserMessageContent(content: ChatMessageContent): string {
+  if (content == null) return "";
+  if (typeof content === "string") {
+    return userTurnPlainTextForClassifier(content, false);
+  }
+  let text = "";
+  let hasImage = false;
+  for (const part of content) {
+    if (part.type === "text" && part.text.trim()) {
+      text = text ? `${text}\n${part.text.trim()}` : part.text.trim();
+    }
+    if (part.type === "image_url") hasImage = true;
+  }
+  return userTurnPlainTextForClassifier(text, hasImage);
+}
+
 /** Plain string for classifiers / merge logic (no binary). */
 export function userTurnPlainTextForClassifier(userText: string, hasImage: boolean): string {
   const t = userText.trim();
