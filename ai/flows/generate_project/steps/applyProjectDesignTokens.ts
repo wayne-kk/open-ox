@@ -9,6 +9,10 @@ import { stepTraceFromLlmCompletion } from "../shared/llmTrace";
 import type { StepTrace } from "../types";
 import { getModelForStep } from "@/lib/config/models";
 
+/** Headroom for full globals.css after Gemini hidden reasoning tokens (see completion_tokens_details.reasoning_tokens). */
+const DESIGN_TOKENS_MAX_OUTPUT = 16_384;
+const DESIGN_TOKENS_RETRY_MAX_OUTPUT = 24_576;
+
 function looksLikeGlobalsCss(text: string): boolean {
   const t = text.trim();
   if (t.length < 20) return false;
@@ -95,24 +99,52 @@ Generate the complete updated globals.css. Be concise — output only the CSS co
     onProgress?.(`waiting for model response... ${waitingSec}s`);
   }, 10_000);
 
-  let raw: string;
   let llmResultForTrace: Awaited<ReturnType<typeof callLLMWithMeta>> | null = null;
   let tokenUsage: { input?: number; output?: number } = {};
   try {
-    const llmResult = await callLLMWithMeta(
-      systemPrompt,
-      userMessage,
-      0.3,
-      8_000,
-      stepModel,
-      { langfuseName: lfPlain(LfPlain.applyDesignTokens) }
-    );
-    llmResultForTrace = llmResult;
-    raw = llmResult.content;
-    tokenUsage = {
-      input: llmResult.inputTokens,
-      output: llmResult.outputTokens,
-    };
+    const llmAttempts: Array<{ maxTokens: number; label: string }> = [
+      { maxTokens: DESIGN_TOKENS_MAX_OUTPUT, label: "minimal thinking" },
+      { maxTokens: DESIGN_TOKENS_RETRY_MAX_OUTPUT, label: "minimal thinking (retry)" },
+    ];
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < llmAttempts.length; attempt += 1) {
+      const { maxTokens, label } = llmAttempts[attempt]!;
+      if (attempt > 0) {
+        onProgress?.(`retrying design token LLM (${label}, max_tokens=${maxTokens})...`);
+      }
+      try {
+        const llmResult = await callLLMWithMeta(
+          systemPrompt,
+          userMessage,
+          0.3,
+          maxTokens,
+          stepModel,
+          {
+            langfuseName: lfPlain(LfPlain.applyDesignTokens),
+            // CSS synthesis is deterministic; cap hidden reasoning so output budget remains for globals.css.
+            thinkingLevel: "minimal",
+          }
+        );
+        llmResultForTrace = llmResult;
+        tokenUsage = {
+          input: llmResult.inputTokens,
+          output: llmResult.outputTokens,
+        };
+        lastErr = undefined;
+        break;
+      } catch (err) {
+        lastErr = err;
+        const msg = err instanceof Error ? err.message : String(err);
+        const retryable =
+          attempt < llmAttempts.length - 1 &&
+          (msg.includes("visible content empty") || msg.includes("max_tokens reached"));
+        if (!retryable) throw err;
+      }
+    }
+    if (lastErr) throw lastErr;
+    if (!llmResultForTrace) {
+      throw new Error("apply_project_design_tokens: LLM returned no result");
+    }
   } finally {
     if (heartbeat) {
       clearInterval(heartbeat);
@@ -125,6 +157,7 @@ Generate the complete updated globals.css. Be concise — output only the CSS co
     `LLM responded in ${elapsed}s (${stepModel}, in=${tokenUsage.input ?? "?"}, out=${tokenUsage.output ?? "?"}), parsing CSS...`
   );
 
+  const raw = llmResultForTrace!.content;
   const globalsCss = parseDesignTokensResponse(raw);
 
   onProgress?.(`writing globals.css (${globalsCss.length} chars)...`);

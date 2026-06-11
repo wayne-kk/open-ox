@@ -654,6 +654,11 @@ export interface RunGenerateProjectOptions {
   langfuseTraceInput?: unknown;
   /** When set, passed into `project_intent_guide` vision (direct /api/ai or worker). */
   userReferenceImageBase64?: string | null;
+  /**
+   * Extra texts for `extract_user_provided_content` image URL scan (bootstrap userPrompt,
+   * intent-agent session). `userInput` may be a summarized merged_brief without verbatim URLs.
+   */
+  userImageSourceTexts?: string[];
 }
 
 async function ensureLangfuseGenerateTrace<T>(
@@ -859,6 +864,7 @@ async function runGenerateProjectInner(
           }),
           stepExtractUserProvidedContent({
             userInput: effectiveUserInput,
+            imageSourceTexts: options.userImageSourceTexts,
             referenceImageBase64: referenceScreenshot,
           }),
         ]);
@@ -880,7 +886,7 @@ async function runGenerateProjectInner(
           "extract_user_provided_content",
           "ok",
           extractResult.content
-            ? `${extractResult.content.images?.length ?? 0} images, address=${Boolean(extractResult.content.business?.address)}`
+            ? `${extractResult.content.images?.length ?? 0} images (scan=${(extractResult.trace.output as { imagesFromPromptScan?: number })?.imagesFromPromptScan ?? 0}), address=${Boolean(extractResult.content.business?.address)}`
             : "none",
           undefined,
           extractResult.trace

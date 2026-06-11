@@ -22,6 +22,7 @@ import type {
   IntentAgentYieldPayload,
   IntentProgressEvent,
 } from "./types";
+import { collectIntentAgentImageSourceTexts } from "./collectImageSourceTexts";
 import { buildUserVisionContent, userTurnPlainTextForClassifier } from "../shared/userVisionContent";
 import { classifyIntentAgentInputProfile } from "./intentAgentInputProfile";
 import type { IntentAgentTraceStep } from "./types";
@@ -169,7 +170,7 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
 
   type TurnResolution =
     | { type: "yield"; payload: IntentAgentYieldPayload }
-    | { type: "commit"; mergedBrief: string };
+    | { type: "commit"; mergedBrief: string; imageSourceTexts: string[] };
 
   const box: { resolution: TurnResolution | null } = { resolution: null };
 
@@ -217,6 +218,10 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
           bootstrapUserPrompt,
           substance,
         }).trim(),
+        imageSourceTexts: collectIntentAgentImageSourceTexts({
+          bootstrapUserPrompt,
+          messages,
+        }),
       };
       return JSON.stringify({ ok: true, halted: true, action: "commit_generate" });
     }),
@@ -339,6 +344,7 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
     return {
       status: "commit_generate",
       mergedBrief: merged,
+      imageSourceTexts: resolution.imageSourceTexts,
       turnCounter,
       toolCalls,
       ...turnMeta,

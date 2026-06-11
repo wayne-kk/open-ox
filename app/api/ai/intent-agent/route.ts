@@ -272,6 +272,9 @@ export async function POST(req: Request) {
           const intentRunPayload: GenerationRunPayloadBody = {
             requestingUserId: user.id,
             effectivePrompt: mergedBrief,
+            ...(intentResult.imageSourceTexts?.length
+              ? { userImageSourceTexts: intentResult.imageSourceTexts }
+              : {}),
             effectiveModel: modelOverride ?? meta.modelId ?? undefined,
             effectiveGenerationMode: meta.generationMode ?? "web",
             preCreatedProjectId: projectId,

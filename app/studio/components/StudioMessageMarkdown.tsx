@@ -2,6 +2,7 @@
 
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
+import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 
@@ -120,7 +121,7 @@ export function StudioMessageMarkdown({
         className
       )}
     >
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={components}>
         {trimmed}
       </ReactMarkdown>
     </div>

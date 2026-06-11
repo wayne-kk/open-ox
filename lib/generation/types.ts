@@ -14,6 +14,8 @@ export type GenerationRunPayloadBody = {
   useDatabasePrompts: boolean;
   /** Data URL or raw base64 — worker passes to `project_intent_guide` vision when set */
   initialImageBase64?: string;
+  /** Bootstrap / intent-session texts for image URL extraction (not merged into effectivePrompt). */
+  userImageSourceTexts?: string[];
 };
 
 export type GenerationRunRow = {

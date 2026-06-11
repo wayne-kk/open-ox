@@ -142,6 +142,10 @@ export async function executeGenerationRun(args: {
     let persistTail: Promise<void> = Promise.resolve();
 
     const projectForLiveSteps = await getProject(admin, projectId);
+    const userImageSourceTexts = [
+      ...(payload.userImageSourceTexts ?? []),
+      projectForLiveSteps?.userPrompt ?? "",
+    ].filter((t) => t.trim());
     const resolvedReferenceScreenshot =
       (typeof payload.initialImageBase64 === "string" && payload.initialImageBase64.trim()
         ? payload.initialImageBase64.trim()
@@ -201,6 +205,8 @@ export async function executeGenerationRun(args: {
           useDatabasePrompts,
           checkpoint,
           enableIntentGuide: payload.enableIntentGuide !== false,
+          userImageSourceTexts:
+            userImageSourceTexts.length > 0 ? userImageSourceTexts : undefined,
           userReferenceImageBase64: resolvedReferenceScreenshot ?? undefined,
           langfuseUserId: requestingUserId,
           langfuseSessionId: langfuseSessionKey,

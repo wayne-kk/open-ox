@@ -255,10 +255,21 @@ export function createUserProvidedContentToolExecutors(
           error: "provide url OR url_prefix + url_suffix for the full https link",
         };
       }
+      const caption = trimStr(args.caption);
+      const role = trimStr(args.role);
+      const existing = acc.images.find((img) => img.url === url);
+      if (existing) {
+        if (caption) existing.caption = caption;
+        if (role) existing.role = role;
+        return {
+          success: true,
+          output: `image already recorded (#${acc.images.indexOf(existing) + 1}); metadata updated if provided`,
+        };
+      }
       acc.images.push({
         url,
-        caption: trimStr(args.caption),
-        role: trimStr(args.role),
+        caption,
+        role,
       });
       console.log(
         `[extract_user_provided_content] image #${acc.images.length} (${url.length} chars)\n  url: ${url}`

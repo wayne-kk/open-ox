@@ -42,6 +42,8 @@ export interface IntentAgentTurnResult {
   status: IntentAgentTurnStatus;
   yieldPayload?: IntentAgentYieldPayload;
   mergedBrief?: string;
+  /** Bootstrap + session texts for downstream image URL extraction. */
+  imageSourceTexts?: string[];
   errorMessage?: string;
   turnCounter: number;
   toolCalls: AgentToolCallRecord[];

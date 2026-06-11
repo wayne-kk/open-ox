@@ -1,4 +1,4 @@
-import { getModelId } from "../../../../lib/config/models";
+import { getModelId, type StepThinkingLevel } from "../../../../lib/config/models";
 import { chatCompletion } from "@/ai/shared/llm/gateway";
 import { callLLMWithTools, callLLMWithToolsFromMessages } from "@/ai/shared/llm/toolLoop";
 import { throwClassifiedLLMError } from "@/ai/shared/llm/errorClassifier";
@@ -17,6 +17,8 @@ export { chatCompletion, callLLMWithTools, callLLMWithToolsFromMessages };
 export type CallLLMObservability = {
   /** Use {@link lfPlain} + {@link LfPlain} for stable Langfuse names. */
   langfuseName: string;
+  /** Gemini-compatible gateways: caps hidden reasoning so visible output keeps budget. */
+  thinkingLevel?: StepThinkingLevel;
 };
 
 export interface LLMCallResult {
@@ -78,12 +80,22 @@ export async function callLLMWithMetaUserContent(
       ],
       temperature,
       ...(maxTokens != null && maxTokens > 0 ? { max_tokens: maxTokens } : {}),
+      ...(observability?.thinkingLevel ? { thinking_level: observability.thinkingLevel } : {}),
       langfuseGenerationName: observability?.langfuseName ?? lfPlain(LfPlain.unspecified),
     });
 
     const content = res.choices[0]?.message?.content?.trim() ?? "";
     if (!content && res.choices[0]?.finish_reason === "length") {
-      throw new Error(`LLM response truncated (max_tokens reached). Model: ${resolvedModel}`);
+      const reasoningTokens = (
+        res.usage as { completion_tokens_details?: { reasoning_tokens?: number } } | undefined
+      )?.completion_tokens_details?.reasoning_tokens;
+      const reasoningHint =
+        reasoningTokens != null && reasoningTokens > 0
+          ? ` Hidden reasoning consumed ~${reasoningTokens} completion tokens before any visible CSS/text was emitted.`
+          : "";
+      throw new Error(
+        `LLM response truncated (max_tokens reached; visible content empty).${reasoningHint} Model: ${resolvedModel}`
+      );
     }
 
     return {

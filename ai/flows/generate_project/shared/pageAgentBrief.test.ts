@@ -1,23 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
   buildPageAgentUserMessage,
-  PAGE_AGENT_DESIGN_SYSTEM_PATH,
-  PAGE_AGENT_GLOBALS_PATH,
   PAGE_AGENT_HERO_SKILL_PATH,
-  PAGE_AGENT_LAYOUT_PATH,
 } from "./pageAgentBrief";
 import {
   compactPageAgentMessages,
+  createBootstrapGuardedReadExecutor,
   createPageAgentSessionState,
+  filterPageAgentToolsForPhase,
   formatPageAgentToolResultForModel,
   normalizeAgentRelativePath,
   resolvePageAgentMaxIterations,
+  shouldRunPageAgentCompaction,
 } from "./pageAgentToolLoop";
 import type { ChatMessage } from "@/ai/shared/llm/types";
 
 describe("pageAgentBrief", () => {
-  it("buildPageAgentUserMessage lists on-disk paths instead of inlining content", () => {
-    const hugeDs = "x".repeat(20_000);
+  it("buildPageAgentUserMessage focuses on task and bootstrap note", () => {
     const msg = buildPageAgentUserMessage({
       targetPath: "app/page.tsx",
       slug: "home",
@@ -36,12 +35,10 @@ describe("pageAgentBrief", () => {
       userImageCount: 0,
       completeToolName: "page_implementation_complete",
     });
-    expect(msg).toContain(PAGE_AGENT_DESIGN_SYSTEM_PATH);
-    expect(msg).toContain(PAGE_AGENT_LAYOUT_PATH);
-    expect(msg).toContain(PAGE_AGENT_GLOBALS_PATH);
-    expect(msg).toContain(PAGE_AGENT_HERO_SKILL_PATH);
-    expect(msg).toContain("read_file");
-    expect(msg).not.toContain(hugeDs);
+    expect(msg).toContain("Workspace context");
+    expect(msg).toContain("pre-loads design-system");
+    expect(msg).toContain("do not re-read");
+    expect(msg).toContain("Implement first");
     expect(msg.length).toBeLessThan(4_000);
   });
 
@@ -72,10 +69,10 @@ describe("pageAgentToolLoop", () => {
     expect(normalizeAgentRelativePath("./app/layout.tsx")).toBe("app/layout.tsx");
   });
 
-  it("resolvePageAgentMaxIterations defaults to 24", () => {
+  it("resolvePageAgentMaxIterations defaults to 36", () => {
     const prev = process.env.PAGE_IMPLEMENT_AGENT_MAX_ITERATIONS;
     delete process.env.PAGE_IMPLEMENT_AGENT_MAX_ITERATIONS;
-    expect(resolvePageAgentMaxIterations()).toBe(24);
+    expect(resolvePageAgentMaxIterations()).toBe(36);
     if (prev !== undefined) process.env.PAGE_IMPLEMENT_AGENT_MAX_ITERATIONS = prev;
   });
 
@@ -103,7 +100,7 @@ describe("pageAgentToolLoop", () => {
   });
 
   it("compactPageAgentMessages preserves head and tail", () => {
-    const state = createPageAgentSessionState();
+    const state = createPageAgentSessionState("bootstrap note");
     state.writtenPaths.push("app/page.tsx");
     const messages: ChatMessage[] = [
       { role: "system", content: "sys" },
@@ -115,12 +112,40 @@ describe("pageAgentToolLoop", () => {
       { role: "assistant", content: "recent" },
       { role: "tool", tool_call_id: "c", content: "t3" },
     ];
-    compactPageAgentMessages(messages, state, { keepRecent: 2 });
+    compactPageAgentMessages(messages, state, { keepRecent: 2, preserveHeadCount: 2 });
     expect(messages[0].role).toBe("system");
     expect(messages[1].role).toBe("user");
     expect(messages[2].role).toBe("system");
     expect(String(messages[2].content)).toContain("app/page.tsx");
+    expect(String(messages[2].content)).toContain("Do NOT re-read bootstrap");
     expect(messages.at(-1)?.content).toBe("t3");
     expect(messages.length).toBe(5);
+  });
+
+  it("shouldRunPageAgentCompaction waits until first write", () => {
+    const state = createPageAgentSessionState();
+    expect(shouldRunPageAgentCompaction(state, 10, 8)).toBe(false);
+    state.writtenPaths.push("app/page.tsx");
+    expect(shouldRunPageAgentCompaction(state, 6, 8)).toBe(false);
+    expect(shouldRunPageAgentCompaction(state, 7, 8)).toBe(true);
+  });
+
+  it("filterPageAgentToolsForPhase hides observe tools in act mode", () => {
+    const tools = [
+      { type: "function" as const, function: { name: "read_file", parameters: { type: "object" } } },
+      { type: "function" as const, function: { name: "write_file", parameters: { type: "object" } } },
+    ];
+    const actOnly = filterPageAgentToolsForPhase(tools, false);
+    expect(actOnly.map((t) => t.function?.name)).toEqual(["write_file"]);
+  });
+
+  it("createBootstrapGuardedReadExecutor blocks bootstrap paths", async () => {
+    const paths = new Set(["design-system.md"]);
+    const exec = createBootstrapGuardedReadExecutor(paths);
+    const result = await exec({ path: "design-system.md" });
+    expect(typeof result).toBe("object");
+    if (typeof result === "object" && result && "output" in result) {
+      expect(String(result.output)).toContain("Already in workspace bootstrap");
+    }
   });
 });

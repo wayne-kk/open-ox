@@ -10,6 +10,7 @@ import { StepRow } from "./StepRow";
 import { BlueprintOverview } from "./BlueprintOverview";
 import { MemoryDebugPanel } from "./MemoryDebugPanel";
 import { StudioMessageMarkdown } from "./StudioMessageMarkdown";
+import { StudioMarkdownTextarea } from "./StudioMarkdownTextarea";
 import { SlashMenu } from "@/app/components/ui/SlashMenu";
 import { useSlashMenu } from "@/app/hooks/useSlashMenu";
 import {
@@ -178,9 +179,7 @@ function ModifyBubble({ record }: { record: ModifyRecord }) {
                         className="max-h-64 rounded-lg border border-white/10 object-cover"
                     />
                 )}
-                <pre className="whitespace-pre-wrap font-body text-[14px] leading-7 text-foreground">
-                    {record.instruction}
-                </pre>
+                <StudioMessageMarkdown content={record.instruction} />
             </div>
         </ChatBubble>
     );
@@ -495,9 +494,7 @@ export function BuildConversation({
                                                     />
                                                 </div>
                                             ) : null}
-                                            <pre className="whitespace-pre-wrap break-all font-body [overflow-wrap:anywhere]">
-                                                {message.content}
-                                            </pre>
+                                            <StudioMessageMarkdown content={message.content} />
                                         </>
                                     ) : (
                                         <StudioMessageMarkdown content={message.content} />
@@ -741,9 +738,7 @@ export function BuildConversation({
                                         className="max-h-64 rounded-lg border border-white/10 object-cover"
                                     />
                                 )}
-                                <pre className="whitespace-pre-wrap font-body text-[14px] leading-7 text-foreground">
-                                    {pendingModifyInstruction}
-                                </pre>
+                                <StudioMessageMarkdown content={pendingModifyInstruction} />
                             </div>
                         </ChatBubble>
                     )}
@@ -882,18 +877,21 @@ export function BuildConversation({
                                 <span className="font-mono text-[10px] text-muted-foreground/60">Image attached</span>
                             </div>
                         )}
-                        <textarea
+                        <StudioMarkdownTextarea
                             id="modify-input"
                             rows={1}
                             disabled={modifying}
-                            className="w-full resize-none border-0 bg-transparent px-1 py-1 font-body text-[14px] leading-7 text-foreground outline-none placeholder:text-white/50 max-h-[200px] overflow-y-auto scrollbar-hidden disabled:opacity-40 disabled:cursor-not-allowed"
                             value={modifyInstruction}
+                            onAutoResize={(el) => {
+                                el.style.height = "auto";
+                                el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+                            }}
                             onChange={(e) => {
                                 setModifyInstruction(e.target.value);
                                 slashMenu.updateCursorPos(e.target.selectionStart ?? 0);
                                 setSlashHint(null);
                                 e.target.style.height = "auto";
-                                e.target.style.height = Math.min(e.target.scrollHeight, 200) + "px";
+                                e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
                             }}
                             onPaste={(e) => {
                                 const items = Array.from(e.clipboardData.items);
@@ -981,10 +979,10 @@ export function BuildConversation({
                                 <span className="font-mono text-[10px] text-muted-foreground/60">Intent 附图</span>
                             </div>
                         )}
-                        <textarea
+                        <StudioMarkdownTextarea
                             rows={2}
                             disabled={loading}
-                            className="w-full resize-none border-0 bg-transparent px-1 py-1 font-body text-[14px] leading-7 text-foreground outline-none placeholder:text-white/50 max-h-[180px] overflow-y-auto scrollbar-hidden disabled:opacity-50"
+                            className="max-h-[180px] disabled:opacity-50"
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onPaste={(e) => {

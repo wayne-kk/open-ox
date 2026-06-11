@@ -15,6 +15,7 @@ import {
   createUserProvidedContentToolExecutors,
   userProvidedContentExtractionTools,
 } from "../tools/userProvidedContentTools";
+import { seedUserProvidedImagesFromTexts } from "../shared/seedUserProvidedImagesFromPrompt";
 
 /**
  * Organize the user query into categories and write content/user-provided.md.
@@ -22,14 +23,26 @@ import {
  */
 export async function stepExtractUserProvidedContent(params: {
   userInput: string;
+  /** Original/bootstrap/intent-session texts — scanned for image URLs alongside `userInput`. */
+  imageSourceTexts?: string[];
   referenceImageBase64?: string | null;
 }): Promise<{ content: UserProvidedContent | undefined; trace: StepTrace }> {
   const acc = createUserProvidedContentAccumulator();
+  const scanTexts = [params.userInput, ...(params.imageSourceTexts ?? [])].filter((t) => t.trim());
+  const seedResult = seedUserProvidedImagesFromTexts(acc.images, scanTexts);
+  acc.images = seedResult.images;
+  const imagesFromPromptScan = acc.images.length;
+
   const executors = createUserProvidedContentToolExecutors(acc);
   const model = getModelForStep("extract_user_provided_content");
 
   const systemPrompt = composePromptBlocks([loadStepPrompt("extractUserProvidedContent")]);
-  const userMessage = `## User message\n\n${params.userInput}`;
+  const preseedNote =
+    imagesFromPromptScan > 0
+      ? `\n\n## Pre-scanned images\n\n${imagesFromPromptScan} Google image URL(s) already registered from your message. ` +
+        `Use \`add_user_provided_image\` only to add **caption/role** or to register URLs that were missed.\n`
+      : "";
+  const userMessage = `## User message\n\n${params.userInput}${preseedNote}`;
   const userContent = buildUserVisionContent(userMessage, params.referenceImageBase64 ?? null);
   const traceUserLabel = visionTraceUserLabel(userMessage, Boolean(params.referenceImageBase64?.trim()));
 
@@ -48,10 +61,14 @@ export async function stepExtractUserProvidedContent(params: {
   });
 
   const content = buildContentFromAccumulator(acc);
+  const finalImageCount = content?.images?.length ?? 0;
 
-  if (content?.images?.length) {
-    console.log(`[extract_user_provided_content] ${content.images.length} image URL(s) recorded:`);
-    content.images.forEach((img, i) => {
+  if (finalImageCount > 0) {
+    console.log(
+      `[extract_user_provided_content] ${finalImageCount} image URL(s) ` +
+        `(prompt_scan=${imagesFromPromptScan}, after_llm=${finalImageCount})`
+    );
+    content!.images!.forEach((img, i) => {
       console.log(`  ${i + 1}. (${img.url.length} chars) ${img.url}`);
     });
   }
@@ -63,10 +80,15 @@ export async function stepExtractUserProvidedContent(params: {
   return {
     content,
     trace: {
-      input: { userInputLength: params.userInput.length },
+      input: {
+        userInputLength: params.userInput.length,
+        imageSourceTextCount: params.imageSourceTexts?.length ?? 0,
+      },
       output: {
         toolCalls: toolCalls.length,
-        imageCount: content?.images?.length ?? 0,
+        imageCount: finalImageCount,
+        imagesFromPromptScan,
+        imagesAddedByLlm: Math.max(0, finalImageCount - imagesFromPromptScan),
         wroteFile: Boolean(content && hasUserProvidedContent(content)),
         file: USER_PROVIDED_CONTENT_PATH,
       },

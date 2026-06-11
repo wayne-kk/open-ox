@@ -40,15 +40,23 @@ import {
   PAGE_AGENT_HERO_SKILL_PATH,
 } from "../shared/pageAgentBrief";
 import {
+  buildPageAgentBootstrap,
+  isPageAgentBootstrapEnabled,
+} from "../shared/pageAgentBootstrap";
+import {
   compactPageAgentMessages,
+  createBootstrapGuardedListDirExecutor,
+  createBootstrapGuardedReadExecutor,
   createPageAgentSessionState,
   executePageAgentListDir,
   executePageAgentReadFile,
+  filterPageAgentToolsForPhase,
   formatPageAgentToolResultForModel,
   isPageAgentBatchFirstRoundEnabled,
   pageAgentCompactFromIteration,
   recordPageAgentToolCall,
   resolvePageAgentMaxIterations,
+  shouldRunPageAgentCompaction,
 } from "../shared/pageAgentToolLoop";
 
 export const PAGE_IMPLEMENTATION_COMPLETE = "page_implementation_complete";
@@ -213,6 +221,26 @@ export async function runPageImplementAgent(
     },
   ];
 
+  const bootstrapEnabled = isPageAgentBootstrapEnabled();
+  let bootstrappedPaths = new Set<string>();
+  let bootstrapSummary = "";
+  if (bootstrapEnabled) {
+    const bootstrap = buildPageAgentBootstrap({
+      heroSkillOnDisk,
+      hasUserProvidedContent: hasUserContent,
+    });
+    bootstrappedPaths = bootstrap.bootstrappedPaths;
+    bootstrapSummary = bootstrap.compactSummary;
+    messages.push({ role: "user", content: bootstrap.message });
+  }
+
+  const readFileExecutor = bootstrapEnabled
+    ? createBootstrapGuardedReadExecutor(bootstrappedPaths)
+    : executePageAgentReadFile;
+  const listDirExecutor = bootstrapEnabled
+    ? createBootstrapGuardedListDirExecutor(bootstrappedPaths)
+    : executePageAgentListDir;
+
   const { executor: baseImageExecutor, pendingImages } = createImageExecutor(
     `page-${page.slug.replace(/[^a-zA-Z0-9_-]+/g, "-")}`
   );
@@ -239,9 +267,10 @@ export async function runPageImplementAgent(
 
   let implementationComplete = false;
   let completeSummary = "";
-  const sessionState = createPageAgentSessionState();
+  const sessionState = createPageAgentSessionState(bootstrapSummary);
   const compactFromIter = pageAgentCompactFromIteration();
   const maxIterations = resolvePageAgentMaxIterations();
+  const preserveHeadCount = bootstrapEnabled ? 3 : 2;
 
   const { content, toolCalls } = await callLLMWithToolsFromMessages({
     messages,
@@ -251,8 +280,8 @@ export async function runPageImplementAgent(
     model,
     ...(thinking ? { thinkingLevel: thinking } : {}),
     executeToolOverrides: {
-      read_file: executePageAgentReadFile,
-      list_dir: executePageAgentListDir,
+      read_file: readFileExecutor,
+      list_dir: listDirExecutor,
       [PAGE_IMPLEMENTATION_COMPLETE]: async (
         args: Record<string, unknown>
       ): Promise<ToolResult> => {
@@ -264,18 +293,65 @@ export async function runPageImplementAgent(
     },
     formatToolResultForModel: formatPageAgentToolResultForModel,
     compactMessagesBeforeRound: ({ iteration, messages: msgs }) => {
-      if (iteration + 1 >= compactFromIter) {
-        compactPageAgentMessages(msgs, sessionState);
+      if (
+        bootstrapEnabled &&
+        !sessionState.actNudgeSent &&
+        iteration >= 2 &&
+        sessionState.writtenPaths.length === 0
+      ) {
+        const nudge: ChatMessage = {
+          role: "system",
+          content:
+            `[Act mode] Workspace bootstrap is already in context. Stop read/list — ` +
+            `\`write_file\` \`${targetPath}\` and page components, then \`${PAGE_IMPLEMENTATION_COMPLETE}\`.`,
+        };
+        msgs.push(nudge);
+        sessionState.actNudgeSent = true;
+        onMessage?.(nudge);
+      }
+      if (
+        shouldRunPageAgentCompaction(sessionState, iteration, compactFromIter)
+      ) {
+        compactPageAgentMessages(msgs, sessionState, {
+          bootstrapSummary,
+          preserveHeadCount,
+        });
       }
     },
     resolveToolsForIteration: (iteration, defaults) => {
-      if (batchFirstRound && iteration === 0) {
-        return batchWriteTools;
+      const allowObserve = sessionState.allowObserveTools || !bootstrapEnabled;
+      let toolsForRound = filterPageAgentToolsForPhase(defaults, allowObserve);
+
+      if (
+        bootstrapEnabled &&
+        iteration === 0 &&
+        sessionState.writtenPaths.length === 0
+      ) {
+        toolsForRound = toolsForRound.filter((t) => {
+          const n = t.function?.name;
+          return (
+            n === "write_file" ||
+            n === "edit_file" ||
+            n === "generate_image" ||
+            n === PAGE_IMPLEMENTATION_COMPLETE
+          );
+        });
       }
-      return defaults;
+
+      if (batchFirstRound && iteration === 0) {
+        toolsForRound = filterPageAgentToolsForPhase(batchWriteTools, allowObserve);
+      }
+      return toolsForRound;
     },
     resolveToolChoiceForIteration: (iteration, toolsForRound) => {
       if (batchFirstRound && iteration === 0 && toolsForRound.length > 0) {
+        return "required";
+      }
+      if (
+        bootstrapEnabled &&
+        iteration === 0 &&
+        toolsForRound.some((t) => t.function?.name === "write_file")
+      ) {
         return "required";
       }
       return "auto";
@@ -283,8 +359,16 @@ export async function runPageImplementAgent(
     onMessage,
     shouldAbortAfterToolResults: () => implementationComplete,
     requireTools: true,
-    onToolCall: ({ name, args, iteration }) => {
+    onToolCall: ({ name, args, iteration, result }) => {
       recordPageAgentToolCall(sessionState, name, args);
+
+      if (name === "read_lints" && typeof result === "object") {
+        const errN = Number(result.meta?.verifyErrorCount ?? 0);
+        if (errN > 0 || (result.diagnostics?.length ?? 0) > 0) {
+          sessionState.allowObserveTools = true;
+        }
+      }
+
       if (!onStep) return;
       if (VISIBLE_TOOL_NAMES.has(name)) {
         const filePath = String(args.path ?? "");

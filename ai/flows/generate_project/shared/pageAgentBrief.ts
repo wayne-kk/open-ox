@@ -1,7 +1,6 @@
 /**
- * Page Agent opening user message — task context + on-disk file pointers.
- * Large artifacts (design-system, layout, globals, hero skill) are not inlined;
- * the agent read_file's them when needed.
+ * Page Agent opening user message — task context only.
+ * Workspace files are pre-loaded in a separate bootstrap message (see pageAgentBootstrap.ts).
  */
 
 export const PAGE_AGENT_DESIGN_SYSTEM_PATH = "design-system.md";
@@ -29,22 +28,16 @@ export interface BuildPageAgentUserMessageParams {
   completeToolName: string;
 }
 
-function buildOnDiskReferencesBlock(params: BuildPageAgentUserMessageParams): string {
+function buildWorkspaceNoteBlock(params: BuildPageAgentUserMessageParams): string {
   const lines = [
-    `- \`${PAGE_AGENT_DESIGN_SYSTEM_PATH}\` — design system / visual rules`,
-    `- \`${PAGE_AGENT_LAYOUT_PATH}\` — chrome layout contract (**read-only** for you)`,
-    `- \`${PAGE_AGENT_GLOBALS_PATH}\` — CSS tokens (**read-only** — do not write/edit)`,
+    "The **next message** pre-loads design-system, layout, globals, directory trees",
+    ...(params.heroSkillOnDisk && params.heroSkillId
+      ? [`and hero skill \`${params.heroSkillId}\``]
+      : []),
+    ...(params.userProvidedFileHint ? ["and user-provided content"] : []),
+    "— **do not re-read** those paths; start writing.",
   ];
-  if (params.heroSkillOnDisk && params.heroSkillId) {
-    lines.push(
-      `- \`${PAGE_AGENT_HERO_SKILL_PATH}\` — hero section recipe (skill \`${params.heroSkillId}\`)`
-    );
-  }
-  if (params.userProvidedFileHint) {
-    lines.push(`- \`content/user-provided.md\` — organized user content (read when needed)`);
-  }
-  lines.push(`- Use \`list_dir\` on \`app/\` and \`components/\` to see existing files before writing.`);
-  return lines.join("\n");
+  return lines.join(" ");
 }
 
 export function buildPageAgentUserMessage(params: BuildPageAgentUserMessageParams): string {
@@ -80,8 +73,8 @@ ${journeyStage}
 ## Page design plan (canonical)
 ${planJson}
 
-## On-disk references (\`read_file\` when you need them)
-${buildOnDiskReferencesBlock(params)}
+## Workspace context
+${buildWorkspaceNoteBlock(params)}
 
 ## Layout contract (read-only paths)
 \`${PAGE_AGENT_LAYOUT_PATH}\` and \`components/chrome/**\` are scaffolded before this step — **do not edit**.
@@ -95,14 +88,13 @@ Fill only the \`{children}\` region. Single-page sites: stable section \`id\` at
 ${userProvidedFileHint}${userProvidedImagesBlock}
 
 ## Instructions
-1. **Explore**: \`read_file\` / \`list_dir\` the references above as needed (parallel calls OK). Read \`${PAGE_AGENT_DESIGN_SYSTEM_PATH}\`, \`${PAGE_AGENT_LAYOUT_PATH}\`, and \`${PAGE_AGENT_GLOBALS_PATH}\` before your first \`write_file\`.
-2. **Implement**: \`write_file\` / \`edit_file\` for \`${targetPath}\` and page-local \`components/**\`. Prefer **one turn with parallel \`write_file\`** for the page and its components once context is loaded.
-3. **User images**: Use listed https URLs as remote \`src\`; each URL at most once.${
+1. **Implement first**: After the bootstrap message, \`write_file\` / \`edit_file\` for \`${targetPath}\` and page-local \`components/**\`. Prefer **one turn with parallel \`write_file\`** for the page and its components.
+2. **User images**: Use listed https URLs as remote \`src\`; each URL at most once.${
     userImageCount > 0
       ? ` ${userImageCount} user URL(s) — assign all before \`generate_image\` for extras.`
       : " Use \`generate_image\` only when you need visuals without user URLs."
   }
-4. **Fix & finish**: \`edit_file\` / \`read_lints\` if needed; then \`${completeToolName}\` with a brief summary. Do not call \`format_code\` — write/edit auto-formats.
+3. **Fix & finish**: \`read_lints\` if needed (then \`read_file\` only for paths **not** in bootstrap); \`${completeToolName}\` with a brief summary. Do not call \`format_code\` — write/edit auto-formats.
 
 ⚠️ \`${completeToolName}\` is mandatory.
 
