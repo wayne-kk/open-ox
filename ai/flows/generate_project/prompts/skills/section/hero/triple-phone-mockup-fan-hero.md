@@ -8,7 +8,7 @@
 - **Background:** Three large soft blobs (`blur-3xl`), `absolute`, `pointer-events-none`, `aria-hidden` on wrapper; tint from design tokens / brief—not a fixed demo hex.
 - **Container:** `max-w-7xl`, horizontal padding; `lg:grid-cols-2`, `gap-16`, items vertically centered. Mobile: stack; column order follows brief (copy first unless specified).
 - **Left column:** Status pill (border, frosted bg, pulse dot + one line); split headline (primary + muted secondary span); body with max width; metric chips (≥3, typically four—label muted, value emphasized); primary solid CTA + secondary ghost with leading `lucide-react` icon; avatar stack (about four faces) + overflow count + one trust line.
-- **Right column — stage:** `relative`, `max-w-xl`, `lg:ml-auto`, `min-h` ~560–600px so rotated phones don’t clip. Three phones `absolute`; center phone highest `z-index`, slightly elevated; sides lower. Chrome: ~`rounded-[2.2rem]`, ring, strong shadow, dark shell, pill notch, home indicator.
+- **Right column — stage:** `relative`, `max-w-[36rem]`, `lg:ml-auto`, `min-h` ~560–600px so rotated phones don’t clip. Three phones `absolute`; center phone highest `z-index`, slightly elevated; sides lower. Chrome: ~`rounded-[2.2rem]`, ring, strong shadow, dark shell, pill notch, home indicator.
 - **Per-screen content (distinct stories):**
   1. **Trail / product card:** header controls, title, hero image card with scrim, meta + small stat grid / schedule strip.
   2. **Map / route:** SVG grid via `<pattern>`, curved route, start/end dots; strokes and fills from CSS variables / `currentColor`; optional floating chips (distance, offline, GPS, etc.) + compact stats + CTA.
@@ -102,7 +102,7 @@ export function TriplePhoneMockupFanHero(props: TriplePhoneMockupFanHeroProps) {
                 {props.title.secondary}
               </span>
             </h1>
-            <p className="mt-5 max-w-xl text-[color:var(--muted-foreground)]">{props.lead}</p>
+            <p className="mt-5 max-w-[36rem] text-[color:var(--muted-foreground)]">{props.lead}</p>
 
             <div className="mt-7 flex flex-wrap gap-3">
               {props.metrics.map((m) => (
@@ -152,7 +152,7 @@ export function TriplePhoneMockupFanHero(props: TriplePhoneMockupFanHeroProps) {
             </div>
           </div>
 
-          <div className="relative mx-auto w-full max-w-xl lg:ml-auto">
+          <div className="relative mx-auto w-full max-w-[36rem] lg:ml-auto">
             <div className="relative h-[560px] sm:h-[600px]">
               {/* Three PhoneShell nodes: left ~-8deg, center upright + higher z, right ~+8deg.
                   useId() prefixes for SVG pattern ids; populate from props.phones. */}

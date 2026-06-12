@@ -117,9 +117,8 @@ Step 0:  validate_skill_prompts          ← 启动前校验技能 Markdown fron
 Step 1:  project_intent_guide           ← 可选（默认开启）；可提前结束并返回引导（不进入生成）
 Step 2:  analyze_project_requirement    ← LLM + web_search ∥
 Step 3:  infer_design_intent             ← LLM（风格 / 技术关键词，与 Step 2 并行）
-Step 4:  plan_project                    ← LLM ─┐ 并行
-Step 5a: match_design_system_skill       ← LLM ─┘（enableSkills=false 时跳过）
-Step 5b: generate_project_design_system  ← 仅当 Step 5a 未命中内置 skill 时执行
+Step 4:  plan_project                    ← LLM
+Step 5:  generate_project_design_system  ← LLM（Style Reference Markdown）
 Step 6:  apply_project_design_tokens     ← LLM：design-system + 当前 globals → 完整 globals.css（须先于 Agent）
 Step 7:  architect_scaffold_agent        ← 快速搭壳：app/layout.tsx + components/chrome/**（链接可占位）
 Step 8:  page_implement_agent × M        ← 每页并行工具闭环；收尾 page_implementation_complete
@@ -180,19 +179,17 @@ ProjectBlueprint {
 
 Blueprint 的容错设计：`asProjectBlueprint()` 函数支持三种 LLM 输出格式（嵌套结构、扁平结构、单页结构），并对每个字段做 normalize，确保即使 LLM 输出不完整也能得到合法的 Blueprint。
 
-4.3 plan_project + match_design_system_skill + generate_project_design_system
+4.3 plan_project + generate_project_design_system
 
-- **plan_project** 与 **match_design_system_skill** 在第一层并行：前者扩展 `PlannedProjectBlueprint`（`pageDesignPlan`、sections 等），后者判断用户 prompt 是否命中 **内置 design-system skill** 正文。
-- 若匹配命中，直接使用 skill Markdown 作为 `design-system.md`，**跳过** LLM `generate_project_design_system`。
-- 若未命中，则调用 `generate_project_design_system`，输入主要来自 `infer_design_intent` 文本 + 可选用户 `styleGuide`（截断 1200 字符）。
+- **plan_project** 扩展 `PlannedProjectBlueprint`（`pageDesignPlan`、sections 等）。
+- 随后调用 **generate_project_design_system**，输入主要来自 `infer_design_intent` 文本 + 可选用户 `styleGuide`（截断 1200 字符），输出 **Style Reference** 格式的 `design-system.md`。
 
 plan_project 的输出为每个 section 准备 traits 化的设计约束（layout/motion/visual/interaction），全局 chrome 仍由下游 Architect + Page Agent 落实。
 
-4.4 Skill 体系（用户风格 / 内置设计系统 / Hero 运行时）
+4.4 Skill 体系（用户 styleGuide / Hero 运行时）
 
 1. **用户 styleGuide**：前端 `/` 菜单选择的 `public/skills/*.md`，主要注入 **generate_project_design_system**，不进入 analyze prompt（防止超长超时）。
-2. **match_design_system_skill**：匹配 **AI 流程内置**的 design-system 技能（仓库 `ai/flows/generate_project/prompts/skills/design-system/`），命中则节省一轮 LLM。
-3. **Hero 运行时组件 skill**：在特定页面 **`page_implement_agent` 启动前** 调用 `discoverAndSelectSkill`，仅把正文注入该页 Agent，用于 Hero 特效级指引；**不是**历史上的全局 `preselect_skills` 批量步骤。
+2. **Hero 运行时组件 skill**：在特定页面 **`page_implement_agent` 启动前** 调用 `discoverAndSelectSkill`，仅把正文注入该页 Agent，用于 Hero 特效级指引；**不是**历史上的全局 `preselect_skills` 批量步骤。
 
 `public/skills/` 下仍有大量面向用户的视觉模板文件；内置 section/hero 技能则服务于组件级代码生成。
 
@@ -677,8 +674,7 @@ Modify Agent 另有 MODIFY_DEFAULT_MODEL（如 claude-opus-4-6），可与生成
 analyze_project_requirement	结构化 Blueprint	强模型
 infer_design_intent	风格 / 技术关键词	强或均衡模型
 plan_project	站点 / 页面规划	强模型
-match_design_system_skill	内置设计系统 skill 匹配	快或均衡模型
-generate_project_design_system	Markdown 设计系统（未命中 skill）	强模型
+generate_project_design_system	Style Reference Markdown 设计系统	强模型
 apply_project_design_tokens	globals.css 重写	中等模型
 architect_scaffold_agent	Chrome 搭壳	可配轻模型
 chrome_optimize_agent	Chrome 精修	强模型
@@ -698,11 +694,11 @@ repair_build	编译失败修复	强模型
 
 10.2 为什么用运行时 Skill 发现替代全局 preselect_skills
 
-历史上的「所有 section 预先批量选 skill」会增加编排耦合与 prompt 体积。当前主路径改为：**内置 design-system skill 匹配**（可选命中即跳过 LLM）+ **Hero 页按需 discoverAndSelectSkill**，其余交由 Page Implement Agent 在设计系统约束下自由落地，减少失效的全局预选与重复调用。
+历史上的「所有 section 预先批量选 skill」会增加编排耦合与 prompt 体积。当前主路径改为：**Hero 页按需 discoverAndSelectSkill**，其余交由 Page Implement Agent 在设计系统约束下自由落地，减少失效的全局预选与重复调用。
 
-10.3 为什么 plan_project 与 match_design_system_skill 并行
+10.3 为什么 design-system 始终 LLM 生成
 
-二者都只依赖归一化后的蓝图与用户原始 prompt，互不依赖；并行可节省一次完整的往返延迟。是否生成 LLM 设计系统则在匹配结果之后分支。
+内置 design-system skill 目录已移除。每个项目的 Style Reference 由 LLM 根据 design intent 与可选 styleGuide 定制生成，避免固定模板与品牌语义脱节。
 
 10.4 为什么 projectId 在 AI 开始前就创建
 

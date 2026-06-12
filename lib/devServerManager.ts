@@ -18,7 +18,7 @@ import path from "path";
 import { Sandbox } from "e2b";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import * as localPreview from "./localDevServerManager";
-import { isPreviewE2B, isPreviewStorage } from "./previewMode";
+import { isPreviewE2B, isPreviewStorage, shouldPublishStaticSitePreview } from "./previewMode";
 import * as staticSitePreview from "./staticSitePreview";
 import { getSavedFingerprint, parseProjectsFilesHash, saveFingerprint } from "./previewFingerprintDb";
 import {
@@ -676,6 +676,11 @@ export async function rebuildDevServer(
     return staticSitePreview.syncStaticSitePreview(db, projectId, { force: true });
   }
   if (!isPreviewE2B()) {
+    // Local iframe uses next dev, but prod/guest preview reads `site-previews` Storage — publish when configured.
+    if (shouldPublishStaticSitePreview()) {
+      await localPreview.stopLocalDevServer(projectId);
+      await staticSitePreview.syncStaticSitePreview(db, projectId, { force: true });
+    }
     return localPreview.rebuildLocalDevServer(db, projectId);
   }
   const sandboxId = await getSandboxId(db, projectId);

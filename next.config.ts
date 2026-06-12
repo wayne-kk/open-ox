@@ -19,9 +19,9 @@ const nextConfig: NextConfig = {
    */
   outputFileTracingIncludes: {
     /**
-     * LLM prompts + design-system `skills.yaml` are read at runtime via `fs` + `process.cwd()` (see
-     * `matchDesignSystemSkill`). Standalone tracing does not infer these paths; include them explicitly
-     * or Docker/production may ship a build where catalog is missing or stale.
+     * LLM prompts + section skill catalogs are read at runtime via `fs` + `process.cwd()`.
+     * Standalone tracing does not infer these paths; include them explicitly
+     * or Docker/production may ship a build where catalogs are missing or stale.
      */
     "/*": [
       "node_modules/playwright/**/*",

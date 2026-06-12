@@ -65,13 +65,12 @@ export default function DesignSystemPage() {
           </P>
           <Pre>{`// 主路径编排（与设计系统相关的部分）
 analyze_project_requirement  ∥ infer_design_intent   // 第一层并行
-plan_project                 ∥ match_design_system_skill   // 第二层并行
-generate_project_design_system   // 仅当未命中内置 skill
+plan_project
+generate_project_design_system   // Style Reference Markdown
 apply_project_design_tokens      // 先于一切页面写入
 architect_scaffold_agent → page_implement_agent ×M → chrome_optimize_agent`}</Pre>
           <Callout>
-            若 <Code>match_design_system_skill</Code> 命中内置 Markdown，则跳过 LLM 生成设计系统但仍会落盘同一 artifacts；
-            <Code>infer_design_intent</Code> 的技术关键词会在其后合并进 blueprint，辅助 Hero skill 路由。
+            设计系统始终由 LLM 按 <strong>Style Reference</strong> 模板生成；<Code>infer_design_intent</Code> 的技术关键词会在 plan 之后合并进 blueprint，辅助 Hero skill 路由。
           </Callout>
         </section>
 
@@ -90,14 +89,14 @@ architect_scaffold_agent → page_implement_agent ×M → chrome_optimize_agent`
   style: "modern SaaS",
   keywords: ["performance", "developer-first", "minimal"]
 }`}</Pre>
-          <P>LLM 根据这些语义信号生成完整的 <Code>design-system.md</Code>，包含：</P>
+          <P>LLM 根据这些语义信号生成完整的 <Code>design-system.md</Code>（Style Reference 格式），包含：</P>
           <div className="mt-4 space-y-2">
             {[
-              { section: "Color System", desc: "primary / secondary / accent / background / surface / border / text 的完整色板，含 hex 值和使用场景" },
-              { section: "Typography", desc: "heading / body / mono 字体族，字号阶梯（xs → 5xl），行高和字重规范" },
-              { section: "Spacing & Layout", desc: "section-gap / container-padding / component-gap 等间距变量，最大宽度约束" },
-              { section: "Component Style", desc: "按钮、卡片、输入框的圆角、阴影、边框风格指导" },
-              { section: "Motion", desc: "过渡时长（fast / normal / slow）、缓动函数、动画类型偏好" },
+              { section: "Tokens — Colors", desc: "语义化色板表格（Name / Value / Token / Role），含渐变与 accent 使用约束" },
+              { section: "Tokens — Typography", desc: "字体族、字重、字距、Type Scale 表格与 CSS token" },
+              { section: "Tokens — Spacing & Shapes", desc: "间距阶梯、圆角、阴影、布局密度与 max-width" },
+              { section: "Components", desc: "6–12 个具名组件规格（Nav Button、Card、Input 等），含 hover/focus 状态" },
+              { section: "Do's and Don'ts + Quick Start", desc: "可验证规则 + 可直接写入 globals.css 的 :root / @theme 块" },
             ].map(({ section, desc }) => (
               <div key={section} className="flex items-start gap-3 rounded-lg border border-white/6 bg-white/[0.02] px-4 py-3">
                 <code className="shrink-0 font-mono text-[11px] text-primary/80 w-36">{section}</code>
@@ -113,28 +112,21 @@ architect_scaffold_agent → page_implement_agent ×M → chrome_optimize_agent`
             <Code>apply_project_design_tokens</Code> 步骤读取 <Code>design-system.md</Code>，
             提取已有的 <Code>globals.css</Code> 内容，然后写入 Tailwind v4 格式的 CSS 变量：
           </P>
-          <Pre>{`/* globals.css — Tailwind v4 @theme block */
+          <Pre>{`/* globals.css — Tailwind v4 @theme block (semantic tokens) */
 @theme inline {
-  --color-primary: #3b82f6;
-  --color-primary-foreground: #ffffff;
-  --color-background: #0a0a0f;
-  --color-surface: #111118;
-  --color-border: rgba(255,255,255,0.08);
+  --color-parchment: #fcfbf8;
+  --color-charcoal: #1c1c1c;
+  --color-linen-border: #eceae4;
 
-  --font-heading: "Space Grotesk", sans-serif;
-  --font-body: "Inter", sans-serif;
-  --font-mono: "JetBrains Mono", monospace;
+  --font-inter: "Inter", ui-sans-serif, system-ui, sans-serif;
 
-  --spacing-section: 6rem;
-  --spacing-container: 1.5rem;
+  --text-body: 16px;
+  --leading-body: 1.5;
+  --tracking-body: -0.4px;
 
-  --radius-sm: 0.375rem;
-  --radius-md: 0.75rem;
-  --radius-lg: 1rem;
-
-  --duration-fast: 150ms;
-  --duration-normal: 300ms;
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --spacing-16: 16px;
+  --radius-card: 16px;
+  --shadow-subtle: oklch(0 0 0 / 0.25) 0px 0px 0px 0.5px inset;
 }`}</Pre>
           <H3>整文件重写（保留结构意图）</H3>
           <P>
@@ -143,8 +135,8 @@ architect_scaffold_agent → page_implement_agent ×M → chrome_optimize_agent`
             <Code>globals.css</Code>，而非局部补丁；提示词要求保留 import、基础层样式等模板结构。
           </P>
           <Callout type="warn">
-            如果 LLM 生成的 token 名称与 Tailwind 内置变量冲突（如 <Code>--color-red-500</Code>），
-            会优先使用生成的值。建议使用语义化命名（<Code>--color-primary</Code>）而非色阶命名。
+            如果 LLM 生成的 token 名称与 Tailwind 内置变量冲突，会优先使用生成的值。颜色请用语义化命名（<Code>--color-parchment</Code>），不要用色阶名（<Code>--color-red-500</Code>）。
+            <strong className="block mt-2">Spacing 特别注意：</strong>不要在 <Code>@theme</Code> 里写 <Code>--spacing-xl</Code>、<Code>--spacing-lg</Code> 等 —— Tailwind v4 会让 <Code>max-w-xl</Code> 变成 32px 级别的窄列。请用 <Code>--spacing-section</Code>、<Code>--spacing-gap-md</Code> 等语义名；组件行宽用 <Code>max-w-[36rem]</Code> 或 <Code>max-w-prose</Code>。
           </Callout>
         </section>
 
@@ -159,8 +151,7 @@ architect_scaffold_agent → page_implement_agent ×M → chrome_optimize_agent`
           <H3>修改时的一致性</H3>
           <P>
             修改 Agent 在启动时也会读取 <Code>design-system.md</Code> 作为上下文的一部分。
-            当用户说"把按钮颜色改成品牌色"时，Agent 知道"品牌色"对应的是
-            <Code>--color-primary</Code>，而不是一个硬编码的 hex 值。
+            当用户说「把按钮颜色改成品牌色」时，Agent 应查 Style Reference 中的 token 名称（如 <Code>--color-charcoal</Code>），而不是硬编码 hex。
           </P>
         </section>
 

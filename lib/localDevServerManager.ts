@@ -17,7 +17,7 @@ import net from "node:net";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSiteRoot, WORKSPACE_ROOT } from "./projectManager";
 import { ensureProjectSourcesOnDisk } from "./storage";
-import { saveFingerprint } from "./previewFingerprintDb";
+import { syncLocalProjectFingerprint } from "./previewFingerprintDb";
 import { computeProjectFingerprint, getTemplateDepMap, readProjectPackageJson, SITES_TEMPLATE_DIR } from "./previewShared";
 
 const execFileAsync = promisify(execFile);
@@ -588,7 +588,7 @@ export async function startLocalDevServer(
     const reusedEarly = await tryReuseRunningLocalPreview(projectId);
     timingLog(projectId, "tryReuseRunningLocalPreview", tReuse);
     if (reusedEarly) {
-      await saveFingerprint(db, projectId, currentHash);
+      await syncLocalProjectFingerprint(db, projectId);
       timingLog(projectId, "TOTAL_startLocalDevServer.exitReuse", wallStart);
       return reusedEarly;
     }
@@ -601,7 +601,7 @@ export async function startLocalDevServer(
       await sleep(600);
       if (await isLocalServerUp(previewHealthCheckUrl(reg.port))) {
         const synced = syncRegistryPublicUrl(projectId, reg);
-        await saveFingerprint(db, projectId, currentHash);
+        await syncLocalProjectFingerprint(db, projectId);
         timingLog(projectId, "registryWarmRetry600ms+fingerprint", tWarm);
         timingLog(projectId, "TOTAL_startLocalDevServer.exitRegistryWarmReuse", wallStart);
         return { url: synced.url, port: synced.port };
@@ -638,7 +638,7 @@ export async function startLocalDevServer(
     localRegistry.set(projectId, { port, url, dev: child });
     await writePersistedLocalPreview(projectId, { port, pid: child.pid ?? undefined });
     const tSav = performance.now();
-    await saveFingerprint(db, projectId, currentHash);
+    await syncLocalProjectFingerprint(db, projectId);
     timingLog(projectId, "saveFingerprint", tSav);
 
     timingLog(projectId, "TOTAL_startLocalDevServer.exitFreshSpawn", wallStart);
@@ -740,7 +740,7 @@ export async function rebuildLocalDevServer(
   await writePersistedLocalPreview(projectId, { port, pid: child.pid ?? undefined });
   const tFp = performance.now();
   try {
-    await saveFingerprint(db, projectId, await computeProjectFingerprint(projectId));
+    await syncLocalProjectFingerprint(db, projectId);
   } catch {
     /* */
   }
@@ -833,7 +833,7 @@ export async function getExistingLocalPreviewUrl(
   const reused = await tryReuseRunningLocalPreview(projectId);
   if (!reused) return null;
   try {
-    await saveFingerprint(db, projectId, await computeProjectFingerprint(projectId));
+    await syncLocalProjectFingerprint(db, projectId);
   } catch {
     /* */
   }

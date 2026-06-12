@@ -22,7 +22,7 @@
   - **商业类区块**（ProductGrid、ProductHero、ProductSpecs、CategoryGrid）：每项须含价格、关键规格短语与一句利益点。
   - **表单 / 转化类区块**（ContactForm、Newsletter、WaitlistForm、Download）：包含字段标签、辅助说明与确认文案。
   - 在横向仍有空间时，不要强行断行（`<br />`、硬编码 `\n`）。
-  - 桌面端避免过窄的正文容器（例如在分栏布局中，标题区块不要无谓使用 `max-w-md`/`max-w-lg`）。
+  - 桌面端避免过窄的正文容器。副文案行宽优先用 **`max-w-[36rem]`**、**`max-w-[50ch]`** 或 **`max-w-prose`**；**不要**用 `max-w-xl`/`max-w-lg`/`max-w-md`/`max-w-sm`——design system 的 `@theme { --spacing-xl: … }` 会覆盖这些 class，导致文本挤成单列单词。
 - 营销区块：**文案少、设计多**。内容类区块：真实信息量更重要。
 - **装饰性文案克制**：无 brief 依据时不要为了「显得丰富」而额外堆 eyebrow 口号行、假 telemetry/系统时钟条、虚构合作 logo 墙、重复叠层的 slogans。Hero 以一层主标题 + 短 supporting（≤2 句）+ 主 CTA 为主；**技能文档里的示例句（如 Core Architecture、示例副标题）勿照抄进生产文案**，须换成项目 brief 中的真实表述。
 - 默认生成服务端安全组件（无 `"use client"`），除非交互确实需要客户端状态/事件。

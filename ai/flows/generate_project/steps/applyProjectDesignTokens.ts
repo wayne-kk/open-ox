@@ -8,6 +8,7 @@ import { lfPlain, LfPlain } from "@/lib/observability/langfuseGenerationCatalog"
 import { stepTraceFromLlmCompletion } from "../shared/llmTrace";
 import type { StepTrace } from "../types";
 import { getModelForStep } from "@/lib/config/models";
+import { sanitizeThemeSpacingTokens } from "../shared/sanitizeThemeSpacingTokens";
 
 /** Headroom for full globals.css after Gemini hidden reasoning tokens (see completion_tokens_details.reasoning_tokens). */
 const DESIGN_TOKENS_MAX_OUTPUT = 16_384;
@@ -158,7 +159,7 @@ Generate the complete updated globals.css. Be concise — output only the CSS co
   );
 
   const raw = llmResultForTrace!.content;
-  const globalsCss = parseDesignTokensResponse(raw);
+  const globalsCss = sanitizeThemeSpacingTokens(parseDesignTokensResponse(raw));
 
   onProgress?.(`writing globals.css (${globalsCss.length} chars)...`);
   await writeSiteFile("app/globals.css", globalsCss);

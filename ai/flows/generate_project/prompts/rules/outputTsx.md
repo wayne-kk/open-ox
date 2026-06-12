@@ -21,6 +21,7 @@ When the task requires React or Next.js component code, output TSX only.
 - **Never use `bg-[url('...')]` with placeholder URLs** (`...`, literal dots, TODO): Turbopack/webpack resolve `url()` as module imports → **`Module not found: Can't resolve '...'`**. Use a **real HTTPS or `/asset.jpg` URL**, **`next/image` `<Image>`**, or a **`style` object** with **`backgroundImage: "url(https://…)"`** (must be complete, parseable URLs only).
 - For keyframe animations not in globals.css, use Tailwind's `animate-[name_duration_easing]` arbitrary value syntax instead of defining new keyframes.
 - Prefer Tailwind utility classes for all layout, spacing, color, and typography.
+- For readable line length, use **`max-w-[36rem]`**, **`max-w-[50ch]`**, or **`max-w-prose`** — not `max-w-xl`/`max-w-lg`/`max-w-md` (custom `--spacing-*` tokens in `@theme` override those utilities in Tailwind v4).
 - If the component uses any browser API, event handlers, or hooks (`useState`, `useEffect`, etc.), it **MUST** have `"use client";` as the very first line.
 - **NEVER import `client-only` or `server-only`.** These sentinel packages frequently cause App Router build failures in generated files. Use component boundaries instead:
   - Browser interactivity/hooks/events => add `"use client";` as first line.

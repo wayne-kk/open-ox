@@ -28,18 +28,9 @@
 
 ---
 
-## 内置风格参考表
+## Style 字段
 
-下方是系统内置的设计风格名称。在输出 `Style` 字段时，**优先从此列表中选择最匹配的一个**。如果没有任何一个高度匹配，可以输出自定义风格名称。
-
-```
-bauhaus, newsprint, monochrome, modern, luxury, saas, terminal,
-swiss_minimalist, kinetic, flat_design, art_deco, material_design,
-neo_brutalism, bold_typography, academia, cyberpunk, web3,
-playful_geometric, minimal_dark, claymorphism, professional,
-botanical, vaporwave, enterprise, sketch, industrial, natural,
-neumorphism, maximalism
-```
+`Style` 用 **1–3 个英文 kebab-case 或短语** 概括视觉方向（如 `minimal-dark-editorial`、`glass-saas`、`neo-brutalist-marketing`）。**不要**从已废弃的内置 design-system skill 目录选模板名；这是自由文本标签，供下游 `generate_project_design_system` 参考，不是 skill 匹配。
 
 ---
 
@@ -66,8 +57,8 @@ neumorphism, maximalism
 
 - Mood: [情绪基调，2-3 个词]
 - Color Direction: [整体色彩倾向，1 句话]
-- Style: [从内置风格参考表中选择最匹配的一个，如 modern / web3 / saas 等。如果没有匹配则写自定义风格名]
-- Keywords: [3-5 个核心视觉关键词，英文，逗号分隔。优先使用内置风格的 keywords 中的词汇]
+- Style: [1–3 个英文风格短语，自由描述；勿使用已废弃的内置 skill 模板 id]
+- Keywords: [3-5 个核心视觉关键词，英文，逗号分隔]
 
 ## Project Style Description
 

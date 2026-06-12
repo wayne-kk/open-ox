@@ -125,7 +125,7 @@ export function EditorialBlindsHero(props: EditorialBlindsHeroProps) {
       <div className="relative z-10 mx-auto flex min-h-screen max-w-4xl flex-col justify-end px-6 pb-24 pt-32 md:pb-32">
         {eyebrow ? <p className="mb-4 text-xs font-medium uppercase tracking-[0.3em] text-muted-foreground">{eyebrow}</p> : null}
         <div className="font-serif text-4xl font-light tracking-tight text-foreground md:text-6xl">{headline}</div>
-        <p className="mt-6 max-w-xl text-pretty text-base leading-relaxed text-muted-foreground">{lead}</p>
+        <p className="mt-6 max-w-[36rem] text-pretty text-base leading-relaxed text-muted-foreground">{lead}</p>
         <a href={primaryCta.href} className="mt-10 inline-flex w-fit rounded-full bg-primary px-8 py-3 text-sm font-medium text-primary-foreground">
           {primaryCta.label}
         </a>

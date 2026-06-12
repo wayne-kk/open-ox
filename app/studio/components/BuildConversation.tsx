@@ -18,6 +18,7 @@ import {
   stripRecoverablePrefixForDisplay,
 } from "@/lib/generationRecovery";
 import type { BuildStudioState, ModifyRecord, ModifyDiff } from "../hooks/useBuildStudio";
+import { filterPipelineSteps } from "../lib/pipelineSteps";
 
 function formatMs(ms: number): string {
     if (ms < 1000) return `${ms}ms`;
@@ -387,7 +388,7 @@ export function BuildConversation({
         (response?.generatedFiles?.length ?? 0) > 0 ||
         (response?.blueprint && (response?.buildSteps?.length ?? 0) > 0)
     );
-    const pipelineSteps = response?.buildSteps?.filter((step) => step.step !== "intent_agent") ?? [];
+    const pipelineSteps = filterPipelineSteps(response?.buildSteps ?? []);
     const hasBuildActivity = Boolean(
         pipelineSteps.length > 0 ||
         response?.generatedFiles?.length ||

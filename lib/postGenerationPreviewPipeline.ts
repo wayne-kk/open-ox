@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { scheduleCaptureProjectCover } from "@/lib/projectCoverCapture";
-import { isPreviewStorage } from "@/lib/previewMode";
+import { shouldPublishStaticSitePreview } from "@/lib/previewMode";
 import { uploadFullProject } from "@/lib/storage";
 import { syncStaticSitePreview } from "@/lib/staticSitePreview";
 
@@ -16,7 +16,7 @@ export function schedulePostGenerationPreviewPipeline(
   void (async () => {
     try {
       await uploadFullProject(projectId);
-      if (isPreviewStorage()) {
+      if (shouldPublishStaticSitePreview()) {
         await syncStaticSitePreview(db, projectId);
       }
       scheduleCaptureProjectCover(projectId);

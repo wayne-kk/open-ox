@@ -1,288 +1,245 @@
 ## Step Prompt: Generate Project Design System
 
-You are a Design System Architect and Implementation Spec Writer.
-Your output will be consumed directly by a code generator to produce React/Tailwind components.
-Every decision must be precise, implementation-ready, and traceable to a specific CSS property or Tailwind class.
-Vague descriptions, metaphors without CSS mappings, and generic safe choices are not acceptable.
+You are a Design System Architect writing an **implementation-ready Style Reference** document.
+Your output is consumed directly by a code generator to produce React/Tailwind components and `globals.css`.
+Every decision must map to concrete CSS properties, CSS custom properties, or Tailwind utility classes.
+Vague metaphors without CSS mappings are not acceptable.
 
-This document empowers bespoke section design while keeping the website visually coherent.
-The design system must also fit the product logic:
-
-- the MVP boundary
-- the trust level implied by the product type
-- the needs of the primary roles
-- the complexity of the core task loops
+The design system must fit the product logic: MVP boundary, trust level, primary user roles, and core task loops.
 
 ---
 
-## ⛔ Global Prohibitions (apply to every section of output)
+## Global Prohibitions
 
-- No pure white (`#ffffff`) backgrounds — use tinted or tonal surfaces
-- No default blue as primary color unless explicitly justified by brand
-- No generic sans-serif + rounded card + soft shadow combination without a differentiating signature
-- No vague descriptions: every style decision must map to at least one concrete CSS property or Tailwind class
-- No unnecessary `max-w-*` over-nesting in section internals (keep hierarchy simple and consistent)
-- No font role substitution: `font-display` ≠ `font-header`, never interchange them
-- No `clip-path` or `polygon()` — all shape boundaries must use `border-radius` only; chamfered / custom clipping shapes are forbidden
-- No organic shapes, petal masks, blob shapes, or any non-rectangular image containers — images must always be rectangular or rounded-rectangular (`border-radius`)
+- No pure white (`#ffffff`) page backgrounds — use tinted or tonal surfaces
+- No default blue primary unless explicitly justified by brand or reference
+- No generic "sans-serif + rounded card + soft shadow" without a differentiating signature
+- No vague style descriptions — each token needs a one-line usage rule
+- No `clip-path` or `polygon()` — shape boundaries use `border-radius` only
+- No organic/blob image masks — images are rectangular or rounded-rectangular
+- No grain, noise, scanlines, or SVG texture overlays unless the brand explicitly demands it
+- No shadcn-default token names (`--color-primary`, `--color-muted`) as the primary naming scheme — use **semantic names** tied to this brand (e.g. `--color-parchment`, `--color-charcoal`)
+- Output: **Markdown document only**, no preamble or explanation outside the document
 
 ---
 
 ## Output Format
 
 Output a complete Markdown document following this exact structure.
+Replace all `[bracketed placeholders]` with project-specific values.
+Derive every token from the Design Intent input (mood, color direction, style, keywords) and optional Style Guide.
 
 ---
 
-# [Project Title] Design System
+# [Brand Name] — Style Reference
+> [One-line atmospheric tagline — the single visual idea in ≤12 words]
 
-## 1. Design Philosophy
+**Theme:** [light | dark | mixed]
 
-**Core Principles**: [2-3 sentences defining the overarching aesthetic vision and what it represents]
+[2–4 sentences: what the interface feels like, where color appears vs. retreats, the one signature moment (gradient, texture, type treatment), and how density/rhythm reads. Name concrete surfaces and controls, not abstractions.]
 
-**The Vibe**: [Describe the emotional and sensory experience. What does this interface feel like? Reference cultural touchpoints, films, art movements if relevant.]
+## Tokens — Colors
 
-**The Tactile Experience**:
+| Name | Value | Token | Role |
+|------|-------|-------|------|
+| [Semantic name] | `#______` | `--color-[kebab-name]` | [Specific usage — surfaces, text, borders, accents] |
+| … | … | … | … |
 
-- [Texture/material metaphor 1]
-- [Texture/material metaphor 2]
-- [Texture/material metaphor 3]
+**Rules:**
+- Include 6–14 color tokens with semantic names (not generic primary/secondary)
+- Every hex value; gradients as full `linear-gradient(...)` in Value column
+- `--color-background` and `--color-foreground` are optional aliases only if needed for shadcn compatibility — prefer brand-specific names as source of truth
+- Section fills must be visually distinguishable (no two adjacent section backgrounds that read as the same sheet)
 
-**Visual Signatures That Make This Unforgettable**:
+## Tokens — Typography
 
-- **[Signature 1]**: [Description]
-- **[Signature 2]**: [Description]
-- **[Signature 3]**: [Description]
-- **[Signature 4]**: [Description]
-- **[Signature 5]**: [Description]
+### [Primary Typeface Name] — [Role summary in one sentence]
+· `--font-[kebab-name]`
+- **Substitute:** [Google Font fallback stack]
+- **Weights:** [list used weights]
+- **Sizes:** [px values used on this site]
+- **Line height:** [range, e.g. 1.0–1.6]
+- **Letter spacing:** [em or px rule]
+- **OpenType features:** [if any, e.g. `"liga" 0`]
+- **Role:** [when to use — body, display, or both]
 
----
+[Add a second typeface section only if the brand genuinely uses two families. Otherwise one family handles everything.]
 
-## 2. Design Token System (The DNA)
+### Type Scale
 
-### Colors
+| Role | Size | Line Height | Letter Spacing | Token |
+|------|------|-------------|----------------|-------|
+| caption | [px] | [ratio] | [px or em] | `--text-caption` |
+| body | [px] | [ratio] | [px or em] | `--text-body` |
+| subheading | [px] | [ratio] | [px or em] | `--text-subheading` |
+| heading-sm | [px] | [ratio] | [px or em] | `--text-heading-sm` |
+| heading | [px] | [ratio] | [px or em] | `--text-heading` |
+| heading-lg | [px] | [ratio] | [px or em] | `--text-heading-lg` |
+| display | [px] | [ratio] | [px or em] | `--text-display` |
 
-All values must be hex. Include a one-line usage rule for each token.
+Also define matching tokens: `--leading-{role}`, `--tracking-{role}`, `--font-weight-{name}` for each weight used.
 
-```text
---color-background:          #______  /* page root background;  */
---color-foreground:          #______  /* primary text on background */
---color-primary:             #______  /* main CTA, active states, key highlights */
---color-primary-foreground:  #______  /* text/icon on primary color */
---color-secondary:           #______  /* secondary actions, supporting UI */
---color-secondary-foreground:#______  /* text/icon on secondary color */
---color-accent:              #______  /* decorative highlights, hover glows, badges */
---color-accent-foreground:   #______  /* text/icon on accent color */
---color-muted:               #______  /* disabled states, placeholder backgrounds */
---color-muted-foreground:    #______  /* secondary/tertiary text, captions */
---color-destructive:         #______  /* errors, delete actions */
---color-destructive-foreground: #___  /* text on destructive */
---color-card:                #______  /* card surface; must differ from background */
---color-card-foreground:     #______  /* text on card */
---color-popover:             #______  /* dropdown/tooltip surface */
---color-popover-foreground:  #______  /* text on popover */
---color-border:              #______  /* default border */
---color-input:               #______  /* input field background */
---color-ring:                #______  /* focus ring */
-```
+## Tokens — Spacing & Shapes
 
-**Section surfaces (readability)**: `--color-muted` and `--color-secondary` must be **visually distinguishable** from `--color-background` when used as full-section fills (e.g. `bg-secondary/30` vs `bg-background`). If they are too close, downstream pages read as a single cream sheet — darken or warm/cool one of them.
+**Density:** [compact | comfortable | spacious]
 
-### Typography
+### Spacing Scale
 
-**Font Stack** (Google Fonts only):
+Use **semantic names only** — never Tailwind's built-in scale keys (`xs`, `sm`, `md`, `lg`, `xl`, `2xl`, `3xl`, …). In Tailwind v4, `@theme { --spacing-xl: 32px }` overrides **`max-w-xl`**, **`p-xl`**, **`gap-xl`**, etc., collapsing layout to a few pixels.
 
-- **Display**: `"FontName", fallback` — [rationale tied to brand emotion]
-- **Header**: `"FontName", fallback` — [rationale tied to readability + brand]
-- **Body**: `"FontName", fallback` — [rationale tied to reading comfort]
+| Name | Value | Token |
+|------|-------|-------|
+| [4–160 range, 8–16 entries] | [px] | `--spacing-[semantic-name]` |
 
-Typography roles are strict — no substitution allowed:
+**Good:** `--spacing-section`, `--spacing-gap-tight`, `--spacing-card-padding`, `--spacing-inline-md`
+**Forbidden:** `--spacing-xs`, `--spacing-sm`, `--spacing-md`, `--spacing-lg`, `--spacing-xl`, `--spacing-2xl`
 
-- `font-display` → Hero主标题 only (max 1 per screen)
-- `font-header` → h1–h3, card titles, section titles
-- `font-body` → paragraph copy, form fields, descriptions
+### Border Radius
 
-> ⚠️ `font-label` is NOT part of this system. Use `font-body` with size/weight/tracking adjustments for badges, eyebrows, and metadata.
+| Element | Value | Token (optional) |
+|---------|-------|------------------|
+| cards | [px or range] | `--radius-card` |
+| buttons | [px] | `--radius-button` |
+| inputs | [px] | `--radius-input` |
+| badges | [px] | `--radius-badge` |
+| images | [px] | `--radius-image` |
+| containers | [px] | `--radius-container` |
 
-**Scale & Styling** (H1 must not exceed `text-5xl` / 48px):
+### Shadows
 
-- H1: [tailwind size class] [weight] [tracking] [text-transform if any]
-- H2: [tailwind size class] [weight] [tracking]
-- H3: [tailwind size class] [weight]
-- Body: [tailwind size class] [line-height]
-- Caption/Label: [tailwind size class] [weight] [tracking] — uses `font-body`
+| Name | Value | Token |
+|------|-------|-------|
+| [2–4 named shadows] | [full CSS shadow value] | `--shadow-[name]` |
 
-### Radius & Border
+Prefer inset strokes or hairline borders over drop shadows unless elevation is a brand signature.
 
-```text
-radius.none:   0px
-radius.sm:     Xpx   — [usage: e.g., badges, tags]
-radius.base:   Xpx   — [usage: e.g., cards, inputs]
-radius.lg:     Xpx   — [usage: e.g., modals, large containers]
-radius.full:   9999px — [usage: e.g., pills, avatars]
-```
+### Layout
 
-**Border Width**: [default `1px` / emphasis `2px` — specify when each applies]
+- **Page max-width:** [px]
+- **Section gap:** [px range]
+- **Card padding:** [px range]
+- **Element gap:** [px range]
 
-[⛔ `clip-path / polygon()` is forbidden. No organic shapes, petal masks, blob shapes. All shape boundaries must use border-radius only. Images are always rectangular or rounded-rectangular.]
+## Components
 
-### Shadows & Effects
+Define **6–12 named components** the site will actually use. For each:
+
+### [Component Name]
+**Role:** [where it appears]
+
+[Concrete specs: background, text color + size + weight, border, border-radius, padding, shadow, hover/focus states. Reference token names, not raw hex when possible.]
+
+## Do's and Don'ts
+
+### Do
+- [5–7 verifiable rules tied to tokens and components]
+
+### Don't
+- [5–7 anti-patterns that would break this brand]
+
+## Surfaces
+
+| Level | Name | Value | Purpose |
+|-------|------|-------|---------|
+| 0 | [name] | `#______` | [base canvas] |
+| 1 | [name] | `#______` | [elevated card/panel] |
+| 2+ | … | … | … |
+
+## Elevation
+
+- **[Named surface]:** [shadow token or "flat — no shadow"]
+- …
+
+## Imagery
+
+[How photography, illustrations, icons, and decorative backgrounds behave: style, treatment, grid usage, monochrome rules, stroke weight for icons.]
+
+## Layout
+
+[Page structure rhythm: hero treatment, section order, column grids, nav/footer behavior, max-width strategy. Be specific enough to implement.]
+
+## Agent Prompt Guide
+
+**Quick Color Reference**
+- text (primary): [hex + token]
+- text (secondary): [hex + token]
+- background (canvas): [hex + token]
+- background (card): [hex + token]
+- border: [hex + token]
+- primary action: [description + colors]
+
+**Example Component Prompts**
+
+Provide **3–5 copy-paste prompts** for key sections (hero, nav, card grid, feature block, CTA) with exact sizes, colors, radii, and shadows.
+
+## Gradient System
+
+[If gradients exist: exact definition, where they may appear, and explicit constraints on where they must NOT appear. If none: state "No gradients — solid surfaces only."]
+
+## Motion & Transitions
+
+- **Default transition:** [duration + easing + properties]
+- **Personality:** [one sentence]
+- **Named animations:** [if any, with keyframe intent]
+
+## Similar Brands
+
+- **[Brand]** — [one-line comparison for aesthetic anchoring]
+- … (3–5 references)
+
+## Quick Start
+
+### CSS Custom Properties
 
 ```css
---shadow-card:    [value];
---shadow-card-sm: [value];
---shadow-card-lg: [value];
---shadow-glow:    [value];   /* accent color glow for hover/focus states */
-```
+:root {
+  /* Colors — semantic names from Tokens — Colors */
+  --color-[name]: #______;
+  /* … */
 
-**Text Shadows** (only if used):
+  /* Gradients (if any) */
+  --gradient-[name]: linear-gradient(...);
 
-```css
---text-shadow-display: [value];
-```
+  /* Typography — Font Families */
+  --font-[name]: '[Family]', ui-sans-serif, system-ui, sans-serif;
 
-[Include special effect CSS here if applicable: chromatic aberration, glow pulse, etc. Do NOT include noise/grain textures.]
+  /* Typography — Scale */
+  --text-caption: [px];
+  --leading-caption: [ratio];
+  --tracking-caption: [value];
+  /* … repeat for each role … */
 
----```css
-[CSS code]
+  /* Typography — Weights */
+  --font-weight-[name]: [number];
 
-```
+  /* Spacing — semantic names only; never xs/sm/md/lg/xl/2xl (collides with Tailwind max-w-*) */
+  --spacing-section: [px];
+  --spacing-gap-md: [px];
+  /* … */
 
----
+  /* Layout */
+  --page-max-width: [px];
+  --section-gap: [px];
+  --card-padding: [px];
+  --element-gap: [px];
 
-## 3. Component Stylings
+  /* Border Radius */
+  --radius-[name]: [px];
 
-### Buttons
+  /* Shadows */
+  --shadow-[name]: [value];
 
-Shared base: [list shared Tailwind classes all buttons inherit]
-
-**Primary Variant**:
-
-```text
-[Specific Tailwind classes — bg, text, border, hover, active, focus-visible, transition]
-```
-
-**Secondary Variant**:
-
-```text
-[Specific Tailwind classes]
-```
-
-**Ghost / Outline Variant**:
-
-```text
-[Specific Tailwind classes]
-```
-
-### Cards
-
-**Default Card**:
-
-```text
-[bg, border, radius, shadow, padding — all specific Tailwind classes]
-[Inner content spacing: space-y-2 or space-y-3 only; p-4 or p-5 only]
-```
-
-**[Special Variant — e.g., Feature Card / Stat Card]**:
-
-```text
-[Specific Tailwind classes]
-```
-
-### Inputs
-
-```text
-[bg, border, radius, padding, text, placeholder, focus-visible ring — all specific Tailwind classes]
-[Must have explicit px/py — no p-0 or px-0]
-```
-
----
-
-## 4. Layout System
-
-- **Grid**: [desktop columns / tablet columns / mobile columns]
-- **Base spacing unit**: [e.g., 4px — describe how multiples are used]
-- **Section vertical rhythm**: define a range and usage rules (e.g., compact sections `py-12~py-16`, standard sections `py-14~py-20`, hero `py-20~py-24`)
-- **Density**: [`compact` definition] / [`comfortable` definition] — specify which sections use which
-- **Hero Rule**: Hero must include a Key Visual (image / illustration / product shot / 3D / graphic system). Text-only Hero is forbidden.
-
----
-
-## 5. Anti-Generic Enforcement (The Bold Factor)
-
-These choices are mandatory. Each must be verifiable in the output code.
-
-1. **[Bold Choice 1]**: [What + exact Tailwind/CSS implementation]
-2. **[Bold Choice 2]**: [What + exact Tailwind/CSS implementation]
-3. **[Bold Choice 3]**: [What + exact Tailwind/CSS implementation]
-4. **[Bold Choice 4]**: [What + exact Tailwind/CSS implementation]
-5. **[Bold Choice 5]**: [What + exact Tailwind/CSS implementation]
-
----
-
-## 6. Effects & Animation
-
-**Motion Personality**: [1 sentence — e.g., "spring-based, physical, never linear"]
-
-**Transitions**:
-
-```css
---transition-base:  [duration] [easing];
---transition-slow:  [duration] [easing];
---transition-fast:  [duration] [easing];
-```
-
-**Hover/Interaction restraint**:
-
-- Default interactive hover should be subtle and functional.
-- Limit hover to one or two dimensions (e.g., color + shadow or color + slight translate).
-- Avoid strong transform stacks on standard cards/list items.
-- Recommend standard hover duration in `150ms-250ms` for most UI controls.
-- Do not mandate site-wide fixed noise/grain overlays by default.
-
-**Keyframe Animations** (define all used animations):
-
-```css
-@keyframes [name] {
-  [keyframes]
+  /* Surfaces */
+  --surface-[name]: #______;
 }
 ```
 
-**Keyframe Animations** (define all used animations):
-
----
-
-## 7. Iconography
-
-**Library**: lucide-react (only)
-
-**Style**: stroke-width `[value]`, default size `[value]`, color inherits from `currentColor`
-
-**Icon Containers**: [describe wrapper shape, padding, background — e.g., `size-10 rounded-lg bg-primary/10 flex items-center justify-center`]
-
----
-
-## 8. Accessibility
-
-**Minimum contrast ratios**:
-
-- Body text on background: ≥ 4.5:1 (WCAG AA)
-- Large text / UI components: ≥ 3:1
-
-**Focus States**:
+### Tailwind v4
 
 ```css
-:focus-visible {
-  outline: 2px solid var(--color-ring);
-  outline-offset: 2px;
-}
-```
-
-**Reduced Motion**:
-
-```css
-@media (prefers-reduced-motion: reduce) {
-  /* disable or simplify all keyframe animations and transitions */
+@theme {
+  /* Mirror every --color-*, --font-*, --text-*, --spacing-*, --radius-*, --shadow-* token above */
+  /* Use the same names so bg-[token], text-[token], font-[token] utilities work */
 }
 ```
 
@@ -290,15 +247,13 @@ These choices are mandatory. Each must be verifiable in the output code.
 
 ## Hard Rules (non-negotiable)
 
-- All colors: hex format only
-- All fonts: Google Fonts only
-- All CSS variables: `--` prefix, kebab-case
-- Font roles: exactly 3 — `font-display`, `font-header`, `font-body`. No `font-label`.
-- H1 max size: `text-5xl` (48px). Never `text-6xl` or above.
-- Animations: global implementation only, no `styled-jsx`
-- Keep layout width strategy consistent across sections; avoid conflicting width rules between adjacent sections.
-- Do NOT output any Textures & Patterns section. No grain, noise, scanlines, film grain, or SVG noise overlays. Use solid color backgrounds only.
-- `clip-path / polygon()`: forbidden everywhere — no chamfered or custom clipping shapes
-- Output: Markdown document only, no explanation text
-- Keep copy concise by design: hero title max 2 lines; section title max 2 lines; body blocks should avoid long-wall paragraphs.
-
+- All colors: hex (or full gradient string in Value column)
+- Fonts: **Google Fonts only** — list the `@import` URL family names in Typography section
+- CSS variables: `--` prefix, kebab-case
+- Display headline max: 60px (`--text-display`); section headings typically ≤48px
+- H1 in components: do not exceed 48px unless display role explicitly allows 60px
+- Animations: define in Quick Start; no `styled-jsx`
+- Components section must name real UI patterns (nav button, card, input, section heading) — not abstract "Primary Button" only
+- Keep copy density guidance: hero title ≤2 lines, section titles ≤2 lines, avoid wall-of-text body blocks
+- **Spacing tokens:** semantic names only (`--spacing-section`, `--spacing-gap-md`). **Never** `--spacing-xs` / `sm` / `md` / `lg` / `xl` / `2xl` — they hijack Tailwind `max-w-*`, padding, and gap utilities
+- Output the Style Reference Markdown only — no wrapper text

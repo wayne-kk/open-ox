@@ -142,7 +142,7 @@ export function SignalGridSplitHero(props: SignalGridSplitHeroProps) {
             <span className="tabular-nums">{clock}</span>
           </div>
 
-          <div className="relative z-10 mt-24 max-w-xl lg:mt-0">
+          <div className="relative z-10 mt-24 max-w-[36rem] lg:mt-0">
             <h1 className="mb-12 text-6xl font-bold uppercase leading-[0.85] tracking-tighter md:text-7xl lg:text-8xl">
               {[props.headline[0], props.headline[1]].map((line, i) => (
                 <span

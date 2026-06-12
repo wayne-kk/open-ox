@@ -11,7 +11,7 @@ Not **`gradient-frame-shader-hero`** / **`ember-radial-blades-hero`** / **`cinem
 - **Root section**: **deep void** background (token), **min-height** full viewport; on **`lg`** use **`h-screen`** + **column flex** with **`overflow-hidden`** so panes **tile** without page scroll (reference: **`lg:h-screen`**, **`lg:overflow-hidden`**); **`overflow-x-hidden`** baseline.
 - **Main** (no header): **`flex-1`** **flex column** on small screens → **`lg:flex-row`** with **gap**; **`h-full`** / **`min-h-0`** patterns so children **shrink** correctly in flex.
 - **Left pane (~40%)**: **`lg:w-5/12`**, **`w-full`**, **`flex flex-col gap`**, on mobile **bounded heights** (`**~60vh**` reference) so **gallery** remains reachable.
-- **Bento 1 — Hero**: **large radius** (`**~2rem**`), **hairline border**, **ultra-subtle** translucent surface; **corner** **decorative blur orb** (`**pointer-events-none`**); **gradient headline** (`**bg-clip-text**`), **light** weight, **tight lead**; supporting **muted** paragraph **`max-w-sm`**.
+- **Bento 1 — Hero**: **large radius** (`**~2rem**`), **hairline border**, **ultra-subtle** translucent surface; **corner** **decorative blur orb** (`**pointer-events-none`**); **gradient headline** (`**bg-clip-text**`), **light** weight, **tight lead**; supporting **muted** paragraph **`max-w-[24rem]`**.
 - **Bento 2 — Configuration**: slightly smaller radius; **horizontal layout** on **`sm+`** (mode + toggle); **mode** row: label + **pill/button** control resembling **dropdown** (implement with **real** **`select`**, **Headless UI**, or **button** + **popover**—not dead iconify); **toggle**: **`aria-pressed`**, **`role="switch"`** or **checkbox** pattern, **keyboard** operable.
 - **Bento 3 — Dropzone**: **flex-grow** (`**flex-1**`), **min-height** floor (**~220px** reference), **dashed metaphor optional**—reference uses **solid** border; **`cursor-pointer`**; **hidden** **`input type="file"`** + **`label`** or **button** to open; **mouse-tracking glow**: **absolute** blurred oval **follows** cursor **inside** box (**`pointer-events-none`**); **default** centered; **hover** reveals glow (**opacity** transition); **icon** in **raised** circle with **hover lift**.
 - **Right pane (~60%)**: **`lg:w-7/12`**, **`rounded-[2rem]`**, **darker inner** token, **overflow hidden**; **top + bottom** **gradient scrims** (**`pointer-events-none`**, **`z-20`**) for depth; **optional** **corner** **control** (e.g. **expand**) — **icons** from **Lucide**.
@@ -207,7 +207,7 @@ export function BentoSplitMarqueeGalleryHero(props: BentoSplitMarqueeGalleryHero
             <h1 className="mb-3 bg-gradient-to-br from-white via-white to-white/40 bg-clip-text text-4xl font-light leading-[1.05] tracking-tight text-transparent lg:text-6xl">
               {hero.title}
             </h1>
-            <p className="max-w-sm text-sm font-light leading-relaxed text-[color:var(--muted-foreground)]">
+            <p className="max-w-[24rem] text-sm font-light leading-relaxed text-[color:var(--muted-foreground)]">
               {hero.description}
             </p>
           </div>

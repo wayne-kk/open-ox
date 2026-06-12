@@ -14,6 +14,7 @@ import { useFaviconSync } from "@/app/hooks/useFaviconSync";
 import { BuildConversation } from "@/app/studio/components/BuildConversation";
 import { GenerationAtlas } from "@/app/studio/components/GenerationAtlas";
 import { ProjectCodePanel } from "@/app/studio/components/ProjectCodePanel";
+import { filterPipelineSteps } from "@/app/studio/lib/pipelineSteps";
 
 function formatMs(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
@@ -34,7 +35,7 @@ function StudioInner({ projectId }: { projectId: string }) {
     error: studio.response?.error ?? studio.modifyError,
   });
   const buildSteps = response?.buildSteps ?? [];
-  const pipelineSteps = buildSteps.filter((step) => step.step !== "intent_agent");
+  const pipelineSteps = filterPipelineSteps(buildSteps);
   const awaitingIntentInput = Boolean(
     response?.intentAgent &&
     response.intentAgent.status !== "commit_generate" &&

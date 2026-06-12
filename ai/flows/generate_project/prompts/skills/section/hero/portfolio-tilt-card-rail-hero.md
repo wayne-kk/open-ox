@@ -57,7 +57,7 @@ When this skill is selected, the generated hero MUST include all of the followin
 5. **Spotlight interaction** implemented with **React state** (`activeIndex: number | null` or equivalent): clicking a card **focuses** it; **non-active** cards get **blur + reduced opacity** and **transform reset** relative to default rail layout; **active** card **clears tilt**, **scales up modestly** (~`1.1–1.2`), **full opacity**, **top z-index**; clicking **same** card **clears** focus; **click outside** grid **clears** focus (use **`useRef`** on container + **`mousedown`/`pointerdown`** or **`click`** on `document` with **cleanup on unmount**).
 6. **Hover scale** on cards in **unfocused** or **non-spotlight** states; when spotlight active, **non-selected** cards **omit hover-grow** or keep it **subtle**—behavior must stay **readable**.
 7. **Staggered entrance** on headline, rail block, subcopy, and CTA row—**disabled or instant** under `prefers-reduced-motion: reduce` (**matchMedia** subscription with cleanup acceptable).
-8. **Subcopy** paragraph: centered, **`max-w-xl`**, **muted** foreground token.
+8. **Subcopy** paragraph: centered, **`max-w-[36rem]`**, **muted** foreground token.
 9. **Two CTAs**: **primary** as **pill button** with **layered background** (internal gradient + **soft glow ellipses** + optional **sheen sweep** + **inset highlight**); **secondary** as **link/button** with **muted fill**, **ring**, and **external-link style icon**; labels from **brief**.
 10. **Icons** from **project system** (e.g. **`lucide-react`**)—**no** Iconify, **no** raw CDN icon scripts, **no** enormous pasted SVG trees unless project forbids lucide.
 11. **Images**: **`next/image`** or **`<img>`** with meaningful **`alt`**; **no** mandatory hard-coded third-party CDN URLs—use **props**, CMS fields, or **placeholder** assets from brief.
@@ -194,7 +194,7 @@ export function PortfolioTiltCardRailHero(props: PortfolioTiltCardRailHeroProps)
         </div>
 
         <p
-          className="mx-auto mt-8 max-w-xl text-center text-base font-sans text-[color:var(--muted-foreground)]"
+          className="mx-auto mt-8 max-w-[36rem] text-center text-base font-sans text-[color:var(--muted-foreground)]"
           style={entrance(500)}
         >
           {subcopy}

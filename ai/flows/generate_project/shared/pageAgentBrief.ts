@@ -26,6 +26,8 @@ export interface BuildPageAgentUserMessageParams {
   userProvidedImagesBlock: string;
   userImageCount: number;
   completeToolName: string;
+  /** Screenshot replicate: page owns header/footer; layout is pass-through only. */
+  screenshotReplicaLayout?: boolean;
 }
 
 function buildWorkspaceNoteBlock(params: BuildPageAgentUserMessageParams): string {
@@ -56,7 +58,18 @@ export function buildPageAgentUserMessage(params: BuildPageAgentUserMessageParam
     userProvidedImagesBlock,
     userImageCount,
     completeToolName,
+    screenshotReplicaLayout,
   } = params;
+
+  const layoutContractBlock = screenshotReplicaLayout
+    ? `## Layout contract (screenshot replicate)
+\`${PAGE_AGENT_LAYOUT_PATH}\` is **pass-through only** (\`{children}\` — no global Nav/Footer).
+**Do not** create \`components/chrome/**\`. Reproduce header/nav/footer from the reference **inside** \`${targetPath}\` or \`components/**\` section files.
+`
+    : `## Layout contract (read-only paths)
+\`${PAGE_AGENT_LAYOUT_PATH}\` and \`components/chrome/**\` are scaffolded before this step — **do not edit**.
+Fill only the \`{children}\` region. Single-page sites: stable section \`id\` attributes (e.g. \`id="features"\`).
+`;
 
   return `## Implement this Next.js route (App Router)
 
@@ -76,10 +89,7 @@ ${planJson}
 ## Workspace context
 ${buildWorkspaceNoteBlock(params)}
 
-## Layout contract (read-only paths)
-\`${PAGE_AGENT_LAYOUT_PATH}\` and \`components/chrome/**\` are scaffolded before this step — **do not edit**.
-Fill only the \`{children}\` region. Single-page sites: stable section \`id\` attributes (e.g. \`id="features"\`).
-
+${layoutContractBlock}
 ## Project
 - Title: ${projectTitle}
 - Description: ${projectDescription}

@@ -10,8 +10,8 @@ const STAGE_MAP: Record<string, StageId> = {
   analyze_project_requirement: "understand",
   infer_design_intent: "understand",
   plan_project: "plan",
+  match_design_system_skill: "design", // legacy build logs only — step removed
   generate_project_design_system: "design",
-  match_design_system_skill: "design",
   apply_project_design_tokens: "design",
   architect_scaffold_agent: "compose",
   chrome_optimize_agent: "compose",
@@ -65,7 +65,6 @@ function inferStage(stepName: string): StageId {
 function inferKind(stepName: string, stage: StageId): GraphNode["kind"] {
   if (stage === "repair") return "repair";
   if (stage === "intent") return "intent";
-  if (stepName === "match_design_system_skill") return "decision";
   if (stepName.startsWith("typecheck_generated")) return "verification";
   if (stepName.startsWith("run_build") || stepName.startsWith("install_dependencies")) return "verification";
   if (

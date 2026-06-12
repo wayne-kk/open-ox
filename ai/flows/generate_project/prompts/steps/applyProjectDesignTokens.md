@@ -1,6 +1,8 @@
 ## Skill: Apply Design Tokens (Tailwind CSS v4)
 
-You are a senior frontend engineer. Given a Design System document and the current `globals.css`, generate a complete updated `globals.css` that fully implements the design system using **Tailwind CSS v4** syntax.
+You are a senior frontend engineer. Given a **Style Reference** design system document and the current `globals.css`, generate a complete updated `globals.css` that fully implements the design system using **Tailwind CSS v4** syntax.
+
+The design system uses semantic token names (e.g. `--color-parchment`, `--color-charcoal`, `--font-inter`) defined in the **Quick Start** section. Mirror those exact names into `@theme`.
 
 ## Output Format
 
@@ -22,15 +24,12 @@ Do not output JSON, do not output diffs, and do not provide any explanation outs
 
 /* 3. @theme block — design tokens that AUTOMATICALLY become Tailwind utility classes */
 @theme {
-  /* Colors → automatically generates: bg-accent, text-accent, border-accent */
-  --color-accent: #FF00FF;
-  --color-primary: #1A1A2E;
-  --color-background: #050505;
+  /* Colors → automatically generates: bg-parchment, text-charcoal, border-linen-border */
+  --color-parchment: #fcfbf8;
+  --color-charcoal: #1c1c1c;
 
-  /* Fonts → automatically generates: font-display, font-header, font-body */
-  --font-display: "Orbitron", sans-serif;
-  --font-header: "Orbitron", sans-serif;
-  --font-body: "Inter", sans-serif;
+  /* Fonts → automatically generates: font-inter, font-display (use names from Style Reference) */
+  --font-inter: "Inter", ui-sans-serif, system-ui, sans-serif;
 
   /* Shadows → automatically generates: shadow-neon, shadow-glow */
   --shadow-neon: 0 0 15px rgba(255, 0, 255, 0.5), 0 0 30px rgba(255, 0, 255, 0.2);
@@ -77,16 +76,28 @@ Tailwind v4 `@theme` tokens **automatically** generate utility classes. You MUST
 
 | @theme token            | Auto-generated Tailwind utility                | DO NOT create                                              |
 | ----------------------- | ---------------------------------------------- | ---------------------------------------------------------- |
-| `--color-primary: #xxx` | `bg-primary`, `text-primary`, `border-primary` | custom mirrors like `.bg-primary-alt`, `.text-primary-alt` |
-| `--color-accent: #xxx`  | `bg-accent`, `text-accent`, `border-accent`    | custom mirrors for the same token meaning                  |
-| `--font-display: "..."` | `font-display`                                 | redundant font mirror classes                              |
-| `--font-header: "..."`  | `font-header`                                  | redundant font mirror classes                              |
-| `--font-body: "..."`    | `font-body`                                    | redundant font mirror classes                              |
+| `--color-parchment: #xxx` | `bg-parchment`, `text-parchment`, `border-parchment` | custom mirrors like `.bg-parchment-alt` |
+| `--color-charcoal: #xxx`  | `bg-charcoal`, `text-charcoal`, `border-charcoal`    | custom mirrors for the same token meaning |
+| `--font-inter: "..."`      | `font-inter`                                         | redundant font mirror classes              |
 | `--shadow-glow: ...`    | `shadow-glow`                                  | redundant shadow mirror classes                            |
 | `--shadow-soft: ...`    | `shadow-soft`                                  | redundant shadow mirror classes                            |
 | `--animate-float: ...`  | `animate-float`                                | redundant animation mirror classes                         |
 | `--animate-pulse: ...`  | `animate-pulse`                                | redundant animation mirror classes                         |
 
+## CRITICAL: Spacing token names must NOT collide with Tailwind scale keys
+
+In Tailwind v4, **`max-w-xs` through `max-w-xl`** resolve from **`--spacing-*`**, not container width. If `@theme` defines `--spacing-xl: 32px`, then **`max-w-xl` becomes 32px** — body copy collapses to one word per line.
+
+| Forbidden in `@theme` | Breaks utilities |
+| --------------------- | ---------------- |
+| `--spacing-xs`, `--spacing-sm`, `--spacing-md`, `--spacing-lg`, `--spacing-xl` | `max-w-xs` … `max-w-xl`, matching `p-*`, `m-*`, `gap-*`, `w-*`, `h-*` |
+| `--spacing-2xl`, `--spacing-3xl`, … | same-scale padding/gap utilities when those keys exist |
+
+**DO:** write design-system spacing as semantic tokens only, e.g. `--spacing-section: 96px`, `--spacing-gap-md: 16px`, `--spacing-card-padding: 24px`.
+
+**DO NOT:** emit `--spacing-xl`, `--spacing-lg`, or any Tailwind scale duplicate from the Style Reference. If the design system mistakenly lists them, **rename** to semantic names in the output CSS (e.g. `--spacing-xl` → `--spacing-section-gap`).
+
+**Component authors** should prefer **`max-w-[36rem]`**, **`max-w-[50ch]`**, or **`max-w-prose`** for readable line length — not `max-w-xl` / `max-w-lg` / `max-w-md` when custom spacing tokens may exist.
 
 *Only create minimal custom utility classes for effects that Tailwind CANNOT auto-generate:**
 
@@ -99,8 +110,10 @@ Tailwind v4 `@theme` tokens **automatically** generate utility classes. You MUST
 
 **@theme block:**
 
-- Define ALL design system colors as `--color-{name}: <value>` (hex, oklch, hsl)
-- Define fonts as `--font-{name}: "Font Family", fallback`
+- Define ALL design system colors from **Tokens — Colors** as `--color-{semantic-name}: <value>` (hex, oklch, hsl)
+- Define fonts as `--font-{name}: "Font Family", fallback` using names from the Style Reference
+- Also mirror typography scale tokens if present: `--text-{role}`, `--leading-{role}`, `--tracking-{role}`
+- Define spacing as `--spacing-{semantic-name}` and radii as `--radius-{name}` when listed in Quick Start — **never** use Tailwind scale keys (`xs`, `sm`, `md`, `lg`, `xl`, `2xl`, …) for spacing; rename collisions to semantic names before writing `@theme`
 - Define named shadows as `--shadow-{name}: <value>`
 - Define animations as `--animate-{name}: <keyframe-name> <timing>`
 - **Do not** put custom `--transition-`* values in `@theme` if they are full shorthands like `all 0.6s cubic-bezier(...)` — Tailwind v4's theme compiler can throw **CssSyntaxError**. Put those on `:root` inside `@layer base` instead
@@ -113,7 +126,7 @@ Tailwind v4 `@theme` tokens **automatically** generate utility classes. You MUST
 
 **@layer base:**
 
-- Keep shadcn/ui CSS variables (`--background`, `--foreground`, `--card`, etc.) using the same variable names but with direct values, NOT `hsl(number number% number%)` format — use hex or oklch
+- Keep shadcn/ui CSS variables (`--background`, `--foreground`, `--card`, etc.) **mapped from** the semantic tokens in the Style Reference (e.g. `--background: var(--color-parchment)` or direct hex from Surfaces table)
 - Apply body/html background and text colors using `theme(--color-xxx)` or direct values
 - Keep `:root` for non-Tailwind CSS variables (complex values, transitions, composited effects)
 - **Do not** add `h1`–`h6` selectors with `color` (or any heading-level color rules). Heading color comes from components via utilities (`text-foreground`, etc.), not global base styles.
@@ -140,6 +153,7 @@ Tailwind v4 `@theme` tokens **automatically** generate utility classes. You MUST
 - Use `hsl(var(--xxx))` pattern for colors (v3 pattern)
 - Reference or modify `tailwind.config.ts` — it is not used in v4
 - Generate `h1`, `h2`, `h3`, `h4`, `h5`, `h6` rules that set `color`
+- Define `--spacing-xs`, `--spacing-sm`, `--spacing-md`, `--spacing-lg`, `--spacing-xl`, or other Tailwind scale duplicates in `@theme` (breaks `max-w-*` and layout utilities)
 
 ## Preserve from existing globals.css
 

@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import type { GraphNode } from "@/lib/atlas/types";
 import type { BuildStep, IntentAgentTurn } from "../types/build-studio";
 import { parseStepsToTopology } from "@/lib/atlas/parseSteps";
+import { filterPipelineSteps } from "../lib/pipelineSteps";
 import { PannableCanvas } from "./PannableCanvas";
 import { StageColumn } from "./StageColumn";
 import { EventStream } from "./EventStream";
@@ -88,7 +89,7 @@ export function GenerationAtlas({
 }) {
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
     const pipelineSteps = useMemo(
-        () => steps.filter((step) => step.step !== "intent_agent"),
+        () => filterPipelineSteps(steps),
         [steps]
     );
 

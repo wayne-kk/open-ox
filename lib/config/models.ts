@@ -115,11 +115,12 @@ export const GENERATION_STEPS = [
     { id: "infer_design_intent", label: "设计意图推断" },
     { id: "plan_project", label: "项目规划" },
     { id: "generate_project_design_system", label: "设计系统" },
-    { id: "match_design_system_skill", label: "设计风格匹配" },
     { id: "apply_project_design_tokens", label: "设计 Token" },
     { id: "preselect_skills", label: "技能匹配" },
     { id: "architect_scaffold_agent", label: "Chrome 搭壳 Agent" },
     { id: "chrome_optimize_agent", label: "Chrome 精修 Agent" },
+    { id: "analyze_screenshot_layout", label: "截图版式分析（ui-analyzer）" },
+    { id: "section_replica_agent", label: "区块复刻 Agent（ui-replica）" },
     { id: "page_implement_agent", label: "页面实现 Agent" },
     { id: "repair_build", label: "构建修复" },
 ] as const;

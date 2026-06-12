@@ -41,7 +41,6 @@ import { hasUserProvidedContent } from "./schema/normalizeUserProvidedContent";
 import { USER_PROVIDED_CONTENT_PATH } from "@/lib/content/userProvidedContentText";
 import { prepareUserProvidedContentForPageAgent } from "./shared/userProvidedContentContext";
 import { stepGenerateProjectDesignSystem } from "./steps/generateProjectDesignSystem";
-import { stepMatchDesignSystemSkill, type DesignSystemMatchResult } from "./steps/matchDesignSystemSkill";
 import { stepInstallDependencies } from "./steps/installDependencies";
 import { stepInferDesignIntent, type DesignIntentResult } from "./steps/inferDesignIntent";
 import { stepPlanProject } from "./steps/planProject";
@@ -76,6 +75,24 @@ import {
   resolveScreenshotIntentMode,
   screenshotGuardrailIdForMode,
 } from "./shared/screenshotIntentMode";
+import { prepareReplicaSiteLayout } from "./shared/applyMinimalReplicaRootLayout";
+import {
+  isScreenshotReplicaPipelineEnabled,
+  shouldBlockSkillsForScreenshotReplicate,
+  shouldSkipExtractUserProvidedContent,
+  shouldUseScreenshotReplicaPipeline,
+} from "./shared/screenshotReplicaPipeline";
+import {
+  stepAnalyzeScreenshotLayout,
+  ANALYZE_SCREENSHOT_LAYOUT_STEP,
+} from "./steps/analyzeScreenshotLayout";
+import { generatePagesViaReplica } from "./generatePagesViaReplica";
+import {
+  mergePageSpecSectionsIntoBlueprint,
+  pageSpecSectionsToPlannedSections,
+  tryLoadPageSpecFromSite,
+  type PageSpec,
+} from "./schema/pageSpec";
 
 function getFileExtension(path: string, fallback = "txt"): string {
   const match = path.match(/\.([a-zA-Z0-9]+)$/);
@@ -407,6 +424,7 @@ async function generatePages(params: {
   logger: StepLogger;
   skipImplementedPages?: Set<string>;
   onStep?: (step: BuildStep) => void;
+  screenshotPageSpec?: PageSpec | null;
 }): Promise<{
   files: string[];
   pendingImages: PendingImage[];
@@ -419,7 +437,24 @@ async function generatePages(params: {
     artifactLogger,
     logger,
     skipImplementedPages,
+    screenshotPageSpec,
   } = params;
+
+  if (
+    shouldUseScreenshotReplicaPipeline(runtimeContext) &&
+    screenshotPageSpec
+  ) {
+    return generatePagesViaReplica({
+      blueprint,
+      pageSpec: screenshotPageSpec,
+      designSystem,
+      runtimeContext,
+      artifactLogger,
+      logger,
+      skipImplementedPages,
+      onStep: params.onStep,
+    });
+  }
   const collectedFiles: string[] = [];
   const collectedPendingImages: PendingImage[] = [];
   const collectedPageSummaries: PageImplementSummary[] = [];
@@ -450,9 +485,11 @@ async function generatePages(params: {
             async () => {
               let heroSkillIdInner: string | null = null;
               let heroSkillPromptInner: string | undefined;
-              const screenshotBlocksHeroSkill =
-                Boolean(runtimeContext.referenceScreenshotDataUrl?.trim()) &&
-                runtimeContext.screenshotIntentMode === "replicate_layout";
+              const screenshotBlocksHeroSkill = shouldBlockSkillsForScreenshotReplicate(
+                runtimeContext.screenshotIntentMode ?? "none",
+                Boolean(runtimeContext.referenceScreenshotDataUrl?.trim()),
+                runtimeContext.rawUserInput
+              );
               if (
                 !screenshotBlocksHeroSkill &&
                 shouldOfferHeroSkillForAgentPage(page, runtimeContext.rawUserInput)
@@ -817,6 +854,11 @@ async function runGenerateProjectInner(
       Boolean(referenceScreenshot)
     );
     const screenshotGuardrailId = screenshotGuardrailIdForMode(screenshotIntentMode);
+    const blockSkillsForScreenshotReplicate = shouldBlockSkillsForScreenshotReplicate(
+      screenshotIntentMode,
+      Boolean(referenceScreenshot),
+      effectiveUserInput
+    );
 
     let rawBlueprint!: ProjectBlueprint;
     let inferredDesignIntent: DesignIntentResult | null = null;
@@ -841,9 +883,34 @@ async function runGenerateProjectInner(
       }
     } else {
       await withLangfuseSpan(LfSpanGen.analyzeBlueprintParallel, async () => {
+        const skipExtractUserContent = shouldSkipExtractUserProvidedContent(
+          screenshotIntentMode,
+          Boolean(referenceScreenshot),
+          effectiveUserInput
+        );
+
         logger.startStep("analyze_project_requirement");
         logger.startStep("infer_design_intent");
-        logger.startStep("extract_user_provided_content");
+        if (!skipExtractUserContent) {
+          logger.startStep("extract_user_provided_content");
+        }
+
+        const extractPromise = skipExtractUserContent
+          ? Promise.resolve({
+              content: undefined as undefined,
+              trace: {
+                output: {
+                  skipped: true,
+                  reason: "screenshot replicate_layout — reference image is for layout only",
+                },
+              },
+            })
+          : stepExtractUserProvidedContent({
+              userInput: effectiveUserInput,
+              imageSourceTexts: options.userImageSourceTexts,
+              referenceImageBase64: referenceScreenshot,
+            });
+
         const [analyzeResult, inferResult, extractResult] = await Promise.all([
           stepAnalyzeProjectRequirement(
             effectiveUserInput,
@@ -862,11 +929,7 @@ async function runGenerateProjectInner(
             referenceImageBase64: referenceScreenshot,
             screenshotGuardrailId,
           }),
-          stepExtractUserProvidedContent({
-            userInput: effectiveUserInput,
-            imageSourceTexts: options.userImageSourceTexts,
-            referenceImageBase64: referenceScreenshot,
-          }),
+          extractPromise,
         ]);
         logger.logStep(
           "analyze_project_requirement",
@@ -885,9 +948,11 @@ async function runGenerateProjectInner(
         logger.logStep(
           "extract_user_provided_content",
           "ok",
-          extractResult.content
-            ? `${extractResult.content.images?.length ?? 0} images (scan=${(extractResult.trace.output as { imagesFromPromptScan?: number })?.imagesFromPromptScan ?? 0}), address=${Boolean(extractResult.content.business?.address)}`
-            : "none",
+          skipExtractUserContent
+            ? "skipped — screenshot replicate (layout reference only)"
+            : extractResult.content
+              ? `${extractResult.content.images?.length ?? 0} images (scan=${(extractResult.trace.output as { imagesFromPromptScan?: number })?.imagesFromPromptScan ?? 0}), address=${Boolean(extractResult.content.business?.address)}`
+              : "none",
           undefined,
           extractResult.trace
         );
@@ -923,19 +988,36 @@ async function runGenerateProjectInner(
 
     const normalizedBlueprint = normalizeBlueprint(rawBlueprint);
 
-    // ── Steps: plan_project + match/generate design system ──
+    // ── Steps: plan_project → generate_project_design_system ──
     let blueprint!: PlannedProjectBlueprint;
     let designSystem!: string;
+    let screenshotPageSpec: PageSpec | null = null;
+
+    const replicaPipelineEligible =
+      isScreenshotReplicaPipelineEnabled() &&
+      screenshotIntentMode === "replicate_layout" &&
+      Boolean(referenceScreenshot);
 
     if (cp?.skipPlanAndDesign && cp.cachedBlueprint && cp.cachedDesignSystem) {
       blueprint = cp.cachedBlueprint;
       designSystem = cp.cachedDesignSystem;
       logger.logStep("plan_project", "ok", "resumed from checkpoint");
       logger.logStep("generate_project_design_system", "ok", "resumed from checkpoint");
+      if (replicaPipelineEligible) {
+        screenshotPageSpec = tryLoadPageSpecFromSite(readSiteFile);
+        if (screenshotPageSpec) {
+          const sections = pageSpecSectionsToPlannedSections(screenshotPageSpec.sections);
+          blueprint = mergePageSpecSectionsIntoBlueprint(blueprint, sections);
+          logger.logStep(
+            ANALYZE_SCREENSHOT_LAYOUT_STEP,
+            "ok",
+            `resumed — ${sections.length} sections from screenshot-page-spec.json`
+          );
+        }
+      }
     } else {
       await withLangfuseSpan(LfSpanGen.planAndDesignSystem, async () => {
         logger.startStep("plan_project");
-        logger.startStep("match_design_system_skill");
 
         // Build a fallback markdown text from blueprint's designIntent if inferDesignIntent returned empty
         const designIntentForSystem = inferredDesignIntent?.text || (() => {
@@ -944,77 +1026,52 @@ async function runGenerateProjectInner(
           return `## Design Intent\n- Mood: ${di.mood.join(", ")}\n- Color Direction: ${di.colorDirection}\n- Style: ${di.style}\n- Keywords: ${di.keywords.join(", ")}`;
         })();
 
-        // Phase 1: plan_project + (optionally) skill matching run in parallel
-        const skillMatchingEnabled = options.enableSkills !== false;
-
-        const planPromise = stepPlanProject(normalizedBlueprint).then((out) => {
+        const planOutcome = await stepPlanProject(normalizedBlueprint).then((out) => {
           logger.logStep("plan_project", "ok", "page-level blueprints prepared", undefined, out.trace);
           return out;
         });
 
-        const matchPromise: Promise<DesignSystemMatchResult> = skillMatchingEnabled
-          ? stepMatchDesignSystemSkill({
-            userInput: effectiveUserInput,
-          }).then((result) => {
-            logger.logStep(
-              "match_design_system_skill",
-              "ok",
-              result.matched
-                ? `matched built-in skill: ${result.skillId} — ${result.reason}`
-                : `no match — ${result.reason}`,
-              result.matched ? result.skillId : undefined
-            );
-            // Attach trace so the topology detail drawer shows LLM call, input/output
-            if (result.trace && Object.keys(result.trace).length > 0) {
-              logger.attachTrace("match_design_system_skill", result.trace);
-            }
-            return result;
-            })
-          : Promise.resolve<DesignSystemMatchResult>({
-            matched: false,
-            skillId: null,
-            reason: "skill matching disabled by user",
-            trace: {},
-          }).then((result) => {
-            logger.logStep("match_design_system_skill", "ok", "skipped — disabled by user");
-            return result;
-          });
-
-        const [planOutcome, matchResult] = await Promise.all([planPromise, matchPromise]);
-
         blueprint = planOutcome.blueprint;
 
-        await persistJsonArtifact(artifactLogger, "match_design_system_skill", "output", {
-          matched: matchResult.matched,
-          skillId: matchResult.skillId,
-          reason: matchResult.reason,
-        });
-
-        // Phase 2: use matched skill or fall back to LLM generation
-        if (matchResult.matched && matchResult.designSystem) {
-          designSystem = matchResult.designSystem;
+        if (replicaPipelineEligible && referenceScreenshot) {
+          logger.startStep(ANALYZE_SCREENSHOT_LAYOUT_STEP);
+          const layoutResult = await stepAnalyzeScreenshotLayout({
+            userInput: effectiveUserInput,
+            referenceScreenshotDataUrl: referenceScreenshot,
+            page: blueprint.site.pages[0],
+          });
+          screenshotPageSpec = layoutResult.pageSpec;
+          blueprint = mergePageSpecSectionsIntoBlueprint(blueprint, layoutResult.sections);
           logger.logStep(
-            "generate_project_design_system",
+            ANALYZE_SCREENSHOT_LAYOUT_STEP,
             "ok",
-            `using built-in skill: ${matchResult.skillId}`
-          );
-        } else {
-          logger.startStep("generate_project_design_system");
-          const dsOutcome = await stepGenerateProjectDesignSystem(
-            designIntentForSystem,
-            options.styleGuide
-          );
-          designSystem = dsOutcome.designSystem;
-          logger.logStep(
-            "generate_project_design_system",
-            "ok",
-            "design-system.md written",
+            `${layoutResult.sections.length} sections from screenshot`,
             undefined,
-            dsOutcome.trace
+            layoutResult.trace
+          );
+          await persistJsonArtifact(
+            artifactLogger,
+            ANALYZE_SCREENSHOT_LAYOUT_STEP,
+            "output",
+            layoutResult.pageSpec
           );
         }
 
-        // Merge infer_design_intent technical keywords after style matching for hero skill routing.
+        logger.startStep("generate_project_design_system");
+        const dsOutcome = await stepGenerateProjectDesignSystem(
+          designIntentForSystem,
+          options.styleGuide
+        );
+        designSystem = dsOutcome.designSystem;
+        logger.logStep(
+          "generate_project_design_system",
+          "ok",
+          "design-system.md written",
+          undefined,
+          dsOutcome.trace
+        );
+
+        // Merge infer_design_intent technical keywords for Hero runtime skill routing.
         if (inferredDesignIntent?.technicalKeywords?.length) {
           const existing = blueprint.experience.designIntent.keywords;
           const merged = [...new Set([...existing, ...inferredDesignIntent.technicalKeywords])];
@@ -1103,8 +1160,31 @@ async function runGenerateProjectInner(
     // ── Chrome scaffold → pages → chrome optimize ─────────────────────────────
     let scaffoldSummary = "";
     let scaffoldChromeForm = "unspecified";
+    const skipChromeScaffold = blockSkillsForScreenshotReplicate;
 
-    if (!cp?.skipScaffold) {
+    if (skipChromeScaffold) {
+      const { layoutPath, removedChromeDir } = await prepareReplicaSiteLayout(blueprint);
+      const replicaScaffoldDetail = cp?.skipScaffold
+        ? `replica layout enforced on resume${removedChromeDir ? " · chrome removed" : ""}`
+        : `skipped — screenshot replicate (pass-through layout${removedChromeDir ? ", chrome stripped" : ""})`;
+      logger.logStep(ARCHITECT_SCAFFOLD_AGENT_STEP, "ok", replicaScaffoldDetail);
+      await persistJsonArtifact(artifactLogger, ARCHITECT_SCAFFOLD_AGENT_STEP, "output", {
+        layoutPath,
+        chromeForm: "none",
+        skipped: true,
+        removedChromeDir,
+        reason: "screenshot replicate — page owns full chrome",
+      });
+      await persistSiteFileArtifact(
+        artifactLogger,
+        ARCHITECT_SCAFFOLD_AGENT_STEP,
+        layoutPath,
+        "layout"
+      );
+      appendGeneratedFiles(result, [layoutPath]);
+      scaffoldSummary = "screenshot replicate: minimal pass-through layout";
+      scaffoldChromeForm = "none";
+    } else if (!cp?.skipScaffold) {
       const scaffoldResult = await withLangfuseSpan(LfSpanGen.architectScaffoldAgent, () =>
         runArchitectScaffoldStep({
           blueprint,
@@ -1134,6 +1214,7 @@ async function runGenerateProjectInner(
         logger,
         skipImplementedPages: cp?.implementedPages,
         onStep,
+        screenshotPageSpec,
       })
     );
     appendGeneratedFiles(result, pageOutcome.files);
@@ -1143,21 +1224,29 @@ async function runGenerateProjectInner(
       pageOutcome.pageSummaries.length === blueprint.site.pages.length;
 
     if (allPagesImplemented && !cp?.skipChromeOptimize) {
-      const optimizeResult = await withLangfuseSpan(LfSpanGen.chromeOptimizeAgent, () =>
-        runChromeOptimizeStep({
-          blueprint,
-          designSystem,
-          scaffoldSummary,
-          scaffoldChromeForm,
-          pageSummaries: pageOutcome.pageSummaries,
-          artifactLogger,
-          logger,
-          onStep,
-          referenceScreenshotDataUrl: referenceScreenshot,
-          screenshotGuardrailId,
-        })
-      );
-      appendGeneratedFiles(result, optimizeResult.files);
+      if (skipChromeScaffold) {
+        logger.logStep(
+          CHROME_OPTIMIZE_AGENT_STEP,
+          "ok",
+          "skipped — screenshot replicate (page sections own header/footer)"
+        );
+      } else {
+        const optimizeResult = await withLangfuseSpan(LfSpanGen.chromeOptimizeAgent, () =>
+          runChromeOptimizeStep({
+            blueprint,
+            designSystem,
+            scaffoldSummary,
+            scaffoldChromeForm,
+            pageSummaries: pageOutcome.pageSummaries,
+            artifactLogger,
+            logger,
+            onStep,
+            referenceScreenshotDataUrl: referenceScreenshot,
+            screenshotGuardrailId,
+          })
+        );
+        appendGeneratedFiles(result, optimizeResult.files);
+      }
     } else if (cp?.skipChromeOptimize) {
       appendGeneratedFiles(result, collectExistingChromeOwnedRelativePaths());
     }

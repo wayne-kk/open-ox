@@ -142,7 +142,7 @@ export function StarfieldPlanetHero() {
           {/* Headline; gradient text via from-primary via-muted to-muted */}
         </h1>
 
-        <p className="mb-12 max-w-xl text-lg font-light text-muted-foreground opacity-0 motion-safe:animate-[heroIn_1s_ease_0.8s_forwards] md:text-xl">
+        <p className="mb-12 max-w-[36rem] text-lg font-light text-muted-foreground opacity-0 motion-safe:animate-[heroIn_1s_ease_0.8s_forwards] md:text-xl">
           {/* Subcopy */}
         </p>
 

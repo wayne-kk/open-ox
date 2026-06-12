@@ -9,12 +9,24 @@
  */
 export type PreviewBackend = "local" | "e2b" | "storage";
 
-function storagePreviewDepsPresent(): boolean {
+/** Supabase + site URL configured — required for static export upload to `site-previews`. */
+export function storagePreviewDepsPresent(): boolean {
   return Boolean(
     process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() &&
       process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() &&
       process.env.NEXT_PUBLIC_SITE_URL?.trim()
   );
+}
+
+/**
+ * After generation/modify, publish static HTML to Storage for prod/guest preview.
+ * Independent of {@link getPreviewBackend}: local Studio may use `next dev` while still uploading `out/`.
+ */
+export function shouldPublishStaticSitePreview(): boolean {
+  if (process.env.OPEN_OX_SKIP_STATIC_PREVIEW_PUBLISH?.trim() === "1") {
+    return false;
+  }
+  return storagePreviewDepsPresent();
 }
 
 export function getPreviewBackend(): PreviewBackend {

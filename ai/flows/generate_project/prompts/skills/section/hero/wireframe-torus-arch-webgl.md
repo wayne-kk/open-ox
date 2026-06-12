@@ -190,7 +190,7 @@ export function WireframeTorusArchHero({ title, subcopy, cta }: WireframeTorusAr
         <h1 className="flex select-none items-center justify-center bg-[linear-gradient(180deg,var(--hero-text-top)_30%,var(--hero-text-base)_100%)] bg-clip-text text-7xl font-semibold leading-none tracking-tighter text-transparent md:text-[10rem]">
           {title}
         </h1>
-        <p className="mx-auto mt-8 max-w-lg text-base font-normal tracking-wide leading-relaxed text-muted-foreground md:text-lg">
+        <p className="mx-auto mt-8 max-w-[32rem] text-base font-normal tracking-wide leading-relaxed text-muted-foreground md:text-lg">
           {subcopy}
         </p>
         <a

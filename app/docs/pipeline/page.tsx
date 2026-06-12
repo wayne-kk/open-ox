@@ -46,18 +46,12 @@ const STEPS = [
   { n: "02", name: "analyze_project_requirement", type: "llm+tool", desc: "解析 ProjectBlueprint，配备 web_search。与步骤 03 并行。" },
   { n: "03", name: "infer_design_intent", type: "llm", desc: "独立风格/技术关键词推理；产物合并进设计系统输入与 blueprint.keywords。与步骤 02、03b 并行。" },
   { n: "03b", name: "extract_user_provided_content", type: "llm+tool", desc: "从用户 query 整理 userProvidedContent（地址、图片 URL、菜单等），写入 content/user-provided.md。与步骤 02、03 并行；Plan 之前合并进 blueprint。" },
-  { n: "04", name: "plan_project", type: "llm", desc: "扩展为 PlannedProjectBlueprint（pages、sections、pageDesignPlan）。与步骤 05a 并行。" },
+  { n: "04", name: "plan_project", type: "llm", desc: "扩展为 PlannedProjectBlueprint（pages、sections、pageDesignPlan）。" },
   {
-    n: "05a",
-    name: "match_design_system_skill",
-    type: "llm",
-    desc: "与用户 prompt 比对内置 design-system skill；命中则直接使用 skill 正文作为 design-system.md。与步骤 04 并行（enableSkills=false 时跳过）。",
-  },
-  {
-    n: "05b",
+    n: "05",
     name: "generate_project_design_system",
     type: "llm",
-    desc: "未命中内置 skill 时执行：根据 infer 文本 + 可选用户 styleGuide 生成 design-system.md。",
+    desc: "根据 infer 文本 + 可选用户 styleGuide 生成 Style Reference 格式的 design-system.md。",
   },
   { n: "06", name: "apply_project_design_tokens", type: "llm", desc: "设计系统 Markdown + 当前 app/globals.css → LLM 产出完整 globals.css（保留模板结构意图）。须先于 Chrome / Page Agent。" },
   {
@@ -148,8 +142,10 @@ await Promise.all([
   stepExtractUserProvidedContent({ userInput }),
 ]);
 
-// 第二层：plan_project + match/generate design system（当前实现）
-const [planOutcome, matchResult] = await Promise.all([...]);
+// 第二层：plan_project → generate_project_design_system（串行；截图复刻时中间插入 analyze_screenshot_layout）
+await stepPlanProject(...);
+// 可选：stepAnalyzeScreenshotLayout(...)
+await stepGenerateProjectDesignSystem(...);
 
 // 第三层：apply_project_design_tokens 必须单独先完成（写 globals.css，避免与 Agent 写文件竞态）
 

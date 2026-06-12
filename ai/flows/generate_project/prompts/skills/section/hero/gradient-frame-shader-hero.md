@@ -193,7 +193,7 @@ export function GradientFrameShaderHero() {
                   </span>
                 </h1>
               </div>
-              <div className="flex max-w-md flex-col gap-8 pb-2">
+              <div className="flex max-w-[28rem] flex-col gap-8 pb-2">
                 <p className="text-sm font-light leading-relaxed text-primary-foreground/60 md:text-base">
                   Subcopy from brief
                 </p>

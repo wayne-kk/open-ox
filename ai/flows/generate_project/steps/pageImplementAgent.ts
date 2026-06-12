@@ -24,6 +24,10 @@ import type { PlannedPageBlueprint, StepTrace, PageAgentProjectContext, BuildSte
 import { resolvePageImplementAgentRuleIds } from "../shared/agentRuleBundles";
 import { buildUserVisionContent } from "../shared/userVisionContent";
 import { screenshotGuardrailIdFromContext } from "../shared/screenshotIntentMode";
+import {
+  shouldBlockSkillsForScreenshotReplicate,
+  shouldScanPromptForUserImageUrls,
+} from "../shared/screenshotReplicaPipeline";
 import { hasUserProvidedContent } from "../schema/normalizeUserProvidedContent";
 import {
   prepareUserProvidedContentForPageAgent,
@@ -156,10 +160,15 @@ export async function runPageImplementAgent(
   const thinking = getThinkingLevelForStep("page_implement_agent");
   const agentStepName = `page_implement_agent:${page.slug}`;
   const userContent = prepareUserProvidedContentForPageAgent(projectContext.userProvidedContent);
-  const userImageUrls = listUserProvidedImageUrls(
-    userContent,
-    projectContext.rawUserInput ?? ""
-  );
+  const hasRefShot = Boolean(projectContext.referenceScreenshotDataUrl?.trim());
+  const imageUrlFallbackText = shouldScanPromptForUserImageUrls(
+    projectContext.screenshotIntentMode ?? "none",
+    hasRefShot,
+    projectContext.rawUserInput
+  )
+    ? (projectContext.rawUserInput ?? "")
+    : "";
+  const userImageUrls = listUserProvidedImageUrls(userContent, imageUrlFallbackText);
   const userImageCount = userImageUrls.length;
   const hasUserContent = hasUserProvidedContent(userContent);
 
@@ -197,6 +206,11 @@ export async function runPageImplementAgent(
     userProvidedImagesBlock: userProvidedContentImagesBlock(userContent),
     userImageCount,
     completeToolName: PAGE_IMPLEMENTATION_COMPLETE,
+    screenshotReplicaLayout: shouldBlockSkillsForScreenshotReplicate(
+      projectContext.screenshotIntentMode ?? "none",
+      Boolean(projectContext.referenceScreenshotDataUrl?.trim()),
+      projectContext.rawUserInput
+    ),
   });
 
   const refShot = projectContext.referenceScreenshotDataUrl ?? null;
@@ -204,10 +218,21 @@ export async function runPageImplementAgent(
     projectContext.screenshotIntentMode,
     Boolean(refShot?.trim())
   );
+  const replicateLayout = shouldBlockSkillsForScreenshotReplicate(
+    projectContext.screenshotIntentMode ?? "none",
+    Boolean(refShot?.trim()),
+    projectContext.rawUserInput
+  );
   const systemPrompt = composePromptBlocks([
     loadSystem("frontend"),
     loadStepPrompt("pageImplementAgent"),
     ...(refGuardId ? [loadGuardrail(refGuardId)] : []),
+    ...(replicateLayout
+      ? [
+          loadGuardrail("screenshotReplicateNoUserAssets"),
+          loadGuardrail("screenshotReplicatePageOwnsChrome"),
+        ]
+      : []),
     ...resolvePageImplementAgentRuleIds({ userProvidedImageCount: userImageCount }).map(
       loadGuardrail
     ),

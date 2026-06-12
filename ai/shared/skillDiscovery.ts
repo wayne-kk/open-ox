@@ -1,14 +1,13 @@
 /**
  * Generic skill discovery — 任何 agent 均可调用
  *
- * 当前生成流水线只用两类 skill：
- *   - `design-system/`：通过 `matchDesignSystemSkill` 走整文件加载（不经过此模块）
- *   - `section/<sectionType>/`：通过 `discoverSkillsBySectionType` + `discoverAndSelectSkill` 选择
+ * 当前生成流水线使用 section skill：
+ *   `section/<sectionType>/` — 通过 `discoverSkillsBySectionType` + `discoverAndSelectSkill` 选择
  *
  * 支持的 skill 文件格式（均为 section skill）：
  *   1. 新格式：独立 .yaml（metadata）+ .md（prompt 正文），文件名相同
  *   2. 旧格式：单个 .md 文件，metadata 写在 YAML frontmatter 中
- *   3. 聚合：`section/<类型>/skills.yaml`，根键 `skills:`，每项 `name` 作 id，`keywords` / `exclude_keywords` 映射到 `when.designKeywords`（`design-system/skills.yaml` 仍为目录特例，忽略）
+ *   3. 聚合：`section/<类型>/skills.yaml`，根键 `skills:`，每项 `name` 作 id，`keywords` / `exclude_keywords` 映射到 `when.designKeywords`
  *
  * rootPath 由调用方传入，例如：
  *   - generate_project flow: ai/flows/generate_project/prompts/skills/
@@ -111,12 +110,6 @@ function parseYamlFile(content: string): Record<string, unknown> {
   return parsed.data as Record<string, unknown>;
 }
 
-/** `design-system/skills.yaml` uses a catalog format for matchDesignSystemSkill, not SkillMetadata. */
-function isDesignSystemSkillsYamlPath(fullPath: string): boolean {
-  const normalized = fullPath.replace(/\\/g, "/");
-  return normalized.endsWith("/design-system/skills.yaml");
-}
-
 /**
  * Section bundles: `prompts/skills/section/<section>/skills.yaml` with top-level `skills:` array.
  * Each item uses `name` as id and `keywords` / `exclude_keywords` → `when.designKeywords`.
@@ -208,9 +201,6 @@ export function discoverSkills(rootPath: string): SkillMetadata[] {
     }
 
     if (name === "skills.yaml") {
-      if (isDesignSystemSkillsYamlPath(fullPath)) {
-        continue;
-      }
       for (const meta of parseBundledSectionSkillsYaml(content, fullPath)) {
         if (seenIds.has(meta.id)) continue;
         seenIds.add(meta.id);
@@ -291,10 +281,6 @@ export function validateSkillFrontmatter(rootPath: string): SkillFrontmatterErro
   // Validate .yaml files
   const yamlFiles = collectYamlFiles(rootPath);
   for (const { fullPath, name } of yamlFiles) {
-    if (name === "skills.yaml" && isDesignSystemSkillsYamlPath(fullPath)) {
-      continue;
-    }
-
     let content: string;
     try {
       content = readFileSync(fullPath, "utf-8");

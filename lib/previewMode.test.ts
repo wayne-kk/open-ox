@@ -46,3 +46,28 @@ describe("getPreviewBackend", () => {
     expect(getPreviewBackend()).toBe("local");
   });
 });
+
+describe("shouldPublishStaticSitePreview", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("publishes when Supabase deps exist even if preview backend is local", async () => {
+    vi.stubEnv("OPEN_OX_PREVIEW_BACKEND", "local");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "secret");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://a.supabase.co");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "http://localhost:3000");
+    const { shouldPublishStaticSitePreview } = await import("./previewMode");
+    expect(shouldPublishStaticSitePreview()).toBe(true);
+  });
+
+  it("skips publish when OPEN_OX_SKIP_STATIC_PREVIEW_PUBLISH=1", async () => {
+    vi.stubEnv("OPEN_OX_SKIP_STATIC_PREVIEW_PUBLISH", "1");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "secret");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://a.supabase.co");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "http://localhost:3000");
+    const { shouldPublishStaticSitePreview } = await import("./previewMode");
+    expect(shouldPublishStaticSitePreview()).toBe(false);
+  });
+});

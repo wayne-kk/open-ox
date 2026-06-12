@@ -106,19 +106,15 @@ export default function SkillsPage() {
         </section>
 
         <section id="routing" className="scroll-mt-24">
-          <H2>三条风格通路</H2>
+          <H2>两条风格通路</H2>
           <P>
-            当前管道里与「风格」相关的逻辑分成三类，切勿混淆：
+            当前管道里与「风格」相关的逻辑分成两类，切勿混淆：
           </P>
           <div className="mt-4 space-y-2">
             {[
               {
                 title: "用户 styleGuide（public/skills + / 菜单）",
                 body: "提交时写入 styleGuide，截断后主要注入 generate_project_design_system，避免撑爆 analyze prompt。",
-              },
-              {
-                title: "match_design_system_skill",
-                body: "并行于 plan_project：用 LLM 判断是否命中 ai 流程内置的 design-system 技能正文；命中则跳过生成步骤直接采用该 Markdown。",
               },
               {
                 title: "Hero 运行时组件 skill",
@@ -134,7 +130,7 @@ export default function SkillsPage() {
           <H3>菜单与菜谱分离</H3>
           <P>
             运行时选型阶段尽量只传技能的 metadata / 短摘要；只有在确定选中后才读取完整 Markdown 正文，
-            以降低 LLM 往返与重复 token。内置 design-system 技能遵循同一原则。
+            以降低 LLM 往返与重复 token。
           </P>
         </section>
 
