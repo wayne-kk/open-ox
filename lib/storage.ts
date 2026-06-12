@@ -530,6 +530,9 @@ async function isLocalProjectOutOfSyncWithStorage(
   if (!saved.filesFingerprint) {
     return false;
   }
+  if (!(await projectPackageJsonExists(projectId))) {
+    return true;
+  }
   const localFp = await computeProjectFingerprint(projectId);
   return localFp !== saved.filesFingerprint;
 }
@@ -549,9 +552,10 @@ export async function ensureProjectSourcesOnDisk(
   options?: { db?: SupabaseClient }
 ): Promise<void> {
   const pkgExists = await projectPackageJsonExists(projectId);
-  const outOfSync = options?.db
-    ? await isLocalProjectOutOfSyncWithStorage(options.db, projectId)
-    : false;
+  const outOfSync =
+    pkgExists && options?.db
+      ? await isLocalProjectOutOfSyncWithStorage(options.db, projectId)
+      : false;
 
   if (pkgExists && !outOfSync) {
     return;
