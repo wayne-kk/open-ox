@@ -216,7 +216,7 @@ function ModifyResultBubble({ record }: { record: ModifyRecord }) {
             ? "回答"
             : record.intentLabel === "规划"
                 ? "计划"
-                : "Analysis";
+                : "总结";
 
     return (
         <ChatBubble role="assistant">
@@ -317,6 +317,7 @@ export function BuildConversation({
     response,
     mergedBrief,
     conversationMessages,
+    userInputScrollNonce,
     lastRunInput,
     elapsed,
     flowStart,
@@ -350,6 +351,9 @@ export function BuildConversation({
     setIntentImage,
 }: BuildStudioState) {
     const chatRef = useRef<HTMLDivElement>(null);
+    const userMessageRefs = useRef(new Map<string, HTMLDivElement>());
+    const pendingModifyUserRef = useRef<HTMLDivElement>(null);
+    const lastUserInputScrollNonceRef = useRef(0);
     const [slashHint, setSlashHint] = useState<string | null>(null);
     const [memoryOpen, setMemoryOpen] = useState(false);
 
@@ -419,6 +423,26 @@ export function BuildConversation({
         return () => el.removeEventListener("scroll", handleScroll);
     }, []);
 
+    // User input should always scroll into view; system/build updates keep the near-bottom behavior.
+    useEffect(() => {
+        if (userInputScrollNonce === lastUserInputScrollNonceRef.current) return;
+        lastUserInputScrollNonceRef.current = userInputScrollNonce;
+
+        requestAnimationFrame(() => {
+            if (pendingModifyUserRef.current) {
+                pendingModifyUserRef.current.scrollIntoView({ block: "nearest", behavior: "smooth" });
+                return;
+            }
+
+            const latestUserMessage = [...conversationMessages].reverse().find((message) => message.role === "user");
+            if (!latestUserMessage) return;
+
+            userMessageRefs.current
+                .get(latestUserMessage.id)
+                ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        });
+    }, [userInputScrollNonce, conversationMessages, pendingModifyInstruction]);
+
     useEffect(() => {
         if (isNearBottomRef.current && chatRef.current) {
             chatRef.current.scrollTop = chatRef.current.scrollHeight;
@@ -476,8 +500,9 @@ export function BuildConversation({
                         </ChatBubble>
                     ) : null}
 
-                    {conversationMessages.map((message) => (
-                        <ChatBubble key={message.id} role={message.role}>
+                    {conversationMessages.map((message) => {
+                        const bubble = (
+                            <ChatBubble role={message.role}>
                             {message.role === "assistant" ? (
                                 <div className="text-[11px] font-medium text-foreground">意图助手</div>
                             ) : null}
@@ -544,7 +569,24 @@ export function BuildConversation({
                                 ) : null}
                             </div>
                         </ChatBubble>
-                    ))}
+                        );
+
+                        if (message.role !== "user") {
+                            return <div key={message.id}>{bubble}</div>;
+                        }
+
+                        return (
+                            <div
+                                key={message.id}
+                                ref={(el) => {
+                                    if (el) userMessageRefs.current.set(message.id, el);
+                                    else userMessageRefs.current.delete(message.id);
+                                }}
+                            >
+                                {bubble}
+                            </div>
+                        );
+                    })}
 
                     {showThinkingBubble ? (
                         <ChatBubble role="assistant">
@@ -729,7 +771,8 @@ export function BuildConversation({
 
                     {/* In-progress modify — show user's input bubble first */}
                     {modifying && pendingModifyInstruction && (
-                        <ChatBubble role="user">
+                        <div ref={pendingModifyUserRef}>
+                            <ChatBubble role="user">
                             <div className="space-y-3">
                                 {pendingModifyImage && (
                                     // eslint-disable-next-line @next/next/no-img-element
@@ -742,6 +785,7 @@ export function BuildConversation({
                                 <StudioMessageMarkdown content={pendingModifyInstruction} />
                             </div>
                         </ChatBubble>
+                        </div>
                     )}
 
                     {/* In-progress modify — assistant response */}
@@ -750,7 +794,7 @@ export function BuildConversation({
                             <div className="text-[11px] font-medium text-foreground">{modifyIntentLabel}助手</div>
                             <div className="mt-3 space-y-3">
                                 {(modifyPlan?.analysis ?? "").trim() ? (
-                                    <LogSection title={modifyIntentLabel === "问答" || modifyIntentLabel === "对话" ? "回答" : modifyIntentLabel === "规划" ? "计划" : "Analysis"}>
+                                    <LogSection title={modifyIntentLabel === "问答" || modifyIntentLabel === "对话" ? "回答" : modifyIntentLabel === "规划" ? "计划" : "总结"}>
                                         <StudioMessageMarkdown content={(modifyPlan?.analysis ?? "").trim()} />
                                     </LogSection>
                                 ) : null}

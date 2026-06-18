@@ -13,6 +13,8 @@
 
 import { NextResponse } from "next/server";
 import { SSE_RESPONSE_HEADERS } from "@/lib/sse-headers";
+import { createAgentSseSender } from "@/lib/transport/agentStreamSse";
+import { tryCreateAgentStreamServerSession } from "@/lib/transport/agentStream.server";
 import { getProject } from "@/lib/projectManager";
 import { runModifyProject } from "@/ai/flows/modify_project/runModifyProject";
 import type { ModifySSEEvent } from "@/ai/flows/modify_project/runModifyProject";
@@ -21,6 +23,7 @@ import { classifyModificationScope } from "@/lib/devServerManager";
 import { getSessionUser } from "@/lib/auth/session";
 import { flushLangfuse, resolveLangfuseSessionId, runWithLangfuseTraceRoot } from "@/lib/observability/langfuseTracing";
 import { LfTrace } from "@/lib/observability/langfuseTraceCatalog";
+import { trackServerAnalyticsEventFireAndForget } from "@/lib/analytics/serverEvents";
 
 export const runtime = "nodejs";
 
@@ -48,6 +51,7 @@ export async function POST(
   let clearContext = false;
   let imageBase64: string | undefined;
   let langfuseSessionIdBody: string | undefined;
+  let clientPublicKey: string | undefined;
   try {
     const body = await req.json();
     userInstruction = body.userInstruction;
@@ -59,6 +63,10 @@ export async function POST(
         ? body.langfuseSessionId.trim()
         : undefined;
     imageBase64 = typeof body.imageBase64 === "string" ? body.imageBase64 : undefined;
+    clientPublicKey =
+      typeof body.clientPublicKey === "string" && body.clientPublicKey.trim()
+        ? body.clientPublicKey.trim()
+        : undefined;
     if (clearContext) conversationHistory = [];
     if (!userInstruction || typeof userInstruction !== "string") {
       return NextResponse.json(
@@ -74,14 +82,20 @@ export async function POST(
   }
 
   const encoder = new TextEncoder();
+  const secureSession = tryCreateAgentStreamServerSession(clientPublicKey);
 
   const stream = new ReadableStream({
     async start(controller) {
       let closed = false;
+      const sendPlain = createAgentSseSender({
+        controller,
+        encoder,
+        secureSession,
+      });
       const send = (event: ModifySSEEvent) => {
         if (closed) return;
         try {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+          sendPlain(event as Record<string, unknown>);
         } catch {
           closed = true;
         }
@@ -89,11 +103,19 @@ export async function POST(
 
       const collectedDiffs: Array<{ file: string; reasoning: string; patch: string; stats: { additions: number; deletions: number } }> = [];
       let buildPassed = false;
+      let modifySucceeded = false;
 
       try {
         const langfuseSessionKey = resolveLangfuseSessionId({
           projectId: id,
           clientSessionId: langfuseSessionIdBody,
+        });
+
+        trackServerAnalyticsEventFireAndForget({
+          userId: user.id,
+          eventName: "modify_start",
+          properties: { projectId: id },
+          sessionId: langfuseSessionKey,
         });
 
         await runWithLangfuseTraceRoot(
@@ -144,10 +166,20 @@ export async function POST(
           diffs: collectedDiffs,
           buildPassed,
         } as ModifySSEEvent & { refreshMode: string; changedFiles: string[]; diffs: typeof collectedDiffs; buildPassed: boolean });
+        modifySucceeded = true;
       } catch (err) {
         const message = err instanceof Error ? err.message : "Internal error";
         send({ type: "error", message });
       } finally {
+        trackServerAnalyticsEventFireAndForget({
+          userId: user.id,
+          eventName: "modify_complete",
+          properties: { projectId: id, success: modifySucceeded },
+          sessionId: resolveLangfuseSessionId({
+            projectId: id,
+            clientSessionId: langfuseSessionIdBody,
+          }),
+        });
         await flushLangfuse();
         if (!closed) {
           closed = true;

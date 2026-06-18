@@ -12,6 +12,8 @@ import {
 import { setRuntimeModelId, type ModelId } from "@/lib/config/models";
 import { loadStepModelsFromDB } from "@/lib/config/models";
 import { SSE_RESPONSE_HEADERS } from "@/lib/sse-headers";
+import { createAgentSseSender } from "@/lib/transport/agentStreamSse";
+import { tryCreateAgentStreamServerSession } from "@/lib/transport/agentStream.server";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
 import { runWithSiteRoot } from "@/ai/tools/system/common";
@@ -39,6 +41,7 @@ import {
 import fs from "fs/promises";
 import path from "path";
 import { formatIntentAgentTraceSummary } from "@/ai/flows/generate_project/intentAgent/formatIntentAgentTrace";
+import { trackServerAnalyticsEventFireAndForget } from "@/lib/analytics/serverEvents";
 
 export const runtime = "nodejs";
 
@@ -80,6 +83,10 @@ export async function POST(req: Request) {
     const projectId: unknown = body.projectId;
     const message: unknown = body.message;
     const imageBase64Raw: unknown = body.imageBase64;
+    const clientPublicKey: string | undefined =
+      typeof body.clientPublicKey === "string" && body.clientPublicKey.trim()
+        ? body.clientPublicKey.trim()
+        : undefined;
     const resetSession: boolean = body.resetSession === true;
     /** Intent Agent already converged the brief — skip duplicate `project_intent_guide` in worker. */
     const enableIntentGuide: boolean = body.enableIntentGuide === true;
@@ -122,12 +129,15 @@ export async function POST(req: Request) {
     await loadStepModelsFromDB();
 
     const encoder = new TextEncoder();
+    const secureSession = tryCreateAgentStreamServerSession(clientPublicKey);
 
     const stream = new ReadableStream({
       async start(controller) {
-        const send = (obj: Record<string, unknown>) => {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
-        };
+        const send = createAgentSseSender({
+          controller,
+          encoder,
+          secureSession,
+        });
 
         try {
           const projectRoot = path.join(process.cwd(), "sites", projectId);
@@ -143,6 +153,13 @@ export async function POST(req: Request) {
             projectId,
             clientSessionId:
               typeof body.langfuseSessionId === "string" ? body.langfuseSessionId : undefined,
+          });
+
+          trackServerAnalyticsEventFireAndForget({
+            userId: user.id,
+            eventName: "intent_agent_start",
+            properties: { projectId },
+            sessionId: langfuseSessionKey,
           });
 
           await runWithLangfuseTraceRoot(
@@ -200,6 +217,13 @@ export async function POST(req: Request) {
           );
 
           send({ type: "intent_agent_turn", turn: serializeIntentTurn(intentResult) });
+
+          trackServerAnalyticsEventFireAndForget({
+            userId: user.id,
+            eventName: "intent_turn",
+            properties: { projectId, status: intentResult.status },
+            sessionId: langfuseSessionKey,
+          });
 
           if (intentResult.status !== "commit_generate") {
             const traceBlock = formatIntentAgentTraceSummary(intentResult.trace);

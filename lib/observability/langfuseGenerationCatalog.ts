@@ -16,6 +16,7 @@ export const LfPlain = {
   projectIntentGuide: "project_intent_guide_dialogue",
   modifyIntentRouter: "modify_intent_router_classify",
   modifyPlan: "modify_plan_target_files",
+  modifyCompletionSummary: "modify_completion_summary",
   commitMergedBriefSubstance: "commit_merged_brief_substance_classify",
   inferDesignIntent: "infer_design_intent_and_keywords",
   analyzeRequirement: "analyze_requirement_blueprint_json",

@@ -4,6 +4,18 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { runBuildSite } from "../lib/build-studio-api";
 import type { AiResponse, BuildStep, IntentAgentTurn, IntentProgressEvent } from "../types/build-studio";
 import { stripRecoverablePrefixForDisplay } from "@/lib/generationRecovery";
+import {
+  createAgentStreamClientSession,
+  decodeAgentSseJsonLine,
+  isSecureAgentStreamSupported,
+  type AgentStreamClientSession,
+} from "@/lib/transport/agentStream.client";
+import { parseSseDataLine } from "@/lib/transport/agentStreamSse";
+import { trackEvent } from "@/lib/analytics/client";
+
+function trackPreviewOpen(projectId: string) {
+  trackEvent("preview_open", { projectId, path: "/studio" });
+}
 
 export type RightPanel = "topology" | "preview" | "code";
 
@@ -67,6 +79,8 @@ export interface BuildStudioState {
   intentAgent: IntentAgentTurn | null;
   mergedBrief: string | null;
   conversationMessages: ConversationMessage[];
+  /** Bumps when the user sends build/modify input so the conversation pane can scroll it into view. */
+  userInputScrollNonce: number;
   lastRunInput: string | null;
   elapsed: number;
   flowStart: number;
@@ -132,6 +146,23 @@ export interface BuildStudioState {
 
 const AUTO_PREVIEW_STORAGE_KEY = "open-ox:studio:autoPreviewAfterBuild";
 const CONVERSATION_STORAGE_PREFIX = "open-ox:studio:conversation:";
+
+function modifyIntentLabelToCategory(
+  label?: string
+): "conversation" | "read_only" | "plan_only" | "code_change" | undefined {
+  switch (label) {
+    case "对话":
+      return "conversation";
+    case "问答":
+      return "read_only";
+    case "规划":
+      return "plan_only";
+    case "修改":
+      return "code_change";
+    default:
+      return undefined;
+  }
+}
 
 /** Polling DB while status is `generating` — after this duration with no SSE, offer recovery UX */
 const GENERATION_POLL_STUCK_MS = 90_000;
@@ -207,6 +238,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
   const [intentAgent, setIntentAgent] = useState<IntentAgentTurn | null>(null);
   const [mergedBrief, setMergedBrief] = useState<string | null>(null);
   const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>([]);
+  const [userInputScrollNonce, setUserInputScrollNonce] = useState(0);
   const [lastRunInput, setLastRunInput] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
@@ -698,12 +730,14 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         imageDataUrl: capturedIntentImage ?? undefined,
       });
       setInput("");
+      setUserInputScrollNonce((nonce) => nonce + 1);
     } else if (capturedIntentImage) {
       appendConversationMessage({
         role: "user",
         content: "（参考截图）",
         imageDataUrl: capturedIntentImage,
       });
+      setUserInputScrollNonce((nonce) => nonce + 1);
     }
 
     try {
@@ -1021,6 +1055,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         setPreviewUrl(data.url);
         setPreviewVersion((v) => v + 1);
         setPreviewState("ready");
+        trackPreviewOpen(projectId);
       } else {
         const err = await res.json().catch(() => ({}));
         if (session !== previewSessionRef.current) return;
@@ -1050,6 +1085,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         setPreviewUrl(data.url);
         setPreviewVersion((v) => v + 1);
         setPreviewState("ready");
+        trackPreviewOpen(projectId);
       } else {
         const err = await res.json().catch(() => ({}));
         if (session !== previewSessionRef.current) return;
@@ -1082,6 +1118,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
           setPreviewUrl(data.url);
           setPreviewVersion((v) => v + 1);
           setPreviewState("ready");
+          trackPreviewOpen(targetProjectId);
         } else {
           const err = await res.json().catch(() => ({}));
           if (session !== previewSessionRef.current) return;
@@ -1175,6 +1212,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     setPendingModifyInstruction(modifyInstruction);
     setPendingModifyImage(capturedImage);
     setModifying(true);
+    setUserInputScrollNonce((nonce) => nonce + 1);
     setModifySteps([]);
     setModifyPlan(null);
     setModifyDiffs([]);
@@ -1192,42 +1230,60 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     // Track whether the done event was received (for history saving)
     let receivedDone = false;
 
-    function processModifySSE(raw: string) {
-      if (!raw.startsWith("data: ")) return;
-      try {
-        const event = JSON.parse(raw.slice(6));
-        if (event.type === "intent") {
-          const label = typeof event.label === "string" ? event.label : "修改";
+    function processModifySSE(raw: string, secureSession: AgentStreamClientSession | null) {
+      const line = parseSseDataLine(raw);
+      if (!line) return;
+      void decodeAgentSseJsonLine(secureSession, line).then((event) => {
+        if (!event) return;
+        try {
+        const e = event as {
+          type: string;
+          label?: string;
+          name?: string;
+          status?: ModifyStep["status"];
+          message?: string;
+          plan?: ModifyPlan;
+          file?: string;
+          reasoning?: string;
+          patch?: string;
+          stats?: ModifyDiff["stats"];
+          tool?: string;
+          args?: Record<string, unknown>;
+          result?: string;
+          content?: string;
+        };
+        if (e.type === "intent") {
+          const label = typeof e.label === "string" ? e.label : "修改";
           setModifyIntentLabel(label);
           modifyIntentLabelRef.current = label;
-        } else if (event.type === "step") {
+        } else if (e.type === "step" && e.name && e.status) {
           setModifySteps((prev) => {
-            const idx = prev.findIndex((s: ModifyStep) => s.name === event.name);
+            const idx = prev.findIndex((s: ModifyStep) => s.name === e.name);
             let next: ModifyStep[];
-            if (idx >= 0) { next = [...prev]; next[idx] = { name: event.name, status: event.status, message: event.message }; }
-            else { next = [...prev, { name: event.name, status: event.status, message: event.message }]; }
+            if (idx >= 0) { next = [...prev]; next[idx] = { name: e.name!, status: e.status!, message: e.message }; }
+            else { next = [...prev, { name: e.name!, status: e.status!, message: e.message }]; }
             modifyStepsRef.current = next;
             return next;
           });
-        } else if (event.type === "plan") {
-          setModifyPlan(event.plan);
-          modifyPlanRef.current = event.plan;
-        } else if (event.type === "diff") {
+        } else if (e.type === "plan" && e.plan) {
+          setModifyPlan(e.plan);
+          modifyPlanRef.current = e.plan;
+        } else if (e.type === "diff" && e.file && e.patch && e.stats) {
           setModifyDiffs((prev) => {
-            const next = [...prev, { file: event.file, reasoning: event.reasoning, patch: event.patch, stats: event.stats }];
+            const next = [...prev, { file: e.file!, reasoning: e.reasoning ?? "", patch: e.patch!, stats: e.stats! }];
             modifyDiffsRef.current = next;
             return next;
           });
-        } else if (event.type === "tool_call") {
-          const tc = { tool: event.tool, args: event.args, result: event.result };
+        } else if (e.type === "tool_call" && e.tool) {
+          const tc = { tool: e.tool, args: e.args ?? {}, result: e.result ?? "" };
           setModifyToolCalls((prev) => [...prev, tc]);
           modifyToolCallsRef.current = [...modifyToolCallsRef.current, tc];
-        } else if (event.type === "thinking") {
-          setModifyThinking((prev) => [...prev, event.content]);
-          modifyThinkingRef.current = [...modifyThinkingRef.current, event.content];
-        } else if (event.type === "error") {
-          setModifyError(event.message);
-        } else if (event.type === "done") {
+        } else if (e.type === "thinking" && typeof e.content === "string") {
+          setModifyThinking((prev) => [...prev, e.content!]);
+          modifyThinkingRef.current = [...modifyThinkingRef.current, e.content!];
+        } else if (e.type === "error") {
+          setModifyError(typeof e.message === "string" ? e.message : "Unknown error");
+        } else if (e.type === "done") {
           receivedDone = true;
           setModifyInstruction("");
           setModifyImage(null);
@@ -1245,15 +1301,21 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
           }]);
         }
       } catch (e) { console.warn("[modify] SSE parse error:", e); }
+      }).catch((e) => console.warn("[modify] SSE decode error:", e));
     }
 
     try {
+      const secureSession = isSecureAgentStreamSupported()
+        ? await createAgentStreamClientSession()
+        : null;
+
       const res = await fetch(`/api/projects/${projectId}/modify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userInstruction: modifyInstruction,
           clearContext: contextCleared,
+          ...(secureSession ? { clientPublicKey: secureSession.clientPublicKeySpki } : {}),
           ...(capturedImage ? { imageBase64: capturedImage } : {}),
           conversationHistory: contextCleared ? [] : modifyHistory.filter((r) => !r.isSystemMessage).map((r) => ({
             instruction: r.instruction,
@@ -1262,6 +1324,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
               : r.error
                 ? `Failed: ${r.error}`
                 : `Modified ${r.diffs.length} file(s)`,
+            intentCategory: modifyIntentLabelToCategory(r.intentLabel),
           })),
         }),
       });
@@ -1281,12 +1344,12 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         const lines = buffer.split("\n\n");
         buffer = lines.pop() ?? "";
         for (const line of lines) {
-          processModifySSE(line);
+          processModifySSE(line, secureSession);
         }
       }
       // Flush remaining buffer (same fix as generate flow)
       if (buffer.trim()) {
-        processModifySSE(buffer);
+        processModifySSE(buffer, secureSession);
       }
 
       // ── Stream ended — trigger preview rebuild if there were changes ──
@@ -1346,7 +1409,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       : startedAt ?? 0;
 
   return {
-    input, setInput, loading, clearing, response, intentAgent, mergedBrief, conversationMessages, lastRunInput, elapsed, flowStart,
+    input, setInput, loading, clearing, response, intentAgent, mergedBrief, conversationMessages, userInputScrollNonce, lastRunInput, elapsed, flowStart,
     handleRun, handleClear, handleRetry,
     generationSeemsStuck,
     recoveryUnlocking,

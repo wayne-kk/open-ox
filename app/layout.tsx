@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, JetBrains_Mono, Space_Grotesk, Syne } from "next/font/google";
 import { ConditionalFooter } from "./components/ConditionalFooter";
 import { ConditionalNav } from "./components/ConditionalNav";
+import { AnalyticsProvider } from "@/components/analytics/AnalyticsProvider";
 import { FaviconProvider } from "./contexts/FaviconContext";
 import { DynamicFavicon } from "./components/DynamicFavicon";
 import "./globals.css";
@@ -46,9 +47,11 @@ export default function RootLayout({
       >
         <FaviconProvider>
           <DynamicFavicon />
-          <ConditionalNav />
-          {children}
-          <ConditionalFooter />
+          <AnalyticsProvider>
+            <ConditionalNav />
+            {children}
+            <ConditionalFooter />
+          </AnalyticsProvider>
         </FaviconProvider>
       </body>
     </html>

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { BuildStep } from "@/ai/flows";
+import { trackServerAnalyticsEventFireAndForget } from "@/lib/analytics/serverEvents";
 import { getProject, updateProjectStatus } from "@/lib/projectManager";
 
 import type { GenerationRunPayloadBody } from "./types";
@@ -79,6 +80,13 @@ export async function enqueueGenerationJob(input: EnqueueGenerationInput): Promi
     currentGenerationRunId: runId,
     /** Drop previous run’s pipeline steps so polling/UI doesn’t show stale phases. */
     buildSteps: intentOnly,
+  });
+
+  trackServerAnalyticsEventFireAndForget({
+    userId: ownerUserId,
+    eventName: "generation_run_queued",
+    sessionId: projectId,
+    properties: { projectId, runId, kind },
   });
 
   return { runId, attached: false };

@@ -60,4 +60,5 @@ export const LfSpanIntent = {
 export const LfSpanModify = {
   intentRouter: `${OX_SPAN_PREFIX}.modify.01_intent_router`,
   agentLoop: `${OX_SPAN_PREFIX}.modify.02_agent_loop`,
+  completionSummary: `${OX_SPAN_PREFIX}.modify.03_completion_summary`,
 } as const;

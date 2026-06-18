@@ -2,7 +2,13 @@ import fs from "fs/promises";
 import path from "path";
 import type { ChatMessage } from "@/ai/flows/generate_project/shared/llm";
 import type { ModifyIntentCategory } from "../intent/modifyIntentRouter";
+import {
+  mergeModifyHistoryTurns,
+  type ModifyHistoryTurn,
+} from "../intent/modifyContinuation";
 import { READ_ONLY_SYSTEM_PROMPT, SYSTEM_PROMPT } from "../prompt/systemPrompt";
+
+export type { ModifyHistoryTurn };
 
 export async function tryReadFile(filePath: string): Promise<string | null> {
   try {
@@ -29,14 +35,10 @@ export async function buildFileTree(dir: string): Promise<string> {
 }
 
 export function buildHistoryContext(
-  dbHistory: Array<{ instruction: string; summary: string }>,
-  sessionHistory: Array<{ instruction: string; summary: string }>
+  dbHistory: ModifyHistoryTurn[],
+  sessionHistory: ModifyHistoryTurn[]
 ): string {
-  const seenInstructions = new Set(dbHistory.map((h) => h.instruction));
-  const mergedHistory = [
-    ...dbHistory,
-    ...sessionHistory.filter((h) => !seenInstructions.has(h.instruction)),
-  ];
+  const mergedHistory = mergeModifyHistoryTurns(dbHistory, sessionHistory);
   const MAX_HISTORY_TURNS = 10;
   const recentHistory = mergedHistory.slice(-MAX_HISTORY_TURNS);
   return recentHistory.length > 0

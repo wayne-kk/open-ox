@@ -1,9 +1,13 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/session";
 import { isAdminUser } from "@/lib/auth/roles";
-import { PromptAdminPanel } from "./PromptAdminPanel";
+import { AdminShell } from "./components/AdminShell";
 
-export default async function AdminPromptsPage() {
+export default async function AdminLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const session = await getSessionUser();
   if (!session) {
     redirect("/auth");
@@ -15,5 +19,6 @@ export default async function AdminPromptsPage() {
   if (!canAccess) {
     redirect("/");
   }
-  return <PromptAdminPanel />;
+
+  return <AdminShell>{children}</AdminShell>;
 }

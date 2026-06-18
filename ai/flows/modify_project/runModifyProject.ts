@@ -13,6 +13,10 @@ import { FileSnapshotTracker, type DiffStats } from "./tracking/fileSnapshotTrac
 import { runAgentLoop } from "./engine/loopEngine";
 import { runFinalVerification } from "./engine/verification";
 import { runModifyPlanPhase } from "./engine/planPhase";
+import {
+  extractLastAssistantMessage,
+  runModifyCompletionSummary,
+} from "./engine/completionSummary";
 import { resolveModifyProfile, withAllowedTargets } from "./profile/modifyProfile";
 import { withLangfuseSpan } from "@/lib/observability/langfuseTracing";
 import { LfSpanModify } from "@/lib/observability/langfuseTraceCatalog";
@@ -20,6 +24,13 @@ import {
   stepModifyIntentRouter,
   type ModifyIntentCategory,
 } from "./intent/modifyIntentRouter";
+import {
+  applyContinuationRoutingOverrides,
+  detectContinuationReply,
+  mergeContinuationInstruction,
+  mergeModifyHistoryTurns,
+  type ModifyHistoryTurn,
+} from "./intent/modifyContinuation";
 import { createImageExecutor, awaitPendingImages, type PendingImage } from "@/ai/tools/system/generateImageTool";
 import type { ToolExecutor } from "@/ai/tools/types";
 import type { ModifyPlan } from "./engine/planPhase";
@@ -76,7 +87,7 @@ export async function runModifyProject(
   projectId: string,
   userInstruction: string,
   onEvent: (event: ModifySSEEvent) => void,
-  conversationHistory?: Array<{ instruction: string; summary: string }>,
+  conversationHistory?: ModifyHistoryTurn[],
   clearContext = false,
   imageBase64?: string,
   modelOverride?: string
@@ -110,7 +121,7 @@ async function runModifyProjectInner(
   projectId: string,
   userInstruction: string,
   onEvent: (event: ModifySSEEvent) => void,
-  conversationHistory: Array<{ instruction: string; summary: string }> | undefined,
+  conversationHistory: ModifyHistoryTurn[] | undefined,
   clearContext: boolean,
   imageBase64: string | undefined,
   modelOverride: string | undefined,
@@ -125,6 +136,23 @@ async function runModifyProjectInner(
   const globalsCss = (await tryReadFile(path.join(projectDir, "app/globals.css"))) ?? "";
   onEvent({ type: "step", name: "read_context", status: "done" });
 
+  const dbHistory: ModifyHistoryTurn[] = clearContext
+    ? []
+    : (project.modificationHistory ?? []).map((r) => ({
+      instruction: r.instruction,
+      summary: r.plan?.analysis
+        ? `${r.plan.analysis} Files: ${r.touchedFiles.join(", ")}`
+        : `Modified ${r.touchedFiles.length} file(s): ${r.touchedFiles.join(", ")}`,
+    }));
+  const sessionHistory = conversationHistory ?? [];
+  const mergedHistory = mergeModifyHistoryTurns(dbHistory, sessionHistory);
+  const recentHistoryForRouter = mergedHistory.slice(-2);
+
+  const isContinuation = detectContinuationReply(userInstruction, mergedHistory);
+  const effectiveInstruction = isContinuation
+    ? mergeContinuationInstruction(userInstruction, mergedHistory)
+    : userInstruction;
+
   onEvent({ type: "step", name: "intent_router", status: "running" });
   let routed: Awaited<ReturnType<typeof stepModifyIntentRouter>> = {
     category: "read_only",
@@ -135,19 +163,29 @@ async function runModifyProjectInner(
   try {
     routed = await withLangfuseSpan(
       LfSpanModify.intentRouter,
-      () => stepModifyIntentRouter(userInstruction, { fileTree }),
-      { metadata: { projectId } }
+      () =>
+        stepModifyIntentRouter(effectiveInstruction, {
+          fileTree,
+          recentHistory: recentHistoryForRouter,
+        }),
+      { metadata: { projectId, continuation: isContinuation } }
     );
   } catch (err) {
     console.warn("[modify] intent_router failed, defaulting to read_only:", err);
     routed = { category: "read_only", scope: "narrow", preloadPaths: [], assistantMessage: "" };
   }
+
+  routed = applyContinuationRoutingOverrides(routed, {
+    isContinuation,
+    recentHistory: mergedHistory,
+    originalInstruction: userInstruction,
+  });
   onEvent({ type: "intent", category: routed.category, label: assistantLabel(routed.category) });
   onEvent({
     type: "step",
     name: "intent_router",
     status: "done",
-    message: `${routed.category} scope=${routed.scope}`,
+    message: `${routed.category} scope=${routed.scope}${isContinuation ? " continuation" : ""}`,
   });
 
   if (routed.category === "conversation") {
@@ -197,7 +235,7 @@ async function runModifyProjectInner(
       LfSpanModify.agentLoop,
       () =>
         runModifyPlanPhase({
-          userInstruction,
+          userInstruction: effectiveInstruction,
           fileTree,
           preloadedFiles,
         }),
@@ -260,7 +298,7 @@ async function runModifyProjectInner(
       LfSpanModify.agentLoop,
       () =>
         runModifyPlanPhase({
-          userInstruction,
+          userInstruction: effectiveInstruction,
           fileTree,
           preloadedFiles,
         }),
@@ -294,19 +332,10 @@ async function runModifyProjectInner(
       onEvent(event);
     };
 
-    const dbHistory = clearContext
-      ? []
-      : (project.modificationHistory ?? []).map((r) => ({
-        instruction: r.instruction,
-        summary: r.plan?.analysis
-          ? `${r.plan.analysis} Files: ${r.touchedFiles.join(", ")}`
-          : `Modified ${r.touchedFiles.length} file(s): ${r.touchedFiles.join(", ")}`,
-      }));
-    const sessionHistory = conversationHistory ?? [];
     const historyContext = buildHistoryContext(dbHistory, sessionHistory);
     const messages = buildInitialMessages({
       modifyCategory: routed.category,
-      userInstruction,
+      userInstruction: effectiveInstruction,
       historyContext,
       fileTree,
       designSystem,
@@ -331,7 +360,7 @@ async function runModifyProjectInner(
           messages,
           tracker,
           collectingOnEvent as (event: { type: "step" | "plan" | "diff" | "tool_call" | "thinking" | "done" | "error";[key: string]: unknown }) => void,
-          userInstruction,
+          effectiveInstruction,
           modelOverride,
           modifyStopMode,
           {
@@ -415,14 +444,30 @@ async function runModifyProjectInner(
       .map((m) => (m.content as string).trim())
       .join("\n\n");
 
-    const analysisText =
-      allRecordDiffs.length > 0
-        ? `Agent made ${allRecordDiffs.length} file change(s) in ${iterations} iterations.`
-        : allThinking.length > 0
-          ? allThinking.slice(0, 4000)
-          : modifyStopMode === "read_only"
-            ? "未能生成回答，请尝试更具体地描述你想了解的内容或文件路径。"
-            : `Agent ran ${iterations} iterations but made no changes. The LLM did not provide an explanation.`;
+    const lastAssistantText = extractLastAssistantMessage(messages);
+    const buildSkipped = !loopState.hasEdited || modifyStopMode === "read_only";
+
+    onEvent({ type: "step", name: "modify_summary", status: "running" });
+    const analysisText = await withLangfuseSpan(
+      LfSpanModify.completionSummary,
+      () =>
+        runModifyCompletionSummary({
+          userInstruction: effectiveInstruction,
+          modifyMode: modifyStopMode,
+          diffs: allRecordDiffs.map((d) => ({ file: d.file, stats: d.stats })),
+          iterations,
+          buildPassed: loopState.buildPassed,
+          buildSkipped,
+          assistantNotes: lastAssistantText || allThinking.slice(-2500),
+        }),
+      { metadata: { projectId, diffCount: allRecordDiffs.length } }
+    );
+    onEvent({
+      type: "step",
+      name: "modify_summary",
+      status: "done",
+      message: `${analysisText.length} chars`,
+    });
 
     onEvent({
       type: "plan",
@@ -444,7 +489,7 @@ async function runModifyProjectInner(
       modifiedAt: new Date().toISOString(),
       touchedFiles,
       plan: {
-        analysis: `${allRecordDiffs.length} file(s) modified`,
+        analysis: analysisText,
         changes: allRecordDiffs.map((d) => ({
           path: d.file,
           action: "modify",

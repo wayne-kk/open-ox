@@ -2,6 +2,10 @@ import { composePromptBlocks, loadGuardrail, loadStepPrompt } from "@/ai/flows/g
 import { callLLMWithMeta, extractJSON } from "@/ai/flows/generate_project/shared/llm";
 import { lfPlain, LfPlain } from "@/lib/observability/langfuseGenerationCatalog";
 import { getModelForStep } from "@/lib/config/models";
+import {
+  formatRecentHistoryForRouter,
+  type ModifyHistoryTurn,
+} from "./modifyContinuation";
 
 export type ModifyIntentCategory = "conversation" | "read_only" | "plan_only" | "code_change";
 
@@ -64,7 +68,7 @@ export function parseModifyIntentRouterPayload(parsed: unknown): ModifyIntentRou
  */
 export async function stepModifyIntentRouter(
   userInstruction: string,
-  options?: { fileTree?: string }
+  options?: { fileTree?: string; recentHistory?: ModifyHistoryTurn[] }
 ): Promise<ModifyIntentRouterResult> {
   const trimmed = userInstruction.trim();
   if (!trimmed) {
@@ -77,9 +81,16 @@ export async function stepModifyIntentRouter(
     loadGuardrail("outputJson"),
   ]);
 
-  const userPayload = options?.fileTree?.trim()
-    ? `${trimmed}\n\n## Project file tree (pick preloadPaths from these paths only)\n\`\`\`\n${options.fileTree.trim()}\n\`\`\``
-    : trimmed;
+  const historyBlock = formatRecentHistoryForRouter(options?.recentHistory ?? []);
+  const userPayload = [
+    trimmed,
+    historyBlock,
+    options?.fileTree?.trim()
+      ? `\n## Project file tree (pick preloadPaths from these paths only)\n\`\`\`\n${options.fileTree.trim()}\n\`\`\``
+      : "",
+  ]
+    .filter(Boolean)
+    .join("");
 
   const meta = await callLLMWithMeta(systemPrompt, userPayload, 0.35, undefined, model, {
     langfuseName: lfPlain(LfPlain.modifyIntentRouter),

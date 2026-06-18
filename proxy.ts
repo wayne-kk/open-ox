@@ -1,13 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-
-/** Same-origin path only — prevents open redirects after login. */
-function safeRedirectTarget(pathWithQuery: string): string {
-  if (!pathWithQuery.startsWith("/") || pathWithQuery.startsWith("//")) {
-    return "/projects";
-  }
-  return pathWithQuery;
-}
+import { safeRedirectTarget } from "@/lib/auth/safe-redirect";
 
 const PROTECTED_PREFIXES = [
   "/studio",

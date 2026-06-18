@@ -354,6 +354,26 @@ export async function updateProjectStatus(
     if (extra.currentGenerationRunId !== undefined)
       update.current_generation_run_id = extra.currentGenerationRunId;
   }
+  if (status === "ready") {
+    void import("@/lib/analytics/serverEvents").then(({ trackServerAnalyticsEventFireAndForget }) => {
+      void db
+        .from("projects")
+        .select("user_id")
+        .eq("id", id)
+        .maybeSingle()
+        .then(({ data }) => {
+          const userId = (data as { user_id?: string | null } | null)?.user_id;
+          if (!userId) return;
+          trackServerAnalyticsEventFireAndForget({
+            userId,
+            eventName: "project_ready",
+            properties: { projectId: id },
+            sessionId: `project_${id}`,
+          });
+        });
+    });
+  }
+
   const maxRetries = 2;
   let lastMessage = "";
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {

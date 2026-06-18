@@ -190,6 +190,9 @@ jobs:
             echo "==> Preparing app dir..."
             cd $APP
 
+            # rsync is incremental (no --delete); drop paths removed from git (e.g. deprecated design-system skills).
+            rm -rf "$APP/ai/flows/generate_project/prompts/skills/design-system"
+
             echo "==> Installing deps..."
             pnpm install --frozen-lockfile
 

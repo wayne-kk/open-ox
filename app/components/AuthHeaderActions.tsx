@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
-import { ChevronDown, LogOut, Shield, FileText } from "lucide-react";
+import { ChevronDown, LogOut, Shield } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   DropdownMenu,
@@ -183,15 +183,9 @@ export function UserMenuDropdown({
           {isAdmin ? (
             <>
               <DropdownMenuItem asChild className="cursor-pointer gap-2 rounded-xl px-3 py-2.5 text-[14px] leading-snug text-foreground/90">
-                <Link href="/admin">
+                <Link href="/admin/dashboard">
                   <Shield className="h-4 w-4 shrink-0 opacity-80" />
                   Admin
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild className="cursor-pointer gap-2 rounded-xl px-3 py-2.5 text-[14px] leading-snug text-foreground/90">
-                <Link href="/admin/prompts">
-                  <FileText className="h-4 w-4 shrink-0 opacity-80" />
-                  Prompt
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator className="my-1 bg-white/10" />

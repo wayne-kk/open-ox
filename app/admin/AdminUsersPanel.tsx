@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 interface AdminUser {
@@ -102,7 +103,11 @@ export function AdminUsersPanel() {
   const adminIds = new Set(admins.map((a) => a.userId));
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">用户管理</h1>
+        <p className="mt-1 text-sm text-muted-foreground">管理员角色与用户搜索</p>
+      </div>
       <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
         <form className="mb-3 flex gap-2" onSubmit={onSearchSubmit}>
           <input
@@ -126,13 +131,14 @@ export function AdminUsersPanel() {
             <thead className="bg-white/5 text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-3 py-2">名字</th>
+                <th className="px-3 py-2">详情</th>
                 <th className="px-3 py-2">是否管理员</th>
               </tr>
             </thead>
             <tbody>
               {users.length === 0 ? (
                 <tr>
-                  <td className="px-3 py-6 text-center text-muted-foreground" colSpan={2}>
+                  <td className="px-3 py-6 text-center text-muted-foreground" colSpan={3}>
                     没有数据
                   </td>
                 </tr>
@@ -143,6 +149,14 @@ export function AdminUsersPanel() {
                   return (
                     <tr key={user.userId} className="border-t border-white/10">
                       <td className="px-3 py-2">{user.name}</td>
+                      <td className="px-3 py-2">
+                        <Link
+                          href={`/admin/users/${user.userId}`}
+                          className="text-xs text-primary hover:underline"
+                        >
+                          查看指标
+                        </Link>
+                      </td>
                       <td className="px-3 py-2">
                         <button
                           className={`rounded-md border px-2.5 py-1 text-xs disabled:opacity-40 ${isAdmin
@@ -166,7 +180,7 @@ export function AdminUsersPanel() {
         <p className="mt-2 text-xs text-muted-foreground">最近 10 个用户。搜索后显示匹配结果前 10 条。</p>
       </div>
 
-      {error ? <p className="mt-4 text-sm text-red-300">{error}</p> : null}
-    </main>
+      {error ? <p className="text-sm text-red-300">{error}</p> : null}
+    </div>
   );
 }

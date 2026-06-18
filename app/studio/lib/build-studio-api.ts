@@ -1,5 +1,12 @@
 import type { AiResponse, BuildStep, IntentAgentTurn } from "../types/build-studio";
 import type { IntentProgressEvent } from "@/ai/flows/generate_project/intentAgent/types";
+import {
+  createAgentStreamClientSession,
+  decodeAgentSseJsonLine,
+  isSecureAgentStreamSupported,
+  type AgentStreamClientSession,
+} from "@/lib/transport/agentStream.client";
+import { parseSseDataLine } from "@/lib/transport/agentStreamSse";
 
 interface BuildSiteCallbacks {
   onStep: (step: BuildStep) => void;
@@ -155,23 +162,18 @@ async function waitForBackgroundGeneration(
   }
 }
 
-function processSSEChunk(chunk: string, callbacks: BuildSiteCallbacks): QueuedHandshake | undefined {
-  const line = chunk.replace(/^data:\s*/, "").trim();
+async function processSSEChunk(
+  chunk: string,
+  callbacks: BuildSiteCallbacks,
+  secureSession: AgentStreamClientSession | null
+): Promise<QueuedHandshake | undefined> {
+  const line = parseSseDataLine(chunk);
   if (!line) return;
 
+  const event = await decodeAgentSseJsonLine(secureSession, line);
+  if (!event) return;
+
   try {
-    const event = JSON.parse(line) as {
-      type?: string;
-      phase?: string;
-      result?: Record<string, unknown> & {
-        intentAgent?: IntentAgentTurn;
-        mergedBriefFromAgent?: string;
-        generationQueued?: boolean;
-        projectId?: string;
-      };
-      message?: string;
-      [key: string]: unknown;
-    };
 
     if (event.type === "intent_agent_turn") {
       callbacks.onIntentTurn?.(event.turn as IntentAgentTurn);
@@ -194,7 +196,13 @@ function processSSEChunk(chunk: string, callbacks: BuildSiteCallbacks): QueuedHa
     }
     if (event.type === "done") {
       const phase = typeof event.phase === "string" ? event.phase : "";
-      const result = event.result ?? {};
+      const result = (event.result ?? {}) as {
+        generationQueued?: boolean;
+        projectId?: string;
+        mergedBriefFromAgent?: string;
+        intentAgent?: IntentAgentTurn;
+        content?: string;
+      };
       const genQueued =
         phase === "generation_queued" || result.generationQueued === true;
 
@@ -240,6 +248,11 @@ export async function runBuildSite(
   }
 ): Promise<void> {
   const useIntentAgent = Boolean(options?.projectId && !options.retryProjectId);
+  const secureSession =
+    useIntentAgent && isSecureAgentStreamSupported()
+      ? await createAgentStreamClientSession()
+      : null;
+
   const res = await fetch(useIntentAgent ? "/api/ai/intent-agent" : "/api/ai", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -250,6 +263,7 @@ export async function runBuildSite(
             message: input,
             ...(options?.model ? { model: options.model } : {}),
             ...(options?.imageBase64 ? { imageBase64: options.imageBase64 } : {}),
+            ...(secureSession ? { clientPublicKey: secureSession.clientPublicKeySpki } : {}),
             runGenerateOnCommit: true,
           }
         : {
@@ -296,7 +310,7 @@ export async function runBuildSite(
         buffer = lines.pop() ?? "";
 
         for (const chunk of lines) {
-          const handshake = processSSEChunk(chunk, callbacks);
+          const handshake = await processSSEChunk(chunk, callbacks, secureSession);
           if (handshake?.kind === "generation_queued") {
             await handleQueuedHandshake(handshake);
             return;
@@ -305,7 +319,7 @@ export async function runBuildSite(
       }
 
       if (buffer.trim()) {
-        const handshake = processSSEChunk(buffer, callbacks);
+        const handshake = await processSSEChunk(buffer, callbacks, secureSession);
         if (handshake?.kind === "generation_queued") {
           await handleQueuedHandshake(handshake);
           return;

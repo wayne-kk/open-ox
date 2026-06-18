@@ -9,6 +9,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FeishuAuthBlock } from "@/components/auth/feishu-auth-block";
+import { GoogleAuthBlock } from "@/components/auth/google-auth-block";
+import { AuthSessionRedirect } from "@/components/auth/auth-session-redirect";
 
 interface PupilProps {
   size?: number;
@@ -349,6 +351,7 @@ function AuthPage() {
 
   return (
     <div className="relative min-h-screen">
+      <AuthSessionRedirect />
       <div className="absolute left-4 top-4 z-50 lg:left-8 lg:top-8">
         <Button
           variant="ghost"
@@ -842,6 +845,7 @@ function AuthPage() {
             </div>
           </div>
 
+          <GoogleAuthBlock />
           <FeishuAuthBlock />
 
           <div className="text-center text-sm text-muted-foreground mt-8">

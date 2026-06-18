@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isFeishuOAuthConfigured } from "@/lib/auth/feishu-env";
 import { getPublicOrigin } from "@/lib/auth/request-origin";
+import { safeRedirectTarget } from "@/lib/auth/safe-redirect";
 import { buildFeishuAuthorizeUrl, generateOAuthState } from "@/lib/auth/feishu-oauth";
 
 /**
@@ -16,10 +17,7 @@ export async function GET(request: NextRequest) {
   const clientId = process.env.FEISHU_APP_ID!.trim();
 
   const { searchParams } = new URL(request.url);
-  const next = searchParams.get("next") ?? "/projects";
-  if (!next.startsWith("/") || next.startsWith("//")) {
-    return NextResponse.json({ error: "Invalid next" }, { status: 400 });
-  }
+  const next = safeRedirectTarget(searchParams.get("next") ?? "/projects");
 
   const redirectUri = `${origin}/api/auth/feishu/callback`;
   const state = generateOAuthState();

@@ -6,6 +6,12 @@ import Link from "next/link";
 import { ArrowLeft, Send, RefreshCw, Trash2, Loader2, AlertTriangle } from "lucide-react";
 import { HamsterLoader } from "@/components/ui/hamster-loader";
 import { useAuthUser } from "@/app/components/AuthHeaderActions";
+import {
+  createAgentStreamClientSession,
+  decodeAgentSseJsonLine,
+  isSecureAgentStreamSupported,
+} from "@/lib/transport/agentStream.client";
+import { parseSseDataLine } from "@/lib/transport/agentStreamSse";
 
 interface ModifyStep {
   name: string;
@@ -105,16 +111,49 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     setModifyDiffs([]);
 
     try {
+      const secureSession = isSecureAgentStreamSupported()
+        ? await createAgentStreamClientSession()
+        : null;
+
       const res = await fetch(`/api/projects/${id}/modify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userInstruction: instruction }),
+        body: JSON.stringify({
+          userInstruction: instruction,
+          ...(secureSession ? { clientPublicKey: secureSession.clientPublicKeySpki } : {}),
+        }),
       });
 
       if (!res.ok || !res.body) {
         setModifyError("Failed to start modification");
         return;
       }
+
+      const applyModifyEvent = (event: SSEEvent) => {
+        if (event.type === "step") {
+          setModifySteps((prev) => {
+            const idx = prev.findIndex((s) => s.name === event.name);
+            if (idx >= 0) {
+              const next = [...prev];
+              next[idx] = { name: event.name, status: event.status, message: event.message };
+              return next;
+            }
+            return [...prev, { name: event.name, status: event.status, message: event.message }];
+          });
+        } else if (event.type === "plan") {
+          setModifyPlan(event.plan);
+        } else if (event.type === "diff") {
+          setModifyDiffs((prev) => [
+            ...prev,
+            { file: event.file, reasoning: event.reasoning, patch: event.patch, stats: event.stats },
+          ]);
+        } else if (event.type === "error") {
+          setModifyError(event.message);
+        } else if (event.type === "done") {
+          setInstruction("");
+          if (iframeRef.current) iframeRef.current.src = iframeRef.current.src;
+        }
+      };
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -127,29 +166,21 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         const lines = buffer.split("\n\n");
         buffer = lines.pop() ?? "";
         for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
+          const jsonLine = parseSseDataLine(line);
+          if (!jsonLine) continue;
           try {
-            const event: SSEEvent = JSON.parse(line.slice(6));
-            if (event.type === "step") {
-              setModifySteps((prev) => {
-                const idx = prev.findIndex((s) => s.name === event.name);
-                if (idx >= 0) {
-                  const next = [...prev];
-                  next[idx] = { name: event.name, status: event.status, message: event.message };
-                  return next;
-                }
-                return [...prev, { name: event.name, status: event.status, message: event.message }];
-              });
-            } else if (event.type === "plan") {
-              setModifyPlan(event.plan);
-            } else if (event.type === "diff") {
-              setModifyDiffs((prev) => [...prev, { file: event.file, reasoning: event.reasoning, patch: event.patch, stats: event.stats }]);
-            } else if (event.type === "error") {
-              setModifyError(event.message);
-            } else if (event.type === "done") {
-              setInstruction("");
-              if (iframeRef.current) iframeRef.current.src = iframeRef.current.src;
-            }
+            const decoded = await decodeAgentSseJsonLine(secureSession, jsonLine);
+            if (!decoded) continue;
+            applyModifyEvent(decoded as SSEEvent);
+          } catch { /* ignore */ }
+        }
+      }
+      if (buffer.trim()) {
+        const jsonLine = parseSseDataLine(buffer);
+        if (jsonLine) {
+          try {
+            const decoded = await decodeAgentSseJsonLine(secureSession, jsonLine);
+            if (decoded) applyModifyEvent(decoded as SSEEvent);
           } catch { /* ignore */ }
         }
       }
@@ -312,7 +343,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 <div className="rounded-xl border border-primary/15 bg-primary/5 p-4 space-y-3">
                   <div className="flex items-center gap-2">
                     <div className="h-1.5 w-1.5 rounded-full bg-primary" />
-                    <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-primary/80">Analysis</span>
+                    <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-primary/80">总结</span>
                   </div>
                   <p className="text-[11px] text-foreground/80 leading-relaxed">{modifyPlan.analysis}</p>
                   <div className="space-y-2 pt-1 border-t border-primary/10">

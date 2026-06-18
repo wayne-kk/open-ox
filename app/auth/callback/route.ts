@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getPublicOrigin } from "@/lib/auth/request-origin";
+import { safeRedirectTarget } from "@/lib/auth/safe-redirect";
 
 export async function GET(request: NextRequest) {
   const origin = getPublicOrigin(request);
@@ -13,7 +14,7 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/";
+  const next = safeRedirectTarget(searchParams.get("next") ?? "/projects");
 
   if (code) {
     const supabaseResponse = NextResponse.redirect(new URL(next, origin));
@@ -31,6 +32,21 @@ export async function GET(request: NextRequest) {
     });
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        const { trackServerAnalyticsEventFireAndForget } = await import("@/lib/analytics/serverEvents");
+        const provider =
+          (user.app_metadata as Record<string, unknown> | undefined)?.provider ??
+          user.identities?.[0]?.provider ??
+          "oauth";
+        trackServerAnalyticsEventFireAndForget({
+          userId: user.id,
+          eventName: "auth_success",
+          properties: { provider: String(provider) },
+        });
+      }
       return supabaseResponse;
     }
   }
