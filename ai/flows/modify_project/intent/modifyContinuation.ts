@@ -35,7 +35,7 @@ function isShortContinuationReply(text: string): boolean {
 }
 
 function stripSummaryFilesSuffix(summary: string): string {
-  return summary.replace(/\s*Files:.*$/s, "").trim();
+  return summary.replace(/\s*Files:[\s\S]*$/, "").trim();
 }
 
 /** True when the prior assistant turn likely expects a follow-up from the user. */
