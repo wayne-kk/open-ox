@@ -1,9 +1,11 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClientOptions } from "@supabase/supabase-js";
 
 /**
  * Server-only Supabase client with service role. Never import in client components.
  */
-export function createSupabaseServiceRoleClient() {
+export function createSupabaseServiceRoleClient(
+  options?: Pick<SupabaseClientOptions<"public">, "global">
+) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) {
@@ -16,5 +18,6 @@ export function createSupabaseServiceRoleClient() {
       persistSession: false,
       autoRefreshToken: false,
     },
+    ...options,
   });
 }

@@ -180,6 +180,72 @@ function conversationStorageKey(projectId: string): string {
   return `${CONVERSATION_STORAGE_PREFIX}${projectId}`;
 }
 
+function intentAssistantContent(turn: IntentAgentTurn | null | undefined): string {
+  return (
+    turn?.yieldPayload?.message ??
+    turn?.assistantText ??
+    turn?.errorMessage ??
+    ""
+  ).trim();
+}
+
+function shouldAppendIntentAssistant(turn: IntentAgentTurn | null | undefined): boolean {
+  if (!turn) return false;
+  if (turn.status === "commit_generate") return false;
+  return intentAssistantContent(turn).length > 0;
+}
+
+/** Strip server-persisted trace appendix from intent_agent build step detail. */
+function intentDetailUserFacing(detail: string | undefined): string {
+  if (!detail?.trim()) return "";
+  return detail.split("\n\n--- 意向分析轨迹 ---")[0]?.trim() ?? detail.trim();
+}
+
+function yieldPayloadFromIntentBuildStep(
+  step: BuildStep
+): IntentAgentTurn["yieldPayload"] | undefined {
+  const output = step.trace?.output as Record<string, unknown> | undefined;
+  const raw = output?.yieldPayload;
+  if (!raw || typeof raw !== "object") return undefined;
+  const payload = raw as Record<string, unknown>;
+  const message = typeof payload.message === "string" ? payload.message.trim() : "";
+  if (!message) return undefined;
+  const kindRaw = payload.kind;
+  const kind =
+    kindRaw === "capability" ||
+    kindRaw === "clarify" ||
+    kindRaw === "options" ||
+    kindRaw === "confirm_brief"
+      ? kindRaw
+      : "clarify";
+  const suggestedReplies = Array.isArray(payload.suggestedReplies)
+    ? payload.suggestedReplies.filter((r): r is string => typeof r === "string")
+    : [];
+  const optionsRaw = Array.isArray(payload.options) ? payload.options : [];
+  const options = optionsRaw
+    .filter((o): o is { id: string; label: string; hint?: string } => {
+      if (!o || typeof o !== "object") return false;
+      const row = o as Record<string, unknown>;
+      return typeof row.id === "string" && typeof row.label === "string";
+    })
+    .map((o) => ({
+      id: o.id,
+      label: o.label,
+      ...(typeof o.hint === "string" && o.hint.trim() ? { hint: o.hint.trim() } : {}),
+    }));
+  const briefDraftMarkdown =
+    typeof payload.briefDraftMarkdown === "string" && payload.briefDraftMarkdown.trim()
+      ? payload.briefDraftMarkdown.trim()
+      : undefined;
+  return {
+    kind,
+    message,
+    suggestedReplies,
+    options,
+    ...(briefDraftMarkdown ? { briefDraftMarkdown } : {}),
+  };
+}
+
 function readStoredConversationMessages(projectId: string): ConversationMessage[] {
   if (typeof window === "undefined") return [];
   try {
@@ -475,13 +541,17 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     const restoredIntentStep = restoredBuildSteps.find((step) => step.step === "intent_agent");
     const storedConversation = readStoredConversationMessages(project.id);
     if (project.status === "awaiting_input" && restoredIntentStep) {
+      const yieldFromStep = yieldPayloadFromIntentBuildStep(restoredIntentStep);
+      const fallbackMessage =
+        intentDetailUserFacing(restoredIntentStep.detail) ||
+        "我还需要你补充或确认需求，然后再开始生成。";
       const restoredIntent: IntentAgentTurn = {
         status: restoredIntentStep.status === "error" ? "error" : "yield",
         yieldPayload: restoredIntentStep.status === "error"
           ? undefined
-          : {
+          : yieldFromStep ?? {
             kind: "clarify",
-            message: restoredIntentStep.detail ?? "我还需要你补充或确认需求，然后再开始生成。",
+            message: fallbackMessage,
             suggestedReplies: [],
             options: [],
           },
@@ -731,6 +801,14 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       });
       setInput("");
       setUserInputScrollNonce((nonce) => nonce + 1);
+    } else if (displayPrompt && textForApi === displayPrompt) {
+      // Hero → Studio auto-run: no typed input, but we still show the stored prompt in chat.
+      appendConversationMessage({
+        role: "user",
+        content: displayPrompt,
+        imageDataUrl: capturedIntentImage ?? undefined,
+      });
+      setUserInputScrollNonce((nonce) => nonce + 1);
     } else if (capturedIntentImage) {
       appendConversationMessage({
         role: "user",
@@ -746,17 +824,11 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         {
           onIntentTurn: (turn) => {
             setIntentAgent(turn);
-            const assistantContent =
-              turn.yieldPayload?.message ??
-              turn.assistantText ??
-              turn.errorMessage ??
-              "";
-            // commit_generate has no user-facing copy here; `onIntentCommit` appends the single
-            // confirmation line. Skipping avoids an extra bubble if the payload ever carries stray text.
-            if (turn.status !== "commit_generate" && assistantContent) {
+            // commit_generate: `onIntentCommit` appends the confirmation line.
+            if (shouldAppendIntentAssistant(turn)) {
               appendConversationMessage({
                 role: "assistant",
-                content: assistantContent,
+                content: intentAssistantContent(turn),
                 intentPayload: turn.yieldPayload,
               });
             }
@@ -794,8 +866,17 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
           },
           onStep: handleStepEvent,
           onDone: (result) => {
+            const turn = result.intentAgent ?? null;
+            // Fallback: if `intent_agent_turn` SSE was dropped (e.g. secure-stream decode), still show reply.
+            if (shouldAppendIntentAssistant(turn)) {
+              appendConversationMessage({
+                role: "assistant",
+                content: intentAssistantContent(turn),
+                intentPayload: turn?.yieldPayload,
+              });
+            }
             finishBuildLiveState(result.buildTotalDuration);
-            setIntentAgent(result.intentAgent ?? null);
+            setIntentAgent(turn);
             setMergedBrief(result.mergedBriefFromAgent ?? result.mergedBrief ?? null);
             // done payload carries the authoritative final buildSteps from the server.
             // This replaces whatever the SSE stream built up, ensuring consistency.

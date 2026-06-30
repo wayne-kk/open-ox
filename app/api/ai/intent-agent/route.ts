@@ -34,10 +34,8 @@ import {
 } from "@/ai/flows/generate_project/intentAgent";
 import { normalizeReferenceImageDataUrl } from "@/ai/flows/generate_project/shared/userVisionContent";
 import type { GenerationRunPayloadBody } from "@/lib/generation/types";
-import {
-  enqueueGenerationJob,
-  getActiveQueuedOrRunningRunId,
-} from "@/lib/generation/enqueueGenerationJob";
+import { enqueueGenerationJob } from "@/lib/generation/enqueueGenerationJob";
+import { scheduleInlineGenerationRun } from "@/lib/generation/inlineGeneration";
 import fs from "fs/promises";
 import path from "path";
 import { formatIntentAgentTraceSummary } from "@/ai/flows/generate_project/intentAgent/formatIntentAgentTrace";
@@ -232,9 +230,6 @@ export async function POST(req: Request) {
               intentResult.assistantText ??
               intentResult.errorMessage ??
               "awaiting user input";
-            const detail = traceBlock
-              ? `${userFacing}\n\n--- 意向分析轨迹 ---\n${traceBlock}`
-              : userFacing;
 
             await updateProjectStatus(db, projectId, "awaiting_input", {
               error: intentResult.status === "error" ? intentResult.errorMessage : undefined,
@@ -242,9 +237,30 @@ export async function POST(req: Request) {
                 {
                   step: "intent_agent",
                   status: intentResult.status === "error" ? "error" : "ok",
-                  detail,
+                  detail: userFacing,
                   timestamp: Date.now(),
                   duration: 0,
+                  ...(intentResult.yieldPayload || traceBlock
+                    ? {
+                        trace: {
+                          output: {
+                            status: intentResult.status,
+                            ...(intentResult.yieldPayload
+                              ? {
+                                  yieldPayload: {
+                                    kind: intentResult.yieldPayload.kind,
+                                    message: intentResult.yieldPayload.message,
+                                    suggestedReplies: intentResult.yieldPayload.suggestedReplies,
+                                    options: intentResult.yieldPayload.options,
+                                    briefDraftMarkdown: intentResult.yieldPayload.briefDraftMarkdown,
+                                  },
+                                }
+                              : {}),
+                            ...(traceBlock ? { traceSummary: traceBlock } : {}),
+                          },
+                        },
+                      }
+                    : {}),
                 },
               ],
             });
@@ -314,24 +330,16 @@ export async function POST(req: Request) {
               : {}),
           };
 
-          let runId: string;
-          let attached: boolean;
-          const aliveRunId = await getActiveQueuedOrRunningRunId(db, projectId);
-          if (aliveRunId) {
-            runId = aliveRunId;
-            attached = true;
-          } else {
-            const job = await enqueueGenerationJob({
-              db,
-              projectId,
-              ownerUserId: user.id,
-              kind: "new",
-              resumeFromCheckpoint: false,
-              payload: intentRunPayload,
-            });
-            runId = job.runId;
-            attached = job.attached;
-          }
+          const { runId, attached } = await enqueueGenerationJob({
+            db,
+            projectId,
+            ownerUserId: user.id,
+            kind: "new",
+            resumeFromCheckpoint: false,
+            payload: intentRunPayload,
+          });
+
+          scheduleInlineGenerationRun(runId);
 
           send({
             type: "done",

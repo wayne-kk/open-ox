@@ -48,7 +48,18 @@ export async function enqueueGenerationJob(input: EnqueueGenerationInput): Promi
 
   const existing = Array.isArray(activeRows) ? activeRows[0] : null;
   if (existing?.id) {
-    return { runId: existing.id as string, attached: true };
+    const runId = existing.id as string;
+    const meta = await getProject(db, projectId);
+    const intentOnly = ((meta?.buildSteps ?? []) as BuildStep[]).filter(
+      (s) => s?.step === "intent_agent"
+    );
+    // Re-commit after intent yield leaves status=awaiting_input; polling must see generating.
+    await updateProjectStatus(db, projectId, "generating", {
+      error: undefined,
+      currentGenerationRunId: runId,
+      buildSteps: intentOnly,
+    });
+    return { runId, attached: true };
   }
 
   const { data: inserted, error: insErr } = await db

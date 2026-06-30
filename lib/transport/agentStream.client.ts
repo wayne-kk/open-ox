@@ -1,4 +1,5 @@
 import {
+  AGENT_STREAM_HKDF_INFO,
   isAgentStreamCryptoInitEvent,
   isAgentStreamEncEvent,
   type AgentStreamEncEvent,
@@ -42,9 +43,26 @@ async function deriveAesKey(
     false,
     []
   );
-  return crypto.subtle.deriveKey(
+  const sharedSecret = await crypto.subtle.deriveBits(
     { name: "ECDH", public: serverPublicKey },
     privateKey,
+    256
+  );
+  const hkdfKey = await crypto.subtle.importKey(
+    "raw",
+    sharedSecret,
+    "HKDF",
+    false,
+    ["deriveKey"]
+  );
+  return crypto.subtle.deriveKey(
+    {
+      name: "HKDF",
+      hash: "SHA-256",
+      salt: new Uint8Array(0),
+      info: new TextEncoder().encode(AGENT_STREAM_HKDF_INFO),
+    },
+    hkdfKey,
     { name: "AES-GCM", length: 256 },
     false,
     ["decrypt"]
@@ -64,10 +82,8 @@ async function decryptEncEvent(event: AgentStreamEncEvent, aesKey: CryptoKey): P
   if (packed.length < GCM_TAG_BYTES) {
     throw new Error("Invalid encrypted payload");
   }
-  const ciphertext = new Uint8Array(
-    packed.subarray(0, packed.length - GCM_TAG_BYTES)
-  );
-  const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, aesKey, ciphertext);
+  // Web Crypto AES-GCM expects ciphertext || authTag in one buffer (Node splits tag separately).
+  const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, aesKey, packed);
   const decompressed = await gunzipBytes(new Uint8Array(decrypted));
   return new TextDecoder().decode(decompressed);
 }
@@ -81,7 +97,7 @@ export async function createAgentStreamClientSession(): Promise<AgentStreamClien
   const keyPair = await crypto.subtle.generateKey(
     { name: "ECDH", namedCurve: "P-256" },
     true,
-    ["deriveKey"]
+    ["deriveKey", "deriveBits"]
   );
   const clientPublicKeySpki = await exportSpki(keyPair.publicKey);
   let aesKey: CryptoKey | null = null;
@@ -93,7 +109,10 @@ export async function createAgentStreamClientSession(): Promise<AgentStreamClien
         aesKey = await deriveAesKey(keyPair.privateKey, event.serverPublicKey);
         return null;
       }
-      if (isAgentStreamEncEvent(event) && aesKey) {
+      if (isAgentStreamEncEvent(event)) {
+        if (!aesKey) {
+          throw new Error("Encrypted SSE event received before crypto_init");
+        }
         const json = await decryptEncEvent(event, aesKey);
         return JSON.parse(json) as Record<string, unknown>;
       }
@@ -126,7 +145,10 @@ export async function decodeAgentSseJsonLine(
       return wire as Record<string, unknown>;
     }
     return null;
-  } catch {
+  } catch (err) {
+    if (typeof console !== "undefined" && console.warn) {
+      console.warn("[agent-stream] failed to decode SSE line:", err);
+    }
     return null;
   }
 }

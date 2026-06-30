@@ -117,26 +117,33 @@ async function recoverAfterSseDisconnected(
   }
 }
 
+const GENERATION_STATUS_GRACE_POLLS = 8;
+
 async function waitForBackgroundGeneration(
   projectId: string,
   callbacks: BuildSiteCallbacks,
   signal?: AbortSignal,
-  extras?: Partial<AiResponse>
+  extras?: Partial<AiResponse>,
+  options?: { afterIntentCommit?: boolean }
 ): Promise<void> {
   let lastFingerprint = "";
   try {
     let firstPoll = true;
+    let pollCount = 0;
+    let sawGenerating = false;
     while (!signal?.aborted) {
       if (!firstPoll) {
         await delay(1200, signal);
       }
       firstPoll = false;
+      pollCount += 1;
       const res = await fetch(`/api/projects/${projectId}`, { signal });
       if (!res.ok) {
         callbacks.onError((await res.json().catch(() => ({}))).error ?? `HTTP ${res.status}`);
         return;
       }
       const project = (await res.json()) as Record<string, unknown>;
+      const status = String(project.status ?? "");
       const steps = (project.buildSteps ?? []) as BuildStep[];
       const fp = JSON.stringify(steps);
       if (fp !== lastFingerprint) {
@@ -145,13 +152,30 @@ async function waitForBackgroundGeneration(
         }
         lastFingerprint = fp;
       }
-      if (project.status !== "generating") {
+      if (status === "generating") {
+        sawGenerating = true;
+        continue;
+      }
+      if (status === "ready" || status === "failed") {
         callbacks.onDone({
           ...projectPayloadToAiResponse(project),
           ...extras,
         });
         return;
       }
+      // Race: intent-agent SSE returns before DB status flips to generating.
+      if (
+        options?.afterIntentCommit &&
+        !sawGenerating &&
+        pollCount < GENERATION_STATUS_GRACE_POLLS
+      ) {
+        continue;
+      }
+      callbacks.onDone({
+        ...projectPayloadToAiResponse(project),
+        ...extras,
+      });
+      return;
     }
   } catch (e) {
     if ((e as Error).name === "AbortError") {
@@ -222,6 +246,15 @@ async function processSSEChunk(
         };
       }
 
+      // Fallback: if the encrypted `intent_agent_turn` chunk was dropped client-side,
+      // `done` still carries the full turn — hydrate conversation from it.
+      if (
+        (phase === "intent_only" || phase === "commit_only") &&
+        result.intentAgent
+      ) {
+        callbacks.onIntentTurn?.(result.intentAgent as IntentAgentTurn);
+      }
+
       callbacks.onDone(result as unknown as AiResponse);
       return;
     }
@@ -288,7 +321,9 @@ export async function runBuildSite(
   const contentType = res.headers.get("content-type") ?? "";
 
   const handleQueuedHandshake = async (q: QueuedHandshake): Promise<boolean> => {
-    await waitForBackgroundGeneration(q.projectId, callbacks, signal, q.extras);
+    await waitForBackgroundGeneration(q.projectId, callbacks, signal, q.extras, {
+      afterIntentCommit: true,
+    });
     return true;
   };
 
