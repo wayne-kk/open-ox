@@ -83,7 +83,12 @@ async function decryptEncEvent(event: AgentStreamEncEvent, aesKey: CryptoKey): P
     throw new Error("Invalid encrypted payload");
   }
   // Web Crypto AES-GCM expects ciphertext || authTag in one buffer (Node splits tag separately).
-  const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, aesKey, packed);
+  const ciphertextWithTag = new Uint8Array(packed);
+  const decrypted = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv },
+    aesKey,
+    ciphertextWithTag
+  );
   const decompressed = await gunzipBytes(new Uint8Array(decrypted));
   return new TextDecoder().decode(decompressed);
 }
