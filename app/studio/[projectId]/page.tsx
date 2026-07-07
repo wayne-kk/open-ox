@@ -12,8 +12,10 @@ import { Label } from "@/components/ui/label";
 import { useBuildStudio } from "@/app/studio/hooks/useBuildStudio";
 import { useFaviconSync } from "@/app/hooks/useFaviconSync";
 import { BuildConversation } from "@/app/studio/components/BuildConversation";
+import { DesignModePanel } from "@/app/studio/components/DesignModePanel";
 import { GenerationAtlas } from "@/app/studio/components/GenerationAtlas";
 import { ProjectCodePanel } from "@/app/studio/components/ProjectCodePanel";
+import { useDesignMode } from "@/app/studio/hooks/useDesignMode";
 import { filterPipelineSteps } from "@/app/studio/lib/pipelineSteps";
 
 function formatMs(ms: number): string {
@@ -26,6 +28,7 @@ function StudioInner({ projectId }: { projectId: string }) {
   const { loading, response, elapsed, rightPanel, setRightPanel,
     previewUrl, previewState, previewError, previewVersion, startPreview, iframeRef, projectLoading,
     autoPreviewAfterBuild, setAutoPreviewAfterBuild,
+    setModifyInstruction,
   } = studio;
 
   // Sync AI processing state → dynamic favicon
@@ -45,6 +48,18 @@ function StudioInner({ projectId }: { projectId: string }) {
   const canPreview = !!projectId && !loading;
   const canCode = !!projectId && !projectLoading;
   const [conversationCollapsed, setConversationCollapsed] = useState(false);
+  const hasGeneratedProject = Boolean(
+    response?.verificationStatus ||
+    (response?.generatedFiles?.length ?? 0) > 0 ||
+    (response?.blueprint && (response?.buildSteps?.length ?? 0) > 0)
+  );
+  const designMode = useDesignMode({
+    iframeRef,
+    previewUrl,
+    previewReady: previewState === "ready" && Boolean(previewUrl),
+    setModifyInstruction,
+    onAppliedDraft: () => setConversationCollapsed(false),
+  });
   const [coverCaptureBusy, setCoverCaptureBusy] = useState(false);
   const [coverCaptureHint, setCoverCaptureHint] = useState<string | null>(null);
 
@@ -350,6 +365,7 @@ function StudioInner({ projectId }: { projectId: string }) {
                 </div>
               ) : (
                 <div className="flex h-full flex-col">
+                  <DesignModePanel designMode={designMode} hasGeneratedProject={hasGeneratedProject} />
                   {previewState === "starting" && (
                     <div className="flex flex-1 flex-col items-center justify-center gap-3">
                       <HamsterLoader size="sm" />

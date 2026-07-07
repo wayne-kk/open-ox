@@ -4,6 +4,12 @@ import {
   SITE_PREVIEWS_BUCKET,
   resolveProxiedContentType,
 } from "@/lib/staticSitePreview";
+import { isStudioDesignModeEnabled } from "@/lib/studio/designMode/featureFlag";
+import {
+  designModeBridgeScriptPath,
+  injectDesignModeBridgeIntoHtml,
+  shouldInjectDesignModeBridge,
+} from "@/lib/studio/designMode/injectBridgeIntoHtml";
 
 export const runtime = "nodejs";
 
@@ -36,7 +42,8 @@ function isSafePreviewSegments(segments: string[]): boolean {
 async function proxyFromStorage(
   projectId: string,
   rel: string,
-  method: "GET" | "HEAD"
+  method: "GET" | "HEAD",
+  requestUrl: string
 ): Promise<NextResponse> {
   const objectKey = `p/${projectId}/${rel}`;
   let storageUrl: string;
@@ -80,6 +87,18 @@ async function proxyFromStorage(
     return new NextResponse(null, { status: 200, headers });
   }
 
+  if (
+    isStudioDesignModeEnabled() &&
+    shouldInjectDesignModeBridge(rel, contentType)
+  ) {
+    const html = await upstream.text();
+    const origin = new URL(requestUrl).origin;
+    const scriptSrc = `${origin}${designModeBridgeScriptPath()}`;
+    const body = injectDesignModeBridgeIntoHtml(html, scriptSrc);
+    headers.set("Content-Length", String(Buffer.byteLength(body, "utf8")));
+    return new NextResponse(body, { status: 200, headers });
+  }
+
   return new NextResponse(upstream.body, { status: 200, headers });
 }
 
@@ -102,7 +121,7 @@ export async function GET(req: Request, ctx: Ctx) {
     return new NextResponse("Invalid path", { status: 400 });
   }
   const rel = segments.length ? segments.join("/") : "index.html";
-  return proxyFromStorage(id, rel, "GET");
+  return proxyFromStorage(id, rel, "GET", req.url);
 }
 
 export async function HEAD(req: Request, ctx: Ctx) {
@@ -116,5 +135,5 @@ export async function HEAD(req: Request, ctx: Ctx) {
     return new NextResponse(null, { status: 400 });
   }
   const rel = segments.length ? segments.join("/") : "index.html";
-  return proxyFromStorage(id, rel, "HEAD");
+  return proxyFromStorage(id, rel, "HEAD", req.url);
 }
