@@ -4,12 +4,25 @@ export const DESIGN_MODE_PROTOCOL = "OPEN_OX_DESIGN_MODE" as const;
 
 export type DesignModeProperty = "color" | "fontSize" | "padding" | "borderRadius";
 
+export interface DesignModeElementRect {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+}
+
 export interface DesignModeElementPayload {
   tagName: string;
   id: string | null;
   className: string;
   textPreview: string;
+  /** Full trimmed text when the element is text-editable. */
+  textContent?: string;
+  canEditText?: boolean;
+  /** Nearest `data-ox-id` on self or ancestor — M2 source anchor. */
+  oxId?: string | null;
   selectorHint: string;
+  rect?: DesignModeElementRect;
   styles: Record<DesignModeProperty, string>;
 }
 
@@ -28,6 +41,11 @@ export type DesignModeParentMessage =
       property: DesignModeProperty;
       value: string;
     }
+  | {
+      protocol: typeof DESIGN_MODE_PROTOCOL;
+      action: "PREVIEW_TEXT";
+      value: string;
+    }
   | { protocol: typeof DESIGN_MODE_PROTOCOL; action: "RESET_PREVIEW" };
 
 export type DesignModeChildMessage =
@@ -38,15 +56,31 @@ export type DesignModeChildMessage =
       action: "ELEMENT_SELECTED";
       payload: DesignModeElementPayload;
     }
+  | {
+      protocol: typeof DESIGN_MODE_PROTOCOL;
+      action: "RECT_UPDATED";
+      payload: { rect: DesignModeElementRect };
+    }
   | { protocol: typeof DESIGN_MODE_PROTOCOL; action: "BRIDGE_READY" };
 
-export interface VisualEdit {
-  selectorHint: string;
-  elementLabel: string;
-  property: DesignModeProperty;
-  before: string;
-  after: string;
-}
+export type VisualEdit =
+  | {
+      kind: "style";
+      oxId?: string;
+      selectorHint: string;
+      elementLabel: string;
+      property: DesignModeProperty;
+      before: string;
+      after: string;
+    }
+  | {
+      kind: "text";
+      oxId?: string;
+      selectorHint: string;
+      elementLabel: string;
+      before: string;
+      after: string;
+    };
 
 export function isDesignModeMessage(value: unknown): value is DesignModeParentMessage | DesignModeChildMessage {
   if (!value || typeof value !== "object") return false;
@@ -56,4 +90,21 @@ export function isDesignModeMessage(value: unknown): value is DesignModeParentMe
 
 export function getPreviewFrameOrigin(previewUrl: string): string {
   return new URL(previewUrl, typeof window !== "undefined" ? window.location.href : "http://localhost").origin;
+}
+
+/** Loopback hostnames differ (`localhost` vs `127.0.0.1`) but refer to the same dev server — try both for postMessage. */
+export function getPreviewFramePostMessageOrigins(previewUrl: string): string[] {
+  const origins = new Set<string>();
+  try {
+    const url = new URL(previewUrl, typeof window !== "undefined" ? window.location.href : "http://localhost");
+    origins.add(url.origin);
+    if (url.hostname === "localhost") {
+      origins.add(`http://127.0.0.1:${url.port || (url.protocol === "https:" ? "443" : "80")}`);
+    } else if (url.hostname === "127.0.0.1") {
+      origins.add(`http://localhost:${url.port || (url.protocol === "https:" ? "443" : "80")}`);
+    }
+  } catch {
+    origins.add("http://localhost");
+  }
+  return [...origins];
 }

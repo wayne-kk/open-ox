@@ -10,6 +10,7 @@ describe("buildModifyDraftFromVisualEdits", () => {
   it("builds grouped draft with selector hints and property changes", () => {
     const edits: VisualEdit[] = [
       {
+        kind: "style",
         selectorHint: "main > section.hero > h1.title",
         elementLabel: "h1.title",
         property: "color",
@@ -17,6 +18,7 @@ describe("buildModifyDraftFromVisualEdits", () => {
         after: "#ff5500",
       },
       {
+        kind: "style",
         selectorHint: "main > section.hero > h1.title",
         elementLabel: "h1.title",
         property: "fontSize",
@@ -33,9 +35,25 @@ describe("buildModifyDraftFromVisualEdits", () => {
     expect(draft).toContain("do not change layout structure");
   });
 
+  it("includes text copy edits", () => {
+    const edits: VisualEdit[] = [
+      {
+        kind: "text",
+        selectorHint: "nav > a.link",
+        elementLabel: "a.link",
+        before: "精选曲目",
+        after: "热门曲目",
+      },
+    ];
+
+    const draft = buildModifyDraftFromVisualEdits(edits);
+    expect(draft).toContain("copy/text: `精选曲目` → `热门曲目`");
+  });
+
   it("separates edits for different elements", () => {
     const edits: VisualEdit[] = [
       {
+        kind: "style",
         selectorHint: "button.cta",
         elementLabel: "button.cta",
         property: "borderRadius",
@@ -43,6 +61,7 @@ describe("buildModifyDraftFromVisualEdits", () => {
         after: "12px",
       },
       {
+        kind: "style",
         selectorHint: "footer",
         elementLabel: "footer",
         property: "padding",

@@ -12,6 +12,8 @@
   var overlay = null;
   var hoverOverlay = null;
   var previewBackup = null;
+  var previewTextBackup = null;
+  var trackingSelection = false;
 
   function ensureOverlay(kind) {
     var node = kind === "hover" ? hoverOverlay : overlay;
@@ -26,6 +28,16 @@
     if (kind === "hover") hoverOverlay = node;
     else overlay = node;
     return node;
+  }
+
+  function readRect(el) {
+    var rect = el.getBoundingClientRect();
+    return {
+      top: rect.top,
+      left: rect.left,
+      width: rect.width,
+      height: rect.height,
+    };
   }
 
   function positionOverlay(el, kind) {
@@ -63,6 +75,18 @@
     return tag;
   }
 
+  function findOxId(el) {
+    var node = el;
+    while (node && node.nodeType === 1) {
+      if (node.getAttribute) {
+        var id = node.getAttribute("data-ox-id");
+        if (id && id.trim()) return id.trim();
+      }
+      node = node.parentElement;
+    }
+    return null;
+  }
+
   function buildSelectorHint(el) {
     var segments = [];
     var node = el;
@@ -85,13 +109,14 @@
     };
   }
 
-  function elementLabel(el) {
-    return elementSegment(el);
-  }
-
   function textPreview(el) {
     var text = (el.textContent || "").replace(/\s+/g, " ").trim();
     return text.length > 80 ? text.slice(0, 77) + "..." : text;
+  }
+
+  function canEditText(el) {
+    if (!el || el.childElementCount > 0) return false;
+    return Boolean((el.textContent || "").replace(/\s+/g, " ").trim());
   }
 
   function notifyParent(message) {
@@ -100,23 +125,59 @@
     }
   }
 
+  function buildPayload(el) {
+    var trimmed = (el.textContent || "").replace(/\s+/g, " ").trim();
+    return {
+      tagName: el.tagName,
+      id: el.id || null,
+      className: (el.className || "").toString(),
+      textPreview: textPreview(el),
+      textContent: trimmed,
+      canEditText: canEditText(el),
+      oxId: findOxId(el),
+      selectorHint: buildSelectorHint(el),
+      rect: readRect(el),
+      styles: readStyles(el),
+    };
+  }
+
+  function notifyRectUpdated() {
+    if (!selectedEl) return;
+    positionOverlay(selectedEl, "select");
+    notifyParent({
+      protocol: PROTOCOL,
+      action: "RECT_UPDATED",
+      payload: { rect: readRect(selectedEl) },
+    });
+  }
+
+  function startSelectionTracking() {
+    if (trackingSelection) return;
+    trackingSelection = true;
+    window.addEventListener("scroll", notifyRectUpdated, true);
+    window.addEventListener("resize", notifyRectUpdated, true);
+  }
+
+  function stopSelectionTracking() {
+    if (!trackingSelection) return;
+    trackingSelection = false;
+    window.removeEventListener("scroll", notifyRectUpdated, true);
+    window.removeEventListener("resize", notifyRectUpdated, true);
+  }
+
   function selectElement(el) {
     if (!el || el.nodeType !== 1) return;
     var tag = el.tagName.toLowerCase();
     if (SKIP_TAGS[tag]) return;
     selectedEl = el;
+    previewBackup = null;
+    previewTextBackup = null;
     positionOverlay(el, "select");
+    startSelectionTracking();
     notifyParent({
       protocol: PROTOCOL,
       action: "ELEMENT_SELECTED",
-      payload: {
-        tagName: el.tagName,
-        id: el.id || null,
-        className: (el.className || "").toString(),
-        textPreview: textPreview(el),
-        selectorHint: buildSelectorHint(el),
-        styles: readStyles(el),
-      },
+      payload: buildPayload(el),
     });
   }
 
@@ -156,9 +217,10 @@
     hoverEl = null;
     clearOverlay("hover");
     clearOverlay("select");
+    stopSelectionTracking();
   }
 
-  function resetPreviewStyles() {
+  function resetPreviewState() {
     if (selectedEl && previewBackup) {
       var props = ["color", "fontSize", "padding", "borderRadius"];
       for (var i = 0; i < props.length; i++) {
@@ -173,7 +235,12 @@
         else selectedEl.style.removeProperty(cssKey);
       }
     }
+    if (selectedEl && previewTextBackup != null) {
+      selectedEl.textContent = previewTextBackup;
+    }
     previewBackup = null;
+    previewTextBackup = null;
+    if (selectedEl) positionOverlay(selectedEl, "select");
   }
 
   function cssPropertyName(property) {
@@ -193,7 +260,16 @@
       };
     }
     selectedEl.style[cssPropertyName(property)] = value;
-    positionOverlay(selectedEl, "select");
+    notifyRectUpdated();
+  }
+
+  function applyPreviewText(value) {
+    if (!selectedEl || !canEditText(selectedEl)) return;
+    if (previewTextBackup == null) {
+      previewTextBackup = selectedEl.textContent || "";
+    }
+    selectedEl.textContent = value;
+    notifyRectUpdated();
   }
 
   window.addEventListener("message", function (ev) {
@@ -205,14 +281,17 @@
         break;
       case "DISABLE":
         disablePickMode();
-        resetPreviewStyles();
+        resetPreviewState();
         selectedEl = null;
         break;
       case "PREVIEW_PROPERTY":
         if (data.property && data.value != null) applyPreviewProperty(data.property, String(data.value));
         break;
+      case "PREVIEW_TEXT":
+        if (data.value != null) applyPreviewText(String(data.value));
+        break;
       case "RESET_PREVIEW":
-        resetPreviewStyles();
+        resetPreviewState();
         break;
       case "PING":
         notifyParent({ protocol: PROTOCOL, action: "PONG" });

@@ -1,9 +1,9 @@
 "use client";
 
-import { use, useState, useEffect, useCallback } from "react";
+import { use, useState, useEffect, useCallback, useRef } from "react";
 import { Suspense } from "react";
 import Link from "next/link";
-import { GitBranch, Monitor, RefreshCw, ExternalLink, PanelLeftClose, PanelLeftOpen, FileCode2, ImagePlus, Loader2 } from "lucide-react";
+import { GitBranch, Monitor, RefreshCw, ExternalLink, PanelLeftClose, PanelLeftOpen, FileCode2, ImagePlus, Loader2, MousePointer2 } from "lucide-react";
 import { AppBackButton } from "@/app/components/AppBackButton";
 import { cn } from "@/lib/utils";
 import { HamsterLoader } from "@/components/ui/hamster-loader";
@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { useBuildStudio } from "@/app/studio/hooks/useBuildStudio";
 import { useFaviconSync } from "@/app/hooks/useFaviconSync";
 import { BuildConversation } from "@/app/studio/components/BuildConversation";
-import { DesignModePanel } from "@/app/studio/components/DesignModePanel";
+import { DesignModePreviewOverlay } from "@/app/studio/components/DesignModePreviewOverlay";
 import { GenerationAtlas } from "@/app/studio/components/GenerationAtlas";
 import { ProjectCodePanel } from "@/app/studio/components/ProjectCodePanel";
 import { useDesignMode } from "@/app/studio/hooks/useDesignMode";
@@ -28,7 +28,7 @@ function StudioInner({ projectId }: { projectId: string }) {
   const { loading, response, elapsed, rightPanel, setRightPanel,
     previewUrl, previewState, previewError, previewVersion, startPreview, iframeRef, projectLoading,
     autoPreviewAfterBuild, setAutoPreviewAfterBuild,
-    setModifyInstruction,
+    bumpPreviewAfterDirectPatch,
   } = studio;
 
   // Sync AI processing state → dynamic favicon
@@ -54,13 +54,14 @@ function StudioInner({ projectId }: { projectId: string }) {
     (response?.blueprint && (response?.buildSteps?.length ?? 0) > 0)
   );
   const designMode = useDesignMode({
+    projectId,
     iframeRef,
     previewUrl,
     previewReady: previewState === "ready" && Boolean(previewUrl),
-    setModifyInstruction,
-    onAppliedDraft: () => setConversationCollapsed(false),
+    onPreviewRefresh: bumpPreviewAfterDirectPatch,
   });
   const [coverCaptureBusy, setCoverCaptureBusy] = useState(false);
+  const previewContainerRef = useRef<HTMLDivElement | null>(null);
   const [coverCaptureHint, setCoverCaptureHint] = useState<string | null>(null);
 
   useEffect(() => {
@@ -304,6 +305,22 @@ function StudioInner({ projectId }: { projectId: string }) {
               {/* Action buttons — right */}
               {rightPanel === "preview" && previewState === "ready" && previewUrl && (
                 <>
+                  {designMode.featureEnabled && hasGeneratedProject ? (
+                    <button
+                      type="button"
+                      onClick={() => designMode.setActive(!designMode.active)}
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-md border px-2.5 h-7 font-mono text-[10px] transition-all",
+                        designMode.active
+                          ? "border-primary/40 bg-primary/10 text-primary"
+                          : "border-white/8 bg-white/3 text-muted-foreground/70 hover:border-white/15 hover:text-foreground"
+                      )}
+                      title="Pick elements in preview to edit styles and copy"
+                    >
+                      <MousePointer2 className="h-3 w-3" />
+                      {designMode.active ? "Exit pick" : "Design pick"}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     onClick={requestCoverCapture}
@@ -364,8 +381,7 @@ function StudioInner({ projectId }: { projectId: string }) {
                   <ProjectCodePanel projectId={projectId} />
                 </div>
               ) : (
-                <div className="flex h-full flex-col">
-                  <DesignModePanel designMode={designMode} hasGeneratedProject={hasGeneratedProject} />
+                <div className="relative flex h-full min-h-0 flex-col">
                   {previewState === "starting" && (
                     <div className="flex flex-1 flex-col items-center justify-center gap-3">
                       <HamsterLoader size="sm" />
@@ -390,13 +406,20 @@ function StudioInner({ projectId }: { projectId: string }) {
                     </div>
                   )}
                   {previewState === "ready" && previewUrl && (
-                    <iframe
-                      key={previewIframeSrc ?? `${previewUrl}_${previewVersion}`}
-                      ref={iframeRef}
-                      src={previewIframeSrc ?? previewUrl}
-                      className="flex-1 w-full border-0"
-                      title="Project Preview"
-                    />
+                    <div ref={previewContainerRef} className="relative flex flex-1 min-h-0">
+                      <iframe
+                        key={previewIframeSrc ?? `${previewUrl}_${previewVersion}`}
+                        ref={iframeRef}
+                        src={previewIframeSrc ?? previewUrl}
+                        className="flex-1 w-full border-0"
+                        title="Project Preview"
+                      />
+                      <DesignModePreviewOverlay
+                        designMode={designMode}
+                        iframeRef={iframeRef}
+                        containerRef={previewContainerRef}
+                      />
+                    </div>
                   )}
                 </div>
               )}

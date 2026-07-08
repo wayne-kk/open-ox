@@ -19,6 +19,7 @@ import { getSiteRoot, WORKSPACE_ROOT } from "./projectManager";
 import { ensureProjectSourcesOnDisk } from "./storage";
 import { syncLocalProjectFingerprint } from "./previewFingerprintDb";
 import { computeProjectFingerprint, getTemplateDepMap, readProjectPackageJson, SITES_TEMPLATE_DIR } from "./previewShared";
+import { ensureDesignModeBridgeInProject } from "./studio/designMode/ensureProjectBridge";
 
 const execFileAsync = promisify(execFile);
 const SITES_DIR = path.join(WORKSPACE_ROOT, "sites");
@@ -83,6 +84,128 @@ async function clearPersistedLocalPreview(projectId: string): Promise<void> {
   } catch {
     /* missing */
   }
+}
+
+async function killProcessId(pid: number, signal: NodeJS.Signals = "SIGTERM"): Promise<void> {
+  if (!Number.isInteger(pid) || pid <= 0) return;
+  try {
+    process.kill(pid, signal);
+  } catch {
+    /* ESRCH / EPERM */
+  }
+}
+
+/** Kill whatever is bound to a preview port (orphan next dev from another worker). */
+async function killProcessesOnPort(port: number): Promise<void> {
+  if (process.platform === "win32") return;
+  try {
+    const { stdout } = await execFileAsync("lsof", ["-ti", `:${port}`], { timeout: 5000 });
+    const pids = stdout
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map((s) => Number.parseInt(s, 10))
+      .filter((n) => Number.isInteger(n) && n > 0);
+    for (const pid of pids) {
+      await killProcessId(pid, "SIGTERM");
+    }
+    if (pids.length === 0) return;
+    await sleep(700);
+    for (const pid of pids) {
+      try {
+        process.kill(pid, 0);
+        await killProcessId(pid, "SIGKILL");
+      } catch {
+        /* already exited */
+      }
+    }
+  } catch {
+    /* lsof: no listeners */
+  }
+}
+
+/** Best-effort kill of stray `next dev` spawned for this generated site directory. */
+async function killOrphanNextDevForProject(projectId: string): Promise<void> {
+  if (process.platform === "win32") return;
+  const needle = path.join("sites", projectId);
+  try {
+    const { stdout } = await execFileAsync("pgrep", ["-fl", "next dev"], { timeout: 5000 });
+    for (const line of stdout.split("\n")) {
+      if (!line.includes(needle)) continue;
+      const pid = Number.parseInt(line.trim().split(/\s+/)[0] ?? "", 10);
+      if (pid > 0) await killProcessId(pid, "SIGTERM");
+    }
+    await sleep(500);
+  } catch {
+    /* pgrep: no matches */
+  }
+}
+
+async function waitForNextDevLockReleased(projectDir: string, timeoutMs = 20_000): Promise<void> {
+  const lockPath = path.join(projectDir, ".next/dev/lock");
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    let lockPresent = false;
+    try {
+      await fs.access(lockPath);
+      lockPresent = true;
+    } catch {
+      return;
+    }
+
+    if (process.platform !== "win32") {
+      try {
+        const { stdout } = await execFileAsync("lsof", ["-t", lockPath], { timeout: 3000 });
+        const holders = stdout
+          .trim()
+          .split("\n")
+          .filter(Boolean)
+          .map((s) => Number.parseInt(s, 10))
+          .filter((n) => Number.isInteger(n) && n > 0);
+        if (holders.length > 0) {
+          for (const pid of holders) await killProcessId(pid, "SIGTERM");
+          await sleep(400);
+          continue;
+        }
+      } catch {
+        /* no process holds the lock file */
+      }
+    }
+
+    if (lockPresent) {
+      try {
+        await fs.unlink(lockPath);
+        return;
+      } catch {
+        await sleep(300);
+      }
+    }
+  }
+  console.warn(`[local preview] Force-clearing stale .next/dev/lock under ${projectDir}`);
+  await fs.unlink(lockPath).catch(() => {});
+}
+
+/**
+ * Stop registry child, persisted pid/port, and orphan next dev processes before a fresh spawn.
+ * Prevents Next 16 "Unable to acquire lock" when rebuild races with another worker or zombie dev server.
+ */
+async function teardownLocalPreviewDevServer(projectId: string, projectDir: string): Promise<void> {
+  const reg = localRegistry.get(projectId);
+  const hadLiveChild = !!(reg?.dev && !reg.dev.killed);
+
+  stopDevInRegistry(projectId);
+  localRegistry.delete(projectId);
+
+  const persisted = await readPersistedLocalPreview(projectId);
+  if (persisted?.pid) await killProcessId(persisted.pid, "SIGTERM");
+  if (persisted?.port) await killProcessesOnPort(persisted.port);
+  if (reg?.port && reg.port !== persisted?.port) await killProcessesOnPort(reg.port);
+
+  await killOrphanNextDevForProject(projectId);
+  await clearPersistedLocalPreview(projectId);
+
+  await sleep(hadLiveChild ? 1800 : 900);
+  await waitForNextDevLockReleased(projectDir);
 }
 
 type LocalInstance = { port: number; url: string; dev: ChildProcess | null };
@@ -580,12 +703,14 @@ export async function startLocalDevServer(
     const projectDir = await ensureProjectDirExists(projectId, db);
     timingLog(projectId, "ensureProjectDirExists(total)", tDir);
 
+    const bridgePatched = await ensureDesignModeBridgeInProject(projectDir);
+
     const tFp = performance.now();
     const currentHash = await computeProjectFingerprint(projectId);
     timingLog(projectId, "computeProjectFingerprint", tFp);
 
     const tReuse = performance.now();
-    const reusedEarly = await tryReuseRunningLocalPreview(projectId);
+    const reusedEarly = bridgePatched ? null : await tryReuseRunningLocalPreview(projectId);
     timingLog(projectId, "tryReuseRunningLocalPreview", tReuse);
     if (reusedEarly) {
       await syncLocalProjectFingerprint(db, projectId);
@@ -597,7 +722,7 @@ export async function startLocalDevServer(
 
     /** Registry miss or warm-up: avoid killing a live Next dev Turbo is still compiling. */
     const tWarm = performance.now();
-    if (reg && !(await isLocalServerUp(previewHealthCheckUrl(reg.port)))) {
+    if (!bridgePatched && reg && !(await isLocalServerUp(previewHealthCheckUrl(reg.port)))) {
       await sleep(600);
       if (await isLocalServerUp(previewHealthCheckUrl(reg.port))) {
         const synced = syncRegistryPublicUrl(projectId, reg);
@@ -609,22 +734,20 @@ export async function startLocalDevServer(
     }
     timingLog(projectId, "registryWarmProbe(noEarlyExit)", tWarm);
 
-    const tTeardown = performance.now();
-    const hadLiveChild = !!(reg?.dev && !reg.dev.killed);
-    stopDevInRegistry(projectId);
-    localRegistry.delete(projectId);
-    /** Avoid stale bindings before spawning (another worker may have exited without clearing). */
-    await clearPersistedLocalPreview(projectId);
-    /** Next 16+ uses `.next/dev/lock`; spawning before the old `next dev` exits causes "Unable to acquire lock". */
-    if (hadLiveChild) await sleep(1200);
+    const tTd = performance.now();
+    const hadLiveChild = !!(localRegistry.get(projectId)?.dev && !localRegistry.get(projectId)?.dev?.killed);
+    await teardownLocalPreviewDevServer(projectId, projectDir);
     timingLog(
       projectId,
       "stopClearPersistStaleLockSleep",
-      tTeardown,
-      hadLiveChild ? "sleptMs=1200" : "sleptMs=0"
+      tTd,
+      hadLiveChild ? "sleptMs=1800" : "sleptMs=900"
     );
 
     await ensurePreviewNextConfigAllowsStudioEmbed(projectDir);
+    if (!bridgePatched) {
+      await ensureDesignModeBridgeInProject(projectDir);
+    }
 
     await runInstallIfNeeded(projectDir, "start", projectId);
     const tPort = performance.now();
@@ -707,25 +830,15 @@ export async function rebuildLocalDevServer(
   const reg = localRegistry.get(projectId);
   const hadLiveChild = !!(reg?.dev && !reg.dev.killed);
   const tTd = performance.now();
-  stopDevInRegistry(projectId);
-  localRegistry.delete(projectId);
-  const persisted = await readPersistedLocalPreview(projectId);
-  if (persisted?.pid) {
-    try {
-      process.kill(persisted.pid, "SIGTERM");
-    } catch {
-      /* */
-    }
-  }
-  await clearPersistedLocalPreview(projectId);
-  if (hadLiveChild) await sleep(1200);
-  timingLog(projectId, "rebuild.teardownKillSleep", tTd, hadLiveChild ? "sleptMs=1200" : "sleptMs=0");
+  await teardownLocalPreviewDevServer(projectId, projectDir);
+  timingLog(projectId, "rebuild.teardownKillSleep", tTd, hadLiveChild ? "sleptMs=1800" : "sleptMs=900");
 
   const tRm = performance.now();
   await fs.rm(path.join(projectDir, ".next"), { recursive: true, force: true });
   timingLog(projectId, "rebuild.rmDotNext", tRm);
 
   await ensurePreviewNextConfigAllowsStudioEmbed(projectDir);
+  await ensureDesignModeBridgeInProject(projectDir);
 
   await runInstallIfNeeded(projectDir, "rebuild", projectId);
 
@@ -769,22 +882,12 @@ export async function ensureLocalDevServerAlive(
   }
   const projectDir = getSiteRoot(projectId);
   const hadLiveChild = !!(reg.dev && !reg.dev.killed);
-  stopDevInRegistry(projectId);
-  localRegistry.delete(projectId);
-  const persistedKill = await readPersistedLocalPreview(projectId);
-  if (persistedKill?.pid) {
-    try {
-      process.kill(persistedKill.pid, "SIGTERM");
-    } catch {
-      /* */
-    }
-  }
-  await clearPersistedLocalPreview(projectId);
-  if (hadLiveChild) await sleep(1200);
+  await teardownLocalPreviewDevServer(projectId, projectDir);
   const wallRestart = performance.now();
   console.log(`[local preview] ensureLocalDevServerAlive RESTART_AFTER_DOWN projectId=${projectId}`);
   try {
     await ensurePreviewNextConfigAllowsStudioEmbed(projectDir);
+    await ensureDesignModeBridgeInProject(projectDir);
 
     await runInstallIfNeeded(projectDir, "ensureAlive", projectId);
     const tp = performance.now();

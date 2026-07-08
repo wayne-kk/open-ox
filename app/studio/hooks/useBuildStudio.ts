@@ -119,6 +119,8 @@ export interface BuildStudioState {
   previewVersion: number;
   startPreview: () => Promise<void>;
   rebuildPreview: () => Promise<void>;
+  /** After Design Mode direct patch — refresh iframe without full rebuild when possible. */
+  bumpPreviewAfterDirectPatch: (url?: string | null) => void;
   /** After generate/retry (and optionally modify), switch to Preview and start/rebuild dev server */
   autoPreviewAfterBuild: boolean;
   setAutoPreviewAfterBuild: (v: boolean) => void;
@@ -1180,6 +1182,11 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     }
   }, [projectId]);
 
+  const bumpPreviewAfterDirectPatch = useCallback((url?: string | null) => {
+    if (url) setPreviewUrl(url);
+    setPreviewVersion((v) => v + 1);
+  }, []);
+
   const openPreviewAfterBuild = useCallback(
     async (targetProjectId: string, forceRebuild = false) => {
       const session = ++previewSessionRef.current;
@@ -1500,7 +1507,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     selectedModel, setSelectedModel, availableModels,
     projectId, setProjectId, projectLoading,
     rightPanel, setRightPanel,
-    previewUrl, previewState, previewError, previewVersion, startPreview, rebuildPreview,
+    previewUrl, previewState, previewError, previewVersion, startPreview, rebuildPreview, bumpPreviewAfterDirectPatch,
     autoPreviewAfterBuild, setAutoPreviewAfterBuild,
     modifyInstruction, setModifyInstruction, modifyImage, setModifyImage, modifying,
     modifySteps, modifyPlan, modifyDiffs, modifyToolCalls, modifyThinking, modifyError, modifyIntentLabel, handleModify,

@@ -18,11 +18,15 @@ function formatElementLabel(edit: VisualEdit): string {
   return edit.elementLabel.trim() || edit.selectorHint;
 }
 
+function groupKey(edit: VisualEdit): string {
+  return `${edit.selectorHint}::${edit.elementLabel}`;
+}
+
 /** Group edits by element so the Modify agent sees one block per target. */
 function groupEditsByElement(edits: VisualEdit[]): Map<string, VisualEdit[]> {
   const groups = new Map<string, VisualEdit[]>();
   for (const edit of edits) {
-    const key = `${edit.selectorHint}::${edit.elementLabel}`;
+    const key = groupKey(edit);
     const list = groups.get(key) ?? [];
     list.push(edit);
     groups.set(key, list);
@@ -40,10 +44,10 @@ export function buildModifyDraftFromVisualEdits(edits: VisualEdit[]): string {
   }
 
   const lines: string[] = [
-    "Apply the following Studio Design Mode visual tweaks to the project source.",
+    "Apply the following Studio Design Mode tweaks to the project source.",
     "",
     "Constraints:",
-    "- Update Tailwind classes or component styles only — do not change layout structure, DOM hierarchy, or add/remove elements.",
+    "- Update Tailwind classes, component styles, or visible copy only — do not change layout structure, DOM hierarchy, or add/remove elements.",
     "- Match the requested values as closely as practical in the generated site's styling system.",
     "",
     "Changes:",
@@ -56,9 +60,14 @@ export function buildModifyDraftFromVisualEdits(edits: VisualEdit[]): string {
     lines.push(`${index}. Element: ${formatElementLabel(head)}`);
     lines.push(`   Selector hint: \`${head.selectorHint}\``);
     for (const edit of group) {
-      const label = PROPERTY_LABELS[edit.property];
-      lines.push(`   - ${label}: \`${edit.before}\` → \`${edit.after}\``);
-      lines.push(`     (${TAILWIND_HINTS[edit.property]})`);
+      if (edit.kind === "text") {
+        lines.push(`   - copy/text: \`${edit.before}\` → \`${edit.after}\``);
+        lines.push("     (Update JSX text nodes or string props for this element only.)");
+      } else {
+        const label = PROPERTY_LABELS[edit.property];
+        lines.push(`   - ${label}: \`${edit.before}\` → \`${edit.after}\``);
+        lines.push(`     (${TAILWIND_HINTS[edit.property]})`);
+      }
     }
     lines.push("");
     index += 1;

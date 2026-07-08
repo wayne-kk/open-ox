@@ -79,6 +79,30 @@
 - 对仅浏览器可用的 API（`window`、`document`、`ResizeObserver`、`matchMedia`），须防护运行时可否存在，以免 SSR/类型错误。
 - 优先安全默认值与早返回，避免深层嵌套。
 
+### Design Mode 锚点（必须 — Studio 反写源码）
+
+生成区块时，须为 **Design Mode 可编辑节点** 添加稳定的 `data-ox-id` 属性，以便 Studio 直接 patch 源码（无需猜文件）。
+
+**规则：**
+
+- 格式：kebab-case，**全项目唯一**；建议 `{section-slug}-{role}`，例如 `hero-root`、`hero-headline`、`hero-cta-primary`。
+- **必须**出现在：
+  - 区块根 `<section>`（或等效容器）：`{slug}-root`
+  - 主标题、副标题、正文段落、按钮/链接文案等 **用户可见文本节点**
+  - 用户可能改样式的容器（含 `className` 的标题/按钮/卡片外壳）
+- 写在 **同一 JSX 元素** 上（与 `className` 同级），优先单行或可扫描的短 JSX。
+- **禁止**重复 id；**禁止**用行号或随机 uuid。
+
+**示例：**
+
+```tsx
+<section data-ox-id="hero-root" className="...">
+  <h1 data-ox-id="hero-headline" className="...">主标题</h1>
+  <p data-ox-id="hero-subcopy" className="...">Supporting copy.</p>
+  <a data-ox-id="hero-cta-primary" className="..." href="#">Get started</a>
+</section>
+```
+
 ### 硬性禁止（必须遵守）
 
 - **`<style jsx>`** 等 TSX 格式红线见 **`outputTsx`** 规则。

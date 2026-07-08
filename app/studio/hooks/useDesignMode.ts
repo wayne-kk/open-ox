@@ -1,26 +1,26 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { buildModifyDraftFromVisualEdits } from "@/lib/studio/designMode/buildModifyDraftFromVisualEdits";
+import { isStudioDesignModeEnabled } from "@/lib/studio/designMode/featureFlag";
+import { trackEvent } from "@/lib/analytics/client";
 import {
-  DESIGN_MODE_PROTOCOL,
   type DesignModeChildMessage,
   type DesignModeElementPayload,
+  type DesignModeElementRect,
   type DesignModeProperty,
-  getPreviewFrameOrigin,
+  DESIGN_MODE_PROTOCOL,
+  getPreviewFramePostMessageOrigins,
   isDesignModeMessage,
   type VisualEdit,
 } from "@/lib/studio/designMode/protocol";
 import { designModeBridgeScriptPath } from "@/lib/studio/designMode/injectBridgeIntoHtml";
-import { isStudioDesignModeEnabled } from "@/lib/studio/designMode/featureFlag";
-import { trackEvent } from "@/lib/analytics/client";
 
 export interface UseDesignModeOptions {
+  projectId: string | null;
   iframeRef: React.RefObject<HTMLIFrameElement | null>;
   previewUrl: string | null;
   previewReady: boolean;
-  setModifyInstruction: (value: string) => void;
-  onAppliedDraft?: () => void;
+  onPreviewRefresh?: (url: string | null) => void;
 }
 
 export interface UseDesignModeResult {
@@ -29,12 +29,16 @@ export interface UseDesignModeResult {
   bridgeReady: boolean;
   bridgeError: string | null;
   selected: DesignModeElementPayload | null;
+  anchorRect: DesignModeElementRect | null;
   styles: Record<DesignModeProperty, string>;
-  pendingEdits: VisualEdit[];
+  textContent: string;
+  canEditText: boolean;
   applyHint: string | null;
+  patching: boolean;
   setActive: (next: boolean) => void;
   updateStyle: (property: DesignModeProperty, value: string) => void;
-  applyDraftToModify: () => void;
+  updateText: (value: string) => void;
+  applyDirectPatch: () => Promise<void>;
   undoLastApply: () => void;
   clearSelection: () => void;
 }
@@ -55,6 +59,16 @@ function stylesFromPayload(payload: DesignModeElementPayload): Record<DesignMode
   };
 }
 
+function elementLabelFromPayload(payload: DesignModeElementPayload): string {
+  const tag = payload.tagName.toLowerCase();
+  const classes = payload.className
+    .split(/\s+/)
+    .map((c) => c.trim())
+    .filter(Boolean)
+    .slice(0, 2);
+  return classes.length > 0 ? `${tag}.${classes.join(".")}` : tag;
+}
+
 function colorToHex(input: string): string {
   const trimmed = input.trim();
   if (/^#[0-9a-f]{3,8}$/i.test(trimmed)) return trimmed;
@@ -72,23 +86,27 @@ function parsePx(value: string, fallback: number): number {
 }
 
 export function useDesignMode({
+  projectId,
   iframeRef,
   previewUrl,
   previewReady,
-  setModifyInstruction,
-  onAppliedDraft,
+  onPreviewRefresh,
 }: UseDesignModeOptions): UseDesignModeResult {
   const featureEnabled = isStudioDesignModeEnabled();
   const [active, setActiveState] = useState(false);
   const [bridgeReady, setBridgeReady] = useState(false);
   const [bridgeError, setBridgeError] = useState<string | null>(null);
   const [selected, setSelected] = useState<DesignModeElementPayload | null>(null);
+  const [anchorRect, setAnchorRect] = useState<DesignModeElementRect | null>(null);
   const [baselineStyles, setBaselineStyles] = useState<Record<DesignModeProperty, string>>(DEFAULT_STYLES);
   const [styles, setStyles] = useState<Record<DesignModeProperty, string>>(DEFAULT_STYLES);
-  const [pendingEdits, setPendingEdits] = useState<VisualEdit[]>([]);
+  const [baselineText, setBaselineText] = useState("");
+  const [textContent, setTextContent] = useState("");
+  const [canEditText, setCanEditText] = useState(false);
   const [applyHint, setApplyHint] = useState<string | null>(null);
+  const [patching, setPatching] = useState(false);
   const originalStylesRef = useRef<Record<DesignModeProperty, string>>(DEFAULT_STYLES);
-  const lastApplyCountRef = useRef(0);
+  const originalTextRef = useRef("");
   const bridgeReadyRef = useRef(false);
   const pingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bridgeFailTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -97,8 +115,10 @@ export function useDesignMode({
     (message: Record<string, unknown>) => {
       const frame = iframeRef.current;
       if (!frame?.contentWindow || !previewUrl) return;
-      const targetOrigin = getPreviewFrameOrigin(previewUrl);
-      frame.contentWindow.postMessage({ protocol: DESIGN_MODE_PROTOCOL, ...message }, targetOrigin);
+      const payload = { protocol: DESIGN_MODE_PROTOCOL, ...message };
+      for (const targetOrigin of getPreviewFramePostMessageOrigins(previewUrl)) {
+        frame.contentWindow.postMessage(payload, targetOrigin);
+      }
     },
     [iframeRef, previewUrl]
   );
@@ -119,6 +139,22 @@ export function useDesignMode({
       }
     }, 400);
   }, [injectBridgeIfNeeded, postToFrame]);
+
+  const applySelectionPayload = useCallback((payload: DesignModeElementPayload) => {
+    const nextStyles = stylesFromPayload(payload);
+    originalStylesRef.current = nextStyles;
+    setBaselineStyles(nextStyles);
+    setStyles(nextStyles);
+    const text = payload.textContent ?? payload.textPreview ?? "";
+    originalTextRef.current = text;
+    setBaselineText(text);
+    setTextContent(text);
+    setCanEditText(payload.canEditText ?? Boolean(text && payload.tagName));
+    setAnchorRect(
+      payload.rect ?? { top: 72, left: 24, width: 160, height: 28 }
+    );
+    setSelected(payload);
+  }, []);
 
   useEffect(() => {
     if (!featureEnabled || !previewReady || !previewUrl) {
@@ -146,12 +182,9 @@ export function useDesignMode({
         injectBridgeIfNeeded();
         postToFrame({ action: "PING" });
       } else if (msg.action === "ELEMENT_SELECTED") {
-        const payload = msg.payload;
-        const nextStyles = stylesFromPayload(payload);
-        originalStylesRef.current = nextStyles;
-        setBaselineStyles(nextStyles);
-        setStyles(nextStyles);
-        setSelected(payload);
+        applySelectionPayload(msg.payload);
+      } else if (msg.action === "RECT_UPDATED") {
+        setAnchorRect(msg.payload.rect);
       }
     };
 
@@ -167,7 +200,7 @@ export function useDesignMode({
     pingBridge();
     bridgeFailTimerRef.current = setTimeout(() => {
       if (!bridgeReadyRef.current) {
-        setBridgeError("Preview bridge unavailable — try Rebuild Preview or regenerate from the latest template.");
+        setBridgeError("Preview bridge unavailable — click Rebuild Preview once (local preview injects bridge on restart).");
       }
     }, 5000);
 
@@ -178,7 +211,7 @@ export function useDesignMode({
       if (bridgeFailTimerRef.current) clearTimeout(bridgeFailTimerRef.current);
       postToFrame({ action: "DISABLE" });
     };
-  }, [featureEnabled, iframeRef, injectBridgeIfNeeded, pingBridge, postToFrame, previewReady, previewUrl]);
+  }, [applySelectionPayload, featureEnabled, iframeRef, injectBridgeIfNeeded, pingBridge, postToFrame, previewReady, previewUrl]);
 
   useEffect(() => {
     if (!featureEnabled) return;
@@ -197,6 +230,7 @@ export function useDesignMode({
       setActiveState(next);
       if (!next) {
         setSelected(null);
+        setAnchorRect(null);
         setApplyHint(null);
         postToFrame({ action: "DISABLE" });
       }
@@ -212,16 +246,40 @@ export function useDesignMode({
     [postToFrame]
   );
 
-  const buildEditsFromCurrentStyles = useCallback((): VisualEdit[] => {
+  const updateText = useCallback(
+    (value: string) => {
+      setTextContent(value);
+      postToFrame({ action: "PREVIEW_TEXT", value });
+    },
+    [postToFrame]
+  );
+
+  const buildEditsFromSelection = useCallback((): VisualEdit[] => {
     if (!selected) return [];
-    const elementLabel = `${selected.tagName.toLowerCase()}${selected.className ? `.${selected.className.split(/\s+/).filter(Boolean).slice(0, 2).join(".")}` : ""}`;
-    const properties: DesignModeProperty[] = ["color", "fontSize", "padding", "borderRadius"];
+    const elementLabel = elementLabelFromPayload(selected);
     const edits: VisualEdit[] = [];
+
+    const oxId = selected.oxId ?? undefined;
+
+    if (canEditText && baselineText !== textContent) {
+      edits.push({
+        kind: "text",
+        oxId,
+        selectorHint: selected.selectorHint,
+        elementLabel,
+        before: baselineText,
+        after: textContent,
+      });
+    }
+
+    const properties: DesignModeProperty[] = ["color", "fontSize", "padding", "borderRadius"];
     for (const property of properties) {
       const before = baselineStyles[property];
       const after = styles[property];
       if (before !== after) {
         edits.push({
+          kind: "style",
+          oxId,
           selectorHint: selected.selectorHint,
           elementLabel,
           property,
@@ -231,44 +289,65 @@ export function useDesignMode({
       }
     }
     return edits;
-  }, [baselineStyles, selected, styles]);
+  }, [baselineStyles, baselineText, canEditText, selected, styles, textContent]);
 
-  const applyDraftToModify = useCallback(() => {
-    const newEdits = buildEditsFromCurrentStyles();
+  const applyDirectPatch = useCallback(async () => {
+    if (!projectId) return;
+    const newEdits = buildEditsFromSelection();
     if (newEdits.length === 0) {
-      setApplyHint("No style changes to apply — adjust a property first.");
+      setApplyHint("No changes to apply — adjust copy or a style first.");
       return;
     }
-    const merged = [...pendingEdits, ...newEdits];
-    const draft = buildModifyDraftFromVisualEdits(merged);
-    setPendingEdits(merged);
-    lastApplyCountRef.current = newEdits.length;
-    setModifyInstruction(draft);
-    setApplyHint("Modify draft ready — review below and click Send to run Modify + build.");
-    trackEvent("design_mode_apply", { editCount: merged.length });
-    onAppliedDraft?.();
-  }, [buildEditsFromCurrentStyles, onAppliedDraft, pendingEdits, setModifyInstruction]);
+    setPatching(true);
+    setApplyHint(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/design-mode/patch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          edits: newEdits,
+          classNameHint: selected?.className ?? "",
+        }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        data?: { previewUrl?: string | null };
+      };
+      if (!res.ok) {
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+
+      setBaselineStyles(styles);
+      setBaselineText(textContent);
+      originalStylesRef.current = styles;
+      originalTextRef.current = textContent;
+      postToFrame({ action: "RESET_PREVIEW" });
+      setApplyHint("Saved to source — preview refreshing.");
+      trackEvent("design_mode_direct_patch", { editCount: newEdits.length });
+      onPreviewRefresh?.(body.data?.previewUrl ?? null);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Patch failed";
+      setApplyHint(`Direct patch failed: ${msg}`);
+    } finally {
+      setPatching(false);
+    }
+  }, [
+    buildEditsFromSelection,
+    onPreviewRefresh,
+    postToFrame,
+    projectId,
+    selected?.className,
+    styles,
+    textContent,
+  ]);
 
   const undoLastApply = useCallback(() => {
-    const removeCount = lastApplyCountRef.current;
-    if (removeCount <= 0) return;
-    setPendingEdits((prev) => {
-      if (prev.length === 0) return prev;
-      const next = prev.slice(0, Math.max(0, prev.length - removeCount));
-      const draft = buildModifyDraftFromVisualEdits(next);
-      setModifyInstruction(draft);
-      setApplyHint(next.length > 0 ? "Removed last visual apply from draft." : "Cleared Design Mode draft.");
-      return next;
-    });
-    lastApplyCountRef.current = 0;
-    postToFrame({ action: "RESET_PREVIEW" });
-    if (selected) {
-      setStyles(originalStylesRef.current);
-    }
-  }, [postToFrame, selected, setModifyInstruction]);
+    setApplyHint("Undo is not available for direct patch yet — use git or Modify to revert.");
+  }, []);
 
   const clearSelection = useCallback(() => {
     setSelected(null);
+    setAnchorRect(null);
     postToFrame({ action: "RESET_PREVIEW" });
   }, [postToFrame]);
 
@@ -278,12 +357,16 @@ export function useDesignMode({
     bridgeReady,
     bridgeError,
     selected,
+    anchorRect,
     styles,
-    pendingEdits,
+    textContent,
+    canEditText,
     applyHint,
+    patching,
     setActive,
     updateStyle,
-    applyDraftToModify,
+    updateText,
+    applyDirectPatch,
     undoLastApply,
     clearSelection,
   };
