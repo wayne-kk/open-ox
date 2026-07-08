@@ -286,6 +286,69 @@ export async function readProjectPackageJson(
   }
 }
 
+/** Keep generated sites on the same Next/React versions as `sites/template` (preview iframe base). */
+const RUNTIME_SYNC_PACKAGES = ["next", "react", "react-dom", "eslint-config-next"] as const;
+
+export async function syncProjectRuntimeVersionsFromTemplate(projectDir: string): Promise<boolean> {
+  let templateRaw: string;
+  try {
+    templateRaw = await fs.readFile(path.join(SITES_TEMPLATE_DIR, "package.json"), "utf-8");
+  } catch {
+    return false;
+  }
+
+  const templatePkg = JSON.parse(templateRaw) as {
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+  };
+
+  const pkgPath = path.join(projectDir, "package.json");
+  let projectRaw: string;
+  try {
+    projectRaw = await fs.readFile(pkgPath, "utf-8");
+  } catch {
+    return false;
+  }
+
+  const projectPkg = JSON.parse(projectRaw) as {
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+  };
+
+  let changed = false;
+  const nextDeps = { ...(projectPkg.dependencies ?? {}) };
+  const nextDevDeps = { ...(projectPkg.devDependencies ?? {}) };
+
+  for (const name of RUNTIME_SYNC_PACKAGES) {
+    const fromDeps = templatePkg.dependencies?.[name];
+    const fromDevDeps = templatePkg.devDependencies?.[name];
+    const version = fromDeps ?? fromDevDeps;
+    if (!version) continue;
+
+    if (fromDeps) {
+      if (nextDeps[name] !== version) {
+        nextDeps[name] = version;
+        changed = true;
+      }
+    } else if (fromDevDeps) {
+      if (nextDevDeps[name] !== version) {
+        nextDevDeps[name] = version;
+        changed = true;
+      }
+    }
+  }
+
+  if (!changed) return false;
+
+  const out = {
+    ...projectPkg,
+    dependencies: nextDeps,
+    devDependencies: nextDevDeps,
+  };
+  await fs.writeFile(pkgPath, `${JSON.stringify(out, null, 2)}\n`, "utf-8");
+  return true;
+}
+
 export type PreviewRefreshMode = "hot" | "rebuild";
 
 /**

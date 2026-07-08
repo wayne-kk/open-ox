@@ -18,8 +18,23 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSiteRoot, WORKSPACE_ROOT } from "./projectManager";
 import { ensureProjectSourcesOnDisk } from "./storage";
 import { syncLocalProjectFingerprint } from "./previewFingerprintDb";
-import { computeProjectFingerprint, getTemplateDepMap, readProjectPackageJson, SITES_TEMPLATE_DIR } from "./previewShared";
-import { ensureDesignModeBridgeInProject } from "./studio/designMode/ensureProjectBridge";
+import { computeProjectFingerprint, getTemplateDepMap, readProjectPackageJson, SITES_TEMPLATE_DIR, syncProjectRuntimeVersionsFromTemplate } from "./previewShared";
+import { ensureDesignModeProjectSetup } from "./studio/designMode/ensureProjectBridge";
+
+/** Sync iframe base Next/React versions + Design Mode bridge/anchors before preview. */
+async function preparePreviewProjectForStudio(projectDir: string): Promise<boolean> {
+  const pkgSynced = await syncProjectRuntimeVersionsFromTemplate(projectDir);
+  if (pkgSynced) {
+    console.log("[local preview] Synced next/react versions from sites/template");
+    try {
+      await fs.rm(path.join(projectDir, "node_modules"), { recursive: true, force: true });
+    } catch {
+      /* */
+    }
+  }
+  const designModeSetup = await ensureDesignModeProjectSetup(projectDir);
+  return pkgSynced || designModeSetup.layoutPatched || designModeSetup.anchorsAdded > 0;
+}
 
 const execFileAsync = promisify(execFile);
 const SITES_DIR = path.join(WORKSPACE_ROOT, "sites");
@@ -703,14 +718,14 @@ export async function startLocalDevServer(
     const projectDir = await ensureProjectDirExists(projectId, db);
     timingLog(projectId, "ensureProjectDirExists(total)", tDir);
 
-    const bridgePatched = await ensureDesignModeBridgeInProject(projectDir);
+    const projectMutated = await preparePreviewProjectForStudio(projectDir);
 
     const tFp = performance.now();
     const currentHash = await computeProjectFingerprint(projectId);
     timingLog(projectId, "computeProjectFingerprint", tFp);
 
     const tReuse = performance.now();
-    const reusedEarly = bridgePatched ? null : await tryReuseRunningLocalPreview(projectId);
+    const reusedEarly = projectMutated ? null : await tryReuseRunningLocalPreview(projectId);
     timingLog(projectId, "tryReuseRunningLocalPreview", tReuse);
     if (reusedEarly) {
       await syncLocalProjectFingerprint(db, projectId);
@@ -722,7 +737,7 @@ export async function startLocalDevServer(
 
     /** Registry miss or warm-up: avoid killing a live Next dev Turbo is still compiling. */
     const tWarm = performance.now();
-    if (!bridgePatched && reg && !(await isLocalServerUp(previewHealthCheckUrl(reg.port)))) {
+    if (!projectMutated && reg && !(await isLocalServerUp(previewHealthCheckUrl(reg.port)))) {
       await sleep(600);
       if (await isLocalServerUp(previewHealthCheckUrl(reg.port))) {
         const synced = syncRegistryPublicUrl(projectId, reg);
@@ -745,9 +760,6 @@ export async function startLocalDevServer(
     );
 
     await ensurePreviewNextConfigAllowsStudioEmbed(projectDir);
-    if (!bridgePatched) {
-      await ensureDesignModeBridgeInProject(projectDir);
-    }
 
     await runInstallIfNeeded(projectDir, "start", projectId);
     const tPort = performance.now();
@@ -838,7 +850,7 @@ export async function rebuildLocalDevServer(
   timingLog(projectId, "rebuild.rmDotNext", tRm);
 
   await ensurePreviewNextConfigAllowsStudioEmbed(projectDir);
-  await ensureDesignModeBridgeInProject(projectDir);
+  await preparePreviewProjectForStudio(projectDir);
 
   await runInstallIfNeeded(projectDir, "rebuild", projectId);
 
@@ -887,7 +899,7 @@ export async function ensureLocalDevServerAlive(
   console.log(`[local preview] ensureLocalDevServerAlive RESTART_AFTER_DOWN projectId=${projectId}`);
   try {
     await ensurePreviewNextConfigAllowsStudioEmbed(projectDir);
-    await ensureDesignModeBridgeInProject(projectDir);
+    await preparePreviewProjectForStudio(projectDir);
 
     await runInstallIfNeeded(projectDir, "ensureAlive", projectId);
     const tp = performance.now();

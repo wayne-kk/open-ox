@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 
 import { WORKSPACE_ROOT } from "@/lib/projectManager";
+import { backfillOxAnchorsInProject } from "./backfillOxAnchors";
 import { isStudioDesignModeEnabled } from "./featureFlag";
 
 const BRIDGE_IMPORT = `import { OpenOxPreviewBridge } from "@/components/open-ox/OpenOxPreviewBridge";`;
@@ -10,37 +11,66 @@ const TEMPLATE_BRIDGE = path.join(
   "sites/template/components/open-ox/OpenOxPreviewBridge.tsx"
 );
 
-/** Copy bootstrap + patch layout so local/E2B preview iframes can load the Design Mode bridge. */
-export async function ensureDesignModeBridgeInProject(projectDir: string): Promise<boolean> {
-  if (!isStudioDesignModeEnabled()) return false;
+export interface DesignModeProjectSetupResult {
+  bridgeCopied: boolean;
+  layoutPatched: boolean;
+  anchorsAdded: number;
+  anchorFiles: string[];
+}
+
+/** Copy bootstrap + patch layout + backfill section anchors for Design Mode. */
+export async function ensureDesignModeProjectSetup(projectDir: string): Promise<DesignModeProjectSetupResult> {
+  const empty: DesignModeProjectSetupResult = {
+    bridgeCopied: false,
+    layoutPatched: false,
+    anchorsAdded: 0,
+    anchorFiles: [],
+  };
+  if (!isStudioDesignModeEnabled()) return empty;
 
   try {
     await fs.access(TEMPLATE_BRIDGE);
   } catch {
     console.warn("[designMode] Template bridge missing:", TEMPLATE_BRIDGE);
-    return false;
+    return empty;
   }
 
   const destBridge = path.join(projectDir, "components/open-ox/OpenOxPreviewBridge.tsx");
   await fs.mkdir(path.dirname(destBridge), { recursive: true });
   await fs.copyFile(TEMPLATE_BRIDGE, destBridge);
 
+  let layoutPatched = false;
   const layoutPath = path.join(projectDir, "app/layout.tsx");
-  let layout: string;
   try {
-    layout = await fs.readFile(layoutPath, "utf-8");
+    const layout = await fs.readFile(layoutPath, "utf-8");
+    if (!layout.includes("OpenOxPreviewBridge")) {
+      await fs.writeFile(layoutPath, patchLayoutForBridge(layout), "utf-8");
+      layoutPatched = true;
+      console.log("[designMode] Patched layout with OpenOxPreviewBridge:", layoutPath);
+    }
   } catch {
-    return false;
+    /* no layout */
   }
 
-  if (layout.includes("OpenOxPreviewBridge")) {
-    return false;
+  const backfill = await backfillOxAnchorsInProject(projectDir);
+  if (backfill.anchorsAdded > 0) {
+    console.log(
+      `[designMode] Backfilled ${backfill.anchorsAdded} data-ox-id anchor(s) in ${backfill.files.length} file(s)`
+    );
   }
 
-  const patched = patchLayoutForBridge(layout);
-  await fs.writeFile(layoutPath, patched, "utf-8");
-  console.log("[designMode] Patched layout with OpenOxPreviewBridge:", layoutPath);
-  return true;
+  return {
+    bridgeCopied: true,
+    layoutPatched,
+    anchorsAdded: backfill.anchorsAdded,
+    anchorFiles: backfill.files,
+  };
+}
+
+/** @deprecated Use ensureDesignModeProjectSetup — kept for call-site compatibility. */
+export async function ensureDesignModeBridgeInProject(projectDir: string): Promise<boolean> {
+  const result = await ensureDesignModeProjectSetup(projectDir);
+  return result.layoutPatched;
 }
 
 /** Pure helper for tests — inserts import + client bootstrap into root layout. */

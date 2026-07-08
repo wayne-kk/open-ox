@@ -194,6 +194,22 @@ sequenceDiagram
 | `classNameHint` | 缩小多文件歧义 |
 | `selectorHint` | class token 二次搜索 |
 
+### 5.6 老项目 backfill
+
+无 `data-ox-id` 的历史 section 在 **Preview 启动 / Rebuild** 时自动 backfill（`backfillOxAnchorsInProject`）：
+
+- 扫描 `components/sections/*.tsx`
+- 为 `section` / `h1`–`h3` / `p` / `button` / `a` 插入 `{slug}-{role}` 锚点
+- 手动触发：`POST /api/projects/[id]/design-mode/backfill`
+
+### 5.7 Preview 基座 Next 版本同步
+
+`sites/template` 与 Open-OX 主应用对齐 **Next 16.3 preview**（`syncProjectRuntimeVersionsFromTemplate`）。本地 preview 启动时会：
+
+1. 将项目 `package.json` 的 `next` / `react` / `react-dom` 同步为 template 版本  
+2. 必要时清除项目 `node_modules` 以使用 template 共享依赖  
+3. 再 `next dev`
+
 ### 5.5 唯一性 = 安全阀
 
 
