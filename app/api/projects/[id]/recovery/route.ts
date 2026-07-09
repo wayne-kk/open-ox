@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getProject, updateProjectStatus } from "@/lib/projectManager";
 import { getSessionUser } from "@/lib/auth/session";
+import { requireOwnedProject } from "@/lib/auth/projectAccess";
 import {
   recoverableGenerationErrorMessage,
 } from "@/lib/generationRecovery";
@@ -16,7 +17,6 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
   }
-  const { supabase: db, user } = session;
   const { id } = await params;
 
   let body: { action?: string };
@@ -36,17 +36,9 @@ export async function POST(req: NextRequest, { params }: Params) {
     );
   }
 
-  const project = await getProject(db, id);
-  if (!project) {
-    return NextResponse.json(
-      { error: "Project not found", code: "PROJECT_NOT_FOUND" },
-      { status: 404 }
-    );
-  }
-
-  if (project.ownerUserId && project.ownerUserId !== user.id) {
-    return NextResponse.json({ error: "Forbidden", code: "FORBIDDEN" }, { status: 403 });
-  }
+  const access = await requireOwnedProject(session, id);
+  if ("error" in access) return access.error;
+  const { project, db } = access;
 
   if (project.status !== "generating") {
     return NextResponse.json(

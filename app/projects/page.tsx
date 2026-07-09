@@ -1,25 +1,29 @@
 "use client";
 
-import { Suspense, useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { Suspense, useEffect, useState, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   Trash2, Plus, Clock, Layers,
   CheckCircle2, AlertCircle, Loader2, Sparkles,
-  AlertTriangle, FolderInput, Search, Users,
+  AlertTriangle, FolderInput, MoreHorizontal, Globe2,
 } from "lucide-react";
 import { HamsterLoader } from "@/components/ui/hamster-loader";
 import { captureAppReturnTo } from "@/lib/navigation/appBack";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useAuthUser, useAuthProfile } from "@/app/components/AuthHeaderActions";
+import {
+  patchProjectPublish,
+  type ProjectPublishState,
+} from "@/app/components/ProjectPublishPanel";
 import { fetchProjectGalleryDeduped } from "@/lib/projectGalleryClient";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface ProjectMetadata {
   id: string;
@@ -37,6 +41,9 @@ interface ProjectMetadata {
   coverImageStatus?: "pending" | "ready" | "failed" | null;
   /** Present when loaded via /api/projects/gallery — direct Storage signed URL. */
   coverImageUrl?: string;
+  publishPreview?: boolean;
+  allowRemix?: boolean;
+  staticPreviewSyncedAt?: string | null;
 }
 
 interface ProjectFolder {
@@ -45,84 +52,7 @@ interface ProjectFolder {
   createdAt: string;
 }
 
-interface ProjectOwnerOption {
-  id: string;
-  label: string;
-}
-
 const PAGE_SIZE = 10;
-
-const ownerFilterTriggerClass =
-  "group flex h-9 w-full min-w-0 items-center justify-between gap-0 rounded-lg border border-white/12 " +
-  "bg-white/[0.04] px-2.5 text-left text-[12px] font-medium text-white/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] " +
-  "outline-none transition-colors hover:border-white/18 hover:bg-white/[0.07] " +
-  "focus-visible:border-primary/45 focus-visible:ring-2 focus-visible:ring-primary/25 " +
-  "!h-9 data-[size=default]:h-9 data-placeholder:text-white/45 " +
-  "[&>svg:last-child]:shrink-0 [&>svg:last-child]:text-white/55 group-hover:[&>svg:last-child]:text-white/70";
-
-const ownerFilterContentClass =
-  "z-[100] overflow-hidden rounded-xl border border-white/12 bg-[#141820] p-1.5 text-white " +
-  "shadow-2xl shadow-black/50 ring-1 ring-white/[0.06] " +
-  "w-(--radix-select-trigger-width) min-w-(--radix-select-trigger-width) max-w-(--radix-select-trigger-width)";
-
-const ownerFilterItemClass =
-  "cursor-pointer rounded-lg py-2 pl-2.5 pr-8 text-[13px] leading-snug text-white/90 " +
-  "focus:bg-white/[0.08] focus:text-white [&_svg]:text-primary/85";
-
-function OwnerMemberSelect({
-  id,
-  value,
-  onValueChange,
-  ownerSelectOptions,
-  widthClass = "w-[150px] min-w-[150px] max-w-[150px]",
-  leadingIcon = true,
-}: {
-  id: string;
-  value: string;
-  onValueChange: (next: string) => void;
-  ownerSelectOptions: { id: string; label: string }[];
-  widthClass?: string;
-  leadingIcon?: boolean;
-}) {
-  return (
-    <div className={cn("min-w-0", widthClass)}>
-      <Select value={value} onValueChange={onValueChange}>
-        <SelectTrigger id={id} className={ownerFilterTriggerClass}>
-          <span className="flex min-w-0 flex-1 items-center gap-2 pr-1">
-            {leadingIcon && (
-              <Users className="size-4 shrink-0 text-white/40" aria-hidden />
-            )}
-            <SelectValue
-              placeholder="选择成员"
-              className="min-w-0 flex-1 truncate text-left"
-            />
-          </span>
-        </SelectTrigger>
-        <SelectContent
-          position="popper"
-          sideOffset={6}
-          align="start"
-          alignOffset={0}
-          className={ownerFilterContentClass}
-        >
-          <SelectItem value="all" className={ownerFilterItemClass}>
-            全部成员
-          </SelectItem>
-          {ownerSelectOptions.map(({ id: oid, label }) => (
-            <SelectItem key={oid} value={oid} className={ownerFilterItemClass}>
-              {label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  );
-}
-
-const mineOnlyButtonClass =
-  "inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-white/12 " +
-  "bg-white/[0.04] px-3 text-[12px] font-medium text-white/75 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] " +
-  "transition-colors hover:border-white/20 hover:bg-white/[0.07] hover:text-primary";
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -152,16 +82,14 @@ function hashColor(str: string): { bg: string; text: string; accent: string } {
 }
 
 function ProjectCard({
-  project, onDelete, onClick, deleting, canDelete, showOwner, isGuest,
+  project, onDelete, onClick, deleting, canDelete, onPublishChange,
 }: {
   project: ProjectMetadata;
-  onDelete: (e: React.MouseEvent) => void;
+  onDelete: () => void;
   onClick: () => void;
   deleting: boolean;
   canDelete: boolean;
-  showOwner: boolean;
-  /** 未登录：普通点击会在新标签打开预览 */
-  isGuest?: boolean;
+  onPublishChange: (projectId: string, state: ProjectPublishState) => void;
 }) {
   const isReady = project.status === "ready";
   const isFailed = project.status === "failed";
@@ -175,12 +103,19 @@ function ProjectCard({
     .slice(0, 2)
     .map((w) => w[0]?.toUpperCase() ?? "")
     .join("");
+  const publishPreview = project.publishPreview === true;
+  const allowRemix = project.allowRemix === true;
+  const hasStaticPreview =
+    typeof project.staticPreviewSyncedAt === "string" &&
+    project.staticPreviewSyncedAt.trim().length > 0;
 
   const statusChipClass =
     "flex shrink-0 items-center gap-1 rounded-full border border-white/12 bg-black/55 px-2 py-0.5 backdrop-blur-md";
 
   const pressedRef = useRef(false);
   const [pressed, setPressed] = useState(false);
+  const [publishBusy, setPublishBusy] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     // Ignore right-click and let delete button handle its own clicks
@@ -193,9 +128,9 @@ function ProjectCard({
     if (!pressedRef.current || !isClickable) return;
     pressedRef.current = false;
     setPressed(false);
-    // Only navigate if mouse is still over this card (not the delete button)
+    // Only navigate if mouse is still over this card (not the delete / menu button)
     const target = e.target as HTMLElement;
-    if (!target.closest("[data-delete-btn]")) {
+    if (!target.closest("[data-card-action]")) {
       if (e.metaKey || e.ctrlKey) {
         window.open(`/projects/${project.id}/preview-launch`, "_blank");
       } else {
@@ -208,13 +143,43 @@ function ProjectCard({
     if (e.button !== 1 || !isClickable) return;
     e.preventDefault();
     const target = e.target as HTMLElement;
-    if (target.closest("[data-delete-btn]")) return;
+    if (target.closest("[data-card-action]")) return;
     window.open(`/projects/${project.id}/preview-launch`, "_blank");
   };
 
   const handleMouseLeave = () => {
     pressedRef.current = false;
     setPressed(false);
+  };
+
+  const togglePublish = async (next: boolean) => {
+    if (publishBusy) return;
+    setPublishBusy(true);
+    setPublishError(null);
+    const result = await patchProjectPublish(project.id, { publishPreview: next });
+    setPublishBusy(false);
+    if (!result.ok) {
+      setPublishError(
+        result.code === "STATIC_PREVIEW_REQUIRED"
+          ? "需要先有静态预览"
+          : result.error
+      );
+      return;
+    }
+    onPublishChange(project.id, result.state);
+  };
+
+  const toggleRemix = async (next: boolean) => {
+    if (publishBusy || !publishPreview) return;
+    setPublishBusy(true);
+    setPublishError(null);
+    const result = await patchProjectPublish(project.id, { allowRemix: next });
+    setPublishBusy(false);
+    if (!result.ok) {
+      setPublishError(result.error);
+      return;
+    }
+    onPublishChange(project.id, result.state);
   };
 
   return (
@@ -225,13 +190,9 @@ function ProjectCard({
       onMouseLeave={handleMouseLeave}
       title={
         isClickable
-          ? isGuest
-            ? isGenerating
-              ? "点击在新标签页打开预览（生成中可查看进度）"
-              : "点击在新标签页打开站点预览；⌘/Ctrl 或中键同样打开预览"
-            : isGenerating
-              ? "点击进入 Studio 查看生成进度（也可 ⌘/Ctrl 点击在新标签打开预览）"
-              : "点击进入 Studio；⌘/Ctrl 点击或鼠标中键在新标签打开站点预览"
+          ? isGenerating
+            ? "点击进入 Studio 查看生成进度（也可 ⌘/Ctrl 点击在新标签打开预览）"
+            : "点击进入 Studio；⌘/Ctrl 点击或鼠标中键在新标签打开站点预览"
           : undefined
       }
       className={cn(
@@ -307,31 +268,41 @@ function ProjectCard({
           <h3 className="min-w-0 flex-1 truncate font-heading text-[14px] font-semibold leading-tight text-white transition-colors duration-150 group-hover/card:text-primary">
             {project.name || "未命名项目"}
           </h3>
-          {isGenerating ? (
-            <div className={statusChipClass}>
-              <Loader2 className="h-3 w-3 shrink-0 animate-spin text-primary" />
-              <span className="text-[8px] font-mono font-bold tracking-wider text-primary">生成中</span>
-            </div>
-          ) : project.status === "failed" ? (
-            <div className={statusChipClass}>
-              <AlertCircle className="h-3 w-3 shrink-0 text-red-400" />
-              <span className="text-[8px] font-mono font-bold tracking-wider text-red-400">失败</span>
-            </div>
-          ) : (
-            <div className={statusChipClass}>
-              <CheckCircle2 className="h-3 w-3 shrink-0 text-green-400" />
-              <span className="text-[8px] font-mono font-bold tracking-wider text-green-400">就绪</span>
-            </div>
-          )}
+          <div className="flex shrink-0 items-center gap-1">
+            {publishPreview ? (
+              <div className={cn(statusChipClass, "border-primary/25 bg-primary/15")}>
+                <Globe2 className="h-3 w-3 shrink-0 text-primary" />
+                <span className="text-[8px] font-mono font-bold tracking-wider text-primary">已发布</span>
+              </div>
+            ) : isGenerating ? (
+              <div className={statusChipClass}>
+                <Loader2 className="h-3 w-3 shrink-0 animate-spin text-primary" />
+                <span className="text-[8px] font-mono font-bold tracking-wider text-primary">生成中</span>
+              </div>
+            ) : project.status === "failed" ? (
+              <div className={statusChipClass}>
+                <AlertCircle className="h-3 w-3 shrink-0 text-red-400" />
+                <span className="text-[8px] font-mono font-bold tracking-wider text-red-400">失败</span>
+              </div>
+            ) : (
+              <div className={statusChipClass}>
+                <CheckCircle2 className="h-3 w-3 shrink-0 text-green-400" />
+                <span className="text-[8px] font-mono font-bold tracking-wider text-green-400">就绪</span>
+              </div>
+            )}
+          </div>
         </div>
-        {showOwner && (project.ownerUsername || project.ownerUserId) && (
-          <p className="mt-0.5 truncate text-[10px] font-mono text-primary/75">
-            {project.ownerUsername?.trim() || project.ownerUserId?.slice(0, 8)}
-          </p>
-        )}
+        {allowRemix ? (
+          <span className="mt-1.5 inline-flex w-fit items-center rounded-full border border-emerald-400/20 bg-emerald-500/10 px-1.5 py-0.5 text-[8px] font-mono font-bold tracking-wider text-emerald-300/85">
+            可 Remix
+          </span>
+        ) : null}
         <p className="mt-1.5 line-clamp-2 text-[11px] leading-snug text-white/45">
           {project.userPrompt}
         </p>
+        {publishError ? (
+          <p className="mt-1 text-[10px] text-red-400/85">{publishError}</p>
+        ) : null}
 
         <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-white/[0.06] pt-2">
           <div className="flex min-w-0 items-center gap-2 text-[9px] font-mono text-white/35">
@@ -347,23 +318,68 @@ function ProjectCard({
             )}
           </div>
 
-          {canDelete ? (
-            <button
-              data-delete-btn
-              onClick={onDelete}
-              disabled={deleting}
-              className="rounded-md p-1 text-white/22 transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50 shrink-0"
-              title="删除项目"
-            >
-              {deleting ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <Trash2 className="h-3 w-3" />
-              )}
-            </button>
-          ) : (
-            <span className="w-6 shrink-0" aria-hidden />
-          )}
+          <div className="flex shrink-0 items-center gap-0.5">
+            {canDelete ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    data-card-action
+                    type="button"
+                    className="rounded-md p-1 text-white/22 transition-colors hover:bg-white/[0.06] hover:text-white/70"
+                    title="更多"
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onMouseUp={(e) => e.stopPropagation()}
+                  >
+                    {publishBusy ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <MoreHorizontal className="h-3 w-3" />
+                    )}
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  className="w-48 border-white/10 bg-[#0c0f16] text-white"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <DropdownMenuItem
+                    disabled={publishBusy || (!hasStaticPreview && !publishPreview)}
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      void togglePublish(!publishPreview);
+                    }}
+                  >
+                    {publishPreview ? "取消发布" : "发布到社区"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={publishBusy || !publishPreview}
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      void toggleRemix(!allowRemix);
+                    }}
+                  >
+                    {allowRemix ? "关闭 Remix" : "允许 Remix"}
+                  </DropdownMenuItem>
+                  {!hasStaticPreview && !publishPreview ? (
+                    <p className="px-2 py-1.5 text-[10px] leading-relaxed text-white/35">
+                      需先有静态预览才能发布
+                    </p>
+                  ) : null}
+                  <DropdownMenuSeparator className="bg-white/10" />
+                  <DropdownMenuItem
+                    variant="destructive"
+                    disabled={deleting}
+                    onSelect={() => onDelete()}
+                  >
+                    删除项目
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <span className="w-6 shrink-0" aria-hidden />
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -489,11 +505,6 @@ function ProjectsPageContent() {
   const searchParams = useSearchParams();
   const { user: authUser, ready: authReady } = useAuthUser();
   const { isAdmin } = useAuthProfile();
-  const folderParamForView = (searchParams.get("folder") || "all").trim() || "all";
-  const isMineView =
-    searchParams.get("mine") === "1" ||
-    folderParamForView === "uncategorized" ||
-    (folderParamForView !== "all" && folderParamForView.length > 0);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const [projects, setProjects] = useState<ProjectMetadata[]>([]);
   const [folders, setFolders] = useState<ProjectFolder[]>([]);
@@ -507,9 +518,7 @@ function ProjectsPageContent() {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [pendingDeleteFolderId, setPendingDeleteFolderId] = useState<string | null>(null);
   const [deletingFolder, setDeletingFolder] = useState(false);
-  const [ownerOptionsFromApi, setOwnerOptionsFromApi] = useState<ProjectOwnerOption[]>([]);
   const galleryRequestKeyRef = useRef<string>("");
-  const [listSearch, setListSearch] = useState("");
 
   const applyFolderFilter = useCallback(
     (next: string) => {
@@ -519,15 +528,6 @@ function ProjectsPageContent() {
           ? "/projects?mine=1&folder=all"
           : `/projects?mine=1&folder=${encodeURIComponent(next)}`;
       router.replace(path, { scroll: false });
-    },
-    [router]
-  );
-
-  const handleOwnerFilterChange = useCallback(
-    (v: string) => {
-      setListSearch("");
-      if (v === "all") router.replace("/projects", { scroll: false });
-      else router.replace(`/projects?owner=${encodeURIComponent(v)}`, { scroll: false });
     },
     [router]
   );
@@ -546,16 +546,8 @@ function ProjectsPageContent() {
         ? "uncategorized"
         : folderFilter;
 
-  /** 全员视图下按 URL ?owner=uuid 服务端筛选某位成员的项目 */
-  const globalOwnerParam = useMemo(() => {
-    if (isMineView) return null;
-    const o = searchParams.get("owner");
-    return o && /^[0-9a-f-]{36}$/i.test(o) ? o : null;
-  }, [isMineView, searchParams]);
-
   type GalleryPagePayload = {
     projects: ProjectMetadata[];
-    owners?: ProjectOwnerOption[];
   };
 
   const fetchProjectsPage = useCallback(
@@ -564,18 +556,12 @@ function ProjectsPageContent() {
         const params = new URLSearchParams();
         params.set("offset", String(offset));
         params.set("limit", String(limit));
-        if (isMineView) {
-          params.set("mine", "1");
-          params.set("folder", folderQuery);
-        } else if (globalOwnerParam) {
-          params.set("owner", globalOwnerParam);
-        }
+        params.set("mine", "1");
+        params.set("folder", folderQuery);
         const galleryUrl = `/api/projects/gallery?${params.toString()}`;
         const res = await fetchProjectGalleryDeduped(galleryUrl);
         if (res.status === 401) {
-          if (isMineView) {
-            router.push(`/auth?redirect=${encodeURIComponent("/projects")}`);
-          }
+          router.push(`/auth?redirect=${encodeURIComponent("/projects")}`);
           return null;
         }
         if (!res.ok) return null;
@@ -584,7 +570,7 @@ function ProjectsPageContent() {
         return null;
       }
     },
-    [folderQuery, globalOwnerParam, isMineView, router]
+    [folderQuery, router]
   );
 
   const loadFolders = useCallback(async () => {
@@ -595,7 +581,7 @@ function ProjectsPageContent() {
   }, []);
 
   const loadInitialProjects = useCallback(async () => {
-    const requestKey = `${isMineView}|${folderQuery}|${globalOwnerParam ?? ""}|0|${PAGE_SIZE}`;
+    const requestKey = `${folderQuery}|0|${PAGE_SIZE}`;
     galleryRequestKeyRef.current = requestKey;
     setLoading(true);
     const payload = await fetchProjectsPage(0, PAGE_SIZE);
@@ -603,12 +589,9 @@ function ProjectsPageContent() {
     if (payload) {
       setProjects(payload.projects);
       setHasMore(payload.projects.length === PAGE_SIZE);
-      if (payload.owners) {
-        setOwnerOptionsFromApi(payload.owners);
-      }
     }
     setLoading(false);
-  }, [fetchProjectsPage, folderQuery, globalOwnerParam, isMineView]);
+  }, [fetchProjectsPage, folderQuery]);
 
   const loadMoreProjects = useCallback(async () => {
     if (loading || loadingMore || !hasMore) return;
@@ -617,9 +600,6 @@ function ProjectsPageContent() {
     if (payload) {
       setProjects((prev) => [...prev, ...payload.projects]);
       setHasMore(payload.projects.length === PAGE_SIZE);
-      if (payload.owners?.length) {
-        setOwnerOptionsFromApi(payload.owners);
-      }
     }
     setLoadingMore(false);
   }, [fetchProjectsPage, hasMore, loading, loadingMore, projects.length]);
@@ -636,58 +616,19 @@ function ProjectsPageContent() {
 
   useEffect(() => {
     if (!authReady) return;
-    if (!authUser && isMineView) {
-      router.replace("/projects", { scroll: false });
+    if (!authUser) {
+      router.replace(`/auth?redirect=${encodeURIComponent("/projects")}`);
     }
-  }, [authReady, authUser, isMineView, router]);
+  }, [authReady, authUser, router]);
 
   useEffect(() => {
     if (authUser) void loadFolders();
   }, [authUser, loadFolders]);
 
   useEffect(() => {
+    if (!authReady || !authUser) return;
     void loadInitialProjects();
-  }, [folderFilter, globalOwnerParam, isMineView, loadInitialProjects]);
-
-  /** 下拉中的成员选项（来自已加载列表；URL 中的 owner 若不在列表也会补一条） */
-  const ownerSelectOptions = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const row of ownerOptionsFromApi) {
-      if (row.id) {
-        const label = row.label?.trim() || `${row.id.slice(0, 8)}…`;
-        m.set(row.id, label);
-      }
-    }
-    for (const p of projects) {
-      if (p.ownerUserId) {
-        const label = p.ownerUsername?.trim() || `${p.ownerUserId.slice(0, 8)}…`;
-        m.set(p.ownerUserId, label);
-      }
-    }
-    const rows = [...m.entries()]
-      .map(([id, label]) => ({ id, label }))
-      .sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
-    if (globalOwnerParam && !m.has(globalOwnerParam)) {
-      rows.push({ id: globalOwnerParam, label: `${globalOwnerParam.slice(0, 8)}…` });
-      rows.sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
-    }
-    return rows;
-  }, [ownerOptionsFromApi, projects, globalOwnerParam]);
-
-  /** 全员视图：在当前结果中按关键词筛选（名称、描述、成员） */
-  const filteredGlobalProjects = useMemo(() => {
-    if (isMineView) return projects;
-    const q = listSearch.trim().toLowerCase();
-    if (!q) return projects;
-    return projects.filter((p) => {
-      return (
-        (p.name || "").toLowerCase().includes(q) ||
-        (p.userPrompt || "").toLowerCase().includes(q) ||
-        (p.ownerUsername || "").toLowerCase().includes(q) ||
-        (p.ownerUserId || "").toLowerCase().includes(q)
-      );
-    });
-  }, [projects, listSearch, isMineView]);
+  }, [authReady, authUser, folderFilter, loadInitialProjects]);
 
   /**
    * 只要**当前已加载列表**里有一条 `generating`，就每 3s 刷新同一段数据，
@@ -732,8 +673,7 @@ function ProjectsPageContent() {
   }, [hasMore, loadMoreProjects, loading, loadingMore]);
 
   // Step 1: click delete → show confirm modal
-  const handleDeleteClick = (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
+  const handleDeleteClick = (id: string) => {
     setPendingDeleteId(id);
   };
 
@@ -787,35 +727,40 @@ function ProjectsPageContent() {
   };
 
   const newProjectHref =
-    isMineView && folderFilter !== "all" && folderFilter !== "uncategorized"
+    folderFilter !== "all" && folderFilter !== "uncategorized"
       ? `/?folder=${folderFilter}`
       : "/";
 
-  const createProjectLinkHref = authUser
-    ? newProjectHref
-    : `/auth?redirect=${encodeURIComponent("/")}`;
-
   const openProject = useCallback(
     (projectId: string) => {
-      if (authUser) {
-        captureAppReturnTo();
-        router.push(`/studio/${projectId}`);
-        return;
-      }
-      window.open(`/projects/${projectId}/preview-launch`, "_blank", "noopener,noreferrer");
+      captureAppReturnTo();
+      router.push(`/studio/${projectId}`);
     },
-    [authUser, router]
+    [router]
   );
 
-  const goGlobalGallery = () => {
-    setListSearch("");
-    router.replace("/projects", { scroll: false });
-  };
+  const handlePublishChange = useCallback((projectId: string, state: ProjectPublishState) => {
+    setProjects((prev) =>
+      prev.map((p) =>
+        p.id === projectId
+          ? {
+              ...p,
+              publishPreview: state.publishPreview,
+              allowRemix: state.allowRemix,
+              staticPreviewSyncedAt: state.staticPreviewSyncedAt,
+            }
+          : p
+      )
+    );
+  }, []);
 
-  const goMineProjects = () => {
-    setListSearch("");
-    router.replace("/projects?mine=1&folder=all", { scroll: false });
-  };
+  if (!authReady || !authUser) {
+    return (
+      <main className="relative min-h-screen flex items-center justify-center bg-[#030304]">
+        <p className="font-mono text-sm text-white/40">加载…</p>
+      </main>
+    );
+  }
 
   return (
     <main className="relative min-h-screen bg-[#030304]">
@@ -840,116 +785,80 @@ function ProjectsPageContent() {
       )}
 
       <div className="relative z-[1] container mx-auto min-h-screen px-4 py-8 sm:px-6 md:py-10 lg:px-8">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-8">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-mono text-white/35 uppercase tracking-wider mr-1">视图</span>
+            <span className="text-[11px] font-mono text-white/35 uppercase tracking-wider mr-2">文件夹</span>
             <button
               type="button"
-              onClick={goGlobalGallery}
-              className={`rounded-full px-3 py-1 text-[12px] font-medium border transition-colors ${!isMineView
+              onClick={() => applyFolderFilter("all")}
+              className={`rounded-full px-3 py-1 text-[12px] font-medium border transition-colors ${folderFilter === "all"
                   ? "border-primary/50 bg-primary/10 text-primary"
                   : "border-white/10 text-white/50 hover:border-white/20"
                 }`}
             >
-              全部成员
+              全部
             </button>
             <button
               type="button"
-              onClick={goMineProjects}
-              className={`rounded-full px-3 py-1 text-[12px] font-medium border transition-colors ${isMineView
+              onClick={() => applyFolderFilter("uncategorized")}
+              className={`rounded-full px-3 py-1 text-[12px] font-medium border transition-colors ${folderFilter === "uncategorized"
                   ? "border-primary/50 bg-primary/10 text-primary"
                   : "border-white/10 text-white/50 hover:border-white/20"
                 }`}
             >
-              我的项目
+              未分类
             </button>
+            {folders.map((f) => (
+              <span key={f.id} className="inline-flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => applyFolderFilter(f.id)}
+                  className={`rounded-full px-3 py-1 text-[12px] font-medium border transition-colors ${folderFilter === f.id
+                      ? "border-primary/50 bg-primary/10 text-primary"
+                      : "border-white/10 text-white/50 hover:border-white/20"
+                    }`}
+                >
+                  {f.name}
+                </button>
+                <button
+                  type="button"
+                  title="删除文件夹"
+                  onClick={() => setPendingDeleteFolderId(f.id)}
+                  className="rounded p-0.5 text-white/20 hover:text-red-400"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/[0.02] pl-2 pr-1 py-1">
+              <FolderInput className="h-3.5 w-3.5 text-white/30 shrink-0" />
+              <input
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                placeholder="新文件夹名称"
+                className="w-32 sm:w-40 bg-transparent text-[12px] text-white/80 outline-none placeholder:text-white/25"
+                onKeyDown={(e) => e.key === "Enter" && void handleCreateFolder()}
+              />
+              <button
+                type="button"
+                disabled={creatingFolder || !newFolderName.trim()}
+                onClick={() => void handleCreateFolder()}
+                className="rounded-lg px-2 py-1 text-[11px] font-medium bg-primary/20 text-primary disabled:opacity-30"
+              >
+                添加
+              </button>
+            </div>
           </div>
         </div>
 
-        {isMineView && (
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-8">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[11px] font-mono text-white/35 uppercase tracking-wider mr-2">文件夹</span>
-              <button
-                type="button"
-                onClick={() => applyFolderFilter("all")}
-                className={`rounded-full px-3 py-1 text-[12px] font-medium border transition-colors ${folderFilter === "all"
-                    ? "border-primary/50 bg-primary/10 text-primary"
-                    : "border-white/10 text-white/50 hover:border-white/20"
-                  }`}
-              >
-                全部
-              </button>
-              <button
-                type="button"
-                onClick={() => applyFolderFilter("uncategorized")}
-                className={`rounded-full px-3 py-1 text-[12px] font-medium border transition-colors ${folderFilter === "uncategorized"
-                    ? "border-primary/50 bg-primary/10 text-primary"
-                    : "border-white/10 text-white/50 hover:border-white/20"
-                  }`}
-              >
-                未分类
-              </button>
-              {folders.map((f) => (
-                <span key={f.id} className="inline-flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => applyFolderFilter(f.id)}
-                    className={`rounded-full px-3 py-1 text-[12px] font-medium border transition-colors ${folderFilter === f.id
-                        ? "border-primary/50 bg-primary/10 text-primary"
-                        : "border-white/10 text-white/50 hover:border-white/20"
-                      }`}
-                  >
-                    {f.name}
-                  </button>
-                  <button
-                    type="button"
-                    title="删除文件夹"
-                    onClick={() => setPendingDeleteFolderId(f.id)}
-                    className="rounded p-0.5 text-white/20 hover:text-red-400"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/[0.02] pl-2 pr-1 py-1">
-                <FolderInput className="h-3.5 w-3.5 text-white/30 shrink-0" />
-                <input
-                  value={newFolderName}
-                  onChange={(e) => setNewFolderName(e.target.value)}
-                  placeholder="新文件夹名称"
-                  className="w-32 sm:w-40 bg-transparent text-[12px] text-white/80 outline-none placeholder:text-white/25"
-                  onKeyDown={(e) => e.key === "Enter" && void handleCreateFolder()}
-                />
-                <button
-                  type="button"
-                  disabled={creatingFolder || !newFolderName.trim()}
-                  onClick={() => void handleCreateFolder()}
-                  className="rounded-lg px-2 py-1 text-[11px] font-medium bg-primary/20 text-primary disabled:opacity-30"
-                >
-                  添加
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
         <p className="mb-6 text-[12px] text-white/35">
-          {isMineView ? (
-            <>
-              提示：未归入任何文件夹的项目请点选「未分类」；也可直接打开{" "}
-              <Link href="/projects?mine=1&folder=uncategorized" className="text-primary/80 hover:underline">
-                /projects?mine=1&amp;folder=uncategorized
-              </Link>
-              。
-            </>
-          ) : (
-            <>
-              全员项目按时间排序（最新在前）。可用搜索在当前已加载结果中过滤；选择成员则只向服务器请求该成员的项目并支持翻页加载。
-            </>
-          )}
+          提示：未归入任何文件夹的项目请点选「未分类」；也可直接打开{" "}
+          <Link href="/projects?mine=1&folder=uncategorized" className="text-primary/80 hover:underline">
+            /projects?mine=1&amp;folder=uncategorized
+          </Link>
+          。
         </p>
 
         {loading ? (
@@ -959,161 +868,25 @@ function ProjectsPageContent() {
           </div>
         ) : projects.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-6 py-32">
-            {!isMineView && globalOwnerParam && (
-              <div className="flex flex-wrap items-center justify-center gap-2">
-                <label htmlFor="projects-owner-filter-empty" className="sr-only">
-                  按成员筛选
-                </label>
-                <OwnerMemberSelect
-                  id="projects-owner-filter-empty"
-                  value={globalOwnerParam ?? "all"}
-                  onValueChange={handleOwnerFilterChange}
-                  ownerSelectOptions={ownerSelectOptions}
-                  widthClass="w-[150px] min-w-[150px] max-w-[150px]"
-                />
-                {authUser && (
-                  <button
-                    type="button"
-                    onClick={() => goMineProjects()}
-                    className={mineOnlyButtonClass}
-                  >
-                    只看我的
-                  </button>
-                )}
-              </div>
-            )}
             <div className="flex h-20 w-20 items-center justify-center rounded-2xl border border-white/8 bg-white/[0.02]">
               <Sparkles className="h-8 w-8 text-primary/40" />
             </div>
             <div className="text-center space-y-2">
-              <h2 className="text-lg font-semibold text-white">
-                {!isMineView && globalOwnerParam ? "该成员暂无项目" : "还没有项目"}
-              </h2>
+              <h2 className="text-lg font-semibold text-white">还没有项目</h2>
               <p className="text-sm text-white/40">
-                {!isMineView && globalOwnerParam
-                  ? "尝试查看全部成员，或选择其他成员。"
-                  : "描述你的想法，AI 帮你生成完整网站"}
+                描述你的想法，AI 帮你生成完整网站
               </p>
             </div>
-            {!isMineView && globalOwnerParam ? (
-              <button
-                type="button"
-                onClick={() => goGlobalGallery()}
-                className="rounded-xl border border-white/12 bg-white/[0.04] px-5 py-2.5 text-[13px] font-medium text-white/80 transition hover:border-primary/35 hover:text-primary"
-              >
-                查看全部成员
-              </button>
-            ) : (
-              <Link href="/" className="defi-button px-6 py-3 text-sm font-semibold uppercase tracking-[0.14em]">
-                <Plus className="h-4 w-4" />
-                创建第一个项目
-              </Link>
-            )}
+            <Link href="/" className="defi-button px-6 py-3 text-sm font-semibold uppercase tracking-[0.14em]">
+              <Plus className="h-4 w-4" />
+              创建第一个项目
+            </Link>
           </div>
-        ) : !isMineView ? (
-          <>
-            {!loading && (projects.length > 0 || globalOwnerParam) && (
-              <div className="mb-6 flex flex-col gap-4 rounded-xl border border-white/8 bg-white/[0.02] px-4 py-4 sm:flex-row sm:items-end sm:justify-between">
-                <div className="relative min-w-0 flex-1 max-w-xl">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/25" aria-hidden />
-                  <input
-                    type="search"
-                    value={listSearch}
-                    onChange={(e) => setListSearch(e.target.value)}
-                    placeholder="搜索项目名称、描述或成员…"
-                    className="w-full rounded-lg border border-white/10 bg-[#0a0c10] py-2.5 pl-10 pr-3 text-[13px] text-white/90 placeholder:text-white/28 outline-none focus:border-primary/40"
-                  />
-                </div>
-                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                  <label htmlFor="projects-owner-filter" className="sr-only">
-                    按成员筛选
-                  </label>
-                  <OwnerMemberSelect
-                    id="projects-owner-filter"
-                    value={globalOwnerParam ?? "all"}
-                    onValueChange={handleOwnerFilterChange}
-                    ownerSelectOptions={ownerSelectOptions}
-                  />
-                  {authUser && (
-                    <button
-                      type="button"
-                      onClick={() => goMineProjects()}
-                      className={mineOnlyButtonClass}
-                    >
-                      只看我的
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {listSearch.trim() && projects.length > 0 && (
-              <p className="mb-3 text-[11px] font-mono text-white/35">
-                匹配 {filteredGlobalProjects.length} / {projects.length} 条（在当前已加载数据中）
-              </p>
-            )}
-
-            <div className="grid items-stretch gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
-              <Link
-                href={createProjectLinkHref}
-                className="group flex min-h-[200px] flex-col items-center justify-center gap-3 self-stretch rounded-2xl border border-dashed border-white/[0.12]
-                  bg-gradient-to-b from-white/[0.025] to-transparent p-6 shadow-[0_4px_20px_-8px_rgba(0,0,0,0.5)]
-                  transition-[box-shadow,border-color] duration-200 ease-out hover:border-primary/35 hover:shadow-[0_10px_32px_-12px_rgba(247,147,26,0.15)]"
-              >
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] transition-colors group-hover:border-primary/30 group-hover:bg-primary/10">
-                  <Plus className="h-5 w-5 text-white/30 group-hover:text-primary transition-colors" />
-                </div>
-                <span className="font-mono text-[10px] text-white/35 group-hover:text-primary/70 tracking-wider transition-colors">
-                  新建项目
-                </span>
-              </Link>
-
-              {filteredGlobalProjects.map((project) => (
-                <ProjectCard
-                  key={project.id}
-                  project={project}
-                  onClick={() => openProject(project.id)}
-                  onDelete={(e) => handleDeleteClick(e, project.id)}
-                  deleting={deletingId === project.id}
-                  canDelete={
-                    !!authUser?.id &&
-                    (project.ownerUserId === authUser.id || isAdmin)
-                  }
-                  showOwner
-                  isGuest={!authUser}
-                />
-              ))}
-            </div>
-
-            {!loading && filteredGlobalProjects.length === 0 && projects.length > 0 && (
-              <div className="rounded-xl border border-white/8 bg-white/[0.02] px-6 py-12 text-center">
-                <p className="text-[14px] text-white/50">没有匹配当前搜索的项目。</p>
-                <button
-                  type="button"
-                  onClick={() => setListSearch("")}
-                  className="mt-3 text-[13px] font-medium text-primary hover:underline"
-                >
-                  清除搜索
-                </button>
-              </div>
-            )}
-
-            <div ref={loadMoreRef} className="flex min-h-14 items-center justify-center py-6">
-              {loadingMore ? (
-                <div className="flex items-center gap-2 text-xs text-white/40 font-mono tracking-wider">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  加载更多项目...
-                </div>
-              ) : !hasMore ? (
-                <span className="text-[11px] text-white/25 font-mono tracking-wider">已加载全部项目</span>
-              ) : null}
-            </div>
-          </>
         ) : (
           <>
             <div className="grid items-stretch gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
               <Link
-                href={createProjectLinkHref}
+                href={newProjectHref}
                 className="group flex min-h-[200px] flex-col items-center justify-center gap-3 self-stretch rounded-2xl border border-dashed border-white/[0.12]
                   bg-gradient-to-b from-white/[0.025] to-transparent p-6 shadow-[0_4px_20px_-8px_rgba(0,0,0,0.5)]
                   transition-[box-shadow,border-color] duration-200 ease-out hover:border-primary/35 hover:shadow-[0_10px_32px_-12px_rgba(247,147,26,0.15)]"
@@ -1131,14 +904,13 @@ function ProjectsPageContent() {
                   key={project.id}
                   project={project}
                   onClick={() => openProject(project.id)}
-                  onDelete={(e) => handleDeleteClick(e, project.id)}
+                  onDelete={() => handleDeleteClick(project.id)}
                   deleting={deletingId === project.id}
                   canDelete={
                     !!authUser?.id &&
                     (project.ownerUserId === authUser.id || isAdmin)
                   }
-                  showOwner={false}
-                  isGuest={!authUser}
+                  onPublishChange={handlePublishChange}
                 />
               ))}
             </div>

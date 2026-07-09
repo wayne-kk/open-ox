@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { ModifyHistoryTurn } from "../history/modifyHistoryTurn";
 import {
   applyContinuationRoutingOverrides,
   detectContinuationReply,
@@ -8,11 +9,13 @@ import {
 } from "./modifyContinuation";
 
 describe("modifyContinuation", () => {
-  const awaitingHistory = [
+  const awaitingHistory: ModifyHistoryTurn[] = [
     {
       instruction: "把动画速度调快一点",
-      summary: "速度需要调整到多少？ Files: ",
-      intentCategory: "code_change" as const,
+      assistantText: "速度需要调整到多少？",
+      touchedFiles: [],
+      intentCategory: "code_change",
+      awaitingReply: true,
     },
   ];
 

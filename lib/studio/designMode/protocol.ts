@@ -52,7 +52,13 @@ export type DesignModeParentMessage =
       action: "PREVIEW_TEXT";
       value: string;
     }
-  | { protocol: typeof DESIGN_MODE_PROTOCOL; action: "RESET_PREVIEW" };
+  | {
+      protocol: typeof DESIGN_MODE_PROTOCOL;
+      action: "PREVIEW_CLASSNAME";
+      value: string;
+    }
+  | { protocol: typeof DESIGN_MODE_PROTOCOL; action: "RESET_PREVIEW" }
+  | { protocol: typeof DESIGN_MODE_PROTOCOL; action: "COMMIT_PREVIEW" };
 
 export type DesignModeChildMessage =
   | { protocol: typeof DESIGN_MODE_PROTOCOL; action: "PONG" }
@@ -77,6 +83,15 @@ export type VisualEdit =
       selectorHint: string;
       elementLabel: string;
       property: DesignModeProperty;
+      before: string;
+      after: string;
+    }
+  | {
+      kind: "className";
+      source?: OxSourceMeta;
+      oxId?: string;
+      selectorHint: string;
+      elementLabel: string;
       before: string;
       after: string;
     }

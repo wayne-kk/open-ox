@@ -2,10 +2,8 @@ import { composePromptBlocks, loadGuardrail, loadStepPrompt } from "@/ai/flows/g
 import { callLLMWithMeta, extractJSON } from "@/ai/flows/generate_project/shared/llm";
 import { lfPlain, LfPlain } from "@/lib/observability/langfuseGenerationCatalog";
 import { getModelForStep } from "@/lib/config/models";
-import {
-  formatRecentHistoryForRouter,
-  type ModifyHistoryTurn,
-} from "./modifyContinuation";
+import { formatRecentHistoryForRouter } from "../history/modifyHistoryTurn";
+import type { ModifyHistoryTurn } from "../history/modifyHistoryTurn";
 
 export type ModifyIntentCategory = "conversation" | "read_only" | "plan_only" | "code_change";
 

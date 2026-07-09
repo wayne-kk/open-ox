@@ -3,31 +3,82 @@ import path from "path";
 
 import { WORKSPACE_ROOT } from "@/lib/projectManager";
 import { backfillOxAnchorsInProject } from "./backfillOxAnchors";
-import { isStudioDesignModeEnabled } from "./featureFlag";
+import { backfillOxSourceInProject } from "./sourceInstrumentation/backfillOxSource";
 
 const BRIDGE_IMPORT = `import { OpenOxPreviewBridge } from "@/components/open-ox/OpenOxPreviewBridge";`;
 const TEMPLATE_BRIDGE = path.join(
   WORKSPACE_ROOT,
   "sites/template/components/open-ox/OpenOxPreviewBridge.tsx"
 );
+const TEMPLATE_LOADER = path.join(
+  WORKSPACE_ROOT,
+  "sites/template/open-ox/source-instrumentation-loader.cjs"
+);
+const TEMPLATE_NEXT_CONFIG = path.join(WORKSPACE_ROOT, "sites/template/next.config.ts");
 
 export interface DesignModeProjectSetupResult {
   bridgeCopied: boolean;
   layoutPatched: boolean;
+  instrumentationSynced: boolean;
+  sourceBackfilled: boolean;
   anchorsAdded: number;
   anchorFiles: string[];
 }
 
-/** Copy bootstrap + patch layout + backfill section anchors for Design Mode. */
+/**
+ * Ensure generated sites have the webpack source-instrumentation loader + next.config rule.
+ * Without this, `data-ox-source` is never injected (most generated sites predate the rule).
+ */
+export async function ensureSourceInstrumentationInProject(projectDir: string): Promise<boolean> {
+  // Always sync when preparing local preview — pick + Modify need source coords.
+  let changed = false;
+
+  try {
+    await fs.access(TEMPLATE_LOADER);
+  } catch {
+    console.warn("[designMode] Template instrumentation loader missing:", TEMPLATE_LOADER);
+    return false;
+  }
+
+  const destLoader = path.join(projectDir, "open-ox/source-instrumentation-loader.cjs");
+  await fs.mkdir(path.dirname(destLoader), { recursive: true });
+  await fs.copyFile(TEMPLATE_LOADER, destLoader);
+
+  const destConfig = path.join(projectDir, "next.config.ts");
+  let existing = "";
+  try {
+    existing = await fs.readFile(destConfig, "utf-8");
+  } catch {
+    existing = "";
+  }
+
+  if (!existing.includes("source-instrumentation-loader")) {
+    try {
+      await fs.access(TEMPLATE_NEXT_CONFIG);
+      await fs.copyFile(TEMPLATE_NEXT_CONFIG, destConfig);
+      changed = true;
+      console.log(
+        "[designMode] Synced next.config.ts from template (source-instrumentation webpack rule). " +
+          "Custom next.config.ts was replaced — merge from git if you had local edits."
+      );
+    } catch (err) {
+      console.warn("[designMode] Could not sync next.config.ts from template:", err);
+    }
+  }
+
+  return changed;
+}
+
+/** Copy bootstrap + patch layout + sync instrumentation + backfill section anchors for Design Mode. */
 export async function ensureDesignModeProjectSetup(projectDir: string): Promise<DesignModeProjectSetupResult> {
   const empty: DesignModeProjectSetupResult = {
     bridgeCopied: false,
     layoutPatched: false,
+    instrumentationSynced: false,
+    sourceBackfilled: false,
     anchorsAdded: 0,
     anchorFiles: [],
   };
-  if (!isStudioDesignModeEnabled()) return empty;
-
   try {
     await fs.access(TEMPLATE_BRIDGE);
   } catch {
@@ -52,6 +103,17 @@ export async function ensureDesignModeProjectSetup(projectDir: string): Promise<
     /* no layout */
   }
 
+  // Keep loader/config in sync for optional webpack path, but prefer disk backfill + Turbopack.
+  const instrumentationSynced = await ensureSourceInstrumentationInProject(projectDir);
+
+  const sourceBackfill = await backfillOxSourceInProject(projectDir);
+  const sourceBackfilled = sourceBackfill.nodesAdded > 0 || sourceBackfill.filesTouched.length > 0;
+  if (sourceBackfilled) {
+    console.log(
+      `[designMode] Backfilled data-ox-source on ${sourceBackfill.nodesAdded} node(s) in ${sourceBackfill.filesTouched.length} file(s)`
+    );
+  }
+
   const backfill = await backfillOxAnchorsInProject(projectDir);
   if (backfill.anchorsAdded > 0) {
     console.log(
@@ -62,6 +124,8 @@ export async function ensureDesignModeProjectSetup(projectDir: string): Promise<
   return {
     bridgeCopied: true,
     layoutPatched,
+    instrumentationSynced,
+    sourceBackfilled,
     anchorsAdded: backfill.anchorsAdded,
     anchorFiles: backfill.files,
   };

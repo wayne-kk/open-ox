@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { runWithSiteRoot } from "@/ai/tools/system/common";
 import { applyDirectVisualEdits } from "@/lib/studio/designMode/directPatch/applyDirectPatch";
-import { isStudioDesignModeEnabled } from "@/lib/studio/designMode/featureFlag";
+import { isDesignModeDirectEditCapable } from "@/lib/studio/designMode/featureFlag";
 import type { VisualEdit } from "@/lib/studio/designMode/protocol";
+import { getPreviewBackend } from "@/lib/previewMode";
 import { classifyModificationScope } from "@/lib/previewShared";
 import { hotRefreshDevServer } from "@/lib/devServerManager";
 import { syncLocalProjectFingerprint } from "@/lib/previewFingerprintDb";
 import { getSessionUser } from "@/lib/auth/session";
-import { getProject, getSiteRoot } from "@/lib/projectManager";
+import { requireOwnedProject } from "@/lib/auth/projectAccess";
+import { getSiteRoot } from "@/lib/projectManager";
 import { ensureProjectSourcesOnDisk } from "@/lib/storage";
 
 type Params = { params: Promise<{ id: string }> };
@@ -20,8 +23,19 @@ function parseEdits(body: unknown): VisualEdit[] | null {
 }
 
 export async function POST(req: NextRequest, { params }: Params) {
-  if (!isStudioDesignModeEnabled()) {
-    return NextResponse.json({ error: "Design Mode is disabled", code: "DESIGN_MODE_DISABLED" }, { status: 403 });
+  if (!isDesignModeDirectEditCapable()) {
+    return NextResponse.json(
+      {
+        error:
+          getPreviewBackend() !== "local"
+            ? "Direct Apply is only available on local next-dev preview. Use Modify with the selection."
+            : "Direct Apply is disabled (set NEXT_PUBLIC_STUDIO_DESIGN_MODE=1 with OPEN_OX_PREVIEW_BACKEND=local).",
+        code: "DIRECT_EDIT_DISABLED",
+        previewBackend: getPreviewBackend(),
+        directEditCapable: false,
+      },
+      { status: 403 }
+    );
   }
 
   const session = await getSessionUser();
@@ -30,10 +44,9 @@ export async function POST(req: NextRequest, { params }: Params) {
   }
 
   const { id } = await params;
-  const project = await getProject(session.supabase, id);
-  if (!project) {
-    return NextResponse.json({ error: "Project not found", code: "PROJECT_NOT_FOUND" }, { status: 404 });
-  }
+  const access = await requireOwnedProject(session, id);
+  if ("error" in access) return access.error;
+  const { db } = access;
 
   let body: unknown;
   try {
@@ -52,16 +65,19 @@ export async function POST(req: NextRequest, { params }: Params) {
       ? (body as { classNameHint: string }).classNameHint
       : undefined;
 
-  await ensureProjectSourcesOnDisk(id, { db: session.supabase });
+  await ensureProjectSourcesOnDisk(id, { db });
 
   const projectDir = getSiteRoot(id);
-  const result = await applyDirectVisualEdits(projectDir, edits, { classNameHint });
+  // verifyWrittenSourceFile / tsxDiagnostics require ALS site-root scope.
+  const result = await runWithSiteRoot(projectDir, () =>
+    applyDirectVisualEdits(projectDir, edits, { classNameHint })
+  );
   if (!result.ok) {
     return NextResponse.json({ error: result.error, code: result.code ?? "PATCH_FAILED" }, { status: 422 });
   }
 
   try {
-    await syncLocalProjectFingerprint(session.supabase, id);
+    await syncLocalProjectFingerprint(db, id);
   } catch {
     /* non-fatal */
   }
@@ -69,7 +85,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   const refreshMode = classifyModificationScope(result.diffs);
   let preview: { url?: string; refreshMode: string } = { refreshMode };
   try {
-    const refreshed = await hotRefreshDevServer(session.supabase, id, result.changedFiles);
+    const refreshed = await hotRefreshDevServer(db, id, result.changedFiles);
     preview = { url: refreshed.url, refreshMode: refreshed.mode ?? refreshMode };
   } catch (err) {
     console.error("[POST design-mode/patch] preview refresh failed:", err);

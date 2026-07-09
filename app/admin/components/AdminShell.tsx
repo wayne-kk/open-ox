@@ -9,6 +9,7 @@ import {
   Clock,
   DollarSign,
   Filter,
+  FolderKanban,
   GitBranch,
   LayoutDashboard,
   ListOrdered,
@@ -25,6 +26,7 @@ const NAV_ITEMS = [
   { href: "/admin/analytics/generation", label: "生成质量", icon: BarChart3 },
   { href: "/admin/analytics/cost", label: "成本", icon: DollarSign },
   { href: "/admin/users", label: "用户", icon: Users },
+  { href: "/admin/projects", label: "项目", icon: FolderKanban },
   { href: "/admin/system/queue", label: "队列", icon: ListOrdered },
   { href: "/admin/system/alerts", label: "告警", icon: AlertTriangle },
 ] as const;

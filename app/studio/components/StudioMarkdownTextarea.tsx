@@ -49,7 +49,7 @@ export function StudioMarkdownTextarea({
         value={value}
         onChange={onChange}
         className={cn(
-          "w-full resize-none border-0 bg-transparent px-1 py-1 font-body text-[14px] leading-7 text-foreground outline-none placeholder:text-white/50 max-h-[200px] overflow-y-auto scrollbar-hidden disabled:opacity-40 disabled:cursor-not-allowed whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
+          "w-full resize-none border-0 bg-transparent px-1 py-1 font-body text-[14px] leading-7 text-foreground outline-none placeholder:text-white/50 max-h-[min(40vh,360px)] overflow-y-auto scrollbar-unified disabled:opacity-40 disabled:cursor-not-allowed whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
           className
         )}
         {...props}
@@ -57,7 +57,7 @@ export function StudioMarkdownTextarea({
       {previewVisible ? (
         <div
           className={cn(
-            "rounded-xl border border-white/8 bg-black/20 px-3 py-2.5",
+            "max-h-[min(28vh,240px)] overflow-y-auto rounded-xl border border-white/8 bg-black/20 px-3 py-2.5 scrollbar-unified",
             previewClassName
           )}
         >

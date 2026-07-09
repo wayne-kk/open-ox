@@ -31,7 +31,8 @@ function propertyPrefixes(property: DesignModeProperty): string[] {
   }
 }
 
-function propertyToUtility(property: DesignModeProperty, value: string): string {
+/** Map a Design Mode style value to the Tailwind utility written on Apply. */
+export function propertyToUtility(property: DesignModeProperty, value: string): string {
   switch (property) {
     case "color":
       return `text-[${rgbToHex(value)}]`;
@@ -58,7 +59,7 @@ function tokenConflicts(token: string, property: DesignModeProperty): boolean {
       if (token.startsWith("text-") && !isTailwindTextSizeToken(token)) return true;
       return false;
     case "fontSize":
-      return isTailwindTextSizeToken(token) || token.startsWith("text-[");
+      return isTailwindTextSizeToken(token);
     case "padding":
       return propertyPrefixes("padding").some((prefix) => token.startsWith(prefix));
     case "borderRadius":

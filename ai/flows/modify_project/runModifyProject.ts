@@ -25,11 +25,14 @@ import {
   type ModifyIntentCategory,
 } from "./intent/modifyIntentRouter";
 import {
+  fromModificationRecord,
+  mergeModifyHistoryTurns,
+  type ModifyHistoryTurn,
+} from "./history/modifyHistoryTurn";
+import {
   applyContinuationRoutingOverrides,
   detectContinuationReply,
   mergeContinuationInstruction,
-  mergeModifyHistoryTurns,
-  type ModifyHistoryTurn,
 } from "./intent/modifyContinuation";
 import { createImageExecutor, awaitPendingImages, type PendingImage } from "@/ai/tools/system/generateImageTool";
 import type { ToolExecutor } from "@/ai/tools/types";
@@ -138,12 +141,7 @@ async function runModifyProjectInner(
 
   const dbHistory: ModifyHistoryTurn[] = clearContext
     ? []
-    : (project.modificationHistory ?? []).map((r) => ({
-      instruction: r.instruction,
-      summary: r.plan?.analysis
-        ? `${r.plan.analysis} Files: ${r.touchedFiles.join(", ")}`
-        : `Modified ${r.touchedFiles.length} file(s): ${r.touchedFiles.join(", ")}`,
-    }));
+    : (project.modificationHistory ?? []).map(fromModificationRecord);
   const sessionHistory = conversationHistory ?? [];
   const mergedHistory = mergeModifyHistoryTurns(dbHistory, sessionHistory);
   const recentHistoryForRouter = mergedHistory.slice(-2);
@@ -210,6 +208,7 @@ async function runModifyProjectInner(
       instruction: userInstruction,
       modifiedAt: new Date().toISOString(),
       touchedFiles: [],
+      intentCategory: "conversation",
       plan: { analysis: reply, changes: [] },
       thinking: [reply],
       image: imageBase64 ?? null,
@@ -265,6 +264,7 @@ async function runModifyProjectInner(
       instruction: userInstruction,
       modifiedAt: new Date().toISOString(),
       touchedFiles: [],
+      intentCategory: "plan_only",
       plan: {
         analysis,
         changes: plan.targetFiles.map((f) => ({
@@ -488,6 +488,7 @@ async function runModifyProjectInner(
       instruction: userInstruction,
       modifiedAt: new Date().toISOString(),
       touchedFiles,
+      intentCategory: routed.category,
       plan: {
         analysis: analysisText,
         changes: allRecordDiffs.map((d) => ({

@@ -145,9 +145,10 @@ P0-B 与 P0-A **可并行**；P0-B-1 不依赖 Design Mode。
 ### P0-A · Design Mode Lite（规格摘要）
 
 - Preview overlay 点选；4 类 Tailwind-friendly 属性  
-- `buildModifyDraftFromVisualEdits(edits[])` → Modify 指令  
-- **禁止**直接写盘；必须 `runModifyProject`  
+- **主路径（架构 v0.3）**：源坐标 `data-ox-source` → 服务端 AST Direct Apply → HMR（见 [studio-design-mode-source-writeback-architecture.md](./studio-design-mode-source-writeback-architecture.md)）  
+- A 类不可 Direct：预检或失败后 **预填 Modify 草稿**（用户确认）；非 Apply 内静默 fallback  
 - v1：单 breakpoint；不改 layout/DOM 结构  
+- ADR：[0001-design-mode-source-coordinate-direct-apply.md](../adr/0001-design-mode-source-coordinate-direct-apply.md)
 
 ### P0-B · 数据与 API（概念）
 

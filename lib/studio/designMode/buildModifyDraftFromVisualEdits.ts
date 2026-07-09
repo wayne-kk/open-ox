@@ -59,10 +59,16 @@ export function buildModifyDraftFromVisualEdits(edits: VisualEdit[]): string {
     if (!head) continue;
     lines.push(`${index}. Element: ${formatElementLabel(head)}`);
     lines.push(`   Selector hint: \`${head.selectorHint}\``);
+    if (head.source) {
+      lines.push(`   Source: \`${head.source.file}:${head.source.line}:${head.source.column}\` (\`${head.source.tag}\`)`);
+    }
     for (const edit of group) {
       if (edit.kind === "text") {
         lines.push(`   - copy/text: \`${edit.before}\` → \`${edit.after}\``);
         lines.push("     (Update JSX text nodes or string props for this element only.)");
+      } else if (edit.kind === "className") {
+        lines.push(`   - className: \`${edit.before}\` → \`${edit.after}\``);
+        lines.push("     (Replace the static className string on this element only.)");
       } else {
         const label = PROPERTY_LABELS[edit.property];
         lines.push(`   - ${label}: \`${edit.before}\` → \`${edit.after}\``);

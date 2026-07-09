@@ -1,15 +1,18 @@
 import { NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/auth/session";
+import { requireAdmin } from "@/lib/admin/requireAdmin";
 import { listProjectOwnerOptions } from "@/lib/projectOwnerOptions";
+import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 
+/**
+ * GET /api/projects/owners — admin-only (internal all-projects / moderation).
+ * Member global gallery was removed; Community discovery is a separate surface.
+ */
 export async function GET() {
   try {
-    const session = await getSessionUser();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
-    }
-
-    const owners = await listProjectOwnerOptions(session.supabase);
+    const adminGate = await requireAdmin();
+    if ("error" in adminGate) return adminGate.error;
+    const admin = createSupabaseServiceRoleClient();
+    const owners = await listProjectOwnerOptions(admin);
     return NextResponse.json(owners);
   } catch (err) {
     console.error("[GET /api/projects/owners]", err);

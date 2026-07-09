@@ -7,7 +7,9 @@ interface DbRecord {
   instruction: string;
   modifiedAt: string;
   touchedFiles: string[];
-  summary: string;
+  assistantText: string;
+  intentCategory?: string;
+  awaitingReply?: boolean;
   diffs: Array<{ file: string; additions: number; deletions: number }>;
 }
 
@@ -84,7 +86,12 @@ export function MemoryDebugPanel({
                           <p className="text-[11px] text-foreground/80 leading-5">"{r.instruction}"</p>
                           <span className="text-[9px] text-muted-foreground/30 shrink-0">{new Date(r.modifiedAt).toLocaleString()}</span>
                         </div>
-                        <p className="text-[10px] text-muted-foreground/50">{r.summary}</p>
+                        <p className="text-[10px] text-muted-foreground/50">{r.assistantText}</p>
+                        {r.touchedFiles.length > 0 && (
+                          <p className="text-[9px] font-mono text-muted-foreground/40">
+                            Files: {r.touchedFiles.join(", ")}
+                          </p>
+                        )}
                         {r.diffs.length > 0 && (
                           <div className="flex flex-wrap gap-1.5 mt-1">
                             {r.diffs.map((d) => (

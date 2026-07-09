@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getProject } from "@/lib/projectManager";
 import { getSessionUser } from "@/lib/auth/session";
+import { requireOwnedProject } from "@/lib/auth/projectAccess";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 import { scheduleManualCaptureProjectCover } from "@/lib/projectCoverCapture";
 
@@ -19,13 +19,10 @@ export async function POST(_req: Request, { params }: Params) {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
   }
-  const { supabase: db } = session;
   const { id } = await params;
 
-  const project = await getProject(db, id);
-  if (!project) {
-    return NextResponse.json({ error: "Project not found", code: "PROJECT_NOT_FOUND" }, { status: 404 });
-  }
+  const access = await requireOwnedProject(session, id);
+  if ("error" in access) return access.error;
 
   try {
     createSupabaseServiceRoleClient();

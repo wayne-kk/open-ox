@@ -55,9 +55,12 @@ function withInstrumentation(
   node: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
   sourceFile: ts.SourceFile,
   filePath: string,
-  textKind: OxTextKind
+  textKind: OxTextKind,
+  options?: { refreshExisting?: boolean }
 ): ts.JsxOpeningElement | ts.JsxSelfClosingElement {
-  if (hasAttr(node, "data-ox-source")) return node;
+  const already = hasAttr(node, "data-ox-source");
+  if (already && !options?.refreshExisting) return node;
+
   const pos = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
   const tag = jsxTagName(node.tagName);
   const classKind = classifyClass(node);
@@ -70,11 +73,19 @@ function withInstrumentation(
     textKind,
     classKind,
   });
+
+  const rest = already
+    ? node.attributes.properties.filter((attr) => {
+        const name = attrName(attr);
+        return name !== "data-ox-source" && name !== "data-ox-text-kind" && name !== "data-ox-class-kind";
+      })
+    : node.attributes.properties;
+
   const attrs = ts.factory.createJsxAttributes([
     makeStringAttr("data-ox-source", source),
     makeStringAttr("data-ox-text-kind", textKind),
     makeStringAttr("data-ox-class-kind", classKind),
-    ...node.attributes.properties,
+    ...rest,
   ]);
   if (ts.isJsxSelfClosingElement(node)) {
     return ts.factory.updateJsxSelfClosingElement(node, node.tagName, node.typeArguments, attrs);
@@ -82,7 +93,10 @@ function withInstrumentation(
   return ts.factory.updateJsxOpeningElement(node, node.tagName, node.typeArguments, attrs);
 }
 
-export function instrumentTsxSource(input: InstrumentTsxSourceInput): InstrumentTsxSourceResult {
+export function instrumentTsxSource(
+  input: InstrumentTsxSourceInput,
+  options?: { refreshExisting?: boolean }
+): InstrumentTsxSourceResult {
   const sourceFile = ts.createSourceFile(input.filePath, input.source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let instrumentedCount = 0;
 
@@ -90,12 +104,18 @@ export function instrumentTsxSource(input: InstrumentTsxSourceInput): Instrument
     const visit: ts.Visitor = (node) => {
       if (ts.isJsxElement(node)) {
         const textKind = classifyText(node.children);
-        const opening = withInstrumentation(node.openingElement, sourceFile, input.filePath, textKind) as ts.JsxOpeningElement;
+        const opening = withInstrumentation(
+          node.openingElement,
+          sourceFile,
+          input.filePath,
+          textKind,
+          options
+        ) as ts.JsxOpeningElement;
         if (opening !== node.openingElement) instrumentedCount += 1;
         return ts.factory.updateJsxElement(node, opening, ts.visitNodes(node.children, visit, ts.isJsxChild), node.closingElement);
       }
       if (ts.isJsxSelfClosingElement(node)) {
-        const next = withInstrumentation(node, sourceFile, input.filePath, "none") as ts.JsxSelfClosingElement;
+        const next = withInstrumentation(node, sourceFile, input.filePath, "none", options) as ts.JsxSelfClosingElement;
         if (next !== node) instrumentedCount += 1;
         return next;
       }

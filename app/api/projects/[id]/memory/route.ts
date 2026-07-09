@@ -8,8 +8,12 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getProject } from "@/lib/projectManager";
 import { getSessionUser } from "@/lib/auth/session";
+import { requireOwnedProject } from "@/lib/auth/projectAccess";
+import {
+  buildHistoryContext,
+  fromModificationRecord,
+} from "@/ai/flows/modify_project/history/modifyHistoryTurn";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -20,31 +24,34 @@ export async function GET(req: NextRequest, { params }: Params) {
     }
     const { id } = await params;
 
-    const project = await getProject(session.supabase, id);
-    if (!project) {
-        return NextResponse.json({ error: "Project not found" }, { status: 404 });
-    }
+    const access = await requireOwnedProject(session, id);
+    if ("error" in access) return access.error;
+    const { project } = access;
 
-    const dbHistory = (project.modificationHistory ?? []).map((r) => ({
-        instruction: r.instruction,
-        modifiedAt: r.modifiedAt,
-        touchedFiles: r.touchedFiles,
-        summary: r.plan?.analysis
-            ? `${r.plan.analysis} Files: ${r.touchedFiles.join(", ")}`
-            : `Modified ${r.touchedFiles.length} file(s): ${r.touchedFiles.join(", ")}`,
-        diffs: (r.diffs ?? []).map((d) => ({
-            file: d.file,
-            additions: d.stats.additions,
-            deletions: d.stats.deletions,
-        })),
-    }));
+    const turns = (project.modificationHistory ?? []).map(fromModificationRecord);
+    const dbHistory = (project.modificationHistory ?? []).map((r, i) => {
+        const turn = turns[i];
+        return {
+            instruction: r.instruction,
+            modifiedAt: r.modifiedAt,
+            touchedFiles: turn.touchedFiles,
+            assistantText: turn.assistantText,
+            intentCategory: turn.intentCategory,
+            awaitingReply: turn.awaitingReply,
+            diffs: (r.diffs ?? []).map((d) => ({
+                file: d.file,
+                additions: d.stats.additions,
+                deletions: d.stats.deletions,
+            })),
+        };
+    });
 
-    // Build the prompt injection preview (what the LLM actually sees)
     const MAX_HISTORY_TURNS = 10;
-    const recentHistory = dbHistory.slice(-MAX_HISTORY_TURNS);
-    const promptPreview = recentHistory.length > 0
-        ? `## Previous Modifications (conversation memory)\n${recentHistory.map((h, i) => `${i + 1}. User: "${h.instruction}"\n   Result: ${h.summary}`).join("\n")}`
-        : "(empty — no previous modifications)";
+    const promptPreview =
+        turns.length > 0
+            ? buildHistoryContext(turns, [], MAX_HISTORY_TURNS).trim() ||
+              "(empty — no previous modifications)"
+            : "(empty — no previous modifications)";
 
     return NextResponse.json({
         projectId: id,
@@ -61,7 +68,7 @@ export async function GET(req: NextRequest, { params }: Params) {
         layer3_prompt: {
             label: "Layer 3: LLM Prompt Injection",
             maxTurns: MAX_HISTORY_TURNS,
-            activeCount: recentHistory.length,
+            activeCount: Math.min(turns.length, MAX_HISTORY_TURNS),
             preview: promptPreview,
         },
     });

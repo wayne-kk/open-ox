@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDevServerStatus } from "@/lib/devServerManager";
 import { getSessionUser } from "@/lib/auth/session";
-import { getProject } from "@/lib/projectManager";
+import { requireOwnedProject } from "@/lib/auth/projectAccess";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -10,15 +10,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
   }
-  const { supabase: db } = session;
   const { id } = await params;
-  const project = await getProject(db, id);
-  if (!project) {
-    return NextResponse.json(
-      { error: "Project not found", code: "PROJECT_NOT_FOUND" },
-      { status: 404 }
-    );
-  }
+  const access = await requireOwnedProject(session, id);
+  if ("error" in access) return access.error;
+  const { db } = access;
   const status = await getDevServerStatus(db, id);
   return NextResponse.json(status);
 }

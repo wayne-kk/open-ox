@@ -16,6 +16,7 @@ import { createAgentSseSender } from "@/lib/transport/agentStreamSse";
 import { tryCreateAgentStreamServerSession } from "@/lib/transport/agentStream.server";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
+import { requireOwnedProject } from "@/lib/auth/projectAccess";
 import { runWithSiteRoot } from "@/ai/tools/system/common";
 import {
   flushLangfuse,
@@ -96,13 +97,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing or invalid projectId" }, { status: 400 });
     }
 
-    const meta = await getProject(db, projectId);
-    if (!meta) {
-      return NextResponse.json({ error: "Project not found" }, { status: 404 });
-    }
-    if (meta.ownerUserId && meta.ownerUserId !== user.id) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const access = await requireOwnedProject(session, projectId);
+    if ("error" in access) return access.error;
+    const meta = access.project;
 
     const messageText = typeof message === "string" ? message : "";
     let clientImage: string | null = null;

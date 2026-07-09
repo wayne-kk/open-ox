@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getProject, renameProject, deleteProject, setProjectFolder } from "@/lib/projectManager";
+import {
+  getProject,
+  renameProject,
+  deleteProject,
+  setProjectFolder,
+  setProjectPublishSettings,
+} from "@/lib/projectManager";
 import { deleteProjectFiles } from "@/lib/storage";
 import { stopDevServer } from "@/lib/devServerManager";
 import { getSessionUser } from "@/lib/auth/session";
+import { requireOwnedProject } from "@/lib/auth/projectAccess";
 import { isAdminUser } from "@/lib/auth/roles";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 import { loadFoldedBuildStepsForRun } from "@/lib/generation/loadRunSteps";
@@ -48,14 +55,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
   }
   const { id } = await params;
-  const project = await getProject(session.supabase, id);
-  if (!project) {
-    return NextResponse.json(
-      { error: "Project not found", code: "PROJECT_NOT_FOUND" },
-      { status: 404 }
-    );
-  }
-  const responsePayload = await enrichProjectPayloadForGenerationProgress(project);
+  const access = await requireOwnedProject(session, id, { allowAdmin: true });
+  if ("error" in access) return access.error;
+  const responsePayload = await enrichProjectPayloadForGenerationProgress(access.project);
   return NextResponse.json(responsePayload);
 }
 
@@ -64,17 +66,17 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
   }
-  const { supabase: db } = session;
   const { id } = await params;
-  const project = await getProject(db, id);
-  if (!project) {
-    return NextResponse.json(
-      { error: "Project not found", code: "PROJECT_NOT_FOUND" },
-      { status: 404 }
-    );
-  }
+  const access = await requireOwnedProject(session, id, { allowAdmin: true });
+  if ("error" in access) return access.error;
+  const { db } = access;
 
-  let body: { name?: string; folderId?: string | null };
+  let body: {
+    name?: string;
+    folderId?: string | null;
+    publishPreview?: boolean;
+    allowRemix?: boolean;
+  };
   try {
     body = await req.json();
   } catch {
@@ -96,6 +98,35 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       );
     }
     await renameProject(db, id, body.name.trim());
+  }
+
+  if (body.publishPreview !== undefined || body.allowRemix !== undefined) {
+    try {
+      const current = (await getProject(db, id)) ?? access.project;
+      await setProjectPublishSettings(
+        db,
+        id,
+        {
+          ...(body.publishPreview !== undefined
+            ? { publishPreview: body.publishPreview }
+            : {}),
+          ...(body.allowRemix !== undefined ? { allowRemix: body.allowRemix } : {}),
+        },
+        current
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message === "STATIC_PREVIEW_REQUIRED") {
+        return NextResponse.json(
+          {
+            error: "需要先有可用的静态预览才能发布到社区",
+            code: "STATIC_PREVIEW_REQUIRED",
+          },
+          { status: 400 }
+        );
+      }
+      throw err;
+    }
   }
 
   const updated = await getProject(db, id);

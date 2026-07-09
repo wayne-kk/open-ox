@@ -3,10 +3,12 @@
 import { useEffect } from "react";
 
 const PROTOCOL = "OPEN_OX_DESIGN_MODE";
+const BRIDGE_ATTR = "data-open-ox-design-bridge";
 
 /**
- * Minimal bootstrap for preview iframes (local dev / E2B). Listens for INJECT_BRIDGE from Studio
- * and loads the full bridge script from the Open-OX app origin.
+ * Bootstrap for preview iframes (local next dev).
+ * Auto-loads the full Design Mode bridge from the Studio origin so handshake
+ * does not depend on catching a one-shot BOOTSTRAP_READY / INJECT_BRIDGE race.
  */
 export function OpenOxPreviewBridge() {
   useEffect(() => {
@@ -18,18 +20,59 @@ export function OpenOxPreviewBridge() {
       window.parent.postMessage(message, "*");
     }
 
-    function onMessage(event: MessageEvent) {
-      const data = event.data as { protocol?: string; action?: string; scriptUrl?: string };
-      if (!data || data.protocol !== PROTOCOL || data.action !== "INJECT_BRIDGE") return;
-      if (!data.scriptUrl || document.querySelector("[data-open-ox-design-bridge]")) return;
+    function resolveStudioOrigin(): string | null {
+      try {
+        if (document.referrer) return new URL(document.referrer).origin;
+      } catch {
+        /* ignore */
+      }
+      const ancestors = (window.location as Location & { ancestorOrigins?: DOMStringList }).ancestorOrigins;
+      if (ancestors && ancestors.length > 0) return ancestors[0]!;
+      const site = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+      if (site) {
+        try {
+          return new URL(site).origin;
+        } catch {
+          /* ignore */
+        }
+      }
+      return null;
+    }
+
+    function loadBridge(scriptUrl?: string) {
+      if (document.querySelector(`[${BRIDGE_ATTR}]`)) return;
+      let url = scriptUrl?.trim() || "";
+      if (!url) {
+        const origin = resolveStudioOrigin();
+        if (!origin) return;
+        url = `${origin}/open-ox/design-mode-bridge.js`;
+      }
       const script = document.createElement("script");
-      script.src = data.scriptUrl;
+      script.src = url;
       script.defer = true;
       script.dataset.openOxDesignBridge = "1";
+      script.onerror = () => {
+        console.warn("[OpenOxPreviewBridge] failed to load", url);
+      };
       document.head.appendChild(script);
     }
 
+    function onMessage(event: MessageEvent) {
+      const data = event.data as { protocol?: string; action?: string; scriptUrl?: string };
+      if (!data || data.protocol !== PROTOCOL) return;
+      if (data.action === "INJECT_BRIDGE") {
+        loadBridge(data.scriptUrl);
+        return;
+      }
+      if (data.action === "PING" && !document.querySelector(`[${BRIDGE_ATTR}]`)) {
+        // Full bridge not loaded yet — re-announce so Studio can inject.
+        notifyParent({ protocol: PROTOCOL, action: "BOOTSTRAP_READY" });
+        loadBridge();
+      }
+    }
+
     window.addEventListener("message", onMessage);
+    loadBridge();
     notifyParent({ protocol: PROTOCOL, action: "BOOTSTRAP_READY" });
 
     return () => {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState } from "react";
-import { Loader2, Undo2, Wand2, X } from "lucide-react";
+import { Code2, Loader2, Undo2, Wand2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { DesignModeElementRect, DesignModeProperty } from "@/lib/studio/designMode/protocol";
 import { computeFloatingEditorPosition } from "@/lib/studio/designMode/floatingEditorPosition";
@@ -15,18 +15,25 @@ interface DesignModePreviewOverlayProps {
 
 const FALLBACK_ANCHOR: DesignModeElementRect = { top: 72, left: 24, width: 160, height: 28 };
 
-function PropertyRow({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
+const PROPERTY_META: Record<DesignModeProperty, { label: string; unit: string }> = {
+  color: { label: "Color", unit: "" },
+  fontSize: { label: "Size", unit: "px" },
+  padding: { label: "Padding", unit: "px" },
+  borderRadius: { label: "Radius", unit: "px" },
+};
+
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return <span className="text-[11px] font-medium text-zinc-400">{children}</span>;
+}
+
+function MappedChip({ utility }: { utility: string }) {
   return (
-    <div className="flex flex-col gap-1">
-      <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground/70">{label}</span>
-      {children}
-    </div>
+    <span
+      className="inline-flex max-w-full truncate rounded-md border border-primary/25 bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] text-primary"
+      title={utility}
+    >
+      {utility}
+    </span>
   );
 }
 
@@ -45,24 +52,47 @@ export function DesignModePreviewOverlay({
     selected,
     anchorRect,
     styles,
+    className,
+    mappedUtilities,
     textContent,
     canEditText,
     applyHint,
     patching,
+    canDirectPatch,
+    directEditCapable,
+    precheckReason,
+    showModifyHandoff,
     updateStyle,
     updateText,
+    updateClassName,
     applyDirectPatch,
+    handoffToModify,
     undoLastApply,
     clearSelection,
   } = designMode;
 
-  const editorOpen = active && bridgeReady && selected;
+  /** Floating Direct editor only when local + Direct env. */
+  const editorOpen = active && bridgeReady && selected && directEditCapable;
+  const showSelectionPill = active && bridgeReady && Boolean(selected);
   const effectiveRect = anchorRect ?? FALLBACK_ANCHOR;
+  const mappedEntries = Object.entries(mappedUtilities) as Array<[DesignModeProperty, string]>;
+  /** Freeze panel while editing the same element - RECT_UPDATED from size/style tweaks must not bounce the popup. */
+  const selectionKey = selected
+    ? `${selected.source?.file ?? ""}:${selected.source?.line ?? ""}:${selected.source?.column ?? ""}:${selected.selectorHint}`
+    : null;
+  const lockedForSelectionRef = useRef<string | null>(null);
+  const placeRectRef = useRef(effectiveRect);
+  placeRectRef.current = effectiveRect;
 
   useLayoutEffect(() => {
-    if (!editorOpen) return;
+    if (!editorOpen || !selectionKey) {
+      lockedForSelectionRef.current = null;
+      return;
+    }
 
-    const updatePosition = () => {
+    const place = (force: boolean) => {
+      if (!force && lockedForSelectionRef.current === selectionKey) return;
+
       const container = containerRef.current;
       const iframe = iframeRef.current;
       const popup = popupRef.current;
@@ -70,11 +100,12 @@ export function DesignModePreviewOverlay({
 
       const containerRect = container.getBoundingClientRect();
       const iframeRect = iframe.getBoundingClientRect();
-      const popupWidth = popup?.offsetWidth ?? 320;
-      const popupHeight = popup?.offsetHeight ?? 360;
+      const popupWidth = popup?.offsetWidth ?? 360;
+      const popupHeight = popup?.offsetHeight ?? 480;
+      const rect = placeRectRef.current;
 
       const next = computeFloatingEditorPosition(
-        effectiveRect,
+        rect,
         {
           top: iframeRect.top - containerRect.top,
           left: iframeRect.left - containerRect.left,
@@ -82,13 +113,19 @@ export function DesignModePreviewOverlay({
         { width: containerRect.width, height: containerRect.height },
         { width: popupWidth, height: popupHeight }
       );
+      lockedForSelectionRef.current = selectionKey;
       setPosition(next);
     };
 
-    updatePosition();
-    window.addEventListener("resize", updatePosition);
-    return () => window.removeEventListener("resize", updatePosition);
-  }, [anchorRect, containerRef, editorOpen, effectiveRect, iframeRef, selected, styles, textContent]);
+    place(lockedForSelectionRef.current !== selectionKey);
+
+    const onResize = () => {
+      lockedForSelectionRef.current = null;
+      place(true);
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [containerRef, editorOpen, iframeRef, selectionKey]);
 
   if (!active) return null;
 
@@ -96,24 +133,41 @@ export function DesignModePreviewOverlay({
   const fontSizePx = parsePx(styles.fontSize, 16);
   const paddingPx = parsePx(styles.padding, 0);
   const radiusPx = parsePx(styles.borderRadius, 0);
+  const sourceLabel = selected?.source
+    ? `${selected.source.file.split("/").pop()}:${selected.source.line}`
+    : null;
 
   return (
     <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden">
       {!bridgeReady && !bridgeError ? (
-        <div className="pointer-events-auto absolute left-3 top-3 max-w-[min(360px,calc(100%-24px))] rounded-lg border border-white/10 bg-background/90 px-3 py-2 font-mono text-[10px] text-muted-foreground/80 shadow-lg backdrop-blur-md">
+        <div className="pointer-events-auto absolute left-3 top-3 max-w-[min(360px,calc(100%-24px))] rounded-xl border border-white/10 bg-zinc-950/90 px-3 py-2 text-[11px] text-zinc-400 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl">
           Connecting preview bridge…
         </div>
       ) : null}
 
       {bridgeError ? (
-        <div className="pointer-events-auto absolute left-3 top-3 max-w-[min(420px,calc(100%-24px))] rounded-lg border border-red-500/30 bg-background/95 px-3 py-2 font-mono text-[10px] text-red-300/90 shadow-lg backdrop-blur-md">
+        <div className="pointer-events-auto absolute left-3 top-3 max-w-[min(420px,calc(100%-24px))] rounded-xl border border-red-500/30 bg-zinc-950/95 px-3 py-2 text-[11px] text-red-300 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl">
           {bridgeError}
         </div>
       ) : null}
 
       {active && bridgeReady && !selected ? (
-        <div className="pointer-events-none absolute left-3 top-3 rounded-lg border border-primary/25 bg-background/80 px-3 py-2 font-mono text-[10px] text-primary/80 shadow-lg backdrop-blur-md">
+        <div className="pointer-events-none absolute left-3 top-3 rounded-xl border border-primary/30 bg-zinc-950/85 px-3 py-2 text-[11px] text-primary shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl">
           Click an element in the preview
+        </div>
+      ) : null}
+
+      {showSelectionPill ? (
+        <div className="pointer-events-auto absolute bottom-3 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/12 bg-zinc-950/90 px-3 py-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+          <span className="inline-flex h-2 w-2 rounded-full bg-sky-400" aria-hidden />
+          <span className="text-[11px] font-medium text-zinc-100">1 selection</span>
+          <button
+            type="button"
+            onClick={clearSelection}
+            className="rounded-full px-2 py-0.5 text-[11px] font-medium text-zinc-400 transition hover:bg-white/8 hover:text-zinc-100 active:scale-[0.98]"
+          >
+            Clear
+          </button>
         </div>
       ) : null}
 
@@ -121,71 +175,115 @@ export function DesignModePreviewOverlay({
         <div
           ref={popupRef}
           className={cn(
-            "pointer-events-auto absolute w-[min(320px,calc(100%-24px))]",
-            "rounded-xl border border-white/12 bg-background/95 shadow-[0_16px_48px_rgba(0,0,0,0.5)] backdrop-blur-xl"
+            "pointer-events-auto absolute w-[min(360px,calc(100%-24px))]",
+            "overflow-hidden rounded-2xl border border-white/10",
+            "bg-zinc-950/92 shadow-[0_20px_60px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.06)]",
+            "backdrop-blur-xl"
           )}
           style={{ top: position.top, left: position.left }}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex items-start justify-between gap-2 border-b border-white/8 px-3 py-2">
+          <div className="flex items-start justify-between gap-3 border-b border-white/6 px-3.5 py-3">
             <div className="min-w-0">
-              <p className="font-mono text-[9px] uppercase tracking-widest text-primary/60">Design Mode</p>
-              <p className="mt-0.5 font-mono text-[10px] text-muted-foreground/80 truncate" title={selected.selectorHint}>
-                {selected.selectorHint}
-              </p>
-              {selected.source ? (
-                <>
-                  <p className="mt-0.5 font-mono text-[9px] text-emerald-400/80 truncate" title={selected.source.file}>
-                    source: {selected.source.file}:{selected.source.line}
-                  </p>
-                  {selected.textKind && selected.textKind !== "static" ? (
-                    <p className="mt-0.5 font-mono text-[9px] text-amber-400/80">
-                      {selected.textKind} text — Modify fallback may be required
-                    </p>
-                  ) : null}
-                </>
-              ) : selected.oxId ? (
-                <p className="mt-0.5 font-mono text-[9px] text-emerald-400/80 truncate" title={selected.oxId}>
-                  legacy anchor: {selected.oxId}
+              <div className="flex items-center gap-2">
+                <span className="inline-flex h-5 items-center rounded-md bg-primary/15 px-1.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                  Edit
+                </span>
+                <p className="truncate font-mono text-[11px] text-zinc-300" title={selected.selectorHint}>
+                  {selected.tagName.toLowerCase()}
+                </p>
+              </div>
+              {sourceLabel ? (
+                <p className="mt-1.5 truncate font-mono text-[10px] text-emerald-400/90" title={selected.source?.file}>
+                  {sourceLabel}
                 </p>
               ) : (
-                <p className="mt-0.5 font-mono text-[9px] text-amber-400/80">
-                  No source map — rebuild preview
-                </p>
+                <p className="mt-1.5 text-[10px] text-amber-400/90">No source map - use Modify</p>
               )}
+              {precheckReason ? <p className="mt-1 text-[10px] leading-snug text-amber-400/90">{precheckReason}</p> : null}
             </div>
             <button
               type="button"
               onClick={clearSelection}
-              className="shrink-0 rounded-md border border-white/10 p-1 text-muted-foreground hover:text-foreground"
+              className="shrink-0 rounded-lg border border-white/10 p-1.5 text-zinc-500 transition hover:border-white/20 hover:bg-white/5 hover:text-zinc-200 active:scale-[0.98]"
               aria-label="Close editor"
             >
               <X className="h-3.5 w-3.5" />
             </button>
           </div>
 
-          <div className="space-y-3 px-3 py-3">
+          <div className="max-h-[min(520px,70vh)] space-y-4 overflow-y-auto px-3.5 py-3.5">
             {canEditText ? (
-              <PropertyRow label="Copy / 文案">
+              <div className="flex flex-col gap-1.5">
+                <FieldLabel>Copy</FieldLabel>
                 <textarea
                   rows={2}
                   value={textContent}
                   onChange={(e) => updateText(e.target.value)}
-                  className="w-full resize-none rounded-lg border border-white/10 bg-black/30 px-2.5 py-2 text-[12px] text-foreground outline-none focus:border-primary/40"
+                  className="w-full resize-y rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-[13px] leading-relaxed text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-primary/45 focus:ring-1 focus:ring-primary/25"
+                  placeholder="Visible text"
                 />
-              </PropertyRow>
+              </div>
             ) : null}
 
-            <div className="grid grid-cols-2 gap-2.5">
-              <PropertyRow label="Color">
-                <input
-                  type="color"
-                  value={colorHex}
-                  onChange={(e) => updateStyle("color" satisfies DesignModeProperty, e.target.value)}
-                  className="h-8 w-full cursor-pointer rounded-md border border-white/10 bg-transparent"
-                />
-              </PropertyRow>
-              <PropertyRow label={`Size (${fontSizePx}px)`}>
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <FieldLabel>Tailwind classes</FieldLabel>
+                <Code2 className="h-3.5 w-3.5 text-zinc-600" aria-hidden />
+              </div>
+              <textarea
+                rows={3}
+                value={className}
+                onChange={(e) => updateClassName(e.target.value)}
+                spellCheck={false}
+                className="w-full resize-y rounded-xl border border-white/10 bg-black/40 px-3 py-2 font-mono text-[11px] leading-relaxed text-zinc-200 outline-none transition placeholder:text-zinc-600 focus:border-primary/45 focus:ring-1 focus:ring-primary/25"
+                placeholder="text-lg font-medium text-white"
+              />
+              <p className="text-[10px] leading-snug text-zinc-500">
+                Edit utilities directly. Style controls below map into this class string.
+              </p>
+            </div>
+
+            {mappedEntries.length > 0 ? (
+              <div className="flex flex-col gap-1.5 rounded-xl border border-primary/20 bg-primary/6 px-2.5 py-2">
+                <FieldLabel>Mapped to Tailwind</FieldLabel>
+                <div className="flex flex-wrap gap-1.5">
+                  {mappedEntries.map(([property, utility]) => (
+                    <MappedChip key={property} utility={utility} />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <FieldLabel>{PROPERTY_META.color.label}</FieldLabel>
+                  {mappedUtilities.color ? <MappedChip utility={mappedUtilities.color} /> : null}
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={colorHex}
+                    onChange={(e) => updateStyle("color" satisfies DesignModeProperty, e.target.value)}
+                    className="h-9 w-11 shrink-0 cursor-pointer rounded-lg border border-white/10 bg-transparent p-0.5"
+                  />
+                  <input
+                    type="text"
+                    value={colorHex}
+                    onChange={(e) => updateStyle("color", e.target.value)}
+                    className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/35 px-2 py-1.5 font-mono text-[11px] text-zinc-200 outline-none focus:border-primary/40"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <FieldLabel>
+                    {PROPERTY_META.fontSize.label} ({fontSizePx}
+                    {PROPERTY_META.fontSize.unit})
+                  </FieldLabel>
+                </div>
                 <input
                   type="range"
                   min={10}
@@ -194,8 +292,14 @@ export function DesignModePreviewOverlay({
                   onChange={(e) => updateStyle("fontSize", `${e.target.value}px`)}
                   className="w-full accent-primary"
                 />
-              </PropertyRow>
-              <PropertyRow label={`Padding (${paddingPx}px)`}>
+                {mappedUtilities.fontSize ? <MappedChip utility={mappedUtilities.fontSize} /> : null}
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <FieldLabel>
+                  {PROPERTY_META.padding.label} ({paddingPx}
+                  {PROPERTY_META.padding.unit})
+                </FieldLabel>
                 <input
                   type="range"
                   min={0}
@@ -204,8 +308,14 @@ export function DesignModePreviewOverlay({
                   onChange={(e) => updateStyle("padding", `${e.target.value}px`)}
                   className="w-full accent-primary"
                 />
-              </PropertyRow>
-              <PropertyRow label={`Radius (${radiusPx}px)`}>
+                {mappedUtilities.padding ? <MappedChip utility={mappedUtilities.padding} /> : null}
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <FieldLabel>
+                  {PROPERTY_META.borderRadius.label} ({radiusPx}
+                  {PROPERTY_META.borderRadius.unit})
+                </FieldLabel>
                 <input
                   type="range"
                   min={0}
@@ -214,32 +324,45 @@ export function DesignModePreviewOverlay({
                   onChange={(e) => updateStyle("borderRadius", `${e.target.value}px`)}
                   className="w-full accent-primary"
                 />
-              </PropertyRow>
+                {mappedUtilities.borderRadius ? <MappedChip utility={mappedUtilities.borderRadius} /> : null}
+              </div>
             </div>
+          </div>
 
+          <div className="space-y-2 border-t border-white/6 px-3.5 py-3">
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                disabled={patching}
+                disabled={patching || !canDirectPatch}
                 onClick={() => void applyDirectPatch()}
-                className="defi-button px-3 py-1.5 text-[10px] font-medium flex items-center gap-1.5 disabled:opacity-40"
+                className="defi-button px-3.5 py-1.5 text-[11px] font-medium disabled:opacity-40"
+                title={precheckReason ?? "Apply Direct patch to source"}
               >
-                {patching ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wand2 className="h-3 w-3" />}
-                {patching ? "Saving…" : "Apply to source"}
+                {patching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
+                {patching ? "Saving…" : "Apply"}
               </button>
+              {(showModifyHandoff || !canDirectPatch) && selected ? (
+                <button
+                  type="button"
+                  disabled={patching}
+                  onClick={handoffToModify}
+                  className="defi-button-outline px-3.5 py-1.5 text-[11px] font-medium disabled:opacity-40"
+                >
+                  Use Modify
+                </button>
+              ) : null}
               <button
                 type="button"
                 disabled
                 onClick={undoLastApply}
-                className="defi-button-outline px-3 py-1.5 text-[10px] font-medium flex items-center gap-1.5 disabled:opacity-40"
+                className="defi-button-outline px-3 py-1.5 text-[11px] font-medium disabled:opacity-40"
                 title="Undo not available for direct patch yet"
               >
-                <Undo2 className="h-3 w-3" />
+                <Undo2 className="h-3.5 w-3.5" />
                 Undo
               </button>
             </div>
-
-            {applyHint ? <p className="font-mono text-[10px] text-primary/75">{applyHint}</p> : null}
+            {applyHint ? <p className="text-[11px] leading-snug text-primary/80">{applyHint}</p> : null}
           </div>
         </div>
       ) : null}

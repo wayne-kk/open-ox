@@ -15,12 +15,16 @@ import { NextResponse } from "next/server";
 import { SSE_RESPONSE_HEADERS } from "@/lib/sse-headers";
 import { createAgentSseSender } from "@/lib/transport/agentStreamSse";
 import { tryCreateAgentStreamServerSession } from "@/lib/transport/agentStream.server";
-import { getProject } from "@/lib/projectManager";
+import {
+  fromClientPayload,
+  type ModifyHistoryTurn,
+} from "@/ai/flows/modify_project/history/modifyHistoryTurn";
 import { runModifyProject } from "@/ai/flows/modify_project/runModifyProject";
 import type { ModifySSEEvent } from "@/ai/flows/modify_project/runModifyProject";
 import { schedulePostModifyPreviewPipeline } from "@/lib/postGenerationPreviewPipeline";
 import { classifyModificationScope } from "@/lib/devServerManager";
 import { getSessionUser } from "@/lib/auth/session";
+import { requireOwnedProject } from "@/lib/auth/projectAccess";
 import { flushLangfuse, resolveLangfuseSessionId, runWithLangfuseTraceRoot } from "@/lib/observability/langfuseTracing";
 import { LfTrace } from "@/lib/observability/langfuseTraceCatalog";
 import { trackServerAnalyticsEventFireAndForget } from "@/lib/analytics/serverEvents";
@@ -35,19 +39,18 @@ export async function POST(
   if (!session) {
     return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
   }
-  const { supabase: db, user } = session;
+  const { user } = session;
 
   const { id } = await params;
 
-  // Validate project exists before streaming
-  const project = await getProject(db, id);
-  if (!project) {
-    return NextResponse.json({ error: "Project not found", code: "NOT_FOUND" }, { status: 404 });
-  }
+  // Validate project exists and caller owns it before streaming
+  const access = await requireOwnedProject(session, id);
+  if ("error" in access) return access.error;
+  const { db } = access;
 
   let userInstruction: string;
   let modelOverride: string | undefined;
-  let conversationHistory: Array<{ instruction: string; summary: string }> | undefined;
+  let conversationHistory: ModifyHistoryTurn[] | undefined;
   let clearContext = false;
   let imageBase64: string | undefined;
   let langfuseSessionIdBody: string | undefined;
@@ -56,7 +59,14 @@ export async function POST(
     const body = await req.json();
     userInstruction = body.userInstruction;
     modelOverride = body.model;
-    conversationHistory = body.conversationHistory;
+    if (Array.isArray(body.conversationHistory)) {
+      const parsed: ModifyHistoryTurn[] = [];
+      for (const item of body.conversationHistory as unknown[]) {
+        const turn = fromClientPayload(item);
+        if (turn) parsed.push(turn);
+      }
+      conversationHistory = parsed;
+    }
     clearContext = body.clearContext === true;
     langfuseSessionIdBody =
       typeof body.langfuseSessionId === "string" && body.langfuseSessionId.trim()

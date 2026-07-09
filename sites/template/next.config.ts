@@ -37,7 +37,9 @@ const staticBasePath = process.env.OPEN_OX_STATIC_BASE_PATH?.trim();
 
 const nextConfig: NextConfig = {
   webpack(config, { dev }) {
-    if (dev && process.env.NEXT_PUBLIC_STUDIO_DESIGN_MODE === "1") {
+    // Always instrument in local next-dev so Design pick can report file:line:col for Modify.
+    // Direct Apply is gated separately (env + local backend).
+    if (dev) {
       config.module.rules.push({
         test: /\.[jt]sx$/,
         exclude: /node_modules/,

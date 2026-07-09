@@ -349,7 +349,12 @@ export function BuildConversation({
     pendingModifyImage,
     intentImage,
     setIntentImage,
-}: BuildStudioState) {
+    designSelectionLabel = null,
+    onClearDesignSelection,
+}: BuildStudioState & {
+    designSelectionLabel?: string | null;
+    onClearDesignSelection?: () => void;
+}) {
     const chatRef = useRef<HTMLDivElement>(null);
     const userMessageRefs = useRef(new Map<string, HTMLDivElement>());
     const pendingModifyUserRef = useRef<HTMLDivElement>(null);
@@ -893,15 +898,32 @@ export function BuildConversation({
             {/* Memory debug panel */}
             {projectId && <MemoryDebugPanel projectId={projectId} sessionHistory={modifyHistory} externalOpen={memoryOpen} onToggle={setMemoryOpen} />}
 
-            {/* Input area */}
-            <div className="border-t border-white/8 px-4 py-4">
+            {/* Input area — keep within viewport; long Design Mode drafts scroll inside textarea */}
+            <div className="shrink-0 border-t border-white/8 px-4 py-4">
                 {projectId && !loading && hasGeneratedProject && response && !response.error ? (
                     /* Modify mode — project ready */
                     <div className="rounded-[24px] border border-white/10 bg-black/25 p-3">
-                        <div className="mb-2 flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <Wand2 className="h-3 w-3 text-primary/60" />
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                            <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                <Wand2 className="h-3 w-3 shrink-0 text-primary/60" />
                                 <span className="font-mono text-[9px] uppercase tracking-widest text-primary/60">Modify project</span>
+                                {designSelectionLabel ? (
+                                    <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-sky-400/35 bg-sky-400/10 px-2 py-0.5 text-[10px] font-medium text-sky-200">
+                                        <span className="truncate" title={designSelectionLabel}>
+                                          1 selection · {designSelectionLabel}
+                                        </span>
+                                        {onClearDesignSelection ? (
+                                            <button
+                                                type="button"
+                                                onClick={onClearDesignSelection}
+                                                className="shrink-0 text-sky-300/80 hover:text-sky-100"
+                                                aria-label="Clear selection"
+                                            >
+                                                ×
+                                            </button>
+                                        ) : null}
+                                    </span>
+                                ) : null}
                             </div>
                         </div>
                         <label className="sr-only" htmlFor="modify-input">修改指令</label>
@@ -924,19 +946,30 @@ export function BuildConversation({
                         )}
                         <StudioMarkdownTextarea
                             id="modify-input"
-                            rows={1}
+                            rows={3}
                             disabled={modifying}
+                            showPreview={false}
+                            className="max-h-[min(40vh,360px)] min-h-[72px]"
                             value={modifyInstruction}
                             onAutoResize={(el) => {
                                 el.style.height = "auto";
-                                el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+                                const cap = Math.min(
+                                    el.scrollHeight,
+                                    Math.min(Math.round(window.innerHeight * 0.4), 360)
+                                );
+                                el.style.height = `${Math.max(cap, 72)}px`;
                             }}
                             onChange={(e) => {
                                 setModifyInstruction(e.target.value);
                                 slashMenu.updateCursorPos(e.target.selectionStart ?? 0);
                                 setSlashHint(null);
-                                e.target.style.height = "auto";
-                                e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
+                                const el = e.target;
+                                el.style.height = "auto";
+                                const cap = Math.min(
+                                    el.scrollHeight,
+                                    Math.min(Math.round(window.innerHeight * 0.4), 360)
+                                );
+                                el.style.height = `${Math.max(cap, 72)}px`;
                             }}
                             onPaste={(e) => {
                                 const items = Array.from(e.clipboardData.items);
@@ -955,15 +988,21 @@ export function BuildConversation({
                             }}
                             onKeyDown={(e) => {
                                 if (slashMenu.handleKeyDown(e)) return;
-                                if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !modifying) {
+                                // Enter = send; Cmd/Ctrl+Enter = newline (default)
+                                if (e.key === "Enter" && !e.metaKey && !e.ctrlKey && !e.shiftKey && !modifying) {
                                     e.preventDefault();
-                                    // Check if it's an exact slash command
                                     const exact = slashCommands.find((c) => modifyInstruction.trim() === `/${c.id}`);
                                     if (exact?.action) { exact.action(); return; }
                                     void handleModify();
                                 }
                             }}
-                            placeholder={modifying ? "修改进行中..." : "描述要修改的内容... (粘贴图片 / 输入 / 查看命令)"}
+                            placeholder={
+                                modifying
+                                    ? "修改进行中..."
+                                    : designSelectionLabel
+                                      ? "Ask to modify the selected element... (paste image / type / for commands)"
+                                      : "描述要修改的内容... (粘贴图片 / 输入 / 查看命令)"
+                            }
                         />
                         {/* Slash command autocomplete — floating overlay */}
                         <div className="relative">
@@ -983,7 +1022,7 @@ export function BuildConversation({
                             <pre className="px-2 py-1.5 text-[10px] leading-5 text-muted-foreground/70 font-mono whitespace-pre-wrap">{slashHint}</pre>
                         )}
                         <div className="mt-3 flex items-center justify-between gap-3">
-                            <div className="hidden text-xs text-muted-foreground sm:block">Cmd/Ctrl + Enter</div>
+                            <div className="hidden text-xs text-muted-foreground sm:block">Enter 发送 · ⌘/Ctrl+Enter 换行</div>
                             <button
                                 type="button"
                                 onClick={handleModify}
@@ -1045,7 +1084,15 @@ export function BuildConversation({
                                 }
                             }}
                             onKeyDown={(e) => {
-                                if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !loading && (input.trim() || intentImage)) {
+                                // Enter = send; Cmd/Ctrl+Enter = newline (default)
+                                if (
+                                    e.key === "Enter" &&
+                                    !e.metaKey &&
+                                    !e.ctrlKey &&
+                                    !e.shiftKey &&
+                                    !loading &&
+                                    (input.trim() || intentImage)
+                                ) {
                                     e.preventDefault();
                                     void handleRun();
                                 }

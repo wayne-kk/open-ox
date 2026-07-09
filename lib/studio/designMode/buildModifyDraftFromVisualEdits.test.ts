@@ -50,28 +50,42 @@ describe("buildModifyDraftFromVisualEdits", () => {
     expect(draft).toContain("copy/text: `精选曲目` → `热门曲目`");
   });
 
-  it("separates edits for different elements", () => {
+  it("includes full className edits", () => {
     const edits: VisualEdit[] = [
       {
-        kind: "style",
-        selectorHint: "button.cta",
-        elementLabel: "button.cta",
-        property: "borderRadius",
-        before: "4px",
-        after: "12px",
-      },
-      {
-        kind: "style",
-        selectorHint: "footer",
-        elementLabel: "footer",
-        property: "padding",
-        before: "16px",
-        after: "24px",
+        kind: "className",
+        selectorHint: "h1.title",
+        elementLabel: "h1.title",
+        before: "text-4xl text-white",
+        after: "text-5xl font-bold text-[#f7931a]",
       },
     ];
 
     const draft = buildModifyDraftFromVisualEdits(edits);
-    expect(draft).toContain("1. Element: button.cta");
-    expect(draft).toContain("2. Element: footer");
+    expect(draft).toContain("className: `text-4xl text-white` → `text-5xl font-bold text-[#f7931a]`");
+  });
+
+  it("includes source coordinates in the draft when present", () => {
+    const edits: VisualEdit[] = [
+      {
+        kind: "style",
+        source: {
+          version: 1,
+          file: "components/sections/Hero.tsx",
+          line: 12,
+          column: 4,
+          tag: "h1",
+          textKind: "static",
+          classKind: "static",
+        },
+        selectorHint: "h1.title",
+        elementLabel: "h1.title",
+        property: "color",
+        before: "#fff",
+        after: "#f00",
+      },
+    ];
+    const draft = buildModifyDraftFromVisualEdits(edits);
+    expect(draft).toContain("components/sections/Hero.tsx:12:4");
   });
 });

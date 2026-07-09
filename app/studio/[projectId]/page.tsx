@@ -3,8 +3,10 @@
 import { use, useState, useEffect, useCallback, useRef } from "react";
 import { Suspense } from "react";
 import Link from "next/link";
-import { GitBranch, Monitor, RefreshCw, ExternalLink, PanelLeftClose, PanelLeftOpen, FileCode2, ImagePlus, Loader2, MousePointer2 } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { GitBranch, Monitor, RefreshCw, ExternalLink, PanelLeftClose, PanelLeftOpen, FileCode2, ImagePlus, Loader2, MousePointer2, X } from "lucide-react";
 import { AppBackButton } from "@/app/components/AppBackButton";
+import { StudioPublishMenu } from "@/app/components/ProjectPublishPanel";
 import { cn } from "@/lib/utils";
 import { HamsterLoader } from "@/components/ui/hamster-loader";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -24,12 +26,18 @@ function formatMs(ms: number): string {
 }
 
 function StudioInner({ projectId }: { projectId: string }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const studio = useBuildStudio(projectId);
   const { loading, response, elapsed, rightPanel, setRightPanel,
     previewUrl, previewState, previewError, previewVersion, startPreview, iframeRef, projectLoading,
     autoPreviewAfterBuild, setAutoPreviewAfterBuild,
     bumpPreviewAfterDirectPatch,
+    remixedFromTitle, remixedFromOwnerUsername,
   } = studio;
+  const justRemixed = searchParams.get("remixed") === "1";
+  const [lineageDismissed, setLineageDismissed] = useState(false);
+  const showLineageBanner = !lineageDismissed && Boolean(remixedFromTitle);
 
   // Sync AI processing state → dynamic favicon
   useFaviconSync({
@@ -58,8 +66,25 @@ function StudioInner({ projectId }: { projectId: string }) {
     iframeRef,
     previewUrl,
     previewReady: previewState === "ready" && Boolean(previewUrl),
+    directEditCapable: studio.directEditCapable,
     onPreviewRefresh: bumpPreviewAfterDirectPatch,
+    onHandoffToModify: (draft) => {
+      studio.setModifyInstruction(draft);
+      setConversationCollapsed(false);
+    },
   });
+
+  useEffect(() => {
+    studio.setOnBeforeModifySend(() => designMode.consumeSelectionForModify());
+    studio.setOnAfterModifySend(() => designMode.clearSelection());
+    return () => {
+      studio.setOnBeforeModifySend(null);
+      studio.setOnAfterModifySend(null);
+    };
+    // Bind once per stable callbacks from designMode / studio setters
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setters are stable; rebind when selection helpers change
+  }, [designMode.clearSelection, designMode.consumeSelectionForModify, studio.setOnAfterModifySend, studio.setOnBeforeModifySend]);
+
   const [coverCaptureBusy, setCoverCaptureBusy] = useState(false);
   const previewContainerRef = useRef<HTMLDivElement | null>(null);
   const [coverCaptureHint, setCoverCaptureHint] = useState<string | null>(null);
@@ -69,6 +94,19 @@ function StudioInner({ projectId }: { projectId: string }) {
     const t = setTimeout(() => setCoverCaptureHint(null), 10_000);
     return () => clearTimeout(t);
   }, [coverCaptureHint]);
+
+  const dismissLineageBanner = useCallback(() => {
+    setLineageDismissed(true);
+    if (justRemixed) {
+      router.replace(`/studio/${projectId}`, { scroll: false });
+    }
+  }, [justRemixed, projectId, router]);
+
+  useEffect(() => {
+    if (!justRemixed || !remixedFromTitle || lineageDismissed) return;
+    const t = setTimeout(() => dismissLineageBanner(), 12_000);
+    return () => clearTimeout(t);
+  }, [dismissLineageBanner, justRemixed, lineageDismissed, remixedFromTitle]);
 
   const requestCoverCapture = useCallback(async () => {
     if (!projectId || coverCaptureBusy) return;
@@ -193,6 +231,7 @@ function StudioInner({ projectId }: { projectId: string }) {
 
                 {/* Right: actions */}
                 <div className="flex items-center gap-2 shrink-0">
+                  {projectId ? <StudioPublishMenu projectId={projectId} /> : null}
                   <Link
                     href="/projects"
                     className="hidden sm:flex items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-3 py-1.5 font-mono text-[10px] text-muted-foreground transition-colors hover:border-white/15 hover:text-foreground"
@@ -205,6 +244,23 @@ function StudioInner({ projectId }: { projectId: string }) {
           </div>
         </div>
 
+        {showLineageBanner && remixedFromTitle ? (
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-emerald-400/20 bg-emerald-500/10 px-4 py-2">
+            <p className="min-w-0 truncate text-[12px] text-emerald-100/90">
+              已从 {remixedFromTitle}
+              {remixedFromOwnerUsername ? `（${remixedFromOwnerUsername}）` : ""} Remix
+            </p>
+            <button
+              type="button"
+              onClick={dismissLineageBanner}
+              className="shrink-0 rounded-md p-1 text-emerald-200/70 transition-colors hover:bg-white/10 hover:text-emerald-100"
+              aria-label="关闭"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ) : null}
+
         <div className="mx-auto flex w-full min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
           <div
             className={cn(
@@ -216,7 +272,11 @@ function StudioInner({ projectId }: { projectId: string }) {
             )}
           >
             <div className="h-full min-h-0 max-h-full overflow-hidden lg:h-full">
-              <BuildConversation {...studio} />
+              <BuildConversation
+                {...studio}
+                designSelectionLabel={designMode.selectionBadgeLabel}
+                onClearDesignSelection={designMode.clearSelection}
+              />
             </div>
           </div>
 
@@ -305,7 +365,7 @@ function StudioInner({ projectId }: { projectId: string }) {
               {/* Action buttons — right */}
               {rightPanel === "preview" && previewState === "ready" && previewUrl && (
                 <>
-                  {designMode.featureEnabled && hasGeneratedProject ? (
+                  {hasGeneratedProject ? (
                     <button
                       type="button"
                       onClick={() => designMode.setActive(!designMode.active)}
@@ -315,7 +375,11 @@ function StudioInner({ projectId }: { projectId: string }) {
                           ? "border-primary/40 bg-primary/10 text-primary"
                           : "border-white/8 bg-white/3 text-muted-foreground/70 hover:border-white/15 hover:text-foreground"
                       )}
-                      title="Pick elements in preview to edit styles and copy"
+                      title={
+                        designMode.directEditCapable
+                          ? "Pick elements to Direct-edit or send to Modify"
+                          : "Pick an element, then describe the change in Modify"
+                      }
                     >
                       <MousePointer2 className="h-3 w-3" />
                       {designMode.active ? "Exit pick" : "Design pick"}
@@ -385,8 +449,8 @@ function StudioInner({ projectId }: { projectId: string }) {
                   {previewState === "starting" && (
                     <div className="flex flex-1 flex-col items-center justify-center gap-3">
                       <HamsterLoader size="sm" />
-                      <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Starting dev server…</p>
-                      <p className="font-mono text-[10px] text-muted-foreground/70">First start may take 15–30s</p>
+                      <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Starting preview…</p>
+                      <p className="font-mono text-[10px] text-muted-foreground/70">Usually a few seconds when cache is warm</p>
                     </div>
                   )}
                   {previewState === "error" && (

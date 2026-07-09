@@ -4,7 +4,8 @@ import path from "path";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
-import { getProject, getSiteRoot } from "@/lib/projectManager";
+import { requireOwnedProject } from "@/lib/auth/projectAccess";
+import { getSiteRoot } from "@/lib/projectManager";
 import { collectFiles } from "@/lib/previewShared";
 import { restoreProjectFiles } from "@/lib/storage";
 
@@ -26,10 +27,8 @@ export async function GET(req: NextRequest, { params }: Params) {
   }
 
   const { id } = await params;
-  const project = await getProject(session.supabase, id);
-  if (!project) {
-    return NextResponse.json({ error: "Not found", code: "NOT_FOUND" }, { status: 404 });
-  }
+  const access = await requireOwnedProject(session, id);
+  if ("error" in access) return access.error;
 
   const projectDir = getSiteRoot(id);
   const forceSync = new URL(req.url).searchParams.get("sync") === "1";

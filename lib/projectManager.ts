@@ -22,6 +22,8 @@ export interface ModificationRecord {
   instruction: string;
   modifiedAt: string;
   touchedFiles: string[];
+  /** Intent router category for this round — optional on legacy rows. */
+  intentCategory?: "conversation" | "read_only" | "plan_only" | "code_change";
   plan?: {
     analysis: string;
     changes: Array<{ path: string; action: string; reasoning: string }>;
@@ -75,6 +77,17 @@ export interface ProjectMetadata {
   currentGenerationRunId?: string | null;
   /** Data URL from pasted screenshot at create; consumed by intent / worker vision. */
   referenceImageDataUrl?: string | null;
+  /** Community listing + non-owner static preview (ADR-0002). */
+  publishPreview?: boolean;
+  /** Copy license; only meaningful when publishPreview is on. */
+  allowRemix?: boolean;
+  /** Reserved: listed | unlisted (UI not in v0.1). */
+  listing?: "listed" | "unlisted";
+  remixedFromProjectId?: string | null;
+  remixedFromTitle?: string | null;
+  remixedFromOwnerUsername?: string | null;
+  /** When static export last synced to site-previews storage. */
+  staticPreviewSyncedAt?: string | null;
 }
 
 interface ProjectRow {
@@ -104,6 +117,13 @@ interface ProjectRow {
   cover_image_updated_at: string | null;
   current_generation_run_id: string | null;
   reference_image_data_url: string | null;
+  publish_preview?: boolean | null;
+  allow_remix?: boolean | null;
+  listing?: string | null;
+  remixed_from_project_id?: string | null;
+  remixed_from_title?: string | null;
+  remixed_from_owner_username?: string | null;
+  static_preview_synced_at?: string | null;
 }
 
 function rowToMetadata(row: ProjectRow): ProjectMetadata {
@@ -138,7 +158,24 @@ function rowToMetadata(row: ProjectRow): ProjectMetadata {
     coverImageUpdatedAt: row.cover_image_updated_at ?? undefined,
     currentGenerationRunId: row.current_generation_run_id ?? undefined,
     referenceImageDataUrl: row.reference_image_data_url ?? null,
+    publishPreview: row.publish_preview === true,
+    allowRemix: row.allow_remix === true,
+    listing: row.listing === "unlisted" ? "unlisted" : "listed",
+    remixedFromProjectId: row.remixed_from_project_id ?? null,
+    remixedFromTitle: row.remixed_from_title ?? null,
+    remixedFromOwnerUsername: row.remixed_from_owner_username ?? null,
+    staticPreviewSyncedAt: row.static_preview_synced_at ?? null,
   };
+}
+
+/** True when a usable static preview exists for Publish Preview gating. */
+export function hasUsableStaticPreview(
+  project: Pick<ProjectMetadata, "staticPreviewSyncedAt" | "status">
+): boolean {
+  return (
+    typeof project.staticPreviewSyncedAt === "string" &&
+    project.staticPreviewSyncedAt.trim().length > 0
+  );
 }
 
 export function getSiteRoot(projectId: string): string {
@@ -167,6 +204,13 @@ interface ProjectListRow {
   owner_username: string | null;
   cover_image_status: ProjectCoverImageStatus | null;
   cover_image_storage_path: string | null;
+  publish_preview?: boolean | null;
+  allow_remix?: boolean | null;
+  listing?: string | null;
+  remixed_from_project_id?: string | null;
+  remixed_from_title?: string | null;
+  remixed_from_owner_username?: string | null;
+  static_preview_synced_at?: string | null;
 }
 
 export type ProjectFolderFilter = "all" | "uncategorized" | string;
@@ -175,9 +219,10 @@ export type { ProjectOwnerOption } from "./projectOwnerOptions";
 export { listProjectOwnerOptions } from "./projectOwnerOptions";
 
 /**
- * Fast list query for dashboard/autocomplete.
+ * Fast list query for Workspace / Community / admin.
  * Avoid selecting heavy JSON columns (blueprint/build_steps/generated_files/modification_history).
- * Pass `userId` to scope to one account (folder filters apply). Omit `userId` for all users (global gallery).
+ * Pass `userId` to scope to one account (folder filters apply).
+ * Omit `userId` only for admin/service-role or Community list (with other filters).
  */
 export async function listProjectsSummary(
   db: SupabaseClient,
@@ -186,16 +231,22 @@ export async function listProjectsSummary(
     limit?: number;
     offset?: number;
     folder?: ProjectFolderFilter;
-    /** When listing globally (`userId` omitted), optionally restrict to one owner */
+    /** When listing without `userId` (admin/community), optionally restrict to one owner */
     filterOwnerUserId?: string | null;
+    /** Community discovery: publish_preview + listed only */
+    communityListed?: boolean;
   }
 ): Promise<ProjectMetadata[]> {
   let query = db
     .from("projects")
     .select(
-      "id,name,user_prompt,status,created_at,updated_at,completed_at,error,verification_status,model_id,generation_mode,folder_id,user_id,owner_username,cover_image_status,cover_image_storage_path"
+      "id,name,user_prompt,status,created_at,updated_at,completed_at,error,verification_status,model_id,generation_mode,folder_id,user_id,owner_username,cover_image_status,cover_image_storage_path,publish_preview,allow_remix,listing,remixed_from_project_id,remixed_from_title,remixed_from_owner_username,static_preview_synced_at"
     )
     .order("created_at", { ascending: false });
+
+  if (options.communityListed) {
+    query = query.eq("publish_preview", true).eq("listing", "listed");
+  }
 
   if (options.userId) {
     query = query.eq("user_id", options.userId);
@@ -248,7 +299,61 @@ export async function listProjectsSummary(
     ownerUsername: row.owner_username ?? undefined,
     coverImageStatus: row.cover_image_status ?? null,
     coverImageStoragePath: row.cover_image_storage_path ?? undefined,
+    publishPreview: row.publish_preview === true,
+    allowRemix: row.allow_remix === true,
+    listing: row.listing === "unlisted" ? "unlisted" : "listed",
+    remixedFromProjectId: row.remixed_from_project_id ?? null,
+    remixedFromTitle: row.remixed_from_title ?? null,
+    remixedFromOwnerUsername: row.remixed_from_owner_username ?? null,
+    staticPreviewSyncedAt: row.static_preview_synced_at ?? null,
   }));
+}
+
+/**
+ * Update Publish Preview / Allow Remix. Clears remix when preview is off.
+ * Enabling preview requires a usable static preview.
+ */
+export async function setProjectPublishSettings(
+  db: SupabaseClient,
+  id: string,
+  patch: { publishPreview?: boolean; allowRemix?: boolean },
+  current: ProjectMetadata
+): Promise<ProjectMetadata> {
+  let publishPreview = current.publishPreview === true;
+  let allowRemix = current.allowRemix === true;
+
+  if (patch.publishPreview !== undefined) {
+    publishPreview = patch.publishPreview;
+  }
+  if (patch.allowRemix !== undefined) {
+    allowRemix = patch.allowRemix;
+  }
+
+  if (publishPreview && !hasUsableStaticPreview(current)) {
+    throw new Error("STATIC_PREVIEW_REQUIRED");
+  }
+  if (!publishPreview) {
+    allowRemix = false;
+  }
+  if (allowRemix && !publishPreview) {
+    allowRemix = false;
+  }
+
+  const { data, error } = await db
+    .from("projects")
+    .update({
+      publish_preview: publishPreview,
+      allow_remix: allowRemix,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    throw new Error(`[projectManager] setProjectPublishSettings failed: ${error?.message}`);
+  }
+  return rowToMetadata(data as ProjectRow);
 }
 
 export async function getProject(db: SupabaseClient, id: string): Promise<ProjectMetadata | null> {

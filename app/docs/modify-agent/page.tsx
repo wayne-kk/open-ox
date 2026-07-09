@@ -188,17 +188,14 @@ export default function ModifyAgentPage() {
           <P>
             每次修改运行都可以访问之前的修改记录作为上下文。记忆从两个来源合并并去重：
           </P>
-          <Pre>{`// DB 历史（跨 session 持久化）
-const dbHistory = project.modificationHistory.map(r => ({
-  instruction: r.instruction,
-  summary: \`\${r.plan.analysis} Files: \${r.touchedFiles.join(", ")}\`,
-}));
+          <Pre>{`// Modify history turn（结构化一轮对话）
+// instruction · assistantText · touchedFiles · intentCategory? · awaitingReply
+const dbHistory = project.modificationHistory.map(fromModificationRecord);
+const sessionHistory = conversationHistory.map(fromClientPayload);
 
-// Session 历史（从客户端传入）
-const merged = [
-  ...dbHistory,
-  ...sessionHistory.filter(h => !seenInstructions.has(h.instruction)),
-].slice(-10); // 最多 10 轮`}</Pre>
+const merged = mergeModifyHistoryTurns(dbHistory, sessionHistory).slice(-10);
+// agent prompt: formatHistoryForAgent（正文 + 另行列 Files）
+// router prompt: formatRecentHistoryForRouter（只要正文）`}</Pre>
           <P>
             用户可以在修改输入框中输入 <Code>/clear</Code> 重置 session 记忆。
             <Code>/memory</Code> 命令打开调试面板，显示将注入下次 prompt 的完整合并历史。

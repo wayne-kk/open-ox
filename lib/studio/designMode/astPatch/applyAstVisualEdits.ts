@@ -27,7 +27,8 @@ export interface AstPatchFailure {
 
 export type AstVisualEdit =
   | { kind: "text"; source: OxSourceMeta; before: string; after: string }
-  | { kind: "style"; source: OxSourceMeta; property: DesignModeProperty; before: string; after: string };
+  | { kind: "style"; source: OxSourceMeta; property: DesignModeProperty; before: string; after: string }
+  | { kind: "className"; source: OxSourceMeta; before: string; after: string };
 
 function hasSource(edit: VisualEdit): edit is VisualEdit & AstVisualEdit {
   return Boolean((edit as { source?: unknown }).source);
@@ -100,12 +101,13 @@ function patchTextInSource(sourceFile: ts.SourceFile, node: ts.JsxElement, befor
   return applyReplacements(sourceFile.text, replacements);
 }
 
-function patchClassInSource(
-  sourceFile: ts.SourceFile,
-  node: ts.JsxElement | ts.JsxSelfClosingElement,
-  property: DesignModeProperty,
-  value: string
-): string | AstPatchFailure {
+function isAstPatchFailure(value: unknown): value is AstPatchFailure {
+  return Boolean(value && typeof value === "object" && "ok" in value && (value as AstPatchFailure).ok === false);
+}
+
+function getStaticClassNameAttr(
+  node: ts.JsxElement | ts.JsxSelfClosingElement
+): { attr: ts.JsxAttribute; initializer: ts.StringLiteral } | AstPatchFailure {
   const opening = ts.isJsxElement(node) ? node.openingElement : node;
   const attr = opening.attributes.properties.find((prop) => attrName(prop) === "className");
   if (!attr || !ts.isJsxAttribute(attr) || !attr.initializer) {
@@ -114,10 +116,32 @@ function patchClassInSource(
   if (!ts.isStringLiteral(attr.initializer)) {
     return { ok: false, code: "DYNAMIC_CLASS_UNSUPPORTED", error: "This className is rendered from an expression and cannot be patched directly yet." };
   }
+  return { attr, initializer: attr.initializer };
+}
 
-  const next = upsertTailwindUtility(attr.initializer.text, property, value);
+function patchClassInSource(
+  sourceFile: ts.SourceFile,
+  node: ts.JsxElement | ts.JsxSelfClosingElement,
+  property: DesignModeProperty,
+  value: string
+): string | AstPatchFailure {
+  const found = getStaticClassNameAttr(node);
+  if (isAstPatchFailure(found)) return found;
+  const next = upsertTailwindUtility(found.initializer.text, property, value);
   return applyReplacements(sourceFile.text, [
-    { start: attr.initializer.getStart(sourceFile), end: attr.initializer.getEnd(), text: JSON.stringify(next) },
+    { start: found.initializer.getStart(sourceFile), end: found.initializer.getEnd(), text: JSON.stringify(next) },
+  ]);
+}
+
+function patchFullClassNameInSource(
+  sourceFile: ts.SourceFile,
+  node: ts.JsxElement | ts.JsxSelfClosingElement,
+  nextClassName: string
+): string | AstPatchFailure {
+  const found = getStaticClassNameAttr(node);
+  if (isAstPatchFailure(found)) return found;
+  return applyReplacements(sourceFile.text, [
+    { start: found.initializer.getStart(sourceFile), end: found.initializer.getEnd(), text: JSON.stringify(nextClassName) },
   ]);
 }
 
@@ -141,7 +165,7 @@ export async function applyAstVisualEdits(projectDir: string, edits: AstVisualEd
         error: "This text is rendered from an expression and cannot be patched directly yet.",
       };
     }
-    if (edit.kind === "style" && edit.source.classKind !== "static") {
+    if ((edit.kind === "style" || edit.kind === "className") && edit.source.classKind !== "static") {
       return {
         ok: false,
         code: "DYNAMIC_CLASS_UNSUPPORTED",
@@ -171,6 +195,8 @@ export async function applyAstVisualEdits(projectDir: string, edits: AstVisualEd
         return { ok: false, code: "STATIC_TEXT_NOT_FOUND", error: "Static text was not found in the source-mapped JSX element." };
       }
       patched = patchTextInSource(sourceFile, node, edit.before, edit.after);
+    } else if (edit.kind === "className") {
+      patched = patchFullClassNameInSource(sourceFile, node, edit.after);
     } else {
       patched = patchClassInSource(sourceFile, node, edit.property, edit.after);
     }

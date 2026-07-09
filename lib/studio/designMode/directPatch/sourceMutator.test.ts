@@ -8,6 +8,11 @@ describe("upsertTailwindUtility", () => {
     expect(next).toBe("font-bold text-[#ff0000]");
   });
 
+  it("replaces font size without dropping color arbitrary utilities", () => {
+    const next = upsertTailwindUtility("text-lg text-[#ff0000]", "fontSize", "24px");
+    expect(next).toBe("text-[#ff0000] text-[24px]");
+  });
+
   it("replaces font size with arbitrary px", () => {
     const next = upsertTailwindUtility("text-lg text-white", "fontSize", "24px");
     expect(next).toBe("text-white text-[24px]");

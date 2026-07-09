@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getProject } from "@/lib/projectManager";
 import { restoreProjectFiles, uploadGeneratedFiles, listProjectFiles, restoreSingleProjectFileFromStorage, copyTemplateFileIntoProjectIfPresent } from "@/lib/storage";
 import fs from "fs/promises";
 import path from "path";
 import { getSiteRoot } from "@/lib/projectManager";
 import { getSessionUser } from "@/lib/auth/session";
+import { requireOwnedProject } from "@/lib/auth/projectAccess";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -24,8 +24,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
         return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
     }
     const { id } = await params;
-    const project = await getProject(session.supabase, id);
-    if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    const access = await requireOwnedProject(session, id);
+    if ("error" in access) return access.error;
 
     const requestUrl = new URL(_req.url);
     const requestedPath = requestUrl.searchParams.get("path");
@@ -96,8 +96,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
     }
     const { id } = await params;
-    const project = await getProject(session.supabase, id);
-    if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    const access = await requireOwnedProject(session, id);
+    if ("error" in access) return access.error;
 
     let body: { path?: string; content?: string };
     try {
@@ -137,8 +137,8 @@ export async function POST(_req: NextRequest, { params }: Params) {
         return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
     }
     const { id } = await params;
-    const project = await getProject(session.supabase, id);
-    if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    const access = await requireOwnedProject(session, id);
+    if ("error" in access) return access.error;
 
     const restored = await restoreProjectFiles(id);
     return NextResponse.json({ restored, count: restored.length });
@@ -151,8 +151,8 @@ export async function PUT(_req: NextRequest, { params }: Params) {
         return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
     }
     const { id } = await params;
-    const project = await getProject(session.supabase, id);
-    if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    const access = await requireOwnedProject(session, id);
+    if ("error" in access) return access.error;
 
     // Collect all files in the project directory
     const projectDir = getSiteRoot(id);

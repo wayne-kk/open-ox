@@ -33,7 +33,13 @@ async function preparePreviewProjectForStudio(projectDir: string): Promise<boole
     }
   }
   const designModeSetup = await ensureDesignModeProjectSetup(projectDir);
-  return pkgSynced || designModeSetup.layoutPatched || designModeSetup.anchorsAdded > 0;
+  return (
+    pkgSynced ||
+    designModeSetup.layoutPatched ||
+    designModeSetup.instrumentationSynced ||
+    designModeSetup.sourceBackfilled ||
+    designModeSetup.anchorsAdded > 0
+  );
 }
 
 const execFileAsync = promisify(execFile);
@@ -219,7 +225,8 @@ async function teardownLocalPreviewDevServer(projectId: string, projectDir: stri
   await killOrphanNextDevForProject(projectId);
   await clearPersistedLocalPreview(projectId);
 
-  await sleep(hadLiveChild ? 1800 : 900);
+  // Brief pause so SIGTERM can release the port/lock; lock waiter covers the rest.
+  await sleep(hadLiveChild ? 350 : 150);
   await waitForNextDevLockReleased(projectDir);
 }
 
@@ -582,6 +589,8 @@ function startNextDevAndWait(
       reject(new Error(`next dev did not become ready within ${timeoutMs / 1000}s`));
     }, timeoutMs);
     const shell = process.platform === "win32";
+    // Prefer Turbopack (Next 16 default). Design Mode source maps are written to disk
+    // via backfillOxSourceInProject — do not force --webpack (very slow cold start).
     const child = spawn("npx", ["next", "dev", "-H", previewBindHost(), "-p", String(port)], {
       cwd: projectDir,
       stdio: ["ignore", "pipe", "pipe"],
@@ -756,7 +765,7 @@ export async function startLocalDevServer(
       projectId,
       "stopClearPersistStaleLockSleep",
       tTd,
-      hadLiveChild ? "sleptMs=1800" : "sleptMs=900"
+      hadLiveChild ? "sleptMs=350" : "sleptMs=150"
     );
 
     await ensurePreviewNextConfigAllowsStudioEmbed(projectDir);
@@ -843,11 +852,15 @@ export async function rebuildLocalDevServer(
   const hadLiveChild = !!(reg?.dev && !reg.dev.killed);
   const tTd = performance.now();
   await teardownLocalPreviewDevServer(projectId, projectDir);
-  timingLog(projectId, "rebuild.teardownKillSleep", tTd, hadLiveChild ? "sleptMs=1800" : "sleptMs=900");
+  timingLog(projectId, "rebuild.teardownKillSleep", tTd, hadLiveChild ? "sleptMs=350" : "sleptMs=150");
 
-  const tRm = performance.now();
-  await fs.rm(path.join(projectDir, ".next"), { recursive: true, force: true });
-  timingLog(projectId, "rebuild.rmDotNext", tRm);
+  // Keep .next cache by default — wiping it forces a full cold compile (often 15–30s+).
+  // Set OPEN_OX_PREVIEW_FORCE_CLEAN=1 only when debugging stale Turbopack/webpack state.
+  if (process.env.OPEN_OX_PREVIEW_FORCE_CLEAN?.trim() === "1") {
+    const tRm = performance.now();
+    await fs.rm(path.join(projectDir, ".next"), { recursive: true, force: true });
+    timingLog(projectId, "rebuild.rmDotNext", tRm);
+  }
 
   await ensurePreviewNextConfigAllowsStudioEmbed(projectDir);
   await preparePreviewProjectForStudio(projectDir);

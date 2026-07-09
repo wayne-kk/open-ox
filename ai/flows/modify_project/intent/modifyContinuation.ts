@@ -1,31 +1,13 @@
+import type { ModifyHistoryTurn } from "../history/modifyHistoryTurn";
 import type { ModifyIntentCategory } from "./modifyIntentRouter";
 
-export type ModifyHistoryTurn = {
-  instruction: string;
-  summary: string;
-  intentCategory?: ModifyIntentCategory;
-};
+export type { ModifyHistoryTurn };
 
 const META_GREETING_RE =
   /^(你好|您好|hi|hello|嗨|在吗|谢谢|感谢|多谢|help|\/help|\/clear|\/memory)$/i;
 
 const AFFIRMATIVE_REPLY_RE =
   /^(是的|好的|好|对|嗯|行|可以|确认|按这个|就这个|ok|okay|yes|yep|sure|第一个|第二个|第三个|第[一二三四五1-5个]+|[A-Da-d][选项]?)$/i;
-
-export function mergeModifyHistoryTurns(
-  dbHistory: ModifyHistoryTurn[],
-  sessionHistory: ModifyHistoryTurn[]
-): ModifyHistoryTurn[] {
-  const seenInstructions = new Set(dbHistory.map((h) => h.instruction));
-  return [
-    ...dbHistory,
-    ...sessionHistory.filter((h) => !seenInstructions.has(h.instruction)),
-  ];
-}
-
-export function isMetaGreetingOnly(text: string): boolean {
-  return META_GREETING_RE.test(text.trim());
-}
 
 function isShortContinuationReply(text: string): boolean {
   const trimmed = text.trim();
@@ -34,33 +16,8 @@ function isShortContinuationReply(text: string): boolean {
   return /^\d+(\.\d+)?(%|x|px|ms|s|秒|倍|倍速)?$/i.test(trimmed);
 }
 
-function stripSummaryFilesSuffix(summary: string): string {
-  return summary.replace(/\s*Files:[\s\S]*$/, "").trim();
-}
-
-/** True when the prior assistant turn likely expects a follow-up from the user. */
-export function lastTurnAwaitingReply(summary: string): boolean {
-  const body = stripSummaryFilesSuffix(summary);
-  if (!body) return false;
-
-  if (/[?？]/.test(body)) return true;
-
-  if (
-    /请(你|告|说|确认|补充|选择)|需要你|能否|是否可以|要不要|哪个|哪种|多少|哪一种|哪一项/.test(
-      body
-    )
-  ) {
-    return true;
-  }
-
-  if (/Files:\s*$/m.test(summary)) return true;
-  if (/Modified 0 file\(s\)|made no changes|but made no changes|未修改|0 file\(s\)/i.test(summary)) {
-    return true;
-  }
-
-  if (/确认执行|按这个计划修改|Planned target — not executed/i.test(body)) return true;
-
-  return false;
+export function isMetaGreetingOnly(text: string): boolean {
+  return META_GREETING_RE.test(text.trim());
 }
 
 export function detectContinuationReply(
@@ -72,7 +29,7 @@ export function detectContinuationReply(
   if (isMetaGreetingOnly(trimmed)) return false;
 
   const last = recentHistory[recentHistory.length - 1];
-  if (!lastTurnAwaitingReply(last.summary)) return false;
+  if (!last.awaitingReply) return false;
 
   if (isShortContinuationReply(trimmed)) return true;
   if (AFFIRMATIVE_REPLY_RE.test(trimmed)) return true;
@@ -86,7 +43,7 @@ export function mergeContinuationInstruction(
 ): string {
   const last = recentHistory[recentHistory.length - 1];
   const priorInstruction = last.instruction.trim();
-  const assistantReply = stripSummaryFilesSuffix(last.summary);
+  const assistantReply = last.assistantText.trim();
 
   return [
     "（续答上一轮对话）",
@@ -107,8 +64,8 @@ export function inferContinuationCategory(
     return last.intentCategory;
   }
 
-  const blob = `${last.instruction}\n${last.summary}`.toLowerCase();
-  if (/确认执行|按这个计划|planned target/i.test(last.summary)) {
+  const blob = `${last.instruction}\n${last.assistantText}`.toLowerCase();
+  if (/确认执行|按这个计划|planned target/i.test(last.assistantText)) {
     return "code_change";
   }
   if (/列个计划|改造计划|refactor 步骤|先别改|plan_only|规划/.test(blob)) {
@@ -169,14 +126,4 @@ export function applyContinuationRoutingOverrides(
   }
 
   return next;
-}
-
-export function formatRecentHistoryForRouter(turns: ModifyHistoryTurn[]): string {
-  if (turns.length === 0) return "";
-  return `\n\n## Recent modify conversation (oldest first — use for follow-up replies)\n${turns
-    .map(
-      (h, i) =>
-        `${i + 1}. User: "${h.instruction}"\n   Assistant: ${stripSummaryFilesSuffix(h.summary).slice(0, 600)}`
-    )
-    .join("\n")}\n`;
 }

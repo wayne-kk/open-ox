@@ -12,6 +12,7 @@ import {
 } from "@/lib/transport/agentStream.client";
 import { parseSseDataLine } from "@/lib/transport/agentStreamSse";
 import { trackEvent } from "@/lib/analytics/client";
+import { toClientHistoryPayload } from "@/ai/flows/modify_project/history/modifyHistoryTurn";
 
 function trackPreviewOpen(projectId: string) {
   trackEvent("preview_open", { projectId, path: "/studio" });
@@ -107,6 +108,9 @@ export interface BuildStudioState {
   projectId: string | null;
   setProjectId: (id: string | null) => void;
   projectLoading: boolean;
+  /** Remix lineage snapshots (display only). */
+  remixedFromTitle: string | null;
+  remixedFromOwnerUsername: string | null;
 
   // Right panel toggle
   rightPanel: RightPanel;
@@ -117,6 +121,10 @@ export interface BuildStudioState {
   previewState: "idle" | "starting" | "ready" | "error";
   previewError: string | null;
   previewVersion: number;
+  /** From preview API: local | storage | e2b */
+  previewBackend: "local" | "storage" | "e2b" | null;
+  /** local next-dev + Direct env — show floating Direct editor / allow PATCH */
+  directEditCapable: boolean;
   startPreview: () => Promise<void>;
   rebuildPreview: () => Promise<void>;
   /** After Design Mode direct patch — refresh iframe without full rebuild when possible. */
@@ -139,6 +147,8 @@ export interface BuildStudioState {
   modifyError: string | null;
   modifyIntentLabel: string;
   handleModify: () => Promise<void>;
+  setOnBeforeModifySend: (fn: (() => string | null) | null) => void;
+  setOnAfterModifySend: (fn: (() => void) | null) => void;
   clearModifyHistory: () => void;
   modifyHistory: ModifyRecord[];
   pendingModifyInstruction: string | null;
@@ -161,6 +171,23 @@ function modifyIntentLabelToCategory(
       return "plan_only";
     case "修改":
       return "code_change";
+    default:
+      return undefined;
+  }
+}
+
+function modifyIntentCategoryToLabel(
+  category?: "conversation" | "read_only" | "plan_only" | "code_change"
+): string | undefined {
+  switch (category) {
+    case "conversation":
+      return "对话";
+    case "read_only":
+      return "问答";
+    case "plan_only":
+      return "规划";
+    case "code_change":
+      return "修改";
     default:
       return undefined;
   }
@@ -323,6 +350,8 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
 
   const [projectId, setProjectId] = useState<string | null>(initialProjectId ?? null);
   const [projectLoading, setProjectLoading] = useState<boolean>(!!initialProjectId);
+  const [remixedFromTitle, setRemixedFromTitle] = useState<string | null>(null);
+  const [remixedFromOwnerUsername, setRemixedFromOwnerUsername] = useState<string | null>(null);
   const [rightPanel, setRightPanel] = useState<RightPanel>("topology");
 
   const [autoPreviewAfterBuild, setAutoPreviewAfterBuildState] = useState(true);
@@ -348,6 +377,8 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
   const [previewState, setPreviewState] = useState<"idle" | "starting" | "ready" | "error">("idle");
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewVersion, setPreviewVersion] = useState(0);
+  const [previewBackend, setPreviewBackend] = useState<"local" | "storage" | "e2b" | null>(null);
+  const [directEditCapable, setDirectEditCapable] = useState(false);
 
   const [modifyInstruction, setModifyInstruction] = useState("");
   const [modifyImage, setModifyImage] = useState<string | null>(null);
@@ -368,6 +399,8 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
   const [recoveryUnlocking, setRecoveryUnlocking] = useState(false);
 
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const onBeforeModifySendRef = useRef<(() => string | null) | null>(null);
+  const onAfterModifySendRef = useRef<(() => void) | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const previewUrlRef = useRef<string | null>(null);
@@ -467,8 +500,11 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     buildSteps?: unknown[]; generatedFiles?: string[]; blueprint?: unknown;
     verificationStatus?: string; logDirectory?: string; error?: string;
     totalDuration?: number;
+    remixedFromTitle?: string | null;
+    remixedFromOwnerUsername?: string | null;
     modificationHistory?: Array<{
       instruction: string; modifiedAt: string;
+      intentCategory?: "conversation" | "read_only" | "plan_only" | "code_change";
       plan?: { analysis: string; changes: Array<{ path: string; action: string; reasoning: string }> };
       diffs?: Array<{ file: string; reasoning: string; patch: string; stats: { additions: number; deletions: number } }>;
       toolCalls?: Array<{ tool: string; args: Record<string, unknown>; result: string }>;
@@ -525,6 +561,16 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
 
   const applyProjectData = useCallback((project: ProjectData) => {
     setLastRunInput(project.userPrompt ?? null);
+    setRemixedFromTitle(
+      typeof project.remixedFromTitle === "string" && project.remixedFromTitle.trim()
+        ? project.remixedFromTitle.trim()
+        : null
+    );
+    setRemixedFromOwnerUsername(
+      typeof project.remixedFromOwnerUsername === "string" && project.remixedFromOwnerUsername.trim()
+        ? project.remixedFromOwnerUsername.trim()
+        : null
+    );
     if (project.modelId) setSelectedModel(project.modelId);
     if (project.modificationHistory?.length) {
       setModifyHistory(project.modificationHistory.map((r) => ({
@@ -537,6 +583,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         thinking: r.thinking ?? [],
         error: r.error ?? null,
         completedAt: r.modifiedAt,
+        intentLabel: modifyIntentCategoryToLabel(r.intentCategory),
       })));
     }
     const restoredBuildSteps = (project.buildSteps ?? []) as import("../types/build-studio").BuildStep[];
@@ -660,6 +707,16 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         if (sseActiveRef.current) {
           // Still apply non-step metadata (prompt, model, history)
           setLastRunInput(project.userPrompt ?? null);
+          setRemixedFromTitle(
+            typeof project.remixedFromTitle === "string" && project.remixedFromTitle.trim()
+              ? project.remixedFromTitle.trim()
+              : null
+          );
+          setRemixedFromOwnerUsername(
+            typeof project.remixedFromOwnerUsername === "string" && project.remixedFromOwnerUsername.trim()
+              ? project.remixedFromOwnerUsername.trim()
+              : null
+          );
           if (project.modelId) setSelectedModel(project.modelId);
           setProjectLoading(false);
           return;
@@ -1121,6 +1178,27 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     }
   }
 
+  const applyPreviewMeta = useCallback((data: {
+    url?: string;
+    previewBackend?: string;
+    directEditCapable?: boolean;
+  }) => {
+    if (data.previewBackend === "local" || data.previewBackend === "storage" || data.previewBackend === "e2b") {
+      setPreviewBackend(data.previewBackend);
+    }
+    if (typeof data.directEditCapable === "boolean") {
+      setDirectEditCapable(data.directEditCapable);
+    }
+  }, []);
+
+  const setOnBeforeModifySend = useCallback((fn: (() => string | null) | null) => {
+    onBeforeModifySendRef.current = fn;
+  }, []);
+
+  const setOnAfterModifySend = useCallback((fn: (() => void) | null) => {
+    onAfterModifySendRef.current = fn;
+  }, []);
+
   // ── Preview ──────────────────────────────────────────────────────────
   const startPreview = useCallback(async () => {
     if (!projectId) return;
@@ -1135,6 +1213,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       if (res.ok) {
         const data = await res.json();
         if (session !== previewSessionRef.current) return;
+        applyPreviewMeta(data);
         setPreviewUrl(data.url);
         setPreviewVersion((v) => v + 1);
         setPreviewState("ready");
@@ -1150,7 +1229,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       setPreviewError(e instanceof Error ? e.message : "Network error");
       setPreviewState("error");
     }
-  }, [projectId]);
+  }, [applyPreviewMeta, projectId]);
 
   const rebuildPreview = useCallback(async () => {
     if (!projectId) return;
@@ -1165,6 +1244,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       if (res.ok) {
         const data = await res.json();
         if (session !== previewSessionRef.current) return;
+        applyPreviewMeta(data);
         setPreviewUrl(data.url);
         setPreviewVersion((v) => v + 1);
         setPreviewState("ready");
@@ -1180,11 +1260,15 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       setPreviewError(e instanceof Error ? e.message : "Network error");
       setPreviewState("error");
     }
-  }, [projectId]);
+  }, [applyPreviewMeta, projectId]);
 
   const bumpPreviewAfterDirectPatch = useCallback((url?: string | null) => {
-    if (url) setPreviewUrl(url);
-    setPreviewVersion((v) => v + 1);
+    if (url) {
+      setPreviewUrl((prev) => (prev === url ? prev : url));
+    }
+    // Do not bump previewVersion here. Remounting the iframe races next compile and
+    // flashes the pre-edit UI (looks like Apply failed). Design Mode COMMIT_PREVIEW
+    // keeps the live DOM correct; local next HMR applies the written source in place.
   }, []);
 
   const openPreviewAfterBuild = useCallback(
@@ -1203,6 +1287,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         if (res.ok) {
           const data = await res.json();
           if (session !== previewSessionRef.current) return;
+          applyPreviewMeta(data);
           setPreviewUrl(data.url);
           setPreviewVersion((v) => v + 1);
           setPreviewState("ready");
@@ -1219,7 +1304,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         setPreviewState("error");
       }
     },
-    []
+    [applyPreviewMeta]
   );
 
   /**
@@ -1251,6 +1336,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       }
       const data = await res.json();
       lastEnsureAliveAtRef.current = Date.now();
+      applyPreviewMeta(data);
       if (data.status === "ok" && data.url) {
         // Serve is alive — update URL in case it changed (sandbox reconnect)
         if (data.url !== previewUrlRef.current) {
@@ -1268,7 +1354,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       // Network blips are common; don't force restart from a single failed check.
       return;
     }
-  }, [projectId]);
+  }, [projectId, applyPreviewMeta]);
 
   // Track the previous rightPanel value to detect tab switches
   const prevRightPanelRef = useRef<RightPanel>(rightPanel);
@@ -1295,9 +1381,16 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
   // ── Modify ───────────────────────────────────────────────────────────
   const handleModify = useCallback(async () => {
     if (!modifyInstruction.trim() || modifying || !projectId) return;
+
+    const selectionPrefix = onBeforeModifySendRef.current?.() ?? null;
+    const instructionToSend = selectionPrefix
+      ? `${selectionPrefix}\n\nUser request:\n${modifyInstruction.trim()}`
+      : modifyInstruction;
+    onAfterModifySendRef.current?.();
+
     const capturedImage = modifyImage;
     setModifyImage(null);
-    setPendingModifyInstruction(modifyInstruction);
+    setPendingModifyInstruction(instructionToSend);
     setPendingModifyImage(capturedImage);
     setModifying(true);
     setUserInputScrollNonce((nonce) => nonce + 1);
@@ -1376,7 +1469,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
           setModifyInstruction("");
           setModifyImage(null);
           setModifyHistory((prev) => [...prev, {
-            instruction: modifyInstruction,
+            instruction: instructionToSend,
             image: capturedImage ?? null,
             plan: modifyPlanRef.current,
             steps: modifyStepsRef.current,
@@ -1401,19 +1494,23 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userInstruction: modifyInstruction,
+          userInstruction: instructionToSend,
           clearContext: contextCleared,
           ...(secureSession ? { clientPublicKey: secureSession.clientPublicKeySpki } : {}),
           ...(capturedImage ? { imageBase64: capturedImage } : {}),
-          conversationHistory: contextCleared ? [] : modifyHistory.filter((r) => !r.isSystemMessage).map((r) => ({
-            instruction: r.instruction,
-            summary: r.plan?.analysis
-              ? `${r.plan.analysis} Files: ${r.diffs.map((d) => d.file).join(", ")}`
-              : r.error
-                ? `Failed: ${r.error}`
-                : `Modified ${r.diffs.length} file(s)`,
-            intentCategory: modifyIntentLabelToCategory(r.intentLabel),
-          })),
+          conversationHistory: contextCleared
+            ? []
+            : modifyHistory
+                .filter((r) => !r.isSystemMessage)
+                .map((r) =>
+                  toClientHistoryPayload({
+                    instruction: r.instruction,
+                    analysis: r.plan?.analysis,
+                    error: r.error,
+                    touchedFiles: r.diffs.map((d) => d.file),
+                    intentCategory: modifyIntentLabelToCategory(r.intentLabel),
+                  })
+                ),
         }),
       });
 
@@ -1451,7 +1548,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
           setModifyInstruction("");
           setModifyImage(null);
           setModifyHistory((prev) => [...prev, {
-            instruction: modifyInstruction,
+            instruction: instructionToSend,
             image: capturedImage ?? null,
             plan: modifyPlanRef.current,
             steps: modifyStepsRef.current,
@@ -1472,7 +1569,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       const msg = err instanceof Error ? err.message : "Unknown error";
       setModifyError(msg);
       setModifyHistory((prev) => [...prev, {
-        instruction: modifyInstruction,
+        instruction: instructionToSend,
         image: capturedImage ?? null,
         plan: modifyPlanRef.current,
         steps: modifyStepsRef.current,
@@ -1488,7 +1585,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       setPendingModifyInstruction(null);
       setPendingModifyImage(null);
     }
-  }, [modifyInstruction, modifyImage, modifying, projectId, selectedModel, modifyHistory, openPreviewAfterBuild]);
+  }, [modifyInstruction, modifyImage, modifying, projectId, selectedModel, modifyHistory, openPreviewAfterBuild, contextCleared]);
 
   // ── Computed ─────────────────────────────────────────────────────────
   const flowStart =
@@ -1506,11 +1603,14 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     intentImage, setIntentImage,
     selectedModel, setSelectedModel, availableModels,
     projectId, setProjectId, projectLoading,
+    remixedFromTitle, remixedFromOwnerUsername,
     rightPanel, setRightPanel,
-    previewUrl, previewState, previewError, previewVersion, startPreview, rebuildPreview, bumpPreviewAfterDirectPatch,
+    previewUrl, previewState, previewError, previewVersion, previewBackend, directEditCapable,
+    startPreview, rebuildPreview, bumpPreviewAfterDirectPatch,
     autoPreviewAfterBuild, setAutoPreviewAfterBuild,
     modifyInstruction, setModifyInstruction, modifyImage, setModifyImage, modifying,
     modifySteps, modifyPlan, modifyDiffs, modifyToolCalls, modifyThinking, modifyError, modifyIntentLabel, handleModify,
+    setOnBeforeModifySend, setOnAfterModifySend,
     clearModifyHistory: () => {
       setModifyHistory([{
         instruction: "/clear",

@@ -1,7 +1,9 @@
 /** Inject the Design Mode bridge script tag into exported static HTML. */
 
 export function designModeBridgeScriptPath(): string {
-  return "/studio/design-mode-bridge.js";
+  // Must NOT live under /studio/* — that prefix is auth-gated in proxy.ts,
+  // and the preview iframe (other origin/port) cannot send Studio cookies.
+  return "/open-ox/design-mode-bridge.js";
 }
 
 export function injectDesignModeBridgeIntoHtml(html: string, scriptSrc: string): string {

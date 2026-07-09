@@ -13,6 +13,7 @@
   var hoverOverlay = null;
   var previewBackup = null;
   var previewTextBackup = null;
+  var previewClassBackup = null;
   var trackingSelection = false;
 
   function ensureOverlay(kind) {
@@ -155,6 +156,7 @@
 
   function buildPayload(el) {
     var trimmed = (el.textContent || "").replace(/\s+/g, " ").trim();
+    var oxSource = findOxSource(el);
     return {
       tagName: el.tagName,
       id: el.id || null,
@@ -162,6 +164,9 @@
       textPreview: textPreview(el),
       textContent: trimmed,
       canEditText: canEditText(el),
+      source: oxSource.source,
+      textKind: oxSource.textKind,
+      classKind: oxSource.classKind,
       oxId: findOxId(el),
       selectorHint: buildSelectorHint(el),
       rect: readRect(el),
@@ -200,6 +205,7 @@
     selectedEl = el;
     previewBackup = null;
     previewTextBackup = null;
+    previewClassBackup = null;
     positionOverlay(el, "select");
     startSelectionTracking();
     notifyParent({
@@ -266,9 +272,37 @@
     if (selectedEl && previewTextBackup != null) {
       selectedEl.textContent = previewTextBackup;
     }
+    if (selectedEl && previewClassBackup != null) {
+      selectedEl.className = previewClassBackup;
+    }
     previewBackup = null;
     previewTextBackup = null;
+    previewClassBackup = null;
     if (selectedEl) positionOverlay(selectedEl, "select");
+  }
+
+  /** Keep current live class/text; clear inline style overrides so Tailwind wins after Apply. */
+  function commitPreviewState() {
+    if (selectedEl && previewBackup) {
+      var props = ["color", "fontSize", "padding", "borderRadius"];
+      for (var i = 0; i < props.length; i++) {
+        var key = props[i];
+        var cssKey =
+          key === "fontSize"
+            ? "font-size"
+            : key === "borderRadius"
+              ? "border-radius"
+              : key;
+        selectedEl.style.removeProperty(cssKey);
+      }
+    }
+    previewBackup = null;
+    previewTextBackup = null;
+    previewClassBackup = null;
+    if (selectedEl) {
+      positionOverlay(selectedEl, "select");
+      notifyRectUpdated();
+    }
   }
 
   function cssPropertyName(property) {
@@ -300,6 +334,15 @@
     notifyRectUpdated();
   }
 
+  function applyPreviewClassName(value) {
+    if (!selectedEl) return;
+    if (previewClassBackup == null) {
+      previewClassBackup = (selectedEl.className || "").toString();
+    }
+    selectedEl.className = value;
+    notifyRectUpdated();
+  }
+
   window.addEventListener("message", function (ev) {
     var data = ev.data;
     if (!data || data.protocol !== PROTOCOL) return;
@@ -318,8 +361,14 @@
       case "PREVIEW_TEXT":
         if (data.value != null) applyPreviewText(String(data.value));
         break;
+      case "PREVIEW_CLASSNAME":
+        if (data.value != null) applyPreviewClassName(String(data.value));
+        break;
       case "RESET_PREVIEW":
         resetPreviewState();
+        break;
+      case "COMMIT_PREVIEW":
+        commitPreviewState();
         break;
       case "PING":
         notifyParent({ protocol: PROTOCOL, action: "PONG" });

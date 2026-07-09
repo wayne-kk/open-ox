@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import { Navigation } from "./Navigation";
 
-/** 这些路由有全屏/独立布局；`/projects` 列表仍显示全局导航 */
+/** 这些路由有全屏/独立布局；`/projects` 与 `/community` 列表仍显示全局导航 */
 const HIDE_NAV_ROUTES = ["/projects/", "/studio/", "/auth"];
 
 export function ConditionalNav() {

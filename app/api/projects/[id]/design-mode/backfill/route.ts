@@ -3,7 +3,8 @@ import { NextResponse } from "next/server";
 import { backfillOxAnchorsInProject } from "@/lib/studio/designMode/backfillOxAnchors";
 import { isStudioDesignModeEnabled } from "@/lib/studio/designMode/featureFlag";
 import { getSessionUser } from "@/lib/auth/session";
-import { getProject, getSiteRoot } from "@/lib/projectManager";
+import { requireOwnedProject } from "@/lib/auth/projectAccess";
+import { getSiteRoot } from "@/lib/projectManager";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -18,10 +19,8 @@ export async function POST(_req: Request, { params }: Params) {
   }
 
   const { id } = await params;
-  const project = await getProject(session.supabase, id);
-  if (!project) {
-    return NextResponse.json({ error: "Project not found", code: "PROJECT_NOT_FOUND" }, { status: 404 });
-  }
+  const access = await requireOwnedProject(session, id);
+  if ("error" in access) return access.error;
 
   const projectDir = getSiteRoot(id);
   const result = await backfillOxAnchorsInProject(projectDir);

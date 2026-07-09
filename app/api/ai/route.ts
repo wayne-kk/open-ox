@@ -11,6 +11,7 @@ import {
   updateProjectStatus,
 } from "@/lib/projectManager";
 import { getSessionUser } from "@/lib/auth/session";
+import { requireOwnedProject } from "@/lib/auth/projectAccess";
 import { getUserDisplayName } from "@/lib/auth/display-name";
 import type { GenerationRunPayloadBody } from "@/lib/generation/types";
 import {
@@ -52,10 +53,9 @@ export async function POST(req: Request) {
     let effectiveGenerationMode = requestGenerationMode ?? "web";
     if (retryProjectId || preCreatedProjectId) {
       const lookupId = retryProjectId ?? preCreatedProjectId!;
-      const existing = await getProject(db, lookupId);
-      if (!existing) {
-        return NextResponse.json({ error: "Project not found" }, { status: 404 });
-      }
+      const access = await requireOwnedProject(session, lookupId);
+      if ("error" in access) return access.error;
+      const existing = access.project;
       if (!effectivePrompt) effectivePrompt = existing.userPrompt;
       if (!effectiveModel && existing.modelId) effectiveModel = existing.modelId;
       effectiveGenerationMode = existing.generationMode ?? "web";

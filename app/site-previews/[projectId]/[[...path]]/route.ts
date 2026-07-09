@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 
+import { getSessionUser } from "@/lib/auth/session";
+import { isAdminUser } from "@/lib/auth/roles";
+import { canAccessStaticPreview } from "@/lib/auth/projectAccess";
+import { getProject } from "@/lib/projectManager";
 import {
   SITE_PREVIEWS_BUCKET,
   resolveProxiedContentType,
 } from "@/lib/staticSitePreview";
-import { isStudioDesignModeEnabled } from "@/lib/studio/designMode/featureFlag";
+import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 import {
   designModeBridgeScriptPath,
   injectDesignModeBridgeIntoHtml,
@@ -12,6 +16,32 @@ import {
 } from "@/lib/studio/designMode/injectBridgeIntoHtml";
 
 export const runtime = "nodejs";
+
+async function assertStaticPreviewAccess(projectId: string): Promise<NextResponse | null> {
+  let admin;
+  try {
+    admin = createSupabaseServiceRoleClient();
+  } catch {
+    return new NextResponse("Server misconfigured", { status: 503 });
+  }
+  const project = await getProject(admin, projectId);
+  if (!project) {
+    return new NextResponse("Not found", { status: 404 });
+  }
+  const session = await getSessionUser();
+  const isAdmin = session
+    ? await isAdminUser({ supabase: session.supabase, userId: session.user.id })
+    : false;
+  if (
+    !canAccessStaticPreview(project, {
+      userId: session?.user.id ?? null,
+      isAdmin,
+    })
+  ) {
+    return new NextResponse("Forbidden", { status: 403 });
+  }
+  return null;
+}
 
 /**
  * Build Supabase Storage public object URL with each path segment encoded.
@@ -88,7 +118,6 @@ async function proxyFromStorage(
   }
 
   if (
-    isStudioDesignModeEnabled() &&
     shouldInjectDesignModeBridge(rel, contentType)
   ) {
     const html = await upstream.text();
@@ -116,6 +145,8 @@ export async function GET(req: Request, ctx: Ctx) {
   if (!id) {
     return new NextResponse("Missing projectId", { status: 400 });
   }
+  const denied = await assertStaticPreviewAccess(id);
+  if (denied) return denied;
   const segments = normalizePreviewPathSegments(path);
   if (!isSafePreviewSegments(segments)) {
     return new NextResponse("Invalid path", { status: 400 });
@@ -129,6 +160,10 @@ export async function HEAD(req: Request, ctx: Ctx) {
   const id = projectId?.trim();
   if (!id) {
     return new NextResponse(null, { status: 400 });
+  }
+  const denied = await assertStaticPreviewAccess(id);
+  if (denied) {
+    return new NextResponse(null, { status: denied.status });
   }
   const segments = normalizePreviewPathSegments(path);
   if (!isSafePreviewSegments(segments)) {

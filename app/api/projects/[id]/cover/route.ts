@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getProject } from "@/lib/projectManager";
 import { getSessionUser } from "@/lib/auth/session";
+import { isAdminUser } from "@/lib/auth/roles";
+import {
+  canAccessStaticPreview,
+  forbiddenProjectResponse,
+  projectNotFoundResponse,
+} from "@/lib/auth/projectAccess";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 
 type Params = { params: Promise<{ id: string }> };
@@ -17,11 +23,7 @@ function coverProxyBytesFlag(): boolean {
 
 /**
  * Project list cover JPEG (Storage `project-files` bucket).
- *
- * - **Logged in**: `getProject` via session client (RLS).
- * - **Guest**: `getProject` via service role only after caller has no session — same data as public gallery; only served when `coverImageStatus === "ready"`.
- *
- * Default: **302** to short-lived signed URL. `OPEN_OX_COVER_PROXY_BYTES=1` proxies bytes through this route.
+ * Owner / admin always; non-owners only when Publish Preview is on (slice 02).
  */
 export async function GET(_req: NextRequest, { params }: Params) {
   const { id } = await params;
@@ -34,13 +36,24 @@ export async function GET(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Server misconfigured", code: "SERVICE_ROLE" }, { status: 503 });
   }
 
-  const project = session
-    ? await getProject(session.supabase, id)
-    : await getProject(admin, id);
-
+  const project = await getProject(admin, id);
   if (!project) {
-    return NextResponse.json({ error: "Project not found", code: "PROJECT_NOT_FOUND" }, { status: 404 });
+    return projectNotFoundResponse();
   }
+
+  const isAdmin = session
+    ? await isAdminUser({ supabase: session.supabase, userId: session.user.id })
+    : false;
+
+  if (
+    !canAccessStaticPreview(project, {
+      userId: session?.user.id ?? null,
+      isAdmin,
+    })
+  ) {
+    return forbiddenProjectResponse();
+  }
+
   if (project.coverImageStatus !== "ready" || !project.coverImageStoragePath?.trim()) {
     return NextResponse.json({ error: "Cover not ready", code: "COVER_NOT_READY" }, { status: 404 });
   }
@@ -58,7 +71,6 @@ export async function GET(_req: NextRequest, { params }: Params) {
     if (!signErr && signed?.signedUrl) {
       return NextResponse.redirect(signed.signedUrl, {
         status: 302,
-        // Do not cache the redirect: the Location URL embeds a time-limited token.
         headers: { "Cache-Control": "private, no-store" },
       });
     }

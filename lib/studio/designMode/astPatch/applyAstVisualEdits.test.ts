@@ -70,6 +70,27 @@ describe("applyAstVisualEdits", () => {
     expect(await fs.readFile(abs, "utf-8")).toContain("text-[#ff3366]");
   });
 
+  it("replaces the full static className string", async () => {
+    const { projectDir, abs } = await writeFile(
+      h2Source.file,
+      `export function TestimonialsSection() {
+  return <h2 className="text-4xl text-ink">听听圈友们怎么说</h2>;
+}`
+    );
+
+    const result = await applyAstVisualEdits(projectDir, [
+      {
+        kind: "className",
+        source: h2Source,
+        before: "text-4xl text-ink",
+        after: "text-5xl font-bold text-[#ff3366]",
+      },
+    ]);
+
+    expect(result.ok).toBe(true);
+    expect(await fs.readFile(abs, "utf-8")).toContain('className="text-5xl font-bold text-[#ff3366]"');
+  });
+
   it("rejects dynamic JSX text instead of falling back to rg", async () => {
     const dynamicSource: OxSourceMeta = {
       version: 1,

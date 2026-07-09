@@ -3,12 +3,13 @@ import path from "path";
 import type { ChatMessage } from "@/ai/flows/generate_project/shared/llm";
 import type { ModifyIntentCategory } from "../intent/modifyIntentRouter";
 import {
-  mergeModifyHistoryTurns,
+  buildHistoryContext,
   type ModifyHistoryTurn,
-} from "../intent/modifyContinuation";
+} from "../history/modifyHistoryTurn";
 import { READ_ONLY_SYSTEM_PROMPT, SYSTEM_PROMPT } from "../prompt/systemPrompt";
 
 export type { ModifyHistoryTurn };
+export { buildHistoryContext };
 
 export async function tryReadFile(filePath: string): Promise<string | null> {
   try {
@@ -32,20 +33,6 @@ export async function buildFileTree(dir: string): Promise<string> {
   }
   await walk(dir, "");
   return r.join("\n");
-}
-
-export function buildHistoryContext(
-  dbHistory: ModifyHistoryTurn[],
-  sessionHistory: ModifyHistoryTurn[]
-): string {
-  const mergedHistory = mergeModifyHistoryTurns(dbHistory, sessionHistory);
-  const MAX_HISTORY_TURNS = 10;
-  const recentHistory = mergedHistory.slice(-MAX_HISTORY_TURNS);
-  return recentHistory.length > 0
-    ? `\n## Previous Modifications (conversation memory)\n${recentHistory
-      .map((h, i) => `${i + 1}. User: "${h.instruction}"\n   Result: ${h.summary}`)
-      .join("\n")}\n`
-    : "";
 }
 
 function userMessageFooter(category: ModifyIntentCategory): string {
