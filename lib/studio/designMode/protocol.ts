@@ -2,6 +2,8 @@
 
 export const DESIGN_MODE_PROTOCOL = "OPEN_OX_DESIGN_MODE" as const;
 
+import type { OxClassKind, OxSourceMeta, OxTextKind } from "./sourceInstrumentation/sourceMeta";
+
 export type DesignModeProperty = "color" | "fontSize" | "padding" | "borderRadius";
 
 export interface DesignModeElementRect {
@@ -19,7 +21,11 @@ export interface DesignModeElementPayload {
   /** Full trimmed text when the element is text-editable. */
   textContent?: string;
   canEditText?: boolean;
-  /** Nearest `data-ox-id` on self or ancestor — M2 source anchor. */
+  /** Dev-only source mapping injected by the preview transformer. */
+  source?: OxSourceMeta | null;
+  textKind?: OxTextKind;
+  classKind?: OxClassKind;
+  /** Legacy semantic anchor fallback. */
   oxId?: string | null;
   selectorHint: string;
   rect?: DesignModeElementRect;
@@ -66,6 +72,7 @@ export type DesignModeChildMessage =
 export type VisualEdit =
   | {
       kind: "style";
+      source?: OxSourceMeta;
       oxId?: string;
       selectorHint: string;
       elementLabel: string;
@@ -75,6 +82,7 @@ export type VisualEdit =
     }
   | {
       kind: "text";
+      source?: OxSourceMeta;
       oxId?: string;
       selectorHint: string;
       elementLabel: string;

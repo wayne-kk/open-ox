@@ -6,6 +6,7 @@ import { FileSnapshotTracker } from "@/ai/flows/modify_project/tracking/fileSnap
 import { tryFormatSource } from "@/ai/tools/system/prettierFormat";
 import { verifyWrittenSourceFile } from "@/ai/flows/generate_project/shared/tsxDiagnostics";
 import type { VisualEdit } from "../protocol";
+import { applyAstVisualEdits, splitAstVisualEdits, type AstPatchFailure } from "../astPatch/applyAstVisualEdits";
 import { findLineToPatch, patchTextInAnchorScope, resolveVisualEditTargetFile } from "./resolveTarget";
 import { patchClassNameOnLine, patchTextInFile, upsertTailwindUtility } from "./sourceMutator";
 import { isValidOxId } from "../anchor";
@@ -19,6 +20,11 @@ export interface DirectPatchResult {
 export interface DirectPatchFailure {
   ok: false;
   error: string;
+  code?: string;
+}
+
+function astFailureToDirectFailure(failure: AstPatchFailure): DirectPatchFailure {
+  return { ok: false, code: failure.code, error: failure.error };
 }
 
 async function writePatchedFile(absPath: string, content: string): Promise<void> {
@@ -92,10 +98,25 @@ export async function applyDirectVisualEdits(
     return { ok: false, error: "No edits to apply" };
   }
 
+  const { astEdits, fallbackEdits } = splitAstVisualEdits(edits);
+
+  if (astEdits.length > 0) {
+    const astResult = await applyAstVisualEdits(projectDir, astEdits);
+    if (!astResult.ok) return astFailureToDirectFailure(astResult);
+    if (fallbackEdits.length === 0) {
+      const tracker = new FileSnapshotTracker(projectDir);
+      for (const file of astResult.changedFiles) {
+        await tracker.capture(file);
+      }
+      const diffs = await tracker.computeAllDiffs();
+      return { ok: true, diffs, changedFiles: astResult.changedFiles };
+    }
+  }
+
   const tracker = new FileSnapshotTracker(projectDir);
   const touched = new Set<string>();
 
-  for (const edit of edits) {
+  for (const edit of fallbackEdits) {
     const target = await resolveVisualEditTargetFile(projectDir, edit, options?.classNameHint);
     if ("error" in target) return { ok: false, error: target.error };
 

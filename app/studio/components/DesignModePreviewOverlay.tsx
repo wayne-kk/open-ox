@@ -133,13 +133,24 @@ export function DesignModePreviewOverlay({
               <p className="mt-0.5 font-mono text-[10px] text-muted-foreground/80 truncate" title={selected.selectorHint}>
                 {selected.selectorHint}
               </p>
-              {selected.oxId ? (
+              {selected.source ? (
+                <>
+                  <p className="mt-0.5 font-mono text-[9px] text-emerald-400/80 truncate" title={selected.source.file}>
+                    source: {selected.source.file}:{selected.source.line}
+                  </p>
+                  {selected.textKind && selected.textKind !== "static" ? (
+                    <p className="mt-0.5 font-mono text-[9px] text-amber-400/80">
+                      {selected.textKind} text — Modify fallback may be required
+                    </p>
+                  ) : null}
+                </>
+              ) : selected.oxId ? (
                 <p className="mt-0.5 font-mono text-[9px] text-emerald-400/80 truncate" title={selected.oxId}>
-                  anchor: {selected.oxId}
+                  legacy anchor: {selected.oxId}
                 </p>
               ) : (
                 <p className="mt-0.5 font-mono text-[9px] text-amber-400/80">
-                  No data-ox-id — regenerate or add anchors
+                  No source map — rebuild preview
                 </p>
               )}
             </div>

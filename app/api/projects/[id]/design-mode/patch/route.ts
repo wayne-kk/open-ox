@@ -8,6 +8,7 @@ import { hotRefreshDevServer } from "@/lib/devServerManager";
 import { syncLocalProjectFingerprint } from "@/lib/previewFingerprintDb";
 import { getSessionUser } from "@/lib/auth/session";
 import { getProject, getSiteRoot } from "@/lib/projectManager";
+import { ensureProjectSourcesOnDisk } from "@/lib/storage";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -51,10 +52,12 @@ export async function POST(req: NextRequest, { params }: Params) {
       ? (body as { classNameHint: string }).classNameHint
       : undefined;
 
+  await ensureProjectSourcesOnDisk(id, { db: session.supabase });
+
   const projectDir = getSiteRoot(id);
   const result = await applyDirectVisualEdits(projectDir, edits, { classNameHint });
   if (!result.ok) {
-    return NextResponse.json({ error: result.error, code: "PATCH_FAILED" }, { status: 422 });
+    return NextResponse.json({ error: result.error, code: result.code ?? "PATCH_FAILED" }, { status: 422 });
   }
 
   try {

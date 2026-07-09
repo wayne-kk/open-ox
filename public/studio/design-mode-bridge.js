@@ -87,6 +87,34 @@
     return null;
   }
 
+  function decodeBase64Url(value) {
+    try {
+      var padded = value.replace(/-/g, "+").replace(/_/g, "/");
+      while (padded.length % 4) padded += "=";
+      return JSON.parse(atob(padded));
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function findOxSource(el) {
+    var node = el;
+    while (node && node.nodeType === 1) {
+      if (node.getAttribute) {
+        var encoded = node.getAttribute("data-ox-source");
+        if (encoded) {
+          return {
+            source: decodeBase64Url(encoded),
+            textKind: node.getAttribute("data-ox-text-kind") || null,
+            classKind: node.getAttribute("data-ox-class-kind") || null,
+          };
+        }
+      }
+      node = node.parentElement;
+    }
+    return { source: null, textKind: null, classKind: null };
+  }
+
   function buildSelectorHint(el) {
     var segments = [];
     var node = el;

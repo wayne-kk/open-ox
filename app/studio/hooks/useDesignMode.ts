@@ -260,10 +260,12 @@ export function useDesignMode({
     const edits: VisualEdit[] = [];
 
     const oxId = selected.oxId ?? undefined;
+    const source = selected.source ?? undefined;
 
     if (canEditText && baselineText !== textContent) {
       edits.push({
         kind: "text",
+        source,
         oxId,
         selectorHint: selected.selectorHint,
         elementLabel,
@@ -279,6 +281,7 @@ export function useDesignMode({
       if (before !== after) {
         edits.push({
           kind: "style",
+          source,
           oxId,
           selectorHint: selected.selectorHint,
           elementLabel,

@@ -36,6 +36,17 @@ const allowedDevOrigins = [...new Set([
 const staticBasePath = process.env.OPEN_OX_STATIC_BASE_PATH?.trim();
 
 const nextConfig: NextConfig = {
+  webpack(config, { dev }) {
+    if (dev && process.env.NEXT_PUBLIC_STUDIO_DESIGN_MODE === "1") {
+      config.module.rules.push({
+        test: /\.[jt]sx$/,
+        exclude: /node_modules/,
+        enforce: "pre",
+        use: [path.join(__dirname, "open-ox/source-instrumentation-loader.cjs")],
+      });
+    }
+    return config;
+  },
   allowedDevOrigins,
   ...(staticBasePath ? { basePath: staticBasePath } : {}),
   output: "export",
