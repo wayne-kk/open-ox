@@ -75,7 +75,7 @@ async function ripgrepFiles(
       .filter(Boolean)
       .map((abs) => path.relative(projectDir, abs));
   } catch (err) {
-    const e = err as NodeJS.ErrnoException & { stdout?: string; code?: string | number };
+    const e = err as { stdout?: string; code?: string | number };
     // rg exit 1 = no matches
     if (e.code === 1) return [];
     if (e.stdout?.trim()) {
