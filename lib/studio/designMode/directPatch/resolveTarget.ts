@@ -18,6 +18,48 @@ function classSearchTokens(className: string): string[] {
     .slice(0, 3);
 }
 
+const SKIP_DIRS = new Set(["node_modules", ".next", ".git", "dist", "build"]);
+
+/** Walk scopes for *.tsx containing a fixed string — used when `rg` is unavailable (CI). */
+async function scanTsxFilesForLiteral(
+  projectDir: string,
+  pattern: string,
+  scopes: string[]
+): Promise<string[]> {
+  const hits: string[] = [];
+
+  async function walk(absDir: string): Promise<void> {
+    let entries;
+    try {
+      entries = await fs.readdir(absDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const abs = path.join(absDir, entry.name);
+      if (entry.isDirectory()) {
+        if (SKIP_DIRS.has(entry.name)) continue;
+        await walk(abs);
+        continue;
+      }
+      if (!entry.isFile() || !entry.name.endsWith(".tsx")) continue;
+      try {
+        const content = await fs.readFile(abs, "utf-8");
+        if (content.includes(pattern)) {
+          hits.push(path.relative(projectDir, abs));
+        }
+      } catch {
+        /* skip unreadable */
+      }
+    }
+  }
+
+  for (const scope of scopes) {
+    await walk(path.join(projectDir, scope));
+  }
+  return hits;
+}
+
 async function ripgrepFiles(
   projectDir: string,
   pattern: string,
@@ -33,7 +75,8 @@ async function ripgrepFiles(
       .filter(Boolean)
       .map((abs) => path.relative(projectDir, abs));
   } catch (err) {
-    const e = err as { stdout?: string; code?: number };
+    const e = err as NodeJS.ErrnoException & { stdout?: string; code?: string | number };
+    // rg exit 1 = no matches
     if (e.code === 1) return [];
     if (e.stdout?.trim()) {
       return e.stdout
@@ -42,7 +85,8 @@ async function ripgrepFiles(
         .filter(Boolean)
         .map((abs) => path.relative(projectDir, abs));
     }
-    return [];
+    // Missing `rg` (ENOENT) or other spawn failures — FS scan so CI/tests still resolve.
+    return scanTsxFilesForLiteral(projectDir, pattern, scopes);
   }
 }
 
