@@ -8,7 +8,6 @@ import { HamsterLoader } from "@/components/ui/hamster-loader";
 import { useAuthUser } from "@/app/components/AuthHeaderActions";
 import { projectCoverDisplayUrl } from "@/lib/projectCoverUrls";
 import { cn } from "@/lib/utils";
-
 type CommunityProject = {
   id: string;
   name: string;
@@ -66,7 +65,7 @@ function CommunityCard({
         "group/card relative flex h-full flex-col overflow-hidden rounded-2xl border border-white/[0.07] bg-[#080a0e]",
         "shadow-[0_4px_20px_-8px_rgba(0,0,0,0.65)]",
         "transition-[box-shadow,border-color] duration-200 ease-out",
-        "hover:border-primary/40 hover:shadow-[0_12px_36px_-14px_rgba(247,147,26,0.22)]"
+        "hover:border-primary/40 hover:shadow-[var(--box-shadow-neon)]"
       )}
     >
       <a
@@ -122,7 +121,7 @@ function CommunityCard({
           ) : null}
         </div>
         <div className="mt-2 flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-white/40">
+          <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-white/65">
             <User className="h-3 w-3 shrink-0 opacity-70" />
             <span className="truncate font-mono">{owner}</span>
           </div>
@@ -273,7 +272,7 @@ export default function CommunityPage() {
   );
 
   return (
-    <main className="relative min-h-screen bg-[#030304]">
+    <main className="relative min-h-screen bg-background">
       <div className="relative z-[1] container mx-auto min-h-screen px-4 py-8 sm:px-6 md:py-10 lg:px-8">
         <div className="mb-8 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -284,13 +283,13 @@ export default function CommunityPage() {
             <h1 className="font-heading text-2xl font-semibold tracking-tight text-white sm:text-[28px]">
               社区
             </h1>
-            <p className="mt-1.5 max-w-xl text-[13px] leading-relaxed text-white/40">
+            <p className="mt-1.5 max-w-xl text-[13px] leading-relaxed text-white/65">
               浏览已发布的静态预览。点击卡片打开预览；编辑需作者开启 Remix 后拷贝到自己的工作区。
             </p>
           </div>
           <Link
-            href="/projects"
-            className="text-[12px] text-white/35 transition-colors hover:text-primary/80"
+            href="/dashboard"
+            className="text-[12px] text-white/60 transition-colors hover:text-primary/80"
           >
             我的项目 →
           </Link>
@@ -299,7 +298,7 @@ export default function CommunityPage() {
         {loading ? (
           <div className="flex flex-col items-center justify-center gap-4 py-32">
             <HamsterLoader size="sm" />
-            <p className="font-mono text-xs tracking-wider text-white/40">加载中...</p>
+            <p className="font-mono text-xs tracking-wider text-white/65">加载中...</p>
           </div>
         ) : error ? (
           <div className="flex flex-col items-center justify-center gap-4 py-32">
@@ -319,7 +318,7 @@ export default function CommunityPage() {
             </div>
             <div className="space-y-2 text-center">
               <h2 className="text-lg font-semibold text-white">还没有发布的作品</h2>
-              <p className="text-sm text-white/40">
+              <p className="text-sm text-white/65">
                 作者在 Studio 开启「发布预览」后，作品会出现在这里
               </p>
             </div>
@@ -339,12 +338,12 @@ export default function CommunityPage() {
             </div>
             <div ref={loadMoreRef} className="flex min-h-14 items-center justify-center py-6">
               {loadingMore ? (
-                <div className="flex items-center gap-2 font-mono text-xs tracking-wider text-white/40">
+                <div className="flex items-center gap-2 font-mono text-xs tracking-wider text-white/65">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   加载更多…
                 </div>
               ) : !hasMore ? (
-                <span className="font-mono text-[11px] tracking-wider text-white/25">
+                <span className="font-mono text-[11px] tracking-wider text-white/55">
                   已加载全部
                 </span>
               ) : null}

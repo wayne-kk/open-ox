@@ -1,8 +1,4 @@
-import fs from "fs/promises";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getSiteRoot } from "@/lib/projectManager";
-import { deleteProjectFiles } from "@/lib/storage";
-import { stopDevServer } from "@/lib/devServerManager";
 
 export interface ProjectFolderRow {
   id: string;
@@ -27,6 +23,36 @@ export async function listFolders(db: SupabaseClient, userId: string): Promise<P
   }));
 }
 
+export async function getFolder(
+  db: SupabaseClient,
+  userId: string,
+  folderId: string
+): Promise<ProjectFolderRow | null> {
+  const { data, error } = await db
+    .from("project_folders")
+    .select("id,name,created_at")
+    .eq("id", folderId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error || !data) return null;
+  const row = data as { id: string; name: string; created_at: string };
+  return { id: row.id, name: row.name, createdAt: row.created_at };
+}
+
+export async function countProjectsInFolder(
+  db: SupabaseClient,
+  userId: string,
+  folderId: string
+): Promise<number> {
+  const { count, error } = await db
+    .from("projects")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("folder_id", folderId);
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
 export async function createFolder(
   db: SupabaseClient,
   userId: string,
@@ -46,45 +72,63 @@ export async function createFolder(
   return { id: row.id, name: row.name, createdAt: row.created_at };
 }
 
+export async function renameFolder(
+  db: SupabaseClient,
+  userId: string,
+  folderId: string,
+  name: string
+): Promise<ProjectFolderRow> {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("Folder name is required");
+  const { data, error } = await db
+    .from("project_folders")
+    .update({ name: trimmed })
+    .eq("id", folderId)
+    .eq("user_id", userId)
+    .select("id,name,created_at")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Folder not found");
+  const row = data as { id: string; name: string; created_at: string };
+  return { id: row.id, name: row.name, createdAt: row.created_at };
+}
+
 /**
- * Deletes local artifacts and storage for each project, then deletes the folder row
- * (DB cascades delete project rows).
+ * Dissolves a folder: moves projects to root (`folder_id` null), then deletes the folder row.
+ * Does not delete projects.
  */
-export async function deleteFolderAndProjects(
+export async function dissolveFolder(
   db: SupabaseClient,
   userId: string,
   folderId: string
-): Promise<{ deletedProjectIds: string[] }> {
-  const { data: folder, error: folderErr } = await db
-    .from("project_folders")
-    .select("id")
-    .eq("id", folderId)
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (folderErr || !folder) {
-    throw new Error("Folder not found");
-  }
+): Promise<{ movedProjectCount: number }> {
+  const folder = await getFolder(db, userId, folderId);
+  if (!folder) throw new Error("Folder not found");
 
   const { data: rows, error: listErr } = await db
     .from("projects")
     .select("id")
+    .eq("user_id", userId)
     .eq("folder_id", folderId);
   if (listErr) throw new Error(listErr.message);
 
-  const deletedProjectIds = (rows ?? []).map((r: { id: string }) => r.id);
+  const projectIds = (rows ?? []).map((r: { id: string }) => r.id);
 
-  for (const projectId of deletedProjectIds) {
-    await stopDevServer(db, projectId);
-    await deleteProjectFiles(projectId).catch((err) =>
-      console.error(`[deleteFolder] Storage cleanup failed for ${projectId}:`, err)
-    );
-    await fs.rm(getSiteRoot(projectId), { recursive: true, force: true }).catch((err) =>
-      console.error(`[deleteFolder] Local rm failed for ${projectId}:`, err)
-    );
+  if (projectIds.length > 0) {
+    const { error: moveErr } = await db
+      .from("projects")
+      .update({ folder_id: null, updated_at: new Date().toISOString() })
+      .eq("user_id", userId)
+      .eq("folder_id", folderId);
+    if (moveErr) throw new Error(moveErr.message);
   }
 
-  const { error: delErr } = await db.from("project_folders").delete().eq("id", folderId).eq("user_id", userId);
+  const { error: delErr } = await db
+    .from("project_folders")
+    .delete()
+    .eq("id", folderId)
+    .eq("user_id", userId);
   if (delErr) throw new Error(delErr.message);
 
-  return { deletedProjectIds };
+  return { movedProjectCount: projectIds.length };
 }

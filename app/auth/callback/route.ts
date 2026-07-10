@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = safeRedirectTarget(searchParams.get("next") ?? "/projects");
+  const next = safeRedirectTarget(searchParams.get("next") ?? "/dashboard");
 
   if (code) {
     const supabaseResponse = NextResponse.redirect(new URL(next, origin));

@@ -9,6 +9,7 @@ import { stripCoverStoragePaths } from "@/lib/projectCoverUrls";
  * GET /api/projects/gallery — current user's Workspace projects.
  * Covers are loaded via `/api/projects/:id/cover?v=` on the client.
  * Query: offset, limit, folder (`all` | `uncategorized` | folder uuid).
+ * `all` / `uncategorized` = root only (`folder_id` null).
  * Response: { projects }
  */
 export async function GET(req: Request) {

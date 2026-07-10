@@ -81,7 +81,7 @@ export default function PreviewLaunchPage({ params }: { params: Promise<{ id: st
                 重试
               </button>
               <Link
-                href="/projects"
+                href="/dashboard"
                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/12 px-4 py-2.5 text-[12px] font-medium text-white/75 hover:bg-white/[0.06]"
               >
                 <ArrowLeft className="h-3.5 w-3.5" />
@@ -89,7 +89,7 @@ export default function PreviewLaunchPage({ params }: { params: Promise<{ id: st
               </Link>
               <Link
                 href={`/studio/${id}`}
-                onClick={() => captureAppReturnTo("/projects")}
+                onClick={() => captureAppReturnTo("/dashboard")}
                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/12 px-4 py-2.5 text-[12px] font-medium text-white/75 hover:bg-white/[0.06]"
               >
                 进入 Studio

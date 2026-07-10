@@ -12,13 +12,11 @@ import {
   UserAvatarButton,
   UserMenuDropdown,
 } from "./AuthHeaderActions";
+import { BrandMark } from "@/app/components/BrandMark";
 
 const NAV_LINKS = [
-  { href: "/projects", label: "项目" },
   { href: "/community", label: "社区" },
   { href: "/docs", label: "文档" },
-  { href: "/llm-test", label: "LLM 测试" },
-  { href: "/test-image", label: "图片测试" },
   { href: "/changelog", label: "更新日志" },
 ];
 
@@ -53,11 +51,9 @@ export function Navigation() {
       >
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 lg:px-8">
           {/* Logo */}
-          <Link href="/" className="group flex items-center gap-2.5">
-            <div className="relative flex h-7 w-7 items-center justify-center rounded-md border border-primary/50 bg-primary/10 transition-colors group-hover:bg-primary/20">
-              <span className="font-mono text-[10px] font-bold text-primary">OX</span>
-            </div>
-            <span className="font-mono text-[13px] font-bold tracking-[0.18em] text-foreground">OPEN-OX</span>
+          <Link href={user ? "/dashboard" : "/"} className="group flex items-center gap-2.5">
+            <BrandMark size={28} />
+            <span className="font-heading text-[13px] font-bold tracking-[0.18em] text-foreground">OPEN-OX</span>
           </Link>
 
           {/* Desktop nav — center */}
@@ -85,13 +81,19 @@ export function Navigation() {
             {!ready ? (
               <div className="hidden h-8 w-24 animate-pulse rounded-md bg-white/5 md:block" />
             ) : user ? (
-              <div className="hidden md:block">
+              <div className="hidden items-center gap-2 md:flex">
+                <Link
+                  href="/dashboard"
+                  className="defi-button px-3 py-1.5 text-xs"
+                >
+                  进入工作台
+                </Link>
                 <UserMenuDropdown user={user} afterSignOut="home" />
               </div>
             ) : (
               <Link
                 href="/auth"
-                className="hidden rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20 md:inline-flex"
+                className="defi-button hidden px-3 py-1.5 text-xs md:inline-flex"
               >
                 登录
               </Link>
@@ -133,6 +135,13 @@ export function Navigation() {
               <div className="mt-2 h-12 animate-pulse rounded-lg bg-white/5" />
             ) : user ? (
               <div className="mt-4 space-y-3 rounded-xl border border-white/10 bg-gradient-to-br from-white/[0.05] via-transparent to-primary/[0.04] p-4">
+                <Link
+                  href="/dashboard"
+                  onClick={() => setOpen(false)}
+                  className="flex w-full items-center justify-center rounded-lg border border-primary/40 bg-primary/10 py-2.5 text-[13px] font-medium text-primary transition hover:bg-primary/20"
+                >
+                  进入工作台
+                </Link>
                 <div className="flex items-start gap-3">
                   <UserAvatarButton user={user} className="h-10 w-10 shrink-0 ring-2 ring-primary/25" />
                   <div className="min-w-0 flex-1">

@@ -2,11 +2,16 @@
 
 import { usePathname } from "next/navigation";
 import { Footer } from "./Footer";
-
-const HIDE_FOOTER_ROUTES = ["/projects/", "/studio/", "/auth"];
+import { useAuthUser } from "./AuthHeaderActions";
 
 export function ConditionalFooter() {
   const pathname = usePathname();
-  if (HIDE_FOOTER_ROUTES.some((route) => pathname.startsWith(route))) return null;
+  const { user, ready } = useAuthUser();
+
+  if (pathname.startsWith("/studio/") || pathname.startsWith("/auth")) return null;
+  if (pathname.startsWith("/projects/")) return null;
+  if (pathname === "/dashboard") return null;
+  if (pathname === "/community" && ready && user) return null;
+
   return <Footer />;
 }

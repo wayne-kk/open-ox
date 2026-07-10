@@ -12,7 +12,7 @@ type AppBackButtonProps = {
 };
 
 export function AppBackButton({
-  fallback = "/projects",
+  fallback = "/dashboard",
   className,
   title = "返回上一页",
 }: AppBackButtonProps) {

@@ -32,16 +32,21 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get("state");
   const cookieState = request.cookies.get("feishu_oauth_state")?.value;
   const nextEncoded = request.cookies.get("feishu_oauth_next")?.value;
-  let nextPath = "/projects";
+  let nextPath = "/dashboard";
   if (nextEncoded) {
     try {
       nextPath = decodeURIComponent(nextEncoded);
     } catch {
-      nextPath = "/projects";
+      nextPath = "/dashboard";
     }
   }
   if (!nextPath.startsWith("/") || nextPath.startsWith("//")) {
-    nextPath = "/projects";
+    nextPath = "/dashboard";
+  }
+  // Keep in sync with safeRedirectTarget: marketing `/` is anonymous-only.
+  const pathOnly = nextPath.split("?")[0] ?? nextPath;
+  if (pathOnly === "/") {
+    nextPath = "/dashboard";
   }
 
   if (!code || !state || !cookieState || !timingSafeEqualString(state, cookieState)) {

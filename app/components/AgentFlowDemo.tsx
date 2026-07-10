@@ -55,7 +55,7 @@ function Node({
         <div
             className={`
         relative flex flex-col items-center gap-3 transition-all duration-500 cursor-default
-        ${state === "pending" ? "opacity-25 scale-95" : "opacity-100"}
+        ${state === "pending" ? "opacity-100 scale-95" : "opacity-100"}
         ${state === "active" ? "scale-[1.08] z-20" : ""}
         ${state === "failed" ? "scale-[1.02] z-20" : ""}
         ${hovered && state !== "pending" ? "scale-[1.12] z-30" : ""}
@@ -66,7 +66,7 @@ function Node({
             {/* Breathing glow — active node */}
             {state === "active" && (
                 <div className="absolute -inset-8 rounded-3xl pointer-events-none animate-[breathe_2s_ease-in-out_infinite]"
-                    style={{ background: "radial-gradient(circle, rgba(247,147,26,0.15) 0%, transparent 70%)" }}
+                    style={{ background: "radial-gradient(circle, rgba(0,255,136,0.15) 0%, transparent 70%)" }}
                 />
             )}
             {/* Done glow */}
@@ -87,8 +87,8 @@ function Node({
                 : state === "failed"
                     ? "bg-red-500/14 border-2 border-red-400/60 text-red-300 shadow-[0_0_24px_rgba(239,68,68,0.35)]"
                 : state === "active"
-                    ? "bg-primary/12 border-2 border-primary/60 text-primary shadow-[0_0_32px_rgba(247,147,26,0.35)]"
-                    : "bg-white/[0.03] border border-white/8 text-white/20"
+                    ? "bg-primary/12 border-2 border-primary/60 text-primary shadow-[0_0_32px_rgba(0,255,136,0.35)]"
+                    : "bg-white/[0.06] border border-white/25 text-white/75"
         }
       `}>
                 {state === "done" ? (
@@ -134,7 +134,7 @@ function Node({
                         ? "bg-red-500 border-red-400 text-black"
                     : state === "active"
                         ? "bg-primary border-primary text-black"
-                        : "bg-white/8 border-white/12 text-white/25"
+                        : "bg-white/15 border-white/30 text-white/80"
           }
         `}>
                     {index + 1}
@@ -165,8 +165,8 @@ function Node({
                         className="h-full rounded-full transition-[width] duration-100"
                         style={{
                             width: `${Math.min(displayProgress, 100)}%`,
-                            background: "linear-gradient(90deg, #f7931a, #fbbf24)",
-                            boxShadow: "0 0 10px rgba(247,147,26,0.5)",
+                            background: "linear-gradient(90deg, #00ff88, #00d4ff)",
+                            boxShadow: "0 0 10px rgba(0,255,136,0.5)",
                         }}
                     />
                 </div>
@@ -178,7 +178,7 @@ function Node({
             <span className={`
         font-mono text-[10px] sm:text-[11px] font-bold tracking-wider leading-tight text-center
         transition-colors duration-500
-        ${state === "done" ? "text-green-300" : state === "failed" ? "text-red-300" : state === "active" ? "text-white" : "text-white/25"}
+        ${state === "done" ? "text-green-300" : state === "failed" ? "text-red-300" : state === "active" ? "text-white" : "text-white/75"}
       `}>
                 {step.label}
             </span>
@@ -187,7 +187,7 @@ function Node({
             <span className={`
         font-mono text-[8px] sm:text-[9px] tracking-wide leading-tight text-center
         max-w-[110px] sm:max-w-[130px] transition-all duration-500
-        ${state === "active" ? "text-white/55 translate-y-0" : state === "done" ? "text-white/30" : state === "failed" ? "text-red-200/60" : "text-white/10"}
+        ${state === "active" ? "text-white/70 translate-y-0" : state === "done" ? "text-white/55" : state === "failed" ? "text-red-200/80" : "text-white/55"}
       `}>
                 {step.detail}
             </span>
@@ -267,7 +267,7 @@ function TopoEdges({ nodeRefs, edges, getState, repairActive }: {
             <defs>
                 <linearGradient id="grad-active" x1="0%" y1="0%" x2="100%" y2="0%">
                     <stop offset="0%" stopColor="rgba(34,197,94,0.5)" />
-                    <stop offset="100%" stopColor="rgba(247,147,26,0.7)" />
+                    <stop offset="100%" stopColor="rgba(0,255,136,0.7)" />
                 </linearGradient>
                 <linearGradient id="grad-repair" x1="0%" y1="0%" x2="100%" y2="0%">
                     <stop offset="0%" stopColor="rgba(251,146,60,0.6)" />
@@ -292,12 +292,12 @@ function TopoEdges({ nodeRefs, edges, getState, repairActive }: {
                   {/* Glow layer */}
                   {isLive && (
                       <path d={p.d} fill="none"
-                          stroke={bothDone ? "rgba(34,197,94,0.15)" : "rgba(247,147,26,0.12)"}
+                          stroke={bothDone ? "rgba(34,197,94,0.15)" : "rgba(0,255,136,0.12)"}
                           strokeWidth="10" filter="url(#glow-edge)" />
                   )}
                   {/* Base line */}
                   <path d={p.d} fill="none"
-                      stroke={bothDone ? "rgba(34,197,94,0.45)" : isLive ? "url(#grad-active)" : "rgba(255,255,255,0.04)"}
+                      stroke={bothDone ? "rgba(34,197,94,0.45)" : isLive ? "url(#grad-active)" : "rgba(255,255,255,0.18)"}
                       strokeWidth={isLive ? 2 : 1}
                       strokeDasharray={!isLive ? "4 8" : "none"}
                       className="transition-all duration-700" />
@@ -305,12 +305,12 @@ function TopoEdges({ nodeRefs, edges, getState, repairActive }: {
                   {/* Particle flow — multiple dots traveling along the path */}
                   {isLive && !bothDone && (
                           <>
-                              <circle r="2.5" fill="#f7931a" filter="url(#glow-particle)">
+                              <circle r="2.5" fill="#00ff88" filter="url(#glow-particle)">
                                   <animateMotion dur="1.5s" repeatCount="indefinite" keyTimes="0;1" keySplines="0.4 0 0.2 1" calcMode="spline">
                                       <mpath href={`#path-${p.id}`} />
                                   </animateMotion>
                               </circle>
-                              <circle r="1.5" fill="#fbbf24" opacity="0.7">
+                              <circle r="1.5" fill="#00d4ff" opacity="0.7">
                                   <animateMotion dur="1.5s" repeatCount="indefinite" begin="0.5s" keyTimes="0;1" keySplines="0.4 0 0.2 1" calcMode="spline">
                                       <mpath href={`#path-${p.id}`} />
                                   </animateMotion>

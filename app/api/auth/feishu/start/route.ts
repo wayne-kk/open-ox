@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
   const clientId = process.env.FEISHU_APP_ID!.trim();
 
   const { searchParams } = new URL(request.url);
-  const next = safeRedirectTarget(searchParams.get("next") ?? "/projects");
+  const next = safeRedirectTarget(searchParams.get("next") ?? "/dashboard");
 
   const redirectUri = `${origin}/api/auth/feishu/callback`;
   const state = generateOAuthState();

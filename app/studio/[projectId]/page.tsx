@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { GitBranch, Monitor, RefreshCw, ExternalLink, PanelLeftClose, PanelLeftOpen, FileCode2, ImagePlus, Loader2, MousePointer2, X } from "lucide-react";
 import { AppBackButton } from "@/app/components/AppBackButton";
+import { BrandMark } from "@/app/components/BrandMark";
 import { StudioPublishMenu } from "@/app/components/ProjectPublishPanel";
 import { cn } from "@/lib/utils";
 import { HamsterLoader } from "@/components/ui/hamster-loader";
@@ -219,14 +220,12 @@ function StudioInner({ projectId }: { projectId: string }) {
                 {/* Left: back + brand */}
                 <div className="flex items-center gap-3 min-w-0">
                   <AppBackButton
-                    fallback="/projects"
+                    fallback="/dashboard"
                     className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-white/10 bg-white/4 text-muted-foreground transition-colors hover:border-white/20 hover:text-foreground"
                   />
 
                   <div className="flex items-center gap-2 min-w-0">
-                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-primary/40 bg-primary/10">
-                      <span className="font-mono text-[9px] font-bold text-primary">OX</span>
-                    </div>
+                    <BrandMark size={24} />
                     <span className="font-mono text-[12px] font-semibold tracking-[0.12em] text-foreground hidden sm:block">
                       STUDIO
                     </span>
@@ -280,7 +279,7 @@ function StudioInner({ projectId }: { projectId: string }) {
                 <div className="flex items-center gap-2 shrink-0">
                   {projectId ? <StudioPublishMenu projectId={projectId} /> : null}
                   <Link
-                    href="/projects"
+                    href="/dashboard"
                     className="hidden sm:flex items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-3 py-1.5 font-mono text-[10px] text-muted-foreground transition-colors hover:border-white/15 hover:text-foreground"
                   >
                     Projects

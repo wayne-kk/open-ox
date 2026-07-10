@@ -10,7 +10,7 @@ import { MessagesSquare } from "lucide-react";
  */
 export function FeishuAuthBlock() {
   const searchParams = useSearchParams();
-  const redirect = searchParams.get("redirect") ?? "/projects";
+  const redirect = searchParams.get("redirect") ?? "/dashboard";
   const error = searchParams.get("error");
   const errorDetail = searchParams.get("msg");
   const [feishuEnabled, setFeishuEnabled] = useState<boolean | null>(null);
@@ -84,10 +84,6 @@ export function FeishuAuthBlock() {
         </p>
       ) : (
         <>
-          <p className="text-center text-xs text-muted-foreground">
-            使用飞书时将跳转授权，登录后回到站点（无需在 Supabase 配置飞书 Issuer）
-          </p>
-
           {feishuEnabled === null ? (
             <div className="flex w-full justify-center rounded-xl border border-white/8 bg-white/[0.03] py-3 text-xs text-muted-foreground">
               检查登录方式…

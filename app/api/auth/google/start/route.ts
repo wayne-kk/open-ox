@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!.trim();
 
   const { searchParams } = new URL(request.url);
-  const next = safeRedirectTarget(searchParams.get("next") ?? "/projects");
+  const next = safeRedirectTarget(searchParams.get("next") ?? "/dashboard");
   const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent(next)}`;
 
   const pendingCookies: {

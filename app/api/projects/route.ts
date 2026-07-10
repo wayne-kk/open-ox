@@ -7,6 +7,7 @@ import { getUserDisplayName } from "@/lib/auth/display-name";
 /**
  * GET /api/projects — current user's Workspace projects only.
  * Query: offset, limit, folder (`all` | `uncategorized` | folder uuid).
+ * `all` / `uncategorized` = root only (`folder_id` null).
  */
 export async function GET(req: Request) {
   try {

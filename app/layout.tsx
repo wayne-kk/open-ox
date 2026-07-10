@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono, Space_Grotesk, Syne } from "next/font/google";
+import { JetBrains_Mono, Orbitron, Share_Tech_Mono } from "next/font/google";
 import { ConditionalFooter } from "./components/ConditionalFooter";
 import { ConditionalNav } from "./components/ConditionalNav";
 import { AnalyticsProvider } from "@/components/analytics/AnalyticsProvider";
@@ -7,15 +7,10 @@ import { FaviconProvider } from "./contexts/FaviconContext";
 import { DynamicFavicon } from "./components/DynamicFavicon";
 import "./globals.css";
 
-const spaceGrotesk = Space_Grotesk({
-  variable: "--font-space-grotesk",
+const orbitron = Orbitron({
+  variable: "--font-orbitron",
   subsets: ["latin"],
-});
-
-const syne = Syne({
-  variable: "--font-syne",
-  subsets: ["latin"],
-  weight: ["700", "800"],
+  weight: ["500", "600", "700", "800", "900"],
 });
 
 const jetBrainsMono = JetBrains_Mono({
@@ -23,17 +18,16 @@ const jetBrainsMono = JetBrains_Mono({
   subsets: ["latin"],
 });
 
-const inter = Inter({
-  variable: "--font-inter",
+const shareTechMono = Share_Tech_Mono({
+  variable: "--font-share-tech",
   subsets: ["latin"],
+  weight: "400",
 });
 
 export const metadata: Metadata = {
   title: "Open-OX Studio",
   description: "AI-powered website builder — describe your idea, get a live site in seconds.",
 };
-
-
 
 export default function RootLayout({
   children,
@@ -43,7 +37,7 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" className="dark">
       <body
-        className={`${spaceGrotesk.variable} ${inter.variable} ${jetBrainsMono.variable} ${syne.variable} min-h-screen bg-background text-foreground antialiased`}
+        className={`${orbitron.variable} ${jetBrainsMono.variable} ${shareTechMono.variable} min-h-screen bg-background text-foreground antialiased`}
       >
         <FaviconProvider>
           <DynamicFavicon />

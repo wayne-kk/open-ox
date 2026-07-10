@@ -17,9 +17,9 @@ const BLOCKS = [
 
 const CODE_LINES = [
     { text: "analyzing requirements...", color: "text-primary/60", delay: 0 },
-    { text: "→ pages: home, about, pricing", color: "text-white/40", delay: 300 },
+    { text: "→ pages: home, about, pricing", color: "text-white/65", delay: 300 },
     { text: "generating design system", color: "text-accent-tertiary/60", delay: 800 },
-    { text: "→ palette: modern dark + accent", color: "text-white/40", delay: 1100 },
+    { text: "→ palette: modern dark + accent", color: "text-white/65", delay: 1100 },
     { text: "building NavbarSection", color: "text-primary/60", delay: 1500 },
     { text: "✓ NavbarSection ready", color: "text-green-400/60", delay: 1900 },
     { text: "building HeroSection", color: "text-primary/60", delay: 2100 },
@@ -62,14 +62,14 @@ export function HeroVisual() {
 
             <div className="relative grid grid-cols-5 gap-3">
                 {/* ── Left: Browser mockup ── */}
-                <div className="col-span-3 rounded-xl border border-white/10 bg-[#0a0c10] overflow-hidden shadow-[0_0_60px_-15px_rgba(247,147,26,0.2)]">
+                <div className="col-span-3 rounded-xl border border-white/10 bg-[#0a0c10] overflow-hidden shadow-[0_0_60px_-15px_rgba(0,255,136,0.25)]">
                     {/* Browser chrome */}
                     <div className="flex items-center gap-1.5 border-b border-white/8 px-3 py-2">
                         <div className="h-2 w-2 rounded-full bg-red-500/60" />
                         <div className="h-2 w-2 rounded-full bg-yellow-500/60" />
                         <div className="h-2 w-2 rounded-full bg-green-500/60" />
                         <div className="ml-2 flex-1 rounded-md bg-white/5 px-2 py-0.5">
-                            <span className="font-mono text-[8px] text-white/25">your-website.com</span>
+                            <span className="font-mono text-[8px] text-white/55">your-website.com</span>
                         </div>
                     </div>
 
@@ -119,10 +119,10 @@ export function HeroVisual() {
                 </div>
 
                 {/* ── Right: AI log panel ── */}
-                <div className="col-span-2 rounded-xl border border-white/10 bg-[#0a0c10] overflow-hidden shadow-[0_0_40px_-15px_rgba(247,147,26,0.15)]">
+                <div className="col-span-2 rounded-xl border border-white/10 bg-[#0a0c10] overflow-hidden shadow-[0_0_40px_-15px_rgba(0,255,136,0.2)]">
                     <div className="flex items-center gap-1.5 border-b border-white/8 px-3 py-2">
                         <span className="h-2 w-2 rounded-full bg-primary/60 animate-pulse" />
-                        <span className="font-mono text-[8px] text-white/30 tracking-wider">AI ENGINE</span>
+                        <span className="font-mono text-[8px] text-white/55 tracking-wider">AI ENGINE</span>
                     </div>
                     <div className="relative h-[320px] overflow-hidden p-2.5">
                         <div className="space-y-1">

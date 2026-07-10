@@ -32,7 +32,7 @@ function GoogleIcon({ className }: { className?: string }) {
  */
 export function GoogleAuthBlock() {
   const searchParams = useSearchParams();
-  const redirect = searchParams.get("redirect") ?? "/projects";
+  const redirect = searchParams.get("redirect") ?? "/dashboard";
   const error = searchParams.get("error");
   const errorDetail = searchParams.get("msg");
   const [googleEnabled, setGoogleEnabled] = useState<boolean | null>(null);

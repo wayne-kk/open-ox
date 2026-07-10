@@ -10,6 +10,7 @@ import {
 
 describe("isSafeInternalPath", () => {
   it("allows app routes with query strings", () => {
+    expect(isSafeInternalPath("/dashboard?mine=1&folder=all")).toBe(true);
     expect(isSafeInternalPath("/projects?mine=1&folder=all")).toBe(true);
     expect(isSafeInternalPath("/studio/abc-123")).toBe(true);
     expect(isSafeInternalPath("/")).toBe(true);
@@ -23,7 +24,7 @@ describe("isSafeInternalPath", () => {
 });
 
 describe("captureAppReturnTo + navigateAppBack", () => {
-  it("uses stored return path before history.back", () => {
+  it("migrates legacy /projects list URLs to /dashboard", () => {
     const storage = new Map<string, string>();
     vi.stubGlobal("sessionStorage", {
       getItem: (k: string) => storage.get(k) ?? null,
@@ -42,7 +43,7 @@ describe("captureAppReturnTo + navigateAppBack", () => {
     const push = vi.fn();
     navigateAppBack({ back, push });
 
-    expect(push).toHaveBeenCalledWith("/projects?mine=1&folder=work");
+    expect(push).toHaveBeenCalledWith("/dashboard?mine=1&folder=work");
     expect(back).not.toHaveBeenCalled();
     expect(peekAppReturnTo()).toBeNull();
     expect(storage.has(APP_RETURN_TO_KEY)).toBe(false);
@@ -79,9 +80,9 @@ describe("captureAppReturnTo + navigateAppBack", () => {
 
     const back = vi.fn();
     const push = vi.fn();
-    navigateAppBack({ back, push }, { fallback: "/projects" });
+    navigateAppBack({ back, push }, { fallback: "/dashboard" });
 
-    expect(push).toHaveBeenCalledWith("/projects");
+    expect(push).toHaveBeenCalledWith("/dashboard");
     expect(back).not.toHaveBeenCalled();
 
     vi.unstubAllGlobals();

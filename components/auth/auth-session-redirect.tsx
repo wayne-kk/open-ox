@@ -9,7 +9,7 @@ import { safeRedirectTarget } from "@/lib/auth/safe-redirect";
 export function AuthSessionRedirect() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirect = safeRedirectTarget(searchParams.get("redirect") ?? "/projects");
+  const redirect = safeRedirectTarget(searchParams.get("redirect") ?? "/dashboard");
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();

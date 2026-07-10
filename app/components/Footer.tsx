@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { Github, Twitter, Mail } from "lucide-react";
+import { BrandMark } from "@/app/components/BrandMark";
 
 const PRODUCT_LINKS = [
-    { href: "/studio", label: "Studio" },
-    { href: "/projects", label: "项目" },
+    { href: "/dashboard", label: "工作台" },
+    { href: "/community", label: "社区" },
     { href: "/docs", label: "文档" },
     { href: "/changelog", label: "更新日志" },
 ];
@@ -30,10 +31,8 @@ export function Footer() {
                   {/* Brand column */}
                   <div className="lg:col-span-2">
                       <Link href="/" className="inline-flex items-center gap-2.5 group">
-                          <div className="flex h-7 w-7 items-center justify-center rounded-md border border-primary/50 bg-primary/10">
-                              <span className="font-mono text-[10px] font-bold text-primary">OX</span>
-                          </div>
-                          <span className="font-mono text-[13px] font-bold tracking-[0.18em] text-foreground">
+                          <BrandMark size={28} />
+                          <span className="font-heading text-[13px] font-bold tracking-[0.18em] text-foreground">
                               OPEN-OX
                           </span>
                       </Link>
@@ -48,7 +47,7 @@ export function Footer() {
                       href={href}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/8 bg-white/3 text-muted-foreground/60 transition-all hover:border-white/20 hover:bg-white/6 hover:text-foreground"
+                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/8 bg-white/3 text-muted-foreground transition-all hover:border-white/20 hover:bg-white/6 hover:text-foreground"
                       aria-label={label}
                   >
                       <Icon className="h-3.5 w-3.5" />
@@ -59,7 +58,7 @@ export function Footer() {
 
                   {/* Product column */}
                   <div>
-                      <h3 className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground/60 mb-4">
+                      <h3 className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground mb-4">
                           产品
                       </h3>
                       <ul className="space-y-2.5">
@@ -78,7 +77,7 @@ export function Footer() {
 
                   {/* Resources column */}
                   <div>
-                      <h3 className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground/60 mb-4">
+                      <h3 className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground mb-4">
                           资源
                       </h3>
                       <ul className="space-y-2.5">
@@ -112,15 +111,15 @@ export function Footer() {
 
               {/* Bottom bar */}
               <div className="flex flex-col items-center justify-between gap-4 border-t border-white/6 py-6 sm:flex-row">
-                  <p className="font-mono text-[11px] text-muted-foreground/40">
+                  <p className="font-mono text-[11px] text-muted-foreground">
                       © {new Date().getFullYear()} Open-OX Studio. Built with AI.
                   </p>
                   <div className="flex items-center gap-4">
                       <div className="flex items-center gap-1.5">
                           <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-                          <span className="font-mono text-[10px] text-muted-foreground/50">All systems operational</span>
+                          <span className="font-mono text-[10px] text-muted-foreground">All systems operational</span>
                       </div>
-                      <span className="font-mono text-[10px] text-muted-foreground/30">v0.1.0</span>
+                      <span className="font-mono text-[10px] text-muted-foreground/70">v0.1.0</span>
                   </div>
               </div>
           </div>

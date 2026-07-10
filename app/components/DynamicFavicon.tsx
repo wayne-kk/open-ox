@@ -5,12 +5,12 @@ import { useFavicon, type FaviconState } from "@/app/contexts/FaviconContext";
 
 // ── Brand palette ────────────────────────────────────────────────────────────
 const BRAND = {
-  primary: "#f7931a",       // accent orange
+  primary: "#00ff88",       // accent orange
   secondary: "#ea580c",     // accent-secondary
   tertiary: "#ffd600",      // accent-tertiary
   white: "#ffffff",
   error: "#ef4444",         // destructive red
-  bg: "#030304",            // background
+  bg: "#0a0a0f",            // background
 };
 
 // ── Config ───────────────────────────────────────────────────────────────────
@@ -88,7 +88,7 @@ export function DynamicFavicon() {
 
       ctx.beginPath();
       ctx.arc(cx, cy, phase * 0.5 + 6, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(247, 147, 26, ${alpha * 0.6})`;
+      ctx.strokeStyle = `rgba(0,255,136, ${alpha * 0.6})`;
       ctx.lineWidth = 2;
       ctx.stroke();
     }

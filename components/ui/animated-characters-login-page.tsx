@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { FeishuAuthBlock } from "@/components/auth/feishu-auth-block";
 import { GoogleAuthBlock } from "@/components/auth/google-auth-block";
 import { AuthSessionRedirect } from "@/components/auth/auth-session-redirect";
@@ -346,21 +345,18 @@ function AuthPage() {
     setIsLoading(false);
   };
 
-  const gridBgClass =
-    "bg-[linear-gradient(to_right,rgb(255_255_255/0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgb(255_255_255/0.05)_1px,transparent_1px)] bg-[length:20px_20px]";
-
   return (
     <div className="relative min-h-screen">
       <AuthSessionRedirect />
       <div className="absolute left-4 top-4 z-50 lg:left-8 lg:top-8">
         <Button
           variant="ghost"
-          className="gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/50 lg:text-primary-foreground/90 lg:hover:bg-primary-foreground/10 lg:hover:text-primary-foreground"
+          className="h-10 gap-2 border border-primary-foreground/25 bg-primary-foreground px-4 font-mono text-[13px] font-medium tracking-wide text-primary shadow-[0_0_0_1px_rgba(10,10,15,0.08)] hover:bg-primary-foreground hover:text-primary/90 lg:hover:bg-white"
           asChild
         >
           <Link href="/">
-            <ArrowLeft className="size-4" />
-            返回 Home
+            <ArrowLeft className="size-4" strokeWidth={1.75} />
+            返回首页
           </Link>
         </Button>
       </div>
@@ -671,7 +667,6 @@ function AuthPage() {
           </div>
         </div>
 
-        <div className={cn("pointer-events-none absolute inset-0", gridBgClass)} />
         <div className="absolute top-1/4 right-1/4 size-64 bg-primary-foreground/10 rounded-full blur-3xl" />
         <div className="absolute bottom-1/4 left-1/4 size-96 bg-primary-foreground/5 rounded-full blur-3xl" />
       </div>

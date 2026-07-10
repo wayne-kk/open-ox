@@ -3,14 +3,24 @@ export const APP_RETURN_TO_KEY = "open-ox:app-return-to";
 
 const SAFE_PREFIXES = [
   "/",
+  "/dashboard",
   "/projects",
   "/studio",
   "/docs",
   "/auth",
+  "/community",
   "/llm-test",
   "/changelog",
   "/style-eval",
 ] as const;
+
+/** Map legacy workspace list URLs to /dashboard (keep /projects/:id). */
+export function migrateWorkspacePath(path: string): string {
+  if (path === "/projects" || path.startsWith("/projects?")) {
+    return `/dashboard${path.slice("/projects".length)}`;
+  }
+  return path;
+}
 
 export function isSafeInternalPath(path: string): boolean {
   if (!path.startsWith("/") || path.startsWith("//")) return false;
@@ -25,7 +35,9 @@ export function isSafeInternalPath(path: string): boolean {
 /** Remember where the user was before opening a nested route (e.g. Studio). */
 export function captureAppReturnTo(path?: string): void {
   if (typeof window === "undefined") return;
-  const target = path ?? `${window.location.pathname}${window.location.search}`;
+  const target = migrateWorkspacePath(
+    path ?? `${window.location.pathname}${window.location.search}`
+  );
   if (!isSafeInternalPath(target)) return;
   try {
     sessionStorage.setItem(APP_RETURN_TO_KEY, target);
@@ -38,7 +50,7 @@ export function peekAppReturnTo(): string | null {
   if (typeof window === "undefined") return null;
   try {
     const stored = sessionStorage.getItem(APP_RETURN_TO_KEY);
-    if (stored && isSafeInternalPath(stored)) return stored;
+    if (stored && isSafeInternalPath(stored)) return migrateWorkspacePath(stored);
   } catch {
     /* ignore */
   }
@@ -60,13 +72,13 @@ type AppRouter = { back: () => void; push: (href: string) => void };
  * Navigate back to the page the user came from:
  * 1. Explicit return path captured before entering Studio
  * 2. Browser history (router.back)
- * 3. Fallback (default `/projects`)
+ * 3. Fallback (default `/dashboard`)
  */
 export function navigateAppBack(
   router: AppRouter,
   options?: { fallback?: string }
 ): void {
-  const fallback = options?.fallback ?? "/projects";
+  const fallback = options?.fallback ?? "/dashboard";
   const stored = peekAppReturnTo();
   if (stored) {
     clearAppReturnTo();

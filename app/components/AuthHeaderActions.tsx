@@ -161,7 +161,7 @@ export function UserMenuDropdown({
         className="w-[min(calc(100vw-1.5rem),166px)] overflow-hidden rounded-2xl border border-white/12 bg-zinc-950/98 p-0 shadow-2xl shadow-black/50 backdrop-blur-xl"
       >
         <div className="relative border-b border-white/[0.08] bg-gradient-to-br from-primary/[0.12] via-transparent to-accent-tertiary/[0.06] px-3 py-3.5">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-20%,rgba(247,147,26,0.12),transparent)]" />
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-20%,rgba(0,255,136,0.12),transparent)]" />
           <div className="relative flex gap-2.5">
             <UserAvatarButton
               user={user}

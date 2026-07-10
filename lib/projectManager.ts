@@ -251,10 +251,11 @@ export async function listProjectsSummary(
 
   if (options.userId) {
     query = query.eq("user_id", options.userId);
+    // `all` and legacy `uncategorized` both mean root (folder_id IS NULL).
     const folder = options.folder ?? "all";
-    if (folder === "uncategorized") {
+    if (folder === "all" || folder === "uncategorized") {
       query = query.is("folder_id", null);
-    } else if (folder !== "all") {
+    } else {
       query = query.eq("folder_id", folder);
     }
   } else if (options.filterOwnerUserId) {

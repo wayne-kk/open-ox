@@ -70,7 +70,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     setDeleting(true);
     try {
       const res = await fetch(`/api/projects/${id}`, { method: "DELETE" });
-      if (res.ok) router.push("/projects");
+      if (res.ok) router.push("/dashboard");
     } catch { /* ignore */ }
     finally { setDeleting(false); }
   };
@@ -250,7 +250,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       <header className="relative z-10 border-b border-white/8 bg-background/75 backdrop-blur-xl shrink-0">
         <div className="mx-auto flex items-center justify-between gap-4 px-6 py-2 lg:px-8">
           <div className="flex items-center gap-4">
-            <Link href="/projects" className="defi-button-outline px-4 py-2 text-[11px] font-medium flex items-center gap-1.5">
+            <Link href="/dashboard" className="defi-button-outline px-4 py-2 text-[11px] font-medium flex items-center gap-1.5">
               <ArrowLeft className="h-4 w-4" />
               Projects
             </Link>
