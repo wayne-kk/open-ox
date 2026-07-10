@@ -3,11 +3,11 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
 import type { ProjectFolderFilter } from "@/lib/projectManager";
 import { listProjectsSummary } from "@/lib/projectManager";
-import { attachCoverSignedUrls, stripCoverStoragePaths } from "@/lib/projectCoverUrls";
-import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
+import { stripCoverStoragePaths } from "@/lib/projectCoverUrls";
 
 /**
- * GET /api/projects/gallery — current user's Workspace projects (+ cover signed URLs).
+ * GET /api/projects/gallery — current user's Workspace projects.
+ * Covers are loaded via `/api/projects/:id/cover?v=` on the client.
  * Query: offset, limit, folder (`all` | `uncategorized` | folder uuid).
  * Response: { projects }
  */
@@ -30,12 +30,6 @@ export async function GET(req: Request) {
     else if (folderParam !== "all") folder = folderParam;
 
     const { supabase: db } = session;
-    let admin;
-    try {
-      admin = createSupabaseServiceRoleClient();
-    } catch {
-      admin = null;
-    }
 
     const projectsRaw = await listProjectsSummary(db, {
       userId: session.user.id,
@@ -44,10 +38,7 @@ export async function GET(req: Request) {
       offset,
     });
 
-    const projects =
-      admin != null
-        ? stripCoverStoragePaths(await attachCoverSignedUrls(admin, projectsRaw))
-        : projectsRaw;
+    const projects = stripCoverStoragePaths(projectsRaw);
 
     return NextResponse.json(
       { projects },

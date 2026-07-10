@@ -19,6 +19,11 @@ import { GenerationAtlas } from "@/app/studio/components/GenerationAtlas";
 import { ProjectCodePanel } from "@/app/studio/components/ProjectCodePanel";
 import { useDesignMode } from "@/app/studio/hooks/useDesignMode";
 import { filterPipelineSteps } from "@/app/studio/lib/pipelineSteps";
+import {
+  COVER_CAPTURE_POLL_INTERVAL_MS,
+  COVER_CAPTURE_POLL_TIMEOUT_MS,
+  evaluateCoverCapturePoll,
+} from "@/lib/coverCaptureOrchestration";
 
 function formatMs(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
@@ -90,10 +95,10 @@ function StudioInner({ projectId }: { projectId: string }) {
   const [coverCaptureHint, setCoverCaptureHint] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!coverCaptureHint) return;
-    const t = setTimeout(() => setCoverCaptureHint(null), 10_000);
+    if (!coverCaptureHint || coverCaptureBusy) return;
+    const t = setTimeout(() => setCoverCaptureHint(null), 12_000);
     return () => clearTimeout(t);
-  }, [coverCaptureHint]);
+  }, [coverCaptureHint, coverCaptureBusy]);
 
   const dismissLineageBanner = useCallback(() => {
     setLineageDismissed(true);
@@ -114,7 +119,11 @@ function StudioInner({ projectId }: { projectId: string }) {
     setCoverCaptureHint(null);
     try {
       const res = await fetch(`/api/projects/${projectId}/cover/capture`, { method: "POST" });
-      const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        code?: string;
+        baselineUpdatedAt?: string | null;
+      };
       if (res.status === 401) {
         setCoverCaptureHint("请先登录后再更新封面图");
         return;
@@ -127,11 +136,49 @@ function StudioInner({ projectId }: { projectId: string }) {
         setCoverCaptureHint("服务端未配置封面截图（需要 SUPABASE_SERVICE_ROLE_KEY）");
         return;
       }
-      if (!res.ok && res.status !== 202) {
+      if (res.status !== 202 && res.status !== 409) {
         setCoverCaptureHint(data.error ?? `更新失败 (${res.status})`);
         return;
       }
-      setCoverCaptureHint("已开始截取当前预览首页，完成后请到项目列表查看新封面（约 1～3 分钟）");
+
+      const baselineUpdatedAt = data.baselineUpdatedAt ?? null;
+      if (res.status === 409) {
+        setCoverCaptureHint("已在截取中，正在等待当前任务完成…");
+      } else {
+        setCoverCaptureHint("正在截取封面…");
+      }
+
+      const started = Date.now();
+      while (Date.now() - started < COVER_CAPTURE_POLL_TIMEOUT_MS) {
+        await new Promise((r) => setTimeout(r, COVER_CAPTURE_POLL_INTERVAL_MS));
+        const pollRes = await fetch(`/api/projects/${projectId}`);
+        if (!pollRes.ok) continue;
+        const project = (await pollRes.json().catch(() => null)) as {
+          coverImageStatus?: string | null;
+          coverImageUpdatedAt?: string | null;
+          coverImageError?: string | null;
+        } | null;
+        if (!project) continue;
+        const step = evaluateCoverCapturePoll({
+          baselineUpdatedAt,
+          status: project.coverImageStatus,
+          updatedAt: project.coverImageUpdatedAt,
+          error: project.coverImageError,
+          elapsedMs: Date.now() - started,
+        });
+        if (step.verdict === "success") {
+          setCoverCaptureHint("封面已更新，可在项目列表查看");
+          return;
+        }
+        if (step.verdict === "failed") {
+          setCoverCaptureHint(
+            step.errorHint ? `封面截取失败：${step.errorHint}` : "封面截取失败，请重试"
+          );
+          return;
+        }
+        if (step.verdict === "timeout") break;
+      }
+      setCoverCaptureHint("截取仍在处理，请稍后到项目列表查看新封面");
     } catch {
       setCoverCaptureHint("网络错误，请稍后重试");
     } finally {

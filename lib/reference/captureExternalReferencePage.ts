@@ -3,7 +3,7 @@
  * SSRF: initial URL and the URL after navigation must pass {@link assertUrlSafeForServerFetch}.
  */
 
-import { chromium } from "playwright";
+import { launchChromium } from "@/lib/playwright/launchChromium";
 import { assertUrlSafeForServerFetch } from "@/lib/net/safePublicUrl";
 
 const VIEWPORT = { width: 1440, height: 900 };
@@ -42,11 +42,7 @@ export async function captureExternalReferencePage(startUrl: string): Promise<Re
     return { ok: false, error: msg };
   }
 
-  const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH?.trim();
-  const browser = await chromium.launch({
-    headless: true,
-    ...(executablePath ? { executablePath } : {}),
-  });
+  const browser = await launchChromium();
 
   try {
     const page = await browser.newPage({

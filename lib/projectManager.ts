@@ -204,6 +204,7 @@ interface ProjectListRow {
   owner_username: string | null;
   cover_image_status: ProjectCoverImageStatus | null;
   cover_image_storage_path: string | null;
+  cover_image_updated_at?: string | null;
   publish_preview?: boolean | null;
   allow_remix?: boolean | null;
   listing?: string | null;
@@ -240,7 +241,7 @@ export async function listProjectsSummary(
   let query = db
     .from("projects")
     .select(
-      "id,name,user_prompt,status,created_at,updated_at,completed_at,error,verification_status,model_id,generation_mode,folder_id,user_id,owner_username,cover_image_status,cover_image_storage_path,publish_preview,allow_remix,listing,remixed_from_project_id,remixed_from_title,remixed_from_owner_username,static_preview_synced_at"
+      "id,name,user_prompt,status,created_at,updated_at,completed_at,error,verification_status,model_id,generation_mode,folder_id,user_id,owner_username,cover_image_status,cover_image_storage_path,cover_image_updated_at,publish_preview,allow_remix,listing,remixed_from_project_id,remixed_from_title,remixed_from_owner_username,static_preview_synced_at"
     )
     .order("created_at", { ascending: false });
 
@@ -299,6 +300,7 @@ export async function listProjectsSummary(
     ownerUsername: row.owner_username ?? undefined,
     coverImageStatus: row.cover_image_status ?? null,
     coverImageStoragePath: row.cover_image_storage_path ?? undefined,
+    coverImageUpdatedAt: row.cover_image_updated_at ?? undefined,
     publishPreview: row.publish_preview === true,
     allowRemix: row.allow_remix === true,
     listing: row.listing === "unlisted" ? "unlisted" : "listed",

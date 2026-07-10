@@ -15,15 +15,10 @@ export const runtime = "nodejs";
 
 const BUCKET = "project-files";
 
-const SIGNED_URL_TTL_SEC = 3600;
-
-function coverProxyBytesFlag(): boolean {
-  return process.env.OPEN_OX_COVER_PROXY_BYTES?.trim() === "1";
-}
-
 /**
  * Project list cover JPEG (Storage `project-files` bucket).
  * Owner / admin always; non-owners only when Publish Preview is on (slice 02).
+ * Always proxies bytes (no signed-URL redirect) so `?v=` cache-busts the image the browser paints.
  */
 export async function GET(_req: NextRequest, { params }: Params) {
   const { id } = await params;
@@ -63,19 +58,6 @@ export async function GET(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Invalid cover path", code: "BAD_COVER_PATH" }, { status: 400 });
   }
   const storagePath = `${id}/${rel}`.replace(/\\/g, "/");
-
-  if (!coverProxyBytesFlag()) {
-    const { data: signed, error: signErr } = await admin.storage
-      .from(BUCKET)
-      .createSignedUrl(storagePath, SIGNED_URL_TTL_SEC);
-    if (!signErr && signed?.signedUrl) {
-      return NextResponse.redirect(signed.signedUrl, {
-        status: 302,
-        headers: { "Cache-Control": "private, no-store" },
-      });
-    }
-    console.warn("[GET /api/projects/:id/cover] createSignedUrl fallback to proxy:", signErr?.message);
-  }
 
   const { data, error } = await admin.storage.from(BUCKET).download(storagePath);
   if (error || !data) {

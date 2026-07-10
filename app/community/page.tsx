@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Globe2, Loader2, Sparkles, User } from "lucide-react";
 import { HamsterLoader } from "@/components/ui/hamster-loader";
 import { useAuthUser } from "@/app/components/AuthHeaderActions";
+import { projectCoverDisplayUrl } from "@/lib/projectCoverUrls";
 import { cn } from "@/lib/utils";
 
 type CommunityProject = {
@@ -13,7 +14,7 @@ type CommunityProject = {
   name: string;
   ownerUsername?: string | null;
   coverImageStatus?: "pending" | "ready" | "failed" | null;
-  coverImageUrl?: string;
+  coverImageUpdatedAt?: string | null;
   allowRemix?: boolean;
   publishPreview?: boolean;
   createdAt?: string;
@@ -82,9 +83,9 @@ function CommunityCard({
           )}
         >
           {hasCover ? (
-            /* eslint-disable-next-line @next/next/no-img-element -- signed Storage URL or API fallback */
+            /* eslint-disable-next-line @next/next/no-img-element -- versioned app cover proxy */
             <img
-              src={project.coverImageUrl ?? `/api/projects/${project.id}/cover`}
+              src={projectCoverDisplayUrl(project.id, project.coverImageUpdatedAt)}
               alt=""
               className="relative z-0 h-full w-full object-contain object-center"
               loading="lazy"

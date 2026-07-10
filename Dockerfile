@@ -8,7 +8,8 @@
 #   (B) `docker compose --env-file .env.local build`, or
 #   (C) `docker build --build-arg NEXT_PUBLIC_...=...` (overrides when non-empty).
 #
-# Do not commit production secrets in `.env.local` to git — use CI secrets when possible.
+# Cover capture: Playwright Chromium is installed at build time into /ms-playwright;
+# the runner installs OS libs + Noto CJK fonts so headless screenshots render Chinese.
 
 FROM node:20-bookworm-slim AS base
 RUN corepack enable
@@ -34,23 +35,51 @@ ARG NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=
 ARG NEXT_PUBLIC_SITE_URL=
 
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 RUN if [ -n "${NEXT_PUBLIC_SUPABASE_URL}" ]; then export NEXT_PUBLIC_SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL}"; fi && \
     if [ -n "${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY}" ]; then export NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY="${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY}"; fi && \
     if [ -n "${NEXT_PUBLIC_SITE_URL}" ]; then export NEXT_PUBLIC_SITE_URL="${NEXT_PUBLIC_SITE_URL}"; fi && \
-    pnpm build
+    pnpm build && \
+    pnpm exec playwright install chromium
 
 FROM base AS runner
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 RUN groupadd --system --gid 1001 nodejs \
   && useradd --system --uid 1001 --gid nodejs nextjs
+
+# Playwright OS deps + CJK-capable fonts for cover screenshots (tofu without these).
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    fonts-noto-core \
+    fonts-noto-cjk \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libcups2 \
+    libdbus-1-3 \
+    libdrm2 \
+    libgbm1 \
+    libgtk-3-0 \
+    libnspr4 \
+    libnss3 \
+    libx11-xcb1 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxkbcommon0 \
+    libxrandr2 \
+    ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 # Runtime `fs` reads under ai/flows/generate_project/prompts/skills (design-system catalog); not always traced into standalone alone.
 COPY --from=builder --chown=nextjs:nodejs /app/ai/flows/generate_project/prompts/skills ./ai/flows/generate_project/prompts/skills
+COPY --from=builder --chown=nextjs:nodejs /ms-playwright /ms-playwright
 
 USER nextjs
 EXPOSE 3000

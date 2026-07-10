@@ -47,6 +47,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     status: project.status,
     ownerUsername: project.ownerUsername ?? null,
     coverImageStatus: project.coverImageStatus ?? null,
+    coverImageUpdatedAt: project.coverImageUpdatedAt ?? null,
     publishPreview: project.publishPreview === true,
     allowRemix: project.allowRemix === true,
     remixedFromTitle: project.remixedFromTitle ?? null,

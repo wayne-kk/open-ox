@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 
 import { listProjectsSummary } from "@/lib/projectManager";
-import { attachCoverSignedUrls, stripCoverStoragePaths } from "@/lib/projectCoverUrls";
+import { stripCoverStoragePaths } from "@/lib/projectCoverUrls";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 
 const COMMUNITY_LIST_MAX = 50;
 
 /**
  * GET /api/community/projects — public Community list (Publish Preview + listed).
+ * Covers are loaded via `/api/projects/:id/cover?v=` on the client.
  * Query: offset, limit (capped).
  */
 export async function GET(req: Request) {
@@ -35,7 +36,7 @@ export async function GET(req: Request) {
       offset,
     });
 
-    const projects = stripCoverStoragePaths(await attachCoverSignedUrls(admin, projectsRaw));
+    const projects = stripCoverStoragePaths(projectsRaw);
 
     return NextResponse.json(
       { projects },

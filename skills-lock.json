@@ -85,6 +85,12 @@
       "skillPath": "skills/redesign-skill/SKILL.md",
       "computedHash": "b405eee0e0e80fc243f731d9aa368bca307e356db7e6157d27101d369dac6726"
     },
+    "refactoring-ui": {
+      "source": "wondelai/skills",
+      "sourceType": "github",
+      "skillPath": "refactoring-ui/SKILL.md",
+      "computedHash": "0c4f141cfd7e2d2d3b7dfd819bec15d0e9980b433b6376e6fbac3d33ff05c7d8"
+    },
     "research": {
       "source": "mattpocock/skills",
       "sourceType": "github",

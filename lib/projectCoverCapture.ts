@@ -3,14 +3,20 @@
  * Server-only. Requires SUPABASE_SERVICE_ROLE_KEY and Chromium (Playwright).
  */
 
+import {
+  COVER_CAPTURE_FONT_READY_TIMEOUT_MS,
+  COVER_CAPTURE_POST_FONT_SETTLE_MS,
+  isFreshCoverPending,
+  type CoverScheduleResult,
+} from "@/lib/coverCaptureOrchestration";
 import { polishCoverJpeg } from "@/lib/coverImagePolish";
 import { startDevServer, getExistingLocalPreviewUrl } from "@/lib/devServerManager";
 import { previewUrlAllowedForScreenshot } from "@/lib/previewScreenshotUrl";
-import { updateProjectCoverState } from "@/lib/projectManager";
+import { launchChromium } from "@/lib/playwright/launchChromium";
+import { getProject, updateProjectCoverState } from "@/lib/projectManager";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { uploadCoverScreenshot } from "@/lib/storage";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
-import { chromium } from "playwright";
 
 const COVER_VIEWPORT_WIDTH = 1480;
 const COVER_VIEWPORT_HEIGHT = 960;
@@ -33,14 +39,24 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function waitForFontsReadyFailOpen(
+  page: { evaluate: (fn: () => Promise<unknown>) => Promise<unknown> },
+  timeoutMs: number
+): Promise<void> {
+  try {
+    await Promise.race([
+      page.evaluate(() => (document.fonts ? document.fonts.ready : Promise.resolve())),
+      sleep(timeoutMs),
+    ]);
+  } catch {
+    /* fail-open */
+  }
+}
+
 async function screenshotHomeViewport(previewEntryUrl: string): Promise<Buffer> {
   previewUrlAllowedForScreenshot(previewEntryUrl);
 
-  const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH?.trim();
-  const browser = await chromium.launch({
-    headless: true,
-    ...(executablePath ? { executablePath } : {}),
-  });
+  const browser = await launchChromium();
   try {
     const page = await browser.newPage({
       viewport: {
@@ -60,7 +76,8 @@ async function screenshotHomeViewport(previewEntryUrl: string): Promise<Buffer> 
     })();
     await page.goto(home, { waitUntil: "load", timeout: 120_000 });
     await page.evaluate(() => window.scrollTo(0, 0));
-    await sleep(1200);
+    await waitForFontsReadyFailOpen(page, COVER_CAPTURE_FONT_READY_TIMEOUT_MS);
+    await sleep(COVER_CAPTURE_POST_FONT_SETTLE_MS);
     const buf = await page.screenshot({
       type: "jpeg",
       quality: 82,
@@ -84,32 +101,60 @@ async function jpegWithCoverPolish(raw: Buffer): Promise<Buffer> {
   }
 }
 
-export type RunCaptureProjectCoverOptions = {
-  /** Manual Studio trigger: run even when OPEN_OX_COVER_CAPTURE=0 */
-  bypassEnvDisable?: boolean;
-};
+async function readCoverBaseline(
+  db: SupabaseClient,
+  projectId: string
+): Promise<{ status: string | null; updatedAt: string | null }> {
+  const project = await getProject(db, projectId);
+  return {
+    status: project?.coverImageStatus ?? null,
+    updatedAt: project?.coverImageUpdatedAt ?? null,
+  };
+}
 
-export async function runCaptureProjectCover(
-  projectId: string,
-  options?: RunCaptureProjectCoverOptions
-): Promise<void> {
+type AcquireOutcome =
+  | { ok: true; baselineUpdatedAt: string | null; db: SupabaseClient }
+  | { ok: false; reason: "in_flight" | "no_service_role"; baselineUpdatedAt: string | null };
+
+/**
+ * Reserve process-local slot first (sync), then refuse if DB has a fresh pending from another worker.
+ */
+async function tryAcquireCoverCapture(projectId: string): Promise<AcquireOutcome> {
   let db: SupabaseClient;
   try {
     db = createSupabaseServiceRoleClient();
   } catch {
-    console.warn("[projectCoverCapture] SKIP: SUPABASE_SERVICE_ROLE_KEY not configured");
-    return;
+    return { ok: false, reason: "no_service_role", baselineUpdatedAt: null };
   }
 
+  if (inFlightCover.has(projectId)) {
+    const baseline = await readCoverBaseline(db, projectId);
+    return { ok: false, reason: "in_flight", baselineUpdatedAt: baseline.updatedAt };
+  }
+  inFlightCover.add(projectId);
+
+  try {
+    const baseline = await readCoverBaseline(db, projectId);
+    if (isFreshCoverPending(baseline.status, baseline.updatedAt, Date.now())) {
+      inFlightCover.delete(projectId);
+      return { ok: false, reason: "in_flight", baselineUpdatedAt: baseline.updatedAt };
+    }
+    return { ok: true, baselineUpdatedAt: baseline.updatedAt, db };
+  } catch (e) {
+    inFlightCover.delete(projectId);
+    throw e;
+  }
+}
+
+async function executeCoverCapture(
+  db: SupabaseClient,
+  projectId: string,
+  options?: { bypassEnvDisable?: boolean }
+): Promise<void> {
   if (coverCaptureDisabledEnv() && !options?.bypassEnvDisable) {
     console.log(`[projectCoverCapture] SKIP (OPEN_OX_COVER_CAPTURE=0): ${projectId}`);
     return;
   }
-
-  if (inFlightCover.has(projectId)) {
-    return;
-  }
-  inFlightCover.add(projectId);
 
   try {
     await updateProjectCoverState(db, projectId, {
@@ -143,6 +188,28 @@ export async function runCaptureProjectCover(
     } catch (e) {
       console.error(`[projectCoverCapture] persist failed state error:`, e);
     }
+  }
+}
+
+export type RunCaptureProjectCoverOptions = {
+  /** Manual Studio trigger: run even when OPEN_OX_COVER_CAPTURE=0 */
+  bypassEnvDisable?: boolean;
+};
+
+export async function runCaptureProjectCover(
+  projectId: string,
+  options?: RunCaptureProjectCoverOptions
+): Promise<void> {
+  const acquired = await tryAcquireCoverCapture(projectId);
+  if (!acquired.ok) {
+    if (acquired.reason === "no_service_role") {
+      console.warn("[projectCoverCapture] SKIP: SUPABASE_SERVICE_ROLE_KEY not configured");
+    }
+    return;
+  }
+
+  try {
+    await executeCoverCapture(acquired.db, projectId, options);
   } finally {
     inFlightCover.delete(projectId);
   }
@@ -155,9 +222,30 @@ export function scheduleCaptureProjectCover(projectId: string): void {
   );
 }
 
-/** Manual capture from Studio — bypasses OPEN_OX_COVER_CAPTURE=0. */
-export function scheduleManualCaptureProjectCover(projectId: string): void {
-  void runCaptureProjectCover(projectId, { bypassEnvDisable: true }).catch((e) =>
-    console.error(`[projectCoverCapture] manual unexpected: ${projectId}`, e)
-  );
+/**
+ * Manual capture from Studio — bypasses OPEN_OX_COVER_CAPTURE=0.
+ * Returns whether a new job was queued or one is already in flight (with poll baseline).
+ */
+export async function scheduleManualCaptureProjectCover(
+  projectId: string
+): Promise<CoverScheduleResult> {
+  const acquired = await tryAcquireCoverCapture(projectId);
+  if (!acquired.ok) {
+    if (acquired.reason === "no_service_role") {
+      throw new Error("SERVICE_ROLE");
+    }
+    return { status: "in_flight", baselineUpdatedAt: acquired.baselineUpdatedAt };
+  }
+
+  void (async () => {
+    try {
+      await executeCoverCapture(acquired.db, projectId, { bypassEnvDisable: true });
+    } catch (e) {
+      console.error(`[projectCoverCapture] manual unexpected: ${projectId}`, e);
+    } finally {
+      inFlightCover.delete(projectId);
+    }
+  })();
+
+  return { status: "queued", baselineUpdatedAt: acquired.baselineUpdatedAt };
 }

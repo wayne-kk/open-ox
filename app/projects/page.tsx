@@ -16,6 +16,7 @@ import {
   type ProjectPublishState,
 } from "@/app/components/ProjectPublishPanel";
 import { fetchProjectGalleryDeduped } from "@/lib/projectGalleryClient";
+import { projectCoverDisplayUrl } from "@/lib/projectCoverUrls";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -39,8 +40,7 @@ interface ProjectMetadata {
   ownerUserId?: string;
   ownerUsername?: string | null;
   coverImageStatus?: "pending" | "ready" | "failed" | null;
-  /** Present when loaded via /api/projects/gallery — direct Storage signed URL. */
-  coverImageUrl?: string;
+  coverImageUpdatedAt?: string | null;
   publishPreview?: boolean;
   allowRemix?: boolean;
   staticPreviewSyncedAt?: string | null;
@@ -228,9 +228,9 @@ function ProjectCard({
           )}
         >
           {hasCover ? (
-            /* eslint-disable-next-line @next/next/no-img-element -- signed Storage URL or API fallback */
+            /* eslint-disable-next-line @next/next/no-img-element -- versioned app cover proxy */
             <img
-              src={project.coverImageUrl ?? `/api/projects/${project.id}/cover`}
+              src={projectCoverDisplayUrl(project.id, project.coverImageUpdatedAt)}
               alt=""
               className="relative z-0 h-full w-full object-contain object-center"
               loading="lazy"
