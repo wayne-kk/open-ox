@@ -308,15 +308,80 @@ async function ensurePreviewBasePathInNextConfig(projectDir: string): Promise<vo
   }
 }
 
+/**
+ * Next 16 Turbopack + a `webpack()` hook without `turbopack` config hard-fails.
+ * Patch older generated sites so plain `next build` / accidental Turbopack runs survive.
+ */
+async function ensureTurbopackConfigSilence(projectDir: string): Promise<void> {
+  const configPath = path.join(projectDir, "next.config.ts");
+  let s: string;
+  try {
+    s = await fs.readFile(configPath, "utf-8");
+  } catch {
+    return;
+  }
+  if (/\bturbopack\s*:/.test(s)) return;
+
+  const withWebpackKey = s.replace(
+    /(const nextConfig:\s*NextConfig\s*=\s*\{\s*\n)(\s*webpack\()/,
+    "$1  turbopack: {},\n$2"
+  );
+  if (withWebpackKey !== s) {
+    await fs.writeFile(configPath, withWebpackKey, "utf-8");
+    return;
+  }
+
+  const withAllowed = s.replace(
+    /(const nextConfig:\s*NextConfig\s*=\s*\{\s*\n)(\s*allowedDevOrigins,)/,
+    "$1  turbopack: {},\n$2"
+  );
+  if (withAllowed !== s) {
+    await fs.writeFile(configPath, withAllowed, "utf-8");
+  }
+}
+
+/** Keep `pnpm run build` on generated sites aligned with Next 16 (--webpack). */
+async function ensureWebpackBuildScript(projectDir: string): Promise<void> {
+  const pkgPath = path.join(projectDir, "package.json");
+  let raw: string;
+  try {
+    raw = await fs.readFile(pkgPath, "utf-8");
+  } catch {
+    return;
+  }
+  let pkg: { scripts?: Record<string, string>; [k: string]: unknown };
+  try {
+    pkg = JSON.parse(raw) as { scripts?: Record<string, string> };
+  } catch {
+    return;
+  }
+  const build = pkg.scripts?.build?.trim() ?? "";
+  if (build.includes("--webpack")) return;
+  if (build !== "next build" && build !== "npx next build") {
+    // Custom script — leave alone; static preview invokes `next build --webpack` directly.
+    if (!build) {
+      pkg.scripts = { ...pkg.scripts, build: "next build --webpack" };
+    } else {
+      return;
+    }
+  } else {
+    pkg.scripts = { ...pkg.scripts, build: "next build --webpack" };
+  }
+  await fs.writeFile(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`, "utf-8");
+}
+
 async function runStaticExportBuild(projectId: string, projectDir: string): Promise<void> {
   const basePath = getStoragePreviewBasePath(projectId);
   await withSiteBuildLock(projectDir, async () => {
     let stdout = "";
     let stderr = "";
     try {
+      // Next.js 16 defaults to Turbopack for `next build`. Generated sites ship a
+      // `webpack()` rule (Design Mode loader) without a turbopack config — that
+      // combination hard-fails unless we pass `--webpack` explicitly.
       const result = await execFileAsync(
         "pnpm",
-        ["run", "build"],
+        ["exec", "next", "build", "--webpack"],
         {
           cwd: projectDir,
           env: {
@@ -461,6 +526,8 @@ export async function syncStaticSitePreview(
 
     await ensureGlobalErrorFromTemplateForProject(projectId);
     await ensurePreviewBasePathInNextConfig(projectDir);
+    await ensureTurbopackConfigSilence(projectDir);
+    await ensureWebpackBuildScript(projectDir);
 
     const filesFp = await computeProjectFingerprint(projectId);
     const originFp = storagePreviewOriginFingerprint();

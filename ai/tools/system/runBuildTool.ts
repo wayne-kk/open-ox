@@ -35,16 +35,18 @@ export const executeRunBuild: ToolExecutor = async (
   try {
     await ensureProjectNodeModules(projectDir);
     return await withSiteBuildLock(projectDir, async () => {
-      const { stdout, stderr } = await execFileAsync(
-        "pnpm",
-        ["run", script],
-        {
-          cwd: projectDir,
-          encoding: "utf8",
-          maxBuffer: 1024 * 1024,
-          env: { ...process.env, NODE_ENV: "production" },
-        }
-      );
+      // Prefer explicit `next build --webpack`: Next 16 Turbopack + site webpack()
+      // config without turbopack:{} hard-fails (see sites/template/next.config.ts).
+      const args =
+        script === "build"
+          ? (["exec", "next", "build", "--webpack"] as const)
+          : (["run", script] as const);
+      const { stdout, stderr } = await execFileAsync("pnpm", [...args], {
+        cwd: projectDir,
+        encoding: "utf8",
+        maxBuffer: 1024 * 1024,
+        env: { ...process.env, NODE_ENV: "production" },
+      });
       const output = [stdout, stderr].filter(Boolean).join("\n").trim();
       return { success: true, output };
     });

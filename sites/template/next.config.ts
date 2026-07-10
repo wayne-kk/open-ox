@@ -36,6 +36,10 @@ const allowedDevOrigins = [...new Set([
 const staticBasePath = process.env.OPEN_OX_STATIC_BASE_PATH?.trim();
 
 const nextConfig: NextConfig = {
+  // Next 16 defaults production builds to Turbopack. We keep a webpack() hook for
+  // Design Mode instrumentation under `next build --webpack` / webpack-backed next-dev.
+  // Empty turbopack config silences the hard error when someone runs plain `next build`.
+  turbopack: {},
   webpack(config, { dev }) {
     // Always instrument in local next-dev so Design pick can report file:line:col for Modify.
     // Direct Apply is gated separately (env + local backend).

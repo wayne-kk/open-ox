@@ -217,7 +217,7 @@ async function buildWithAutoInstall(
   label: string
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
   const buildCmd =
-    "cd /home/user/app && NODE_OPTIONS='--max-old-space-size=512' npx next build 2>&1";
+    "cd /home/user/app && NODE_OPTIONS='--max-old-space-size=512' npx next build --webpack 2>&1";
 
   const first = await safeRun(sandbox, buildCmd, { timeoutMs: 120_000 });
   if (first.exitCode === 0) return first;
