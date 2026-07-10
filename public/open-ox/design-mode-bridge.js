@@ -21,12 +21,23 @@
   function ensureOverlay(kind) {
     var node = kind === "hover" ? hoverOverlay : overlay;
     if (node && node.parentNode) return node;
+    var color = kind === "hover" ? "rgba(247,147,26,0.85)" : "rgba(255,214,0,0.95)";
+    var bg = kind === "hover" ? "rgba(247,147,26,0.95)" : "rgba(255,214,0,0.95)";
     node = document.createElement("div");
     node.setAttribute("data-open-ox-design-overlay", kind);
     node.style.cssText =
       "position:fixed;pointer-events:none;z-index:2147483646;border:2px solid " +
-      (kind === "hover" ? "rgba(247,147,26,0.85)" : "rgba(255,214,0,0.95)") +
+      color +
       ";border-radius:2px;box-sizing:border-box;transition:top 0.05s,left 0.05s,width 0.05s,height 0.05s;";
+    var label = document.createElement("div");
+    label.setAttribute("data-open-ox-design-overlay-label", kind);
+    label.style.cssText =
+      "position:absolute;left:-2px;max-width:min(320px,70vw);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" +
+      "padding:1px 6px;border-radius:2px 2px 0 0;font:600 11px/16px ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;" +
+      "color:#111;background:" +
+      bg +
+      ";box-sizing:border-box;pointer-events:none;";
+    node.appendChild(label);
     document.documentElement.appendChild(node);
     if (kind === "hover") hoverOverlay = node;
     else overlay = node;
@@ -43,15 +54,44 @@
     };
   }
 
+  function overlayLabelText(el) {
+    var tag = el.tagName.toLowerCase();
+    if (el.id && el.id.trim()) return tag + "#" + el.id.trim();
+    var classes = (el.className || "")
+      .toString()
+      .split(/\s+/)
+      .map(function (c) {
+        return c.trim();
+      })
+      .filter(Boolean)
+      .slice(0, 2);
+    if (classes.length) return tag + "." + classes.join(".");
+    return tag;
+  }
+
   function positionOverlay(el, kind) {
     if (!el || !el.getBoundingClientRect) return;
     var rect = el.getBoundingClientRect();
     var node = ensureOverlay(kind);
+    var label = node.firstElementChild;
     node.style.top = rect.top + "px";
     node.style.left = rect.left + "px";
     node.style.width = rect.width + "px";
     node.style.height = rect.height + "px";
     node.style.display = rect.width > 0 && rect.height > 0 ? "block" : "none";
+    if (label) {
+      label.textContent = overlayLabelText(el);
+      // Prefer above the box; flip below when near the top of the viewport.
+      if (rect.top >= 20) {
+        label.style.top = "auto";
+        label.style.bottom = "100%";
+        label.style.borderRadius = "2px 2px 0 0";
+      } else {
+        label.style.bottom = "auto";
+        label.style.top = "100%";
+        label.style.borderRadius = "0 0 2px 2px";
+      }
+    }
   }
 
   function clearOverlay(kind) {

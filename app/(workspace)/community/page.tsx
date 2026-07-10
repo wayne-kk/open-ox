@@ -272,7 +272,7 @@ export default function CommunityPage() {
   );
 
   return (
-    <main className="relative min-h-screen bg-background">
+    <main className="relative min-h-screen">
       <div className="relative z-[1] container mx-auto min-h-screen px-4 py-8 sm:px-6 md:py-10 lg:px-8">
         <div className="mb-8 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>

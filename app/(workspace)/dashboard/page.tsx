@@ -4,9 +4,10 @@ import { Suspense, useEffect, useState, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
-  Trash2, Plus, Clock, Layers,
-  CheckCircle2, AlertCircle, Loader2, Sparkles,
+  Trash2, Plus, FolderInput,
+  AlertCircle, Loader2, Sparkles,
   AlertTriangle, MoreHorizontal, Globe2, FolderCog, Check, Pencil,
+  Repeat2,
 } from "lucide-react";
 import { HamsterLoader } from "@/components/ui/hamster-loader";
 import { captureAppReturnTo } from "@/lib/navigation/appBack";
@@ -121,47 +122,22 @@ function ProjectCard({
     typeof project.staticPreviewSyncedAt === "string" &&
     project.staticPreviewSyncedAt.trim().length > 0;
 
-  const statusChipClass =
-    "flex shrink-0 items-center gap-1 rounded-full border border-white/12 bg-black/55 px-2 py-0.5 backdrop-blur-md";
-
-  const pressedRef = useRef(false);
-  const [pressed, setPressed] = useState(false);
   const [publishBusy, setPublishBusy] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
 
-  const handleMouseDown = (e: React.MouseEvent) => {
-    // Ignore right-click and let delete button handle its own clicks
-    if (e.button !== 0 || !isClickable) return;
-    pressedRef.current = true;
-    setPressed(true);
-  };
-
-  const handleMouseUp = (e: React.MouseEvent) => {
-    if (!pressedRef.current || !isClickable) return;
-    pressedRef.current = false;
-    setPressed(false);
-    // Only navigate if mouse is still over this card (not the delete / menu button)
-    const target = e.target as HTMLElement;
-    if (!target.closest("[data-card-action]")) {
-      if (e.metaKey || e.ctrlKey) {
-        window.open(`/projects/${project.id}/preview-launch`, "_blank");
-      } else {
-        onClick();
-      }
+  const openStudioOrPreview = (e: React.MouseEvent) => {
+    if (!isClickable) return;
+    if (e.metaKey || e.ctrlKey) {
+      window.open(`/projects/${project.id}/preview-launch`, "_blank");
+      return;
     }
+    onClick();
   };
 
-  const handleAuxClick = (e: React.MouseEvent) => {
-    if (e.button !== 1 || !isClickable) return;
+  const openPreviewTab = (e: React.MouseEvent) => {
+    if (!isClickable || e.button !== 1) return;
     e.preventDefault();
-    const target = e.target as HTMLElement;
-    if (target.closest("[data-card-action]")) return;
     window.open(`/projects/${project.id}/preview-launch`, "_blank");
-  };
-
-  const handleMouseLeave = () => {
-    pressedRef.current = false;
-    setPressed(false);
   };
 
   const togglePublish = async (next: boolean) => {
@@ -194,243 +170,266 @@ function ProjectCard({
     onPublishChange(project.id, result.state);
   };
 
-  return (
-    <div
-      onMouseDown={handleMouseDown}
-      onMouseUp={handleMouseUp}
-      onAuxClick={handleAuxClick}
-      onMouseLeave={handleMouseLeave}
-      title={
-        isClickable
-          ? isGenerating
-            ? "点击进入 Studio 查看生成进度（也可 ⌘/Ctrl 点击在新标签打开预览）"
-            : "点击进入 Studio；⌘/Ctrl 点击或鼠标中键在新标签打开站点预览"
-          : undefined
+  const statusBadge = publishPreview
+    ? {
+        icon: Globe2,
+        label: "已发布",
+        className: "border-primary/25 bg-primary/15 text-primary",
+        spin: false,
       }
+    : isGenerating
+      ? {
+          icon: Loader2,
+          label: "生成中",
+          className: "border-white/10 bg-black/55 text-primary",
+          spin: true,
+        }
+      : isFailed
+        ? {
+            icon: AlertCircle,
+            label: "失败",
+            className: "border-red-400/30 bg-black/55 text-red-300",
+            spin: false,
+          }
+        : null;
+  const StatusIcon = statusBadge?.icon;
+
+  const menuItemClass =
+    "cursor-pointer gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-white/85 focus:bg-white/[0.06] focus:text-white data-[highlighted]:bg-white/[0.06] data-[highlighted]:text-white";
+
+  return (
+    <article
       className={cn(
-        "group/card relative flex h-full flex-col overflow-hidden rounded-2xl border bg-[#080a0e]",
-        "shadow-[0_4px_20px_-8px_rgba(0,0,0,0.65)]",
-        "transition-[box-shadow,border-color] duration-200 ease-out",
-        pressed && "select-none",
-        isReady &&
-          cn(
-            "cursor-pointer border-white/[0.07] hover:border-primary/40",
-            hasCover
-              ? "hover:shadow-[var(--box-shadow-neon)]"
-              : "hover:shadow-[var(--box-shadow-neon-sm)]"
-          ),
-        isFailed &&
-          cn(
-            "cursor-pointer border-red-400/22 hover:border-red-400/40 hover:shadow-[0_10px_28px_-12px_rgba(248,113,113,0.18)]"
-          ),
-        isGenerating &&
-          cn(
-            "cursor-pointer border-primary/22 hover:border-primary/45 hover:shadow-[var(--box-shadow-neon-sm)]"
-          ),
-        !isReady && !isFailed && !isGenerating && "cursor-default border-white/[0.05]"
+        "group/card relative flex h-full flex-col overflow-hidden rounded-2xl",
+        "border border-white/[0.08] bg-[#0a0c10]",
+        "transition-[border-color,transform,box-shadow] duration-200 ease-out",
+        isClickable && "hover:-translate-y-0.5 hover:border-white/16 hover:shadow-[0_12px_40px_-18px_rgba(0,0,0,0.85)]",
+        isFailed && "border-red-400/20 hover:border-red-400/35",
+        isGenerating && "border-primary/20 hover:border-primary/35",
+        !isClickable && "opacity-80"
       )}
     >
-      {/* 封面：与截取视口 1480×960 同源比例；内边距 + contain 完整呈现成片暗角与安全区 */}
-      <div className="relative w-full shrink-0 bg-[#030406] p-2 sm:p-2.5">
-        <div
-          className={cn(
-            "relative aspect-[1480/960] w-full overflow-hidden rounded-[11px] ring-1 ring-inset ring-white/[0.07]",
-            !hasCover && `bg-gradient-to-br ${colors.bg}`,
-            hasCover && "bg-[#020309] shadow-[inset_0_0_52px_rgba(0,0,0,0.42)]"
-          )}
-        >
-          {hasCover ? (
-            /* eslint-disable-next-line @next/next/no-img-element -- versioned app cover proxy */
-            <img
-              src={projectCoverDisplayUrl(project.id, project.coverImageUpdatedAt)}
-              alt=""
-              className="relative z-0 h-full w-full object-contain object-center"
-              loading="lazy"
-              decoding="async"
+      <button
+        type="button"
+        disabled={!isClickable}
+        onClick={openStudioOrPreview}
+        onAuxClick={openPreviewTab}
+        title={
+          isClickable
+            ? isGenerating
+              ? "进入 Studio 查看生成进度（⌘/Ctrl 点击打开预览）"
+              : "进入 Studio；⌘/Ctrl 或中键打开站点预览"
+            : undefined
+        }
+        className={cn(
+          "relative block w-full overflow-hidden text-left aspect-[1480/960]",
+          !hasCover && `bg-gradient-to-br ${colors.bg}`,
+          hasCover && "bg-[#05070b]",
+          isClickable
+            ? "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/45"
+            : "cursor-default"
+        )}
+      >
+        {hasCover ? (
+          /* eslint-disable-next-line @next/next/no-img-element -- versioned app cover proxy */
+          <img
+            src={projectCoverDisplayUrl(project.id, project.coverImageUpdatedAt)}
+            alt=""
+            className="h-full w-full object-contain object-center transition-transform duration-500 ease-out group-hover/card:scale-[1.015]"
+            loading="lazy"
+            decoding="async"
+          />
+        ) : (
+          <>
+            <div
+              className="absolute inset-0 opacity-[0.07]"
+              style={{
+                backgroundImage: "radial-gradient(circle, white 1px, transparent 1px)",
+                backgroundSize: "20px 20px",
+              }}
             />
-          ) : (
-            <>
-              <div
-                className="absolute inset-0 opacity-[0.09]"
-                style={{
-                  backgroundImage: "radial-gradient(circle, white 1px, transparent 1px)",
-                  backgroundSize: "22px 22px",
-                }}
-              />
-              <span
-                className={cn(
-                  "relative z-[1] flex h-full items-center justify-center font-heading text-3xl font-bold tracking-tight sm:text-4xl",
-                  colors.text,
-                  "opacity-[0.88]"
-                )}
-              >
-                {initials || "?"}
-              </span>
-            </>
-          )}
+            <span
+              className={cn(
+                "relative z-[1] flex h-full items-center justify-center font-heading text-3xl font-bold tracking-tight sm:text-4xl",
+                colors.text,
+                "opacity-80"
+              )}
+            >
+              {initials || "?"}
+            </span>
+          </>
+        )}
 
-          {isGenerating && (
-            <div className="pointer-events-none absolute inset-0 z-10 animate-[shimmer_2s_ease-in-out_infinite] rounded-[11px] bg-gradient-to-r from-transparent via-white/[0.05] to-transparent" />
-          )}
-        </div>
-      </div>
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#0a0c10]/90 to-transparent" />
 
-      <div className="flex min-h-0 flex-1 flex-col bg-[#080b10] px-3 py-2.5 sm:px-3.5 sm:py-3">
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="min-w-0 flex-1 truncate font-heading text-[14px] font-semibold leading-tight text-white transition-colors duration-150 group-hover/card:text-primary">
-            {project.name || "未命名项目"}
-          </h3>
-          <div className="flex shrink-0 items-center gap-1">
-            {publishPreview ? (
-              <div className={cn(statusChipClass, "border-primary/25 bg-primary/15")}>
-                <Globe2 className="h-3 w-3 shrink-0 text-primary" />
-                <span className="text-[8px] font-mono font-bold tracking-wider text-primary">已发布</span>
-              </div>
-            ) : isGenerating ? (
-              <div className={statusChipClass}>
-                <Loader2 className="h-3 w-3 shrink-0 animate-spin text-primary" />
-                <span className="text-[8px] font-mono font-bold tracking-wider text-primary">生成中</span>
-              </div>
-            ) : project.status === "failed" ? (
-              <div className={statusChipClass}>
-                <AlertCircle className="h-3 w-3 shrink-0 text-red-400" />
-                <span className="text-[8px] font-mono font-bold tracking-wider text-red-400">失败</span>
-              </div>
-            ) : (
-              <div className={statusChipClass}>
-                <CheckCircle2 className="h-3 w-3 shrink-0 text-green-400" />
-                <span className="text-[8px] font-mono font-bold tracking-wider text-green-400">就绪</span>
-              </div>
+        {isGenerating && (
+          <div className="pointer-events-none absolute inset-0 z-10 animate-[shimmer_2s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/[0.04] to-transparent" />
+        )}
+
+        {statusBadge && StatusIcon ? (
+          <span
+            className={cn(
+              "pointer-events-none absolute left-2.5 top-2.5 z-20 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 backdrop-blur-md",
+              statusBadge.className
             )}
-          </div>
-        </div>
-        {allowRemix ? (
-          <span className="mt-1.5 inline-flex w-fit items-center rounded-full border border-emerald-400/20 bg-emerald-500/10 px-1.5 py-0.5 text-[8px] font-mono font-bold tracking-wider text-emerald-300/85">
-            可 Remix
+          >
+            <StatusIcon
+              className={cn("h-3 w-3 shrink-0", statusBadge.spin && "animate-spin")}
+            />
+            <span className="text-[9px] font-medium tracking-wide">
+              {statusBadge.label}
+            </span>
           </span>
         ) : null}
-        <p className="mt-1.5 line-clamp-2 text-[11px] leading-snug text-white/70">
-          {project.userPrompt}
-        </p>
-        {publishError ? (
-          <p className="mt-1 text-[10px] text-red-400/85">{publishError}</p>
+      </button>
+
+      <div className="flex min-h-0 flex-1 flex-col gap-2 px-3.5 py-3">
+        <div className="flex items-start gap-2">
+          <button
+            type="button"
+            disabled={!isClickable}
+            onClick={openStudioOrPreview}
+            onAuxClick={openPreviewTab}
+            className={cn(
+              "min-w-0 flex-1 text-left text-[14px] font-semibold leading-snug text-white/95 transition-colors line-clamp-2",
+              isClickable
+                ? "cursor-pointer hover:text-primary focus-visible:outline-none focus-visible:text-primary"
+                : "cursor-default"
+            )}
+          >
+            {project.name || "未命名项目"}
+          </button>
+          {canDelete ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="mt-0.5 shrink-0 rounded-lg p-1.5 text-white/40 opacity-70 transition-all hover:bg-white/[0.06] hover:text-white/85 group-hover/card:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40 data-[state=open]:bg-white/[0.08] data-[state=open]:text-white data-[state=open]:opacity-100"
+                  title="更多"
+                  aria-label="项目操作"
+                >
+                  {publishBusy ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <MoreHorizontal className="h-3.5 w-3.5" />
+                  )}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                sideOffset={8}
+                className="w-52 rounded-xl border border-white/10 bg-[#0e1118]/98 p-1.5 text-white shadow-[0_16px_48px_-12px_rgba(0,0,0,0.75)] backdrop-blur-xl"
+              >
+                <DropdownMenuItem
+                  disabled={publishBusy || (!hasStaticPreview && !publishPreview)}
+                  className={menuItemClass}
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    void togglePublish(!publishPreview);
+                  }}
+                >
+                  <Globe2 className="h-3.5 w-3.5 shrink-0 text-white/50" />
+                  {publishPreview ? "取消发布" : "发布到社区"}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={publishBusy || !publishPreview}
+                  className={menuItemClass}
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    void toggleRemix(!allowRemix);
+                  }}
+                >
+                  <Repeat2 className="h-3.5 w-3.5 shrink-0 text-white/50" />
+                  {allowRemix ? "关闭 Remix" : "允许 Remix"}
+                </DropdownMenuItem>
+                {!hasStaticPreview && !publishPreview ? (
+                  <p className="px-2.5 pb-1.5 pt-0.5 text-[10px] leading-relaxed text-white/40">
+                    需先有静态预览才能发布
+                  </p>
+                ) : null}
+                <DropdownMenuSeparator className="my-1.5 bg-white/[0.08]" />
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger
+                    className={cn(menuItemClass, "focus:bg-white/[0.06] data-[state=open]:bg-white/[0.06]")}
+                  >
+                    <FolderInput className="h-3.5 w-3.5 shrink-0 text-white/50" />
+                    移动到…
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="max-h-64 w-48 overflow-y-auto rounded-xl border border-white/10 bg-[#0e1118]/98 p-1.5 text-white shadow-[0_16px_48px_-12px_rgba(0,0,0,0.75)] backdrop-blur-xl">
+                    <DropdownMenuItem
+                      disabled={!project.folderId}
+                      className={menuItemClass}
+                      onSelect={(e) => {
+                        e.preventDefault();
+                        if (!project.folderId) return;
+                        onMove(null);
+                      }}
+                    >
+                      <span className="flex-1">最外层</span>
+                      {!project.folderId ? <Check className="h-3.5 w-3.5 text-primary" /> : null}
+                    </DropdownMenuItem>
+                    {folders.map((f) => {
+                      const current = project.folderId === f.id;
+                      return (
+                        <DropdownMenuItem
+                          key={f.id}
+                          disabled={current}
+                          className={menuItemClass}
+                          onSelect={(e) => {
+                            e.preventDefault();
+                            if (current) return;
+                            onMove(f.id);
+                          }}
+                        >
+                          <span className="min-w-0 flex-1 truncate">{f.name}</span>
+                          {current ? <Check className="h-3.5 w-3.5 shrink-0 text-primary" /> : null}
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+                <DropdownMenuSeparator className="my-1.5 bg-white/[0.08]" />
+                <DropdownMenuItem
+                  variant="destructive"
+                  disabled={deleting}
+                  className="cursor-pointer gap-2.5 rounded-lg px-2.5 py-2 text-[13px] focus:bg-red-500/12 data-[highlighted]:bg-red-500/12"
+                  onSelect={() => onDelete()}
+                >
+                  <Trash2 className="h-3.5 w-3.5 shrink-0" />
+                  删除项目
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
+        </div>
+
+        {project.verificationStatus === "passed" ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="inline-flex items-center rounded-md border border-white/[0.08] bg-white/[0.03] px-1.5 py-0.5 text-[10px] text-white/45">
+              已验证
+            </span>
+          </div>
         ) : null}
 
-        <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-white/[0.06] pt-2">
-          <div className="flex min-w-0 items-center gap-2 text-[9px] font-mono text-white/60">
-            <span className="flex items-center gap-0.5 truncate">
-              <Clock className="h-2.5 w-2.5 shrink-0 opacity-70" />
-              {timeAgo(project.createdAt)}
-            </span>
-            {project.verificationStatus === "passed" && (
-              <span className="flex shrink-0 items-center gap-0.5 text-green-400/50">
-                <Layers className="h-2.5 w-2.5" />
-                已验证
-              </span>
-            )}
-          </div>
+        {project.userPrompt?.trim() ? (
+          <p className="line-clamp-2 text-[12px] leading-relaxed text-white/55">
+            {project.userPrompt.trim()}
+          </p>
+        ) : (
+          <p className="text-[12px] text-white/30">暂无描述</p>
+        )}
 
-          <div className="flex shrink-0 items-center gap-0.5">
-            {canDelete ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    data-card-action
-                    type="button"
-                    className="rounded-md p-1 text-white/55 transition-colors hover:bg-white/[0.06] hover:text-white/70"
-                    title="更多"
-                    onClick={(e) => e.stopPropagation()}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onMouseUp={(e) => e.stopPropagation()}
-                  >
-                    {publishBusy ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <MoreHorizontal className="h-3 w-3" />
-                    )}
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  className="w-48 border-white/10 bg-[#0c0f16] text-white"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <DropdownMenuItem
-                    disabled={publishBusy || (!hasStaticPreview && !publishPreview)}
-                    onSelect={(e) => {
-                      e.preventDefault();
-                      void togglePublish(!publishPreview);
-                    }}
-                  >
-                    {publishPreview ? "取消发布" : "发布到社区"}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    disabled={publishBusy || !publishPreview}
-                    onSelect={(e) => {
-                      e.preventDefault();
-                      void toggleRemix(!allowRemix);
-                    }}
-                  >
-                    {allowRemix ? "关闭 Remix" : "允许 Remix"}
-                  </DropdownMenuItem>
-                  {!hasStaticPreview && !publishPreview ? (
-                    <p className="px-2 py-1.5 text-[10px] leading-relaxed text-white/60">
-                      需先有静态预览才能发布
-                    </p>
-                  ) : null}
-                  <DropdownMenuSeparator className="bg-white/10" />
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger className="text-white/85">
-                      移动到…
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="max-h-64 w-48 overflow-y-auto border-white/10 bg-[#0c0f16] text-white">
-                      <DropdownMenuItem
-                        disabled={!project.folderId}
-                        onSelect={(e) => {
-                          e.preventDefault();
-                          if (!project.folderId) return;
-                          onMove(null);
-                        }}
-                      >
-                        <span className="flex-1">最外层</span>
-                        {!project.folderId ? <Check className="h-3.5 w-3.5 text-primary" /> : null}
-                      </DropdownMenuItem>
-                      {folders.map((f) => {
-                        const current = project.folderId === f.id;
-                        return (
-                          <DropdownMenuItem
-                            key={f.id}
-                            disabled={current}
-                            onSelect={(e) => {
-                              e.preventDefault();
-                              if (current) return;
-                              onMove(f.id);
-                            }}
-                          >
-                            <span className="min-w-0 flex-1 truncate">{f.name}</span>
-                            {current ? <Check className="h-3.5 w-3.5 shrink-0 text-primary" /> : null}
-                          </DropdownMenuItem>
-                        );
-                      })}
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
-                  <DropdownMenuSeparator className="bg-white/10" />
-                  <DropdownMenuItem
-                    variant="destructive"
-                    disabled={deleting}
-                    onSelect={() => onDelete()}
-                  >
-                    删除项目
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : (
-              <span className="w-6 shrink-0" aria-hidden />
-            )}
-          </div>
+        {publishError ? (
+          <p className="text-[10px] text-red-400/85">{publishError}</p>
+        ) : null}
+
+        <div className="mt-auto border-t border-white/[0.06] pt-2.5">
+          <span className="text-[11px] tabular-nums text-white/40">
+            {timeAgo(project.createdAt)}
+          </span>
         </div>
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -1043,7 +1042,7 @@ function ProjectsPageContent() {
 
   if (!authReady || !authUser) {
     return (
-      <main className="relative flex min-h-screen items-center justify-center bg-background">
+      <main className="relative flex min-h-screen items-center justify-center">
         <p className="font-mono text-sm text-white/65">加载…</p>
       </main>
     );
@@ -1056,7 +1055,7 @@ function ProjectsPageContent() {
   })();
 
   return (
-    <main className="relative min-h-screen bg-background">
+    <main className="relative min-h-screen">
       {pendingDeleteId && (
         <ConfirmDeleteModal
           projectName={projects.find((p) => p.id === pendingDeleteId)?.name || "未命名项目"}
@@ -1168,14 +1167,15 @@ function ProjectsPageContent() {
               <button
                 type="button"
                 onClick={focusCreatePrompt}
-                className="group flex min-h-[200px] w-full flex-col items-center justify-center gap-3 self-stretch rounded-2xl border border-dashed border-white/[0.12]
-                  bg-gradient-to-b from-white/[0.025] to-transparent p-6 shadow-[0_4px_20px_-8px_rgba(0,0,0,0.5)]
-                  transition-[box-shadow,border-color] duration-200 ease-out hover:border-primary/35 hover:shadow-[var(--box-shadow-neon-sm)]"
+                className="group flex min-h-[180px] w-full flex-col items-center justify-center gap-3 self-stretch rounded-2xl border border-dashed border-white/[0.12]
+                  bg-[#0a0c10]/60 p-6
+                  transition-[border-color,background-color,transform] duration-200 ease-out
+                  hover:-translate-y-0.5 hover:border-primary/35 hover:bg-primary/[0.04]"
               >
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] transition-colors group-hover:border-primary/30 group-hover:bg-primary/10">
-                  <Plus className="h-5 w-5 text-white/55 group-hover:text-primary transition-colors" />
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] transition-colors group-hover:border-primary/30 group-hover:bg-primary/10">
+                  <Plus className="h-5 w-5 text-white/45 transition-colors group-hover:text-primary" />
                 </div>
-                <span className="font-mono text-[10px] text-white/60 group-hover:text-primary/70 tracking-wider transition-colors">
+                <span className="text-[12px] font-medium text-white/50 transition-colors group-hover:text-primary/80">
                   新建项目
                 </span>
               </button>

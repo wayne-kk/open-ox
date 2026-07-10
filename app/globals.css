@@ -102,13 +102,14 @@
   --chart-4: #b4b8c8;
   --chart-5: #f3f4f6;
   --radius: 0.125rem;
-  --sidebar: #12121a;
+  /* Clean void sidebar — solid cool charcoal, no muddy purple-gray */
+  --sidebar: #08090c;
   --sidebar-foreground: #f3f4f6;
   --sidebar-primary: #00ff88;
   --sidebar-primary-foreground: #0a0a0f;
-  --sidebar-accent: #1c1c2e;
+  --sidebar-accent: #11141a;
   --sidebar-accent-foreground: #f3f4f6;
-  --sidebar-border: #3a3a4a;
+  --sidebar-border: #1a1d24;
   --sidebar-ring: #00ff88;
 
   /* Neon shadows (legacy orange names remapped for compatibility) */
@@ -261,6 +262,81 @@
   }
   50% {
     text-shadow: 2px 0 #ff00ff, -2px 0 #00d4ff;
+  }
+}
+
+/* Workspace flowing-water atmosphere */
+@keyframes water-caustic-a {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.55;
+  }
+  40% {
+    transform: translate3d(4%, -3%, 0) scale(1.08);
+    opacity: 0.75;
+  }
+  70% {
+    transform: translate3d(-3%, 4%, 0) scale(0.96);
+    opacity: 0.5;
+  }
+}
+
+@keyframes water-caustic-b {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1.05);
+    opacity: 0.45;
+  }
+  35% {
+    transform: translate3d(-5%, 2%, 0) scale(1);
+    opacity: 0.65;
+  }
+  65% {
+    transform: translate3d(3%, -4%, 0) scale(1.12);
+    opacity: 0.4;
+  }
+}
+
+@keyframes water-caustic-c {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.35;
+  }
+  50% {
+    transform: translate3d(2%, 5%, 0) scale(1.1);
+    opacity: 0.55;
+  }
+}
+
+@keyframes water-wave-drift {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-8%, 0, 0);
+  }
+}
+
+@keyframes water-wave-drift-alt {
+  0% {
+    transform: translate3d(-6%, 0, 0);
+  }
+  100% {
+    transform: translate3d(2%, 0, 0);
+  }
+}
+
+@keyframes water-sheen {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: translate3d(-4%, 0, 0) skewX(-8deg);
+  }
+  50% {
+    opacity: 0.55;
+    transform: translate3d(6%, 0, 0) skewX(-4deg);
   }
 }
 
@@ -530,6 +606,117 @@
     content: "_";
     margin-left: 0.25rem;
   }
+
+  /* Clean product sidebar — opaque cool void, blocks body neon bleed */
+  .app-sidebar-surface {
+    background:
+      linear-gradient(180deg, rgb(12 14 18 / 100%) 0%, rgb(8 9 12 / 100%) 100%);
+    isolation: isolate;
+  }
+
+  .app-sidebar-surface::before {
+    background: linear-gradient(
+      180deg,
+      rgb(0 212 255 / 10%) 0%,
+      transparent 28%,
+      transparent 100%
+    );
+    content: "";
+    inset: 0;
+    opacity: 0.45;
+    pointer-events: none;
+    position: absolute;
+    z-index: 0;
+  }
+
+  .workspace-water {
+    z-index: 0;
+  }
+
+  .workspace-water__base {
+    background:
+      radial-gradient(ellipse 90% 55% at 50% -10%, rgb(0 212 255 / 10%), transparent 55%),
+      radial-gradient(ellipse 60% 40% at 85% 30%, rgb(0 255 136 / 6%), transparent 50%),
+      radial-gradient(ellipse 50% 35% at 10% 70%, rgb(0 180 220 / 7%), transparent 45%),
+      linear-gradient(180deg, #07090d 0%, #0a0a0f 45%, #06080c 100%);
+    inset: 0;
+    position: absolute;
+  }
+
+  .workspace-water__caustic {
+    border-radius: 50%;
+    filter: blur(48px);
+    position: absolute;
+    will-change: transform, opacity;
+  }
+
+  .workspace-water__caustic--a {
+    animation: water-caustic-a 18s ease-in-out infinite;
+    background: radial-gradient(circle, rgb(0 212 255 / 28%) 0%, transparent 70%);
+    height: 55vmin;
+    left: 8%;
+    top: 12%;
+    width: 55vmin;
+  }
+
+  .workspace-water__caustic--b {
+    animation: water-caustic-b 22s ease-in-out infinite;
+    background: radial-gradient(circle, rgb(0 255 136 / 18%) 0%, transparent 68%);
+    bottom: 18%;
+    height: 48vmin;
+    right: 5%;
+    width: 48vmin;
+  }
+
+  .workspace-water__caustic--c {
+    animation: water-caustic-c 26s ease-in-out infinite;
+    background: radial-gradient(circle, rgb(0 180 255 / 16%) 0%, transparent 70%);
+    height: 40vmin;
+    left: 40%;
+    top: 45%;
+    width: 40vmin;
+  }
+
+  .workspace-water__waves {
+    bottom: 0;
+    height: min(42vh, 360px);
+    left: -10%;
+    opacity: 0.9;
+    position: absolute;
+    width: 120%;
+  }
+
+  .workspace-water__wave-layer {
+    transform-origin: center bottom;
+    will-change: transform;
+  }
+
+  .workspace-water__wave-layer--1 {
+    animation: water-wave-drift 28s linear infinite;
+  }
+
+  .workspace-water__wave-layer--2 {
+    animation: water-wave-drift-alt 36s linear infinite;
+  }
+
+  .workspace-water__wave-layer--3 {
+    animation: water-wave-drift 44s linear infinite reverse;
+  }
+
+  .workspace-water__sheen {
+    animation: water-sheen 14s ease-in-out infinite;
+    background: linear-gradient(
+      105deg,
+      transparent 30%,
+      rgb(0 212 255 / 6%) 48%,
+      rgb(255 255 255 / 4%) 50%,
+      rgb(0 255 136 / 5%) 52%,
+      transparent 70%
+    );
+    inset: 0;
+    position: absolute;
+    will-change: transform, opacity;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -537,8 +724,17 @@
   .cyber-glitch:hover,
   .animate-float,
   .animate-pulse-glow,
-  .blink-cursor::after {
+  .blink-cursor::after,
+  .workspace-water__caustic,
+  .workspace-water__wave-layer,
+  .workspace-water__sheen {
     animation: none !important;
+  }
+
+  .workspace-water__caustic--a,
+  .workspace-water__caustic--b,
+  .workspace-water__caustic--c {
+    opacity: 0.4;
   }
 
   .cyber-glitch {

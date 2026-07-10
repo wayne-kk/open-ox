@@ -23,6 +23,7 @@ import {
   isRootFolderParam,
 } from "@/lib/projectFolders";
 import { BrandMark } from "@/app/components/BrandMark";
+import { WorkspaceWaterBg } from "@/app/components/WorkspaceWaterBg";
 
 const SIDEBAR_COLLAPSED_KEY = "open-ox:app-sidebar-collapsed";
 export const WORKSPACE_PROMPT_ID = "workspace-prompt";
@@ -154,7 +155,7 @@ function SidebarBody({
       <div
         className={cn(
           "flex items-center px-2 transition-[padding] duration-300",
-          collapsed ? "justify-center py-3 pb-10" : "py-3 pr-10"
+          collapsed ? "justify-center py-3 pb-10" : "py-5 pr-10"
         )}
       >
         <Link
@@ -378,11 +379,21 @@ export function AppSidebar({
   }, [collapsed, onCollapsedChange]);
 
   const userSlot = (
-    <div className={cn("border-t border-white/6 p-2", collapsed && "flex justify-center")}>
+    <div className={cn("border-t border-white/[0.05] p-2", collapsed && "flex justify-center")}>
       {!ready ? (
-        <div className="h-10 animate-pulse rounded-full bg-white/5" />
+        <div
+          className={cn(
+            "animate-pulse rounded-xl bg-white/5",
+            collapsed ? "h-10 w-10" : "h-10 w-full"
+          )}
+        />
       ) : user ? (
-        <UserMenuDropdown user={user} afterSignOut="home" />
+        <UserMenuDropdown
+          user={user}
+          afterSignOut="home"
+          variant="sidebar"
+          collapsed={collapsed}
+        />
       ) : null}
     </div>
   );
@@ -392,7 +403,7 @@ export function AppSidebar({
       {/* Desktop */}
       <aside
         className={cn(
-          "relative sticky top-0 hidden h-screen shrink-0 flex-col overflow-hidden border-r border-border bg-sidebar transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] md:flex",
+          "app-sidebar-surface relative sticky top-0 z-20 hidden h-screen shrink-0 flex-col overflow-hidden border-r border-sidebar-border transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] md:flex",
           collapsed ? "w-16" : "w-60"
         )}
       >
@@ -403,7 +414,7 @@ export function AppSidebar({
             "absolute z-20 rounded-sm p-1.5 text-muted-foreground transition-[top,left,right,transform,background-color,color] duration-300 hover:bg-primary/10 hover:text-primary hover:shadow-[var(--box-shadow-neon-sm)]",
             collapsed
               ? "left-1/2 top-12 -translate-x-1/2"
-              : "right-2 top-3 translate-x-0"
+              : "right-2 top-5 translate-x-0"
           )}
           aria-label={collapsed ? "展开侧栏" : "折叠侧栏"}
         >
@@ -413,7 +424,7 @@ export function AppSidebar({
             <PanelLeftClose className="h-4 w-4" />
           )}
         </button>
-        <div className="min-h-0 flex-1 overflow-hidden">
+        <div className="relative z-[1] min-h-0 flex-1 overflow-hidden">
           <SidebarBodySuspense
             collapsed={collapsed}
             foldersOpen={foldersOpen}
@@ -423,19 +434,29 @@ export function AppSidebar({
         </div>
         <div
           className={cn(
-            "border-t border-white/6 p-2 transition-[padding] duration-300",
+            "relative z-[1] border-t border-white/[0.05] p-2 transition-[padding] duration-300",
             collapsed && "flex justify-center"
           )}
         >
           {!ready ? (
-            <div className="h-10 animate-pulse rounded-full bg-white/5" />
+            <div
+              className={cn(
+                "animate-pulse rounded-xl bg-white/5",
+                collapsed ? "h-10 w-10" : "h-10 w-full"
+              )}
+            />
           ) : user ? (
-            <UserMenuDropdown user={user} afterSignOut="home" />
+            <UserMenuDropdown
+              user={user}
+              afterSignOut="home"
+              variant="sidebar"
+              collapsed={collapsed}
+            />
           ) : null}
         </div>
       </aside>
 
-      <div className="fixed inset-x-0 top-0 z-40 flex h-12 items-center gap-2 border-b border-border bg-sidebar/95 px-3 backdrop-blur-xl md:hidden">
+      <div className="fixed inset-x-0 top-0 z-40 flex h-12 items-center gap-2 border-b border-sidebar-border bg-[#08090c]/95 px-3 backdrop-blur-xl md:hidden">
         <button
           type="button"
           onClick={() => onMobileOpenChange(true)}
@@ -458,8 +479,8 @@ export function AppSidebar({
             aria-label="关闭菜单"
             onClick={() => onMobileOpenChange(false)}
           />
-          <aside className="absolute left-0 top-0 flex h-full w-[min(100vw-3rem,16rem)] flex-col border-r border-white/8 bg-[#050507] shadow-2xl">
-            <div className="flex items-center justify-end p-2">
+          <aside className="app-sidebar-surface absolute left-0 top-0 flex h-full w-[min(100vw-3rem,16rem)] flex-col border-r border-sidebar-border shadow-2xl">
+            <div className="relative z-[1] flex items-center justify-end p-2">
               <button
                 type="button"
                 onClick={() => onMobileOpenChange(false)}
@@ -469,7 +490,7 @@ export function AppSidebar({
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <div className="min-h-0 flex-1">
+            <div className="relative z-[1] min-h-0 flex-1">
               <SidebarBodySuspense
                 collapsed={false}
                 onNavigate={() => onMobileOpenChange(false)}
@@ -478,7 +499,7 @@ export function AppSidebar({
                 folders={folders}
               />
             </div>
-            {userSlot}
+            <div className="relative z-[1]">{userSlot}</div>
           </aside>
         </div>
       )}
@@ -509,14 +530,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-screen bg-[#07090d]">
       <AppSidebar
         collapsed={collapsed}
         onCollapsedChange={onCollapsedChange}
         mobileOpen={mobileOpen}
         onMobileOpenChange={setMobileOpen}
       />
-      <div className="min-w-0 flex-1 pt-12 md:pt-0">{children}</div>
+      <div className="relative min-w-0 flex-1 overflow-x-hidden pt-12 md:pt-0">
+
+        <div className="relative z-[1]">{children}</div>
+      </div>
     </div>
   );
 }

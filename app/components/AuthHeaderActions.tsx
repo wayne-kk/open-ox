@@ -118,14 +118,20 @@ export function UserAvatarButton({
 export function UserMenuDropdown({
   user,
   afterSignOut = "home",
+  variant = "nav",
+  collapsed = false,
 }: {
   user: User;
   afterSignOut?: "home" | "auth";
+  /** `nav` = top bar chip; `sidebar` = workspace rail (adapts to collapsed). */
+  variant?: "nav" | "sidebar";
+  collapsed?: boolean;
 }) {
   const router = useRouter();
   const displayName = getUserDisplayName(user);
   const subtitle = getUserAccountSubtitle(user);
   const { isAdmin } = useAuthProfile();
+  const sidebarCollapsed = variant === "sidebar" && collapsed;
 
   const signOut = async () => {
     const supabase = createSupabaseBrowserClient();
@@ -142,21 +148,48 @@ export function UserMenuDropdown({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="group flex h-9 max-w-[min(100vw-8rem,220px)] shrink-0 items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] py-0 pl-0.5 pr-2 outline-none transition-[border-color,background-color,box-shadow] hover:border-primary/35 hover:bg-white/[0.07] focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-offset-0 data-[state=open]:border-primary/30 data-[state=open]:bg-white/[0.08] data-[state=open]:[&_.nav-chevron]:rotate-180 md:h-10 md:pr-2.5"
+          className={cn(
+            "group flex shrink-0 items-center outline-none transition-[border-color,background-color,box-shadow,width,padding,gap] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-offset-0 data-[state=open]:[&_.nav-chevron]:rotate-180",
+            variant === "nav" &&
+              "h-9 max-w-[min(100vw-8rem,220px)] gap-2 rounded-full border border-white/10 bg-white/[0.04] py-0 pl-0.5 pr-2 hover:border-primary/35 hover:bg-white/[0.07] data-[state=open]:border-primary/30 data-[state=open]:bg-white/[0.08] md:h-10 md:pr-2.5",
+            variant === "sidebar" &&
+              !sidebarCollapsed &&
+              "h-10 w-full gap-2.5 rounded-xl border border-white/[0.07] bg-white/[0.03] px-2 hover:border-white/12 hover:bg-white/[0.06] data-[state=open]:border-primary/25 data-[state=open]:bg-white/[0.07]",
+            sidebarCollapsed &&
+              "h-10 w-10 justify-center rounded-xl border border-white/[0.07] bg-white/[0.03] p-0 hover:border-white/12 hover:bg-white/[0.06] data-[state=open]:border-primary/25 data-[state=open]:bg-white/[0.07]"
+          )}
           aria-label="账户菜单"
+          title={sidebarCollapsed ? displayName : undefined}
         >
           <UserAvatarButton
             user={user}
-            className="h-8 w-8 ring-2 ring-primary/25 transition group-hover:ring-primary/40 md:h-9 md:w-9"
+            className={cn(
+              "transition",
+              variant === "nav" &&
+                "h-8 w-8 ring-2 ring-primary/25 group-hover:ring-primary/40 md:h-9 md:w-9",
+              variant === "sidebar" && "h-7 w-7 border-white/12"
+            )}
           />
-          <span className="hidden min-w-0 max-w-[7rem] truncate text-left text-[13px] font-medium text-foreground/95 lg:inline">
-            {displayName}
-          </span>
-          <ChevronDown className="nav-chevron hidden h-3.5 w-3.5 shrink-0 text-muted-foreground/70 transition-transform duration-200 lg:block" />
+          {variant === "nav" ? (
+            <>
+              <span className="hidden min-w-0 max-w-[7rem] truncate text-left text-[13px] font-medium text-foreground/95 lg:inline">
+                {displayName}
+              </span>
+              <ChevronDown className="nav-chevron hidden h-3.5 w-3.5 shrink-0 text-muted-foreground/70 transition-transform duration-200 lg:block" />
+            </>
+          ) : !sidebarCollapsed ? (
+            <>
+              <span className="min-w-0 flex-1 truncate text-left text-[13px] font-medium text-foreground/95">
+                {displayName}
+              </span>
+              <ChevronDown className="nav-chevron h-3.5 w-3.5 shrink-0 text-muted-foreground/60 transition-transform duration-200" />
+            </>
+          ) : null}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        align="end"
+        align={variant === "sidebar" ? "start" : "end"}
+        side={variant === "sidebar" ? "top" : "bottom"}
         sideOffset={10}
         className="w-[min(calc(100vw-1.5rem),166px)] overflow-hidden rounded-2xl border border-white/12 bg-zinc-950/98 p-0 shadow-2xl shadow-black/50 backdrop-blur-xl"
       >
