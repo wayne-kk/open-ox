@@ -3,6 +3,8 @@
  * Communicates with Studio parent through postMessage (OPEN_OX_DESIGN_MODE protocol).
  */
 (function openOxDesignModeBridge() {
+  if (window.__openOxDesignModeBridge) return;
+  window.__openOxDesignModeBridge = true;
   var PROTOCOL = "OPEN_OX_DESIGN_MODE";
   var SKIP_TAGS = { html: 1, body: 1, head: 1, script: 1, style: 1, svg: 1, path: 1 };
 

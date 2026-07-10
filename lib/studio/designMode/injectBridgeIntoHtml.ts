@@ -3,6 +3,8 @@
 export function designModeBridgeScriptPath(): string {
   // Must NOT live under /studio/* — that prefix is auth-gated in proxy.ts,
   // and the preview iframe (other origin/port) cannot send Studio cookies.
+  // Prefer this root-absolute path over `${request.url origin}/…`: behind a
+  // reverse proxy, request.url is often localhost and breaks HTTPS previews.
   return "/open-ox/design-mode-bridge.js";
 }
 

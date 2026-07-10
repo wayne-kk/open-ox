@@ -39,13 +39,24 @@ export function OpenOxPreviewBridge() {
       return null;
     }
 
+    function bridgeAlreadyRunning(): boolean {
+      return Boolean((window as Window & { __openOxDesignModeBridge?: boolean }).__openOxDesignModeBridge);
+    }
+
     function loadBridge(scriptUrl?: string) {
-      if (document.querySelector(`[${BRIDGE_ATTR}]`)) return;
+      if (bridgeAlreadyRunning()) return;
       let url = scriptUrl?.trim() || "";
       if (!url) {
         const origin = resolveStudioOrigin();
         if (!origin) return;
         url = `${origin}/open-ox/design-mode-bridge.js`;
+      }
+      const existing = document.querySelector<HTMLScriptElement>(`[${BRIDGE_ATTR}]`);
+      if (existing) {
+        const prev = existing.getAttribute("src") || "";
+        if (prev === url) return;
+        // Replace a dead/wrong src (e.g. http://127.0.0.1 injected behind TLS proxy).
+        existing.remove();
       }
       const script = document.createElement("script");
       script.src = url;
@@ -53,6 +64,7 @@ export function OpenOxPreviewBridge() {
       script.dataset.openOxDesignBridge = "1";
       script.onerror = () => {
         console.warn("[OpenOxPreviewBridge] failed to load", url);
+        script.remove();
       };
       document.head.appendChild(script);
     }
@@ -64,10 +76,10 @@ export function OpenOxPreviewBridge() {
         loadBridge(data.scriptUrl);
         return;
       }
-      if (data.action === "PING" && !document.querySelector(`[${BRIDGE_ATTR}]`)) {
+      if (data.action === "PING" && !bridgeAlreadyRunning()) {
         // Full bridge not loaded yet — re-announce so Studio can inject.
         notifyParent({ protocol: PROTOCOL, action: "BOOTSTRAP_READY" });
-        loadBridge();
+        loadBridge(data.scriptUrl);
       }
     }
 

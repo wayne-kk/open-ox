@@ -72,8 +72,7 @@ function isSafePreviewSegments(segments: string[]): boolean {
 async function proxyFromStorage(
   projectId: string,
   rel: string,
-  method: "GET" | "HEAD",
-  requestUrl: string
+  method: "GET" | "HEAD"
 ): Promise<NextResponse> {
   const objectKey = `p/${projectId}/${rel}`;
   let storageUrl: string;
@@ -121,9 +120,10 @@ async function proxyFromStorage(
     shouldInjectDesignModeBridge(rel, contentType)
   ) {
     const html = await upstream.text();
-    const origin = new URL(requestUrl).origin;
-    const scriptSrc = `${origin}${designModeBridgeScriptPath()}`;
-    const body = injectDesignModeBridgeIntoHtml(html, scriptSrc);
+    // Root-absolute path (not request.url origin): behind nginx, req.url is often
+    // http://127.0.0.1:3000 — injecting that as script src breaks HTTPS pages
+    // (mixed content) and leaves a dead data-open-ox-design-bridge tag that blocks retries.
+    const body = injectDesignModeBridgeIntoHtml(html, designModeBridgeScriptPath());
     headers.set("Content-Length", String(Buffer.byteLength(body, "utf8")));
     return new NextResponse(body, { status: 200, headers });
   }
@@ -139,7 +139,7 @@ type Ctx = { params: Promise<{ projectId: string; path?: string[] }> };
  * URL — combined with the above you get ERR_TOO_MANY_REDIRECTS. Serve `index.html` for both shapes.
  */
 
-export async function GET(req: Request, ctx: Ctx) {
+export async function GET(_req: Request, ctx: Ctx) {
   const { projectId, path } = await ctx.params;
   const id = projectId?.trim();
   if (!id) {
@@ -152,10 +152,10 @@ export async function GET(req: Request, ctx: Ctx) {
     return new NextResponse("Invalid path", { status: 400 });
   }
   const rel = segments.length ? segments.join("/") : "index.html";
-  return proxyFromStorage(id, rel, "GET", req.url);
+  return proxyFromStorage(id, rel, "GET");
 }
 
-export async function HEAD(req: Request, ctx: Ctx) {
+export async function HEAD(_req: Request, ctx: Ctx) {
   const { projectId, path } = await ctx.params;
   const id = projectId?.trim();
   if (!id) {
@@ -170,5 +170,5 @@ export async function HEAD(req: Request, ctx: Ctx) {
     return new NextResponse(null, { status: 400 });
   }
   const rel = segments.length ? segments.join("/") : "index.html";
-  return proxyFromStorage(id, rel, "HEAD", req.url);
+  return proxyFromStorage(id, rel, "HEAD");
 }
