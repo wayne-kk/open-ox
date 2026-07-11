@@ -30,8 +30,8 @@ export function ConsoleEasterEgg() {
         "font-size: 13px",
         "line-height: 1.2",
         "font-weight: 700",
-        "color: #00ff88",
-        "text-shadow: 0 0 8px #00ff88, 0 0 18px #00d4ff",
+        "color: #b0a0ea",
+        "text-shadow: 0 0 10px rgba(176,160,234,0.55)",
       ].join(";"),
     );
   }, []);

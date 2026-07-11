@@ -5,12 +5,12 @@ import { useFavicon, type FaviconState } from "@/app/contexts/FaviconContext";
 
 // ── Brand palette ────────────────────────────────────────────────────────────
 const BRAND = {
-  primary: "#00ff88",       // accent orange
-  secondary: "#ea580c",     // accent-secondary
-  tertiary: "#ffd600",      // accent-tertiary
+  primary: "#b0a0ea",
+  secondary: "#a1a1aa",
+  tertiary: "#f4f4f5",
   white: "#ffffff",
-  error: "#ef4444",         // destructive red
-  bg: "#0a0a0f",            // background
+  error: "#f87171",
+  bg: "#09090b",
 };
 
 // ── Config ───────────────────────────────────────────────────────────────────

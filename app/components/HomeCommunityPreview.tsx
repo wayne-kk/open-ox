@@ -167,22 +167,16 @@ export function HomeCommunityPreview() {
 
 export function HomeCommunitySectionHeader() {
   return (
-    <div className="mb-10 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <div className="mt-12 mb-12 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
-        <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.4em] text-primary">
-          // Discover
-        </p>
-        <h2 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
-          <Globe2 className="h-6 w-6 text-primary/80" />
+        <h2 className="flex items-center gap-2.5 text-[clamp(1.5rem,3vw,2.25rem)] font-semibold tracking-[-0.035em]">
+          <Globe2 className="h-5 w-5 text-muted-foreground" strokeWidth={1.5} />
           发现社区作品
         </h2>
-        <p className="mt-3 max-w-md text-sm text-muted-foreground">
-          浏览已发布预览的真实站点 — 不是模板墙，是用户交付的结果。
-        </p>
       </div>
       <Link
         href="/community"
-        className="inline-flex shrink-0 items-center rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 font-mono text-[12px] text-muted-foreground transition-colors hover:border-white/20 hover:text-foreground"
+        className="defi-button-outline h-9 shrink-0 px-4 text-[13px]"
       >
         查看全部 →
       </Link>

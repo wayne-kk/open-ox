@@ -2,11 +2,9 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowRight, ArrowUp, Plus } from "lucide-react";
+import { ArrowRight, ArrowUp, ImagePlus, Plus } from "lucide-react";
 import { type InjectedChip } from "@/app/hooks/usePromptTriggers";
 import { PromptChips } from "@/app/components/ui/PromptChips";
-import { QuickTemplates } from "@/app/components/ui/QuickTemplates";
-import { SparkleHoverButton } from "@/components/ui/sparkle-hover-button";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { captureAppReturnTo } from "@/lib/navigation/appBack";
 import { resolveFolderIdFromSearchParam } from "@/lib/projectFolders";
@@ -224,18 +222,55 @@ export function HeroPrompt({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+    if (e.key !== "Enter") return;
+
+    // ⌘/Ctrl+Enter → insert newline
+    if (e.metaKey || e.ctrlKey) {
       e.preventDefault();
-      void submit();
+      const el = e.currentTarget;
+      const start = el.selectionStart;
+      const end = el.selectionEnd;
+      const next = `${value.slice(0, start)}\n${value.slice(end)}`;
+      setValue(next);
+      requestAnimationFrame(() => {
+        el.selectionStart = el.selectionEnd = start + 1;
+      });
+      return;
     }
+
+    // Enter alone → build
+    e.preventDefault();
+    void submit();
   };
 
   const canSubmit = Boolean(composeUserPrompt({ v: 1, value, chips, folderId })) && !submitting;
-  const showTemplates = chips.length === 0 && value.trim().length < 1;
+  const showEmptyHints = chips.length === 0 && value.trim().length < 1;
   const placeholder =
     chips.length > 0
       ? "描述你想要的网站..."
       : displayed + (phase !== "erasing" && !focused && !value ? "▌" : "");
+
+  const fileInput = (
+    <input
+      ref={fileInputRef}
+      type="file"
+      accept="image/*"
+      className="hidden"
+      onChange={(e) => {
+        const file = e.target.files?.[0];
+        if (file) addImageChip(file);
+        e.target.value = "";
+      }}
+    />
+  );
+
+  const emptyHint = showEmptyHints ? (
+    <p className="min-w-0 flex-1 truncate text-left text-[12px] leading-snug text-muted-foreground/80 sm:text-[13px]">
+      说清站点目标与风格 · 可附截图参考
+    </p>
+  ) : (
+    <div className="min-w-0 flex-1" />
+  );
 
   if (isWorkspace) {
     return (
@@ -250,8 +285,8 @@ export function HeroPrompt({
           className={cn(
             "relative flex flex-col gap-3 rounded-[28px] border bg-[#0a0c10]/92 px-5 pb-3.5 pt-5 shadow-[0_20px_60px_-24px_rgba(0,0,0,0.85)] backdrop-blur-xl transition-all duration-200 sm:px-6 sm:pb-4 sm:pt-6",
             focused
-              ? "border-primary/55 shadow-[var(--box-shadow-neon)]"
-              : "border-white/10 hover:border-white/18"
+              ? "border-white/20 shadow-[var(--box-shadow-neon)]"
+              : "border-white/10 hover:border-white/16"
           )}
         >
           <PromptChips chips={chips} onRemove={removeChip} />
@@ -284,17 +319,7 @@ export function HeroPrompt({
           />
 
           <div className="flex min-w-0 items-end gap-2 sm:gap-3">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) addImageChip(file);
-                e.target.value = "";
-              }}
-            />
+            {fileInput}
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
@@ -305,25 +330,12 @@ export function HeroPrompt({
               <Plus className="h-4 w-4" />
             </button>
 
-            {showTemplates ? (
-              <div className="min-h-0 min-w-0 flex-1 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/15">
-                <QuickTemplates
-                  layout="row"
-                  visible
-                  onSelect={(prompt) => {
-                    setValue(prompt);
-                    textareaRef.current?.focus();
-                  }}
-                />
-              </div>
-            ) : (
-              <div className="min-w-0 flex-1" />
-            )}
+            {emptyHint}
 
             <button
               type="submit"
               disabled={!canSubmit}
-              title="开始构建（⌘ Enter）"
+              title="开始构建（Enter）"
               aria-label="开始构建"
               className={cn(
                 "flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-all",
@@ -353,21 +365,16 @@ export function HeroPrompt({
       className="mx-auto w-full max-w-4xl"
     >
       <div
-        className={`cyber-chamfer relative flex flex-col gap-2.5 border bg-input px-5 pt-4 pb-3 transition-all duration-150 ${
+        className={cn(
+          "relative flex flex-col gap-2.5 rounded-2xl border bg-card/80 px-5 pb-3.5 pt-4 backdrop-blur-sm transition-all duration-200",
           focused
-            ? "border-primary shadow-[var(--box-shadow-neon)]"
-            : "border-border hover:border-primary/40"
-        }`}
+            ? "border-white/20 shadow-[var(--box-shadow-neon)]"
+            : "border-white/8 hover:border-white/14"
+        )}
       >
         <PromptChips chips={chips} onRemove={removeChip} />
 
         <div className="relative flex gap-2">
-          <span
-            aria-hidden
-            className="select-none pt-0.5 font-mono text-[15px] font-bold text-primary drop-shadow-[0_0_6px_var(--primary)]"
-          >
-            &gt;
-          </span>
           <textarea
             ref={textareaRef}
             rows={3}
@@ -386,35 +393,29 @@ export function HeroPrompt({
               }
             }}
             placeholder={placeholder}
-            className="w-full resize-none bg-transparent font-mono text-[15px] leading-relaxed tracking-wide text-foreground outline-none placeholder:text-muted-foreground"
+            className="w-full resize-none bg-transparent text-[15px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/70 sm:text-[16px]"
           />
         </div>
 
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-          {showTemplates ? (
-            <div className="min-h-0 min-w-0 flex-1 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/15">
-              <QuickTemplates
-                layout="row"
-                visible
-                onSelect={(prompt) => {
-                  setValue(prompt);
-                  textareaRef.current?.focus();
-                }}
-              />
-            </div>
-          ) : null}
-          <div className={`flex shrink-0 items-center gap-2.5 ${showTemplates ? "" : "ml-auto"}`}>
-            <span
-              className="font-mono text-[11px] text-muted-foreground"
-              title="⌘ Enter（Windows / Linux：Ctrl Enter）提交"
-            >
-              <kbd className="border border-border px-1 py-0.5 text-[10px]">⌘</kbd>
-              <kbd className="border border-border px-1 py-0.5 text-[10px]">↵</kbd>
-            </span>
-            <SparkleHoverButton
+          {fileInput}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-white/10 px-3 text-[12px] font-medium text-muted-foreground transition-colors hover:border-white/18 hover:bg-white/5 hover:text-foreground"
+            title="添加截图参考"
+          >
+            <ImagePlus className="h-3.5 w-3.5" strokeWidth={1.75} />
+            截图参考
+          </button>
+
+          {emptyHint}
+
+          <div className="flex shrink-0 items-center gap-2.5">
+            <button
               type="submit"
               disabled={!canSubmit}
-              className="defi-button px-5 py-2.5 tracking-widest disabled:cursor-not-allowed disabled:opacity-30"
+              className="defi-button px-6 py-2.5 text-[13px] disabled:cursor-not-allowed disabled:opacity-35"
             >
               {submitting ? (
                 <>
@@ -426,7 +427,7 @@ export function HeroPrompt({
                   构建 <ArrowRight className="h-3.5 w-3.5" />
                 </>
               )}
-            </SparkleHoverButton>
+            </button>
           </div>
         </div>
       </div>

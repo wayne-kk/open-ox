@@ -1142,7 +1142,7 @@ export function BuildConversation({
                                 type="button"
                                 onClick={handleModify}
                                 disabled={modifying || !modifyInstruction.trim()}
-                                className="defi-button flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-50"
+                                className="defi-button flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 {modifying ? (
                                     <>
@@ -1229,7 +1229,7 @@ export function BuildConversation({
                                 type="button"
                                 onClick={() => void handleRun()}
                                 disabled={loading || (!input.trim() && !intentImage)}
-                                className="defi-button flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-50"
+                                className="defi-button flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 <Send className="h-4 w-4" />
                                 Send

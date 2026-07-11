@@ -21,18 +21,17 @@
 @source not "../supabase";
 @source not "../patches";
 @source not "../example";
-/* Python / stray prompt dumps can contain prose like `bg-[url('…')]`; Tailwind v4 extracts it and webpack resolves `…` → Module not found. */
 @source not "../**/*.py";
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-jetbrains);
+  --font-sans: var(--font-jakarta);
   --font-mono: var(--font-jetbrains);
-  --font-heading: var(--font-orbitron);
-  --font-body: var(--font-jetbrains);
-  --font-label: var(--font-share-tech);
+  --font-heading: var(--font-jakarta);
+  --font-body: var(--font-jakarta);
+  --font-label: var(--font-jakarta);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -64,6 +63,7 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-brand-signal: var(--brand-signal);
   --radius-sm: calc(var(--radius) * 0.5);
   --radius-md: var(--radius);
   --radius-lg: calc(var(--radius) * 1.5);
@@ -74,60 +74,61 @@
 }
 
 :root {
-  /* Cyberpunk / Glitch tokens — contrast tuned for WCAG AA on void bg */
-  --background: #0a0a0f;
-  --foreground: #f3f4f6;
-  --card: #12121a;
-  --card-foreground: #f3f4f6;
-  --popover: #12121a;
-  --popover-foreground: #f3f4f6;
-  --primary: #00ff88;
-  --primary-foreground: #0a0a0f;
-  --secondary: #1c1c2e;
-  --secondary-foreground: #f3f4f6;
-  --muted: #1c1c2e;
-  /* Was #6b7280 (~4:1, too dim with overlays); #b4b8c8 ≈ 9:1 on #0a0a0f */
-  --muted-foreground: #b4b8c8;
-  --accent: #00ff88;
-  --accent-foreground: #0a0a0f;
-  --accent-secondary: #ff00ff;
-  --accent-tertiary: #00d4ff;
-  --destructive: #ff3366;
-  --border: #3a3a4a;
-  --input: #12121a;
-  --ring: #00ff88;
-  --chart-1: #00ff88;
-  --chart-2: #ff00ff;
-  --chart-3: #00d4ff;
-  --chart-4: #b4b8c8;
-  --chart-5: #f3f4f6;
-  --radius: 0.125rem;
-  /* Clean void sidebar — solid cool charcoal, no muddy purple-gray */
-  --sidebar: #08090c;
-  --sidebar-foreground: #f3f4f6;
-  --sidebar-primary: #00ff88;
-  --sidebar-primary-foreground: #0a0a0f;
-  --sidebar-accent: #11141a;
-  --sidebar-accent-foreground: #f3f4f6;
-  --sidebar-border: #1a1d24;
-  --sidebar-ring: #00ff88;
+  /* Brand purple primary — solid CTA + accents share one token */
+  --background: #09090b;
+  --foreground: #fafafa;
+  --card: #111113;
+  --card-foreground: #fafafa;
+  --popover: #111113;
+  --popover-foreground: #fafafa;
+  --primary: #b0a0ea;
+  --primary-foreground: #fafafa;
+  --secondary: #18181b;
+  --secondary-foreground: #fafafa;
+  --muted: #18181b;
+  --muted-foreground: #d4d4d8;
+  --accent: #b0a0ea;
+  --accent-foreground: #fafafa;
+  --accent-secondary: #d4d4d8;
+  --accent-tertiary: #a1a1aa;
+  --destructive: #f87171;
+  --border: #27272a;
+  --input: #111113;
+  --ring: #b0a0ea;
+  --chart-1: #b0a0ea;
+  --chart-2: #d4d4d8;
+  --chart-3: #a1a1aa;
+  --chart-4: #52525b;
+  --chart-5: #3f3f46;
+  --radius: 0.75rem;
+  --sidebar: #0c0c0e;
+  --sidebar-foreground: #fafafa;
+  --sidebar-primary: #b0a0ea;
+  --sidebar-primary-foreground: #fafafa;
+  --sidebar-accent: #18181b;
+  --sidebar-accent-foreground: #fafafa;
+  --sidebar-border: #1f1f23;
+  --sidebar-ring: #b0a0ea;
 
-  /* Neon shadows (legacy orange names remapped for compatibility) */
-  --box-shadow-neon: 0 0 5px #00ff88, 0 0 10px #00ff8840;
-  --box-shadow-neon-sm: 0 0 3px #00ff88, 0 0 6px #00ff8830;
-  --box-shadow-neon-lg: 0 0 10px #00ff88, 0 0 20px #00ff8860, 0 0 40px #00ff8830;
-  --box-shadow-neon-secondary: 0 0 5px #ff00ff, 0 0 20px #ff00ff60;
-  --box-shadow-neon-tertiary: 0 0 5px #00d4ff, 0 0 20px #00d4ff60;
+  --brand-signal: var(--primary);
+  --primary-hover: #c2b4f2;
+  --primary-active: #9686d4;
+
+  --box-shadow-neon: 0 0 0 1px rgb(255 255 255 / 8%), 0 8px 24px -12px rgb(0 0 0 / 55%);
+  --box-shadow-neon-sm: 0 0 0 1px rgb(255 255 255 / 6%), 0 4px 12px -8px rgb(0 0 0 / 50%);
+  --box-shadow-neon-lg: 0 0 0 1px rgb(255 255 255 / 10%), 0 16px 40px -16px rgb(0 0 0 / 65%);
+  --box-shadow-neon-secondary: 0 0 0 1px rgb(255 255 255 / 6%);
+  --box-shadow-neon-tertiary: 0 0 0 1px rgb(255 255 255 / 6%);
   --shadow-orange: var(--box-shadow-neon);
   --shadow-orange-lg: var(--box-shadow-neon-lg);
-  --shadow-orange-soft: 0 0 50px -10px #00ff8820;
+  --shadow-orange-soft: 0 24px 64px -32px rgb(0 0 0 / 70%);
   --shadow-gold: var(--box-shadow-neon-tertiary);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
-    scrollbar-color: rgb(0 255 136 / 35%) rgb(18 18 26 / 80%);
+    scrollbar-color: rgb(255 255 255 / 18%) rgb(17 17 19 / 90%);
     scrollbar-width: thin;
   }
 
@@ -137,41 +138,49 @@
   }
 
   *::-webkit-scrollbar-track {
-    background: rgb(18 18 26 / 80%);
+    background: rgb(17 17 19 / 90%);
   }
 
   *::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, rgb(0 255 136 / 45%), rgb(0 212 255 / 40%));
-    border: 1px solid rgb(10 10 15 / 80%);
+    background: rgb(255 255 255 / 14%);
+    border: 1px solid rgb(9 9 11 / 80%);
+    border-radius: 999px;
   }
 
   *::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(180deg, rgb(0 255 136 / 70%), rgb(0 212 255 / 55%));
+    background: rgb(255 255 255 / 24%);
   }
 
   html {
     @apply bg-background font-sans text-foreground;
     scrollbar-gutter: stable;
+    scroll-behavior: smooth;
   }
 
   body {
     @apply bg-background text-foreground;
     background-image:
-      radial-gradient(circle at top left, rgb(0 255 136 / 8%), transparent 28%),
-      radial-gradient(circle at top right, rgb(255 0 255 / 6%), transparent 22%),
-      radial-gradient(circle at bottom center, rgb(0 212 255 / 7%), transparent 32%);
-    font-family: var(--font-jetbrains), "PingFang SC", "Hiragino Sans GB", "Noto Sans SC",
+      radial-gradient(ellipse 80% 50% at 50% -20%, rgb(255 255 255 / 4%), transparent 55%),
+      radial-gradient(ellipse 40% 30% at 100% 0%, rgb(176 160 234 / 6%), transparent 45%);
+    font-family: var(--font-jakarta), "PingFang SC", "Hiragino Sans GB", "Noto Sans SC",
       "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
-    letter-spacing: normal;
-    min-height: 100vh;
+    letter-spacing: -0.011em;
+    min-height: 100dvh;
     position: relative;
   }
 
+  body::before {
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    content: "";
+    inset: 0;
+    opacity: 0.12;
+    pointer-events: none;
+    position: fixed;
+    z-index: 1;
+  }
+
   body::after {
-    background:
-      radial-gradient(circle at 18% 16%, rgb(0 255 136 / 6%), transparent 22%),
-      radial-gradient(circle at 82% 14%, rgb(255 0 255 / 5%), transparent 18%),
-      radial-gradient(circle at 50% 100%, rgb(0 212 255 / 7%), transparent 24%);
+    background: radial-gradient(ellipse 70% 40% at 50% -10%, rgb(255 255 255 / 3%), transparent 50%);
     content: "";
     inset: 0;
     pointer-events: none;
@@ -180,15 +189,21 @@
   }
 
   ::selection {
-    background: rgb(0 255 136 / 28%);
-    color: #0a0a0f;
+    background: rgb(176 160 234 / 35%);
+    color: #fafafa;
   }
 
   a,
   button,
   input,
   textarea {
-    transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    transition:
+      color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+      background-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+      border-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+      box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1),
+      transform 200ms cubic-bezier(0.4, 0, 0.2, 1),
+      opacity 200ms cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   h1,
@@ -196,6 +211,8 @@
   h3,
   h4 {
     @apply font-heading;
+    letter-spacing: -0.035em;
+    text-wrap: balance;
   }
 }
 
@@ -208,20 +225,20 @@
 @keyframes float {
   0%,
   100% {
-    transform: translateY(0px);
+    transform: translateY(0);
   }
   50% {
-    transform: translateY(-20px);
+    transform: translateY(-12px);
   }
 }
 
 @keyframes pulse-glow {
   0%,
   100% {
-    box-shadow: var(--box-shadow-neon);
+    box-shadow: var(--box-shadow-neon-sm);
   }
   50% {
-    box-shadow: var(--box-shadow-neon-lg);
+    box-shadow: var(--box-shadow-neon);
   }
 }
 
@@ -236,49 +253,30 @@
   }
 }
 
-@keyframes cyber-glitch {
-  0%,
-  100% {
-    transform: translate(0);
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
   }
-  20% {
-    transform: translate(-2px, 2px);
-  }
-  40% {
-    transform: translate(2px, -2px);
-  }
-  60% {
-    transform: translate(-1px, -1px);
-  }
-  80% {
-    transform: translate(1px, 1px);
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
-@keyframes rgb-shift {
-  0%,
-  100% {
-    text-shadow: -2px 0 #ff00ff, 2px 0 #00d4ff;
-  }
-  50% {
-    text-shadow: 2px 0 #ff00ff, -2px 0 #00d4ff;
-  }
-}
-
-/* Workspace flowing-water atmosphere */
 @keyframes water-caustic-a {
   0%,
   100% {
     transform: translate3d(0, 0, 0) scale(1);
-    opacity: 0.55;
+    opacity: 0.4;
   }
   40% {
     transform: translate3d(4%, -3%, 0) scale(1.08);
-    opacity: 0.75;
+    opacity: 0.55;
   }
   70% {
     transform: translate3d(-3%, 4%, 0) scale(0.96);
-    opacity: 0.5;
+    opacity: 0.35;
   }
 }
 
@@ -286,15 +284,15 @@
   0%,
   100% {
     transform: translate3d(0, 0, 0) scale(1.05);
-    opacity: 0.45;
+    opacity: 0.3;
   }
   35% {
     transform: translate3d(-5%, 2%, 0) scale(1);
-    opacity: 0.65;
+    opacity: 0.45;
   }
   65% {
     transform: translate3d(3%, -4%, 0) scale(1.12);
-    opacity: 0.4;
+    opacity: 0.28;
   }
 }
 
@@ -302,11 +300,11 @@
   0%,
   100% {
     transform: translate3d(0, 0, 0) scale(1);
-    opacity: 0.35;
+    opacity: 0.25;
   }
   50% {
     transform: translate3d(2%, 5%, 0) scale(1.1);
-    opacity: 0.55;
+    opacity: 0.4;
   }
 }
 
@@ -331,18 +329,18 @@
 @keyframes water-sheen {
   0%,
   100% {
-    opacity: 0.35;
+    opacity: 0.2;
     transform: translate3d(-4%, 0, 0) skewX(-8deg);
   }
   50% {
-    opacity: 0.55;
+    opacity: 0.35;
     transform: translate3d(6%, 0, 0) skewX(-4deg);
   }
 }
 
 @layer utilities {
   .scrollbar-unified {
-    scrollbar-color: rgb(0 255 136 / 35%) rgb(18 18 26 / 80%);
+    scrollbar-color: rgb(255 255 255 / 18%) rgb(17 17 19 / 90%);
     scrollbar-width: thin;
   }
 
@@ -352,12 +350,13 @@
   }
 
   .scrollbar-unified::-webkit-scrollbar-track {
-    background: rgb(18 18 26 / 80%);
+    background: rgb(17 17 19 / 90%);
   }
 
   .scrollbar-unified::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, rgb(0 255 136 / 45%), rgb(0 212 255 / 40%));
-    border: 1px solid rgb(10 10 15 / 80%);
+    background: rgb(255 255 255 / 14%);
+    border: 1px solid rgb(9 9 11 / 80%);
+    border-radius: 999px;
   }
 
   .scrollbar-hidden {
@@ -370,17 +369,19 @@
   }
 
   .font-heading {
-    font-family: var(--font-orbitron), ui-monospace, monospace;
+    font-family: var(--font-jakarta), "PingFang SC", "Hiragino Sans GB", "Noto Sans SC",
+      "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
   }
 
   .font-body {
-    font-family: var(--font-jetbrains), "PingFang SC", "Hiragino Sans GB", "Noto Sans SC",
+    font-family: var(--font-jakarta), "PingFang SC", "Hiragino Sans GB", "Noto Sans SC",
       "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
   }
 
   .font-label {
-    font-family: var(--font-share-tech), ui-monospace, monospace;
-    letter-spacing: 0.2em;
+    font-family: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+    font-weight: 500;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
   }
 
@@ -392,178 +393,142 @@
     background-image: none;
   }
 
-  /* Chamfered corners */
   .cyber-chamfer {
-    clip-path: polygon(
-      0 10px,
-      10px 0,
-      calc(100% - 10px) 0,
-      100% 10px,
-      100% calc(100% - 10px),
-      calc(100% - 10px) 100%,
-      10px 100%,
-      0 calc(100% - 10px)
-    );
+    border-radius: 0.875rem;
+    clip-path: none;
   }
 
   .cyber-chamfer-sm {
-    clip-path: polygon(
-      0 6px,
-      6px 0,
-      calc(100% - 6px) 0,
-      100% 6px,
-      100% calc(100% - 6px),
-      calc(100% - 6px) 100%,
-      6px 100%,
-      0 calc(100% - 6px)
-    );
+    border-radius: 0.625rem;
+    clip-path: none;
   }
 
-  /* Glitch headline */
   .cyber-glitch {
-    animation: rgb-shift 4s ease-in-out infinite;
+    animation: none;
     position: relative;
   }
 
   .cyber-glitch:hover {
-    animation:
-      cyber-glitch 0.35s steps(2) 2,
-      rgb-shift 4s ease-in-out infinite;
+    animation: none;
   }
 
   .defi-panel {
-    background: linear-gradient(180deg, rgb(18 18 26 / 96%), rgb(10 10 15 / 94%));
+    background: linear-gradient(180deg, rgb(17 17 19 / 98%), rgb(9 9 11 / 96%));
     border: 1px solid var(--border);
+    border-radius: 1rem;
     box-shadow: var(--shadow-orange-soft);
-    clip-path: polygon(
-      0 10px,
-      10px 0,
-      calc(100% - 10px) 0,
-      100% 10px,
-      100% calc(100% - 10px),
-      calc(100% - 10px) 100%,
-      10px 100%,
-      0 calc(100% - 10px)
-    );
+    clip-path: none;
     position: relative;
   }
 
   .defi-panel:hover {
-    border-color: rgb(0 255 136 / 55%);
+    border-color: rgb(255 255 255 / 18%);
     box-shadow: var(--box-shadow-neon);
     transform: translateY(-1px);
   }
 
   .defi-glass {
     backdrop-filter: blur(18px);
-    background: rgb(28 28 46 / 35%);
-    border: 1px solid rgb(0 255 136 / 25%);
+    background: rgb(17 17 19 / 55%);
+    border: 1px solid rgb(255 255 255 / 10%);
+    border-radius: 0.875rem;
     box-shadow: var(--box-shadow-neon-sm);
     position: relative;
   }
 
+  /* Brand purple pill CTA */
   .defi-button {
     align-items: center;
-    background: transparent;
-    border: 2px solid var(--primary);
-    box-shadow: var(--box-shadow-neon-sm);
-    clip-path: polygon(
-      0 6px,
-      6px 0,
-      calc(100% - 6px) 0,
-      100% 6px,
-      100% calc(100% - 6px),
-      calc(100% - 6px) 100%,
-      6px 100%,
-      0 calc(100% - 6px)
-    );
-    color: var(--primary);
+    background: var(--primary);
+    border: 1px solid transparent;
+    border-radius: 9999px;
+    box-shadow: none;
+    clip-path: none;
+    color: var(--primary-foreground);
     display: inline-flex;
-    font-family: var(--font-share-tech), ui-monospace, monospace;
-    gap: 0.75rem;
+    font-family: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+    font-weight: 600;
+    gap: 0.5rem;
     justify-content: center;
-    letter-spacing: 0.14em;
-    min-height: 44px;
-    text-transform: uppercase;
-    transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    letter-spacing: -0.01em;
+    min-height: 40px;
+    padding-inline: 1.25rem;
+    text-transform: none;
+    transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .defi-button:hover {
-    background: var(--primary);
-    box-shadow: var(--box-shadow-neon-lg);
+    background: var(--primary-hover);
+    box-shadow: none;
     color: var(--primary-foreground);
+    transform: translateY(-1px);
+  }
+
+  .defi-button:active {
+    background: var(--primary-active);
+    transform: scale(0.98) translateY(0);
   }
 
   .defi-button-outline {
     align-items: center;
     background: transparent;
     border: 1px solid var(--border);
-    clip-path: polygon(
-      0 6px,
-      6px 0,
-      calc(100% - 6px) 0,
-      100% 6px,
-      100% calc(100% - 6px),
-      calc(100% - 6px) 100%,
-      6px 100%,
-      0 calc(100% - 6px)
-    );
+    border-radius: 9999px;
+    clip-path: none;
     color: var(--foreground);
     display: inline-flex;
     justify-content: center;
-    min-height: 44px;
-    transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    min-height: 40px;
+    padding-inline: 1.25rem;
+    transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .defi-button-outline:hover {
-    border-color: var(--primary);
-    box-shadow: var(--box-shadow-neon-sm);
-    color: var(--primary);
+    border-color: rgb(255 255 255 / 22%);
+    background: rgb(255 255 255 / 4%);
+    box-shadow: none;
+    color: var(--foreground);
   }
 
   .defi-badge {
     align-items: center;
-    background: rgb(0 255 136 / 8%);
-    border: 1px solid rgb(0 255 136 / 25%);
-    color: var(--primary);
+    background: rgb(255 255 255 / 4%);
+    border: 1px solid rgb(255 255 255 / 10%);
+    border-radius: 9999px;
+    color: var(--muted-foreground);
     display: inline-flex;
-    font-family: var(--font-share-tech), ui-monospace, monospace;
-    letter-spacing: 0.16em;
+    font-family: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
   }
 
   .defi-input {
     background: var(--input);
     border: 1px solid var(--border);
-    color: var(--primary);
-    font-family: var(--font-jetbrains), ui-monospace, monospace;
+    border-radius: 0.875rem;
+    color: var(--foreground);
+    font-family: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
     min-height: 48px;
   }
 
   .defi-input:focus-visible {
-    border-color: var(--primary);
-    box-shadow: var(--box-shadow-neon);
+    border-color: rgb(255 255 255 / 28%);
+    box-shadow: 0 0 0 3px rgb(255 255 255 / 6%);
     outline: none;
   }
 
-  /* Kept class name; neon gradient implementation */
   .bitcoin-gradient-text {
-    background-image: linear-gradient(90deg, var(--accent), var(--accent-tertiary), var(--accent-secondary));
-    background-size: 200% auto;
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    filter: drop-shadow(0 0 10px rgba(0, 255, 136, 0.45));
+    background-image: none;
+    color: var(--foreground);
+    filter: none;
+    -webkit-background-clip: unset;
+    background-clip: unset;
   }
 
-  .orange-glow {
-    box-shadow: var(--box-shadow-neon);
-  }
-
-  .gold-glow {
-    box-shadow: var(--box-shadow-neon-tertiary);
-  }
-
+  .orange-glow,
+  .gold-glow,
   .neon-glow {
     box-shadow: var(--box-shadow-neon);
   }
@@ -573,37 +538,39 @@
   }
 
   .animate-float {
-    animation: float 8s ease-in-out infinite;
+    animation: float 10s ease-in-out infinite;
   }
 
   .animate-pulse-glow {
-    animation: pulse-glow 2.6s ease-in-out infinite;
+    animation: pulse-glow 3.2s ease-in-out infinite;
+  }
+
+  .animate-fade-up {
+    animation: fade-up 0.75s cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 
   .blink-cursor::after {
-    animation: blink 1s step-end infinite;
-    color: var(--accent);
-    content: "_";
-    margin-left: 0.25rem;
+    animation: none;
+    content: "";
   }
 
-  /* Clean product sidebar — opaque cool void, blocks body neon bleed */
+  .text-brand-signal {
+    color: var(--brand-signal);
+  }
+
+  .bg-brand-signal {
+    background-color: var(--brand-signal);
+  }
+
   .app-sidebar-surface {
-    background:
-      linear-gradient(180deg, rgb(12 14 18 / 100%) 0%, rgb(8 9 12 / 100%) 100%);
+    background: linear-gradient(180deg, rgb(12 12 14 / 100%) 0%, rgb(9 9 11 / 100%) 100%);
     isolation: isolate;
   }
 
   .app-sidebar-surface::before {
-    background: linear-gradient(
-      180deg,
-      rgb(0 212 255 / 10%) 0%,
-      transparent 28%,
-      transparent 100%
-    );
+    background: linear-gradient(180deg, rgb(255 255 255 / 3%) 0%, transparent 28%);
     content: "";
     inset: 0;
-    opacity: 0.45;
     pointer-events: none;
     position: absolute;
     z-index: 0;
@@ -615,24 +582,24 @@
 
   .workspace-water__base {
     background:
-      radial-gradient(ellipse 90% 55% at 50% -10%, rgb(0 212 255 / 10%), transparent 55%),
-      radial-gradient(ellipse 60% 40% at 85% 30%, rgb(0 255 136 / 6%), transparent 50%),
-      radial-gradient(ellipse 50% 35% at 10% 70%, rgb(0 180 220 / 7%), transparent 45%),
-      linear-gradient(180deg, #07090d 0%, #0a0a0f 45%, #06080c 100%);
+      radial-gradient(ellipse 90% 55% at 50% -10%, rgb(255 255 255 / 4%), transparent 55%),
+      radial-gradient(ellipse 60% 40% at 85% 30%, rgb(176 160 234 / 5%), transparent 50%),
+      radial-gradient(ellipse 50% 35% at 10% 70%, rgb(130 150 180 / 4%), transparent 45%),
+      linear-gradient(180deg, #08080a 0%, #09090b 45%, #070709 100%);
     inset: 0;
     position: absolute;
   }
 
   .workspace-water__caustic {
     border-radius: 50%;
-    filter: blur(48px);
+    filter: blur(56px);
     position: absolute;
     will-change: transform, opacity;
   }
 
   .workspace-water__caustic--a {
-    animation: water-caustic-a 18s ease-in-out infinite;
-    background: radial-gradient(circle, rgb(0 212 255 / 28%) 0%, transparent 70%);
+    animation: water-caustic-a 22s ease-in-out infinite;
+    background: radial-gradient(circle, rgb(255 255 255 / 8%) 0%, transparent 70%);
     height: 55vmin;
     left: 8%;
     top: 12%;
@@ -640,8 +607,8 @@
   }
 
   .workspace-water__caustic--b {
-    animation: water-caustic-b 22s ease-in-out infinite;
-    background: radial-gradient(circle, rgb(0 255 136 / 18%) 0%, transparent 68%);
+    animation: water-caustic-b 26s ease-in-out infinite;
+    background: radial-gradient(circle, rgb(176 160 234 / 12%) 0%, transparent 68%);
     bottom: 18%;
     height: 48vmin;
     right: 5%;
@@ -649,8 +616,8 @@
   }
 
   .workspace-water__caustic--c {
-    animation: water-caustic-c 26s ease-in-out infinite;
-    background: radial-gradient(circle, rgb(0 180 255 / 16%) 0%, transparent 70%);
+    animation: water-caustic-c 30s ease-in-out infinite;
+    background: radial-gradient(circle, rgb(130 150 180 / 10%) 0%, transparent 70%);
     height: 40vmin;
     left: 40%;
     top: 45%;
@@ -661,7 +628,7 @@
     bottom: 0;
     height: min(42vh, 360px);
     left: -10%;
-    opacity: 0.9;
+    opacity: 0.5;
     position: absolute;
     width: 120%;
   }
@@ -672,25 +639,25 @@
   }
 
   .workspace-water__wave-layer--1 {
-    animation: water-wave-drift 28s linear infinite;
+    animation: water-wave-drift 32s linear infinite;
   }
 
   .workspace-water__wave-layer--2 {
-    animation: water-wave-drift-alt 36s linear infinite;
+    animation: water-wave-drift-alt 40s linear infinite;
   }
 
   .workspace-water__wave-layer--3 {
-    animation: water-wave-drift 44s linear infinite reverse;
+    animation: water-wave-drift 48s linear infinite reverse;
   }
 
   .workspace-water__sheen {
-    animation: water-sheen 14s ease-in-out infinite;
+    animation: water-sheen 16s ease-in-out infinite;
     background: linear-gradient(
       105deg,
       transparent 30%,
-      rgb(0 212 255 / 6%) 48%,
-      rgb(255 255 255 / 4%) 50%,
-      rgb(0 255 136 / 5%) 52%,
+      rgb(255 255 255 / 3%) 48%,
+      rgb(255 255 255 / 5%) 50%,
+      rgb(176 160 234 / 4%) 52%,
       transparent 70%
     );
     inset: 0;
@@ -704,6 +671,7 @@
   .cyber-glitch:hover,
   .animate-float,
   .animate-pulse-glow,
+  .animate-fade-up,
   .blink-cursor::after,
   .workspace-water__caustic,
   .workspace-water__wave-layer,
@@ -714,10 +682,10 @@
   .workspace-water__caustic--a,
   .workspace-water__caustic--b,
   .workspace-water__caustic--c {
-    opacity: 0.4;
+    opacity: 0.45;
   }
 
   .cyber-glitch {
-    text-shadow: -1px 0 #ff00ff, 1px 0 #00d4ff;
+    text-shadow: none;
   }
 }

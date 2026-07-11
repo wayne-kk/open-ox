@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { JetBrains_Mono, Orbitron, Share_Tech_Mono } from "next/font/google";
+import { JetBrains_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import { ConditionalFooter } from "./components/ConditionalFooter";
 import { ConditionalNav } from "./components/ConditionalNav";
 import { ConsoleEasterEgg } from "./components/ConsoleEasterEgg";
@@ -8,21 +8,16 @@ import { FaviconProvider } from "./contexts/FaviconContext";
 import { DynamicFavicon } from "./components/DynamicFavicon";
 import "./globals.css";
 
-const orbitron = Orbitron({
-  variable: "--font-orbitron",
+const plusJakarta = Plus_Jakarta_Sans({
+  variable: "--font-jakarta",
   subsets: ["latin"],
-  weight: ["500", "600", "700", "800", "900"],
+  weight: ["400", "500", "600", "700"],
 });
 
 const jetBrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains",
   subsets: ["latin"],
-});
-
-const shareTechMono = Share_Tech_Mono({
-  variable: "--font-share-tech",
-  subsets: ["latin"],
-  weight: "400",
+  weight: ["400", "500", "600"],
 });
 
 export const metadata: Metadata = {
@@ -38,7 +33,7 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" className="dark">
       <body
-        className={`${orbitron.variable} ${jetBrainsMono.variable} ${shareTechMono.variable} min-h-screen bg-background text-foreground antialiased`}
+        className={`${plusJakarta.variable} ${jetBrainsMono.variable} min-h-screen bg-background text-foreground antialiased`}
       >
         <FaviconProvider>
           <DynamicFavicon />

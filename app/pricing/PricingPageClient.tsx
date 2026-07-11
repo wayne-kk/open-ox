@@ -104,16 +104,16 @@ function FaqItem({ q, a }: { q: string; a: React.ReactNode }) {
         className="flex w-full items-center justify-between gap-4 py-5 text-left"
         aria-expanded={open}
       >
-        <span className="text-[15px] font-medium text-white/90">{q}</span>
+        <span className="text-[15px] font-medium text-foreground/90">{q}</span>
         <ChevronDown
           className={cn(
-            "h-4 w-4 shrink-0 text-white/40 transition-transform duration-200",
+            "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
             open && "rotate-180"
           )}
         />
       </button>
       {open ? (
-        <div className="pb-5 pr-8 text-[14px] leading-relaxed text-white/55">{a}</div>
+        <div className="pb-5 pr-8 text-[14px] leading-relaxed text-muted-foreground">{a}</div>
       ) : null}
     </div>
   );
@@ -121,8 +121,8 @@ function FaqItem({ q, a }: { q: string; a: React.ReactNode }) {
 
 function Feature({ children }: { children: React.ReactNode }) {
   return (
-    <li className="flex gap-2.5 text-[13px] leading-snug text-white/65">
-      <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" strokeWidth={2.5} />
+    <li className="flex gap-2.5 text-[13px] leading-snug text-muted-foreground">
+      <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-signal" strokeWidth={2.5} />
       <span>{children}</span>
     </li>
   );
@@ -208,19 +208,18 @@ export function PricingPageClient() {
     credits?.plan === "pro" && credits.proTier === selectedTier?.id;
 
   return (
-    <div className="relative min-h-screen bg-[#0a0a0f] text-foreground">
+    <div className="relative min-h-dvh bg-background text-foreground">
       <div
         aria-hidden
-        className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,rgba(0,255,136,0.07),transparent)]"
+        className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,rgba(255,255,255,0.04),transparent)]"
       />
 
       <main className="relative z-10 mx-auto max-w-6xl px-6 pb-28 pt-14 md:pt-16">
-        {/* Hero — Lovable pattern: title + one capacity sentence */}
         <div className="mx-auto max-w-2xl text-center">
-          <h1 className="font-heading text-4xl font-semibold tracking-wide text-white md:text-5xl">
+          <h1 className="font-heading text-4xl font-semibold tracking-[-0.035em] text-foreground md:text-5xl">
             Pricing
           </h1>
-          <p className="mt-4 text-[16px] leading-relaxed text-white/55 md:text-[17px]">
+          <p className="mt-4 text-[16px] leading-relaxed text-muted-foreground md:text-[17px]">
             Start for free. Upgrade to get the capacity that matches how much you build.
           </p>
           {credits?.plan === "pro" ? (
@@ -228,7 +227,7 @@ export function PricingPageClient() {
               type="button"
               onClick={() => void openPortal()}
               disabled={busy !== null}
-              className="mt-4 text-[13px] text-primary hover:underline disabled:opacity-50"
+              className="mt-4 text-[13px] text-brand-signal hover:underline disabled:opacity-50"
             >
               {busy === "portal" ? "Opening…" : "Manage subscription"}
             </button>
@@ -236,13 +235,13 @@ export function PricingPageClient() {
         </div>
 
         {checkout === "success" ? (
-          <p className="mx-auto mt-8 max-w-xl rounded-lg border border-primary/25 bg-primary/10 px-4 py-3 text-center text-[13px] text-primary">
+          <p className="mx-auto mt-8 max-w-xl rounded-2xl border border-white/12 bg-white/4 px-4 py-3 text-center text-[13px] text-foreground/80">
             Payment received. Credits usually appear within a few seconds — refresh if the balance
             looks stale.
           </p>
         ) : null}
         {checkout === "cancel" ? (
-          <p className="mx-auto mt-8 max-w-xl rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3 text-center text-[13px] text-white/55">
+          <p className="mx-auto mt-8 max-w-xl rounded-2xl border border-white/8 bg-white/2 px-4 py-3 text-center text-[13px] text-muted-foreground">
             Checkout canceled. No charge was made.
           </p>
         ) : null}
@@ -252,16 +251,16 @@ export function PricingPageClient() {
           </p>
         ) : null}
 
-        {/* Plan cards — Free | Pro | Enterprise */}
         <section className="mt-14 grid gap-5 lg:grid-cols-3">
-          {/* Free */}
-          <article className="flex flex-col rounded-2xl border border-white/[0.09] bg-[#0e0e14] p-7">
-            <h2 className="text-[15px] font-medium text-white">Free</h2>
-            <p className="mt-1 text-[13px] text-white/45">Try Open-OX</p>
+          <article className="flex flex-col rounded-2xl border border-white/8 bg-card p-7">
+            <h2 className="text-[15px] font-medium text-foreground">Free</h2>
+            <p className="mt-1 text-[13px] text-muted-foreground">Try Open-OX</p>
             <div className="mt-6 flex items-baseline gap-1">
-              <span className="font-heading text-4xl font-semibold text-white">$0</span>
+              <span className="font-heading text-4xl font-semibold tracking-[-0.03em] text-foreground">
+                $0
+              </span>
             </div>
-            <p className="mt-2 text-[13px] text-white/45">5 credits / day · 30 / month max</p>
+            <p className="mt-2 text-[13px] text-muted-foreground">5 credits / day · 30 / month max</p>
 
             <ul className="mt-8 flex flex-1 flex-col gap-3">
               <Feature>Generate & modify with daily credits</Feature>
@@ -272,34 +271,33 @@ export function PricingPageClient() {
 
             <Link
               href="/dashboard"
-              className="mt-8 inline-flex h-11 w-full items-center justify-center rounded-lg border border-white/15 text-[13px] font-medium text-white/85 transition hover:bg-white/[0.04]"
+              className="defi-button-outline mt-8 h-11 w-full text-[13px]"
             >
               Get started
             </Link>
           </article>
 
-          {/* Pro — capacity selector inside one card */}
-          <article className="relative flex flex-col rounded-2xl border border-primary/35 bg-[#0e0e14] p-7 shadow-[0_0_0_1px_rgba(0,255,136,0.08)]">
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-0.5 text-[11px] font-medium text-primary-foreground">
+          <article className="relative flex flex-col rounded-2xl border border-white/20 bg-card p-7 shadow-[0_0_0_1px_rgba(255,255,255,0.04)]">
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-0.5 text-[11px] font-semibold text-primary-foreground">
               Popular
             </div>
-            <h2 className="text-[15px] font-medium text-white">Pro</h2>
-            <p className="mt-1 text-[13px] text-white/45">For builders who ship often</p>
+            <h2 className="text-[15px] font-medium text-foreground">Pro</h2>
+            <p className="mt-1 text-[13px] text-muted-foreground">For builders who ship often</p>
 
             <div className="mt-6 flex items-baseline gap-1">
-              <span className="font-heading text-4xl font-semibold text-white">
+              <span className="font-heading text-4xl font-semibold tracking-[-0.03em] text-foreground">
                 ${selectedTier?.priceUsd ?? "—"}
               </span>
-              <span className="text-[14px] text-white/40">/ month</span>
+              <span className="text-[14px] text-muted-foreground">/ month</span>
             </div>
 
             <label className="mt-5 block">
-              <span className="mb-1.5 block text-[12px] text-white/40">Monthly credits</span>
+              <span className="mb-1.5 block text-[12px] text-muted-foreground">Monthly credits</span>
               <div className="relative">
                 <select
                   value={selectedTier?.id ?? ""}
                   onChange={(e) => setSelectedTierId(e.target.value)}
-                  className="h-10 w-full appearance-none rounded-lg border border-white/12 bg-[#16161e] px-3 pr-9 text-[13px] text-white outline-none focus:border-primary/50"
+                  className="h-10 w-full appearance-none rounded-xl border border-white/12 bg-[#161618] px-3 pr-9 text-[13px] text-foreground outline-none focus:border-white/25"
                 >
                   {(catalog?.pro ?? []).map((tier) => (
                     <option key={tier.id} value={tier.id} disabled={!tier.available}>
@@ -308,7 +306,7 @@ export function PricingPageClient() {
                     </option>
                   ))}
                 </select>
-                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/35" />
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               </div>
             </label>
 
@@ -329,7 +327,7 @@ export function PricingPageClient() {
                 startCheckout({ kind: "subscription", tierId: selectedTier.id })
               }
               className={cn(
-                "mt-8 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary text-[13px] font-semibold text-primary-foreground transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45"
+                "defi-button mt-8 h-11 w-full gap-2 text-[13px] disabled:cursor-not-allowed disabled:opacity-45"
               )}
             >
               {busy === selectedTier?.id ? (
@@ -339,14 +337,15 @@ export function PricingPageClient() {
             </button>
           </article>
 
-          {/* Enterprise */}
-          <article className="flex flex-col rounded-2xl border border-white/[0.09] bg-[#0e0e14] p-7">
-            <h2 className="text-[15px] font-medium text-white">Enterprise</h2>
-            <p className="mt-1 text-[13px] text-white/45">Volume & governance</p>
+          <article className="flex flex-col rounded-2xl border border-white/8 bg-card p-7">
+            <h2 className="text-[15px] font-medium text-foreground">Enterprise</h2>
+            <p className="mt-1 text-[13px] text-muted-foreground">Volume & governance</p>
             <div className="mt-6 flex items-baseline gap-1">
-              <span className="font-heading text-4xl font-semibold text-white">Custom</span>
+              <span className="font-heading text-4xl font-semibold tracking-[-0.03em] text-foreground">
+                Custom
+              </span>
             </div>
-            <p className="mt-2 text-[13px] text-white/45">Invoicing · SSO · volume credits</p>
+            <p className="mt-2 text-[13px] text-muted-foreground">Invoicing · SSO · volume credits</p>
 
             <ul className="mt-8 flex flex-1 flex-col gap-3">
               <Feature>Custom credit volume</Feature>
@@ -357,18 +356,19 @@ export function PricingPageClient() {
 
             <a
               href="mailto:hello@open-ox.dev?subject=Open-OX%20Enterprise"
-              className="mt-8 inline-flex h-11 w-full items-center justify-center rounded-lg border border-white/15 text-[13px] font-medium text-white/85 transition hover:bg-white/[0.04]"
+              className="defi-button-outline mt-8 h-11 w-full text-[13px]"
             >
               Contact us
             </a>
           </article>
         </section>
 
-        {/* Top-ups — secondary, quieter */}
         <section className="mt-20">
           <div className="mx-auto max-w-xl text-center">
-            <h2 className="text-[22px] font-medium tracking-tight text-white">Need more credits?</h2>
-            <p className="mt-2 text-[14px] text-white/50">
+            <h2 className="text-[22px] font-medium tracking-[-0.02em] text-foreground">
+              Need more credits?
+            </h2>
+            <p className="mt-2 text-[14px] text-muted-foreground">
               One-time top-ups. Available on Free and Pro — added to the same balance.
             </p>
           </div>
@@ -376,15 +376,15 @@ export function PricingPageClient() {
             {(catalog?.topups ?? []).map((pack) => (
               <div
                 key={pack.id}
-                className="flex flex-col items-center rounded-xl border border-white/[0.08] bg-[#0e0e14] px-4 py-5 text-center"
+                className="flex flex-col items-center rounded-2xl border border-white/8 bg-card px-4 py-5 text-center"
               >
-                <p className="text-[15px] font-medium text-white">{pack.credits} credits</p>
-                <p className="mt-1 text-[13px] text-white/45">${pack.priceUsd}</p>
+                <p className="text-[15px] font-medium text-foreground">{pack.credits} credits</p>
+                <p className="mt-1 text-[13px] text-muted-foreground">${pack.priceUsd}</p>
                 <button
                   type="button"
                   disabled={!pack.available || busy !== null}
                   onClick={() => startCheckout({ kind: "topup", packId: pack.id })}
-                  className="mt-4 text-[13px] font-medium text-primary hover:underline disabled:opacity-40"
+                  className="mt-4 text-[13px] font-medium text-brand-signal hover:underline disabled:opacity-40"
                 >
                   {busy === pack.id ? "…" : "Buy"}
                 </button>
@@ -393,9 +393,8 @@ export function PricingPageClient() {
           </div>
         </section>
 
-        {/* FAQ — Lovable pattern */}
         <section className="mx-auto mt-24 max-w-2xl">
-          <h2 className="text-center text-[22px] font-medium tracking-tight text-white">
+          <h2 className="text-center text-[22px] font-medium tracking-[-0.02em] text-foreground">
             Frequently asked questions
           </h2>
           <div className="mt-8">

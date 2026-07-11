@@ -66,7 +66,7 @@ function Node({
             {/* Breathing glow — active node */}
             {state === "active" && (
                 <div className="absolute -inset-8 rounded-3xl pointer-events-none animate-[breathe_2s_ease-in-out_infinite]"
-                    style={{ background: "radial-gradient(circle, rgba(0,255,136,0.15) 0%, transparent 70%)" }}
+                    style={{ background: "radial-gradient(circle, rgba(176,160,234,0.22) 0%, transparent 70%)" }}
                 />
             )}
             {/* Done glow */}
@@ -87,7 +87,7 @@ function Node({
                 : state === "failed"
                     ? "bg-red-500/14 border-2 border-red-400/60 text-red-300 shadow-[0_0_24px_rgba(239,68,68,0.35)]"
                 : state === "active"
-                    ? "bg-primary/12 border-2 border-primary/60 text-primary shadow-[0_0_32px_rgba(0,255,136,0.35)]"
+                    ? "bg-primary/12 border-2 border-primary/60 text-primary shadow-[0_0_32px_rgba(176,160,234,0.35)]"
                     : "bg-white/[0.06] border border-white/25 text-white/75"
         }
       `}>
@@ -133,7 +133,7 @@ function Node({
                     : state === "failed"
                         ? "bg-red-500 border-red-400 text-black"
                     : state === "active"
-                        ? "bg-primary border-primary text-black"
+                        ? "bg-primary border-primary text-primary-foreground"
                         : "bg-white/15 border-white/30 text-white/80"
           }
         `}>
@@ -165,8 +165,8 @@ function Node({
                         className="h-full rounded-full transition-[width] duration-100"
                         style={{
                             width: `${Math.min(displayProgress, 100)}%`,
-                            background: "linear-gradient(90deg, #00ff88, #00d4ff)",
-                            boxShadow: "0 0 10px rgba(0,255,136,0.5)",
+                            background: "linear-gradient(90deg, #b0a0ea, #8296b4)",
+                            boxShadow: "0 0 10px rgba(176,160,234,0.35)",
                         }}
                     />
                 </div>
@@ -266,8 +266,8 @@ function TopoEdges({ nodeRefs, edges, getState, repairActive }: {
         <svg ref={svgRef} className="absolute inset-0 z-0 pointer-events-none overflow-visible">
             <defs>
                 <linearGradient id="grad-active" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="rgba(34,197,94,0.5)" />
-                    <stop offset="100%" stopColor="rgba(0,255,136,0.7)" />
+                    <stop offset="0%" stopColor="rgba(176,160,234,0.55)" />
+                    <stop offset="100%" stopColor="rgba(130,150,180,0.7)" />
                 </linearGradient>
                 <linearGradient id="grad-repair" x1="0%" y1="0%" x2="100%" y2="0%">
                     <stop offset="0%" stopColor="rgba(251,146,60,0.6)" />
@@ -292,7 +292,7 @@ function TopoEdges({ nodeRefs, edges, getState, repairActive }: {
                   {/* Glow layer */}
                   {isLive && (
                       <path d={p.d} fill="none"
-                          stroke={bothDone ? "rgba(34,197,94,0.15)" : "rgba(0,255,136,0.12)"}
+                          stroke={bothDone ? "rgba(34,197,94,0.15)" : "rgba(176,160,234,0.14)"}
                           strokeWidth="10" filter="url(#glow-edge)" />
                   )}
                   {/* Base line */}
@@ -305,17 +305,17 @@ function TopoEdges({ nodeRefs, edges, getState, repairActive }: {
                   {/* Particle flow — multiple dots traveling along the path */}
                   {isLive && !bothDone && (
                           <>
-                              <circle r="2.5" fill="#00ff88" filter="url(#glow-particle)">
+                              <circle r="2.5" fill="#b0a0ea" filter="url(#glow-particle)">
                                   <animateMotion dur="1.5s" repeatCount="indefinite" keyTimes="0;1" keySplines="0.4 0 0.2 1" calcMode="spline">
                                       <mpath href={`#path-${p.id}`} />
                                   </animateMotion>
                               </circle>
-                              <circle r="1.5" fill="#00d4ff" opacity="0.7">
+                              <circle r="1.5" fill="#8296b4" opacity="0.7">
                                   <animateMotion dur="1.5s" repeatCount="indefinite" begin="0.5s" keyTimes="0;1" keySplines="0.4 0 0.2 1" calcMode="spline">
                                       <mpath href={`#path-${p.id}`} />
                                   </animateMotion>
                               </circle>
-                              <circle r="1" fill="#fde68a" opacity="0.5">
+                              <circle r="1" fill="#f4f4f5" opacity="0.5">
                                   <animateMotion dur="1.5s" repeatCount="indefinite" begin="1s" keyTimes="0;1" keySplines="0.4 0 0.2 1" calcMode="spline">
                                       <mpath href={`#path-${p.id}`} />
                                   </animateMotion>

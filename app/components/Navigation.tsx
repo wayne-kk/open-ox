@@ -40,8 +40,8 @@ export function Navigation() {
       >
         <div className="container mx-auto flex items-center justify-between px-6 py-4 lg:px-8">
           <Link href={brandHref} className="group flex items-center gap-2.5">
-            <BrandMark size={28} />
-            <span className="font-heading text-[13px] font-bold tracking-[0.18em] text-foreground">
+            <BrandMark size={26} />
+            <span className="font-heading text-[14px] font-semibold tracking-[-0.02em] text-foreground">
               OPEN-OX
             </span>
           </Link>
@@ -53,14 +53,13 @@ export function Navigation() {
                 <Link
                   key={href}
                   href={href}
-                  className={`relative px-4 py-2 text-[13px] font-medium transition-colors ${
-                    active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                  className={`relative px-3.5 py-2 text-[13px] font-medium transition-colors after:absolute after:inset-x-3.5 after:bottom-0.5 after:h-px after:origin-left after:bg-primary after:transition-transform after:duration-300 after:ease-out after:content-[''] ${
+                    active
+                      ? "text-foreground after:scale-x-100"
+                      : "text-muted-foreground after:scale-x-0 hover:text-foreground hover:after:scale-x-100"
                   }`}
                 >
                   {label}
-                  {active ? (
-                    <span className="absolute inset-x-4 bottom-0 h-px rounded-full bg-primary/70" />
-                  ) : null}
                 </Link>
               );
             })}
@@ -68,11 +67,11 @@ export function Navigation() {
 
           <div className="flex items-center gap-3">
             {!ready ? (
-              <div className="hidden h-8 w-24 animate-pulse rounded-md bg-white/5 md:block" />
+              <div className="hidden h-8 w-24 animate-pulse rounded-full bg-white/5 md:block" />
             ) : user ? (
               <Link
                 href="/dashboard"
-                className="defi-button hidden px-3 py-1.5 text-xs md:inline-flex"
+                className="defi-button hidden h-8 px-4 text-[12px] md:inline-flex"
               >
                 进入工作台
               </Link>
@@ -80,11 +79,11 @@ export function Navigation() {
               <div className="hidden items-center gap-2 md:flex">
                 <Link
                   href="/auth"
-                  className="px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                  className="px-3 py-1.5 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground"
                 >
                   登录
                 </Link>
-                <Link href="/auth?mode=register" className="defi-button px-3 py-1.5 text-xs">
+                <Link href="/auth?mode=register" className="defi-button h-8 px-4 text-[12px]">
                   注册
                 </Link>
               </div>
@@ -92,7 +91,7 @@ export function Navigation() {
             <button
               type="button"
               onClick={() => setOpen((v) => !v)}
-              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground md:hidden"
+              className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:text-foreground md:hidden"
               aria-label="Toggle menu"
             >
               {open ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
@@ -115,8 +114,8 @@ export function Navigation() {
                   key={href}
                   href={href}
                   onClick={() => setOpen(false)}
-                  className={`block rounded-lg px-4 py-3 text-[15px] font-medium transition-colors ${
-                    active ? "bg-primary/10 text-primary" : "text-muted-foreground"
+                  className={`block rounded-xl px-4 py-3 text-[15px] font-medium transition-colors ${
+                    active ? "bg-white/6 text-foreground" : "text-muted-foreground"
                   }`}
                 >
                   {label}
@@ -124,12 +123,12 @@ export function Navigation() {
               );
             })}
             {!ready ? (
-              <div className="mt-2 h-12 animate-pulse rounded-lg bg-white/5" />
+              <div className="mt-2 h-12 animate-pulse rounded-xl bg-white/5" />
             ) : user ? (
               <Link
                 href="/dashboard"
                 onClick={() => setOpen(false)}
-                className="mt-4 flex w-full items-center justify-center rounded-lg border border-primary/40 bg-primary/10 py-2.5 text-[13px] font-medium text-primary transition hover:bg-primary/20"
+                className="defi-button mt-4 w-full py-2.5 text-[13px]"
               >
                 进入工作台
               </Link>
@@ -138,14 +137,14 @@ export function Navigation() {
                 <Link
                   href="/auth"
                   onClick={() => setOpen(false)}
-                  className="flex w-full items-center justify-center rounded-lg border border-white/15 py-2.5 text-[13px] font-medium text-foreground transition hover:bg-white/5"
+                  className="defi-button-outline w-full py-2.5 text-[13px]"
                 >
                   登录
                 </Link>
                 <Link
                   href="/auth?mode=register"
                   onClick={() => setOpen(false)}
-                  className="flex w-full items-center justify-center rounded-lg border border-primary/40 bg-primary/10 py-2.5 text-[13px] font-medium text-primary transition hover:bg-primary/20"
+                  className="defi-button w-full py-2.5 text-[13px]"
                 >
                   注册
                 </Link>
