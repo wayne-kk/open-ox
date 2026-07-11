@@ -36,6 +36,7 @@
 | **爽点** | 贵 token 的生成变成「确认后执行」，抬首次可用率 |
 | **与路线图关系** | 强化迭代大纲 **C2 生成前确认**；可演进为可交互 IA，而不只是只读纲要 |
 | **建议优先级** | **P0**（优先押注之一） |
+| **已拆 PRD** | [`generate-blueprint-preview-v0.1-prd.md`](./generate-blueprint-preview-v0.1-prd.md)（Intent Agent 确认层） |
 
 ### 2.2 「一句话 + 三问」Brief
 

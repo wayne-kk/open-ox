@@ -22,6 +22,7 @@ const NAV_ITEMS = [
       { href: "/docs/design-system", label: "设计系统生成" },
       { href: "/docs/section-generation", label: "Section 生成" },
       { href: "/docs/skills", label: "风格技能" },
+      { href: "/docs/design-mode", label: "Design Mode" },
       { href: "/docs/modify-agent", label: "修改 Agent" },
     ],
   },

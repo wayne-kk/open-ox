@@ -1,12 +1,28 @@
 import Link from "next/link";
-import { ArrowRight, Cpu, GitBranch, Layers, Zap, Eye, MessageSquare, Database, Palette, FileCode, LayoutTemplate, History, Plug } from "lucide-react";
+import {
+  ArrowRight,
+  Cpu,
+  GitBranch,
+  Layers,
+  Zap,
+  Eye,
+  MessageSquare,
+  Database,
+  Palette,
+  FileCode,
+  LayoutTemplate,
+  History,
+  Plug,
+  MousePointer2,
+  Globe2,
+} from "lucide-react";
 
 const CARDS = [
   {
     icon: Cpu,
     href: "/docs/architecture",
     title: "系统架构",
-    desc: "系统全景、API 路由、数据流，以及从用户输入到上线预览的完整项目生命周期。",
+    desc: "产品面（Workspace / Community / Studio）、API、数据流，以及从输入到预览的完整生命周期。",
     tag: "核心",
     accent: "primary",
   },
@@ -14,8 +30,24 @@ const CARDS = [
     icon: GitBranch,
     href: "/docs/pipeline",
     title: "AI 生成流水线",
-    desc: "从校验技能到构建验证的主路径编排 — analyze ∥ infer、plan → 设计系统生成、Architect → 多页 Page Agent、可选范围类型检查与最多 5 轮构建修复。",
+    desc: "从校验技能到构建验证的主路径编排 — analyze ∥ infer、plan → 设计系统、Chrome 两阶段、多页 Page Agent、最多 5 轮构建修复。",
     tag: "流水线",
+    accent: "tertiary",
+  },
+  {
+    icon: Globe2,
+    href: "/docs/architecture#surfaces",
+    title: "Workspace · Community",
+    desc: "默认私有 Workspace；Publish Preview 上架社区静态发现；Allow Remix 为独立拷贝许可。",
+    tag: "产品",
+    accent: "primary",
+  },
+  {
+    icon: MousePointer2,
+    href: "/docs/design-mode",
+    title: "Design Mode",
+    desc: "Preview 点选 → 源坐标定位 → 服务端 AST Direct Apply；失败时预填 Modify 草稿。",
+    tag: "Studio",
     accent: "tertiary",
   },
   {
@@ -62,7 +94,7 @@ const CARDS = [
     icon: MessageSquare,
     href: "/docs/modify-agent",
     title: "修改 Agent",
-    desc: "受 Claude Code 启发的 Agent 循环，配备 Stop Hook、对话记忆和图片输入。",
+    desc: "Intent 路由 + Agent 循环；工作记忆投影稳住短程续写；Stop Hook、图片输入与 /clear。",
     tag: "Agent",
     accent: "tertiary",
   },
@@ -86,7 +118,7 @@ const CARDS = [
 
 const METRICS = [
   { value: "~90s", label: "端到端生成时间" },
-  { value: "8", label: "核心流水线节点" },
+  { value: "8+", label: "核心流水线节点" },
   { value: "0", label: "用户需要写的代码" },
   { value: "5", label: "构建修复最多轮次" },
 ];
@@ -94,7 +126,6 @@ const METRICS = [
 export default function DocsPage() {
   return (
     <div className="max-w-3xl">
-      {/* Breadcrumb */}
       <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-primary mb-6">
         // docs
       </p>
@@ -107,11 +138,10 @@ export default function DocsPage() {
       </h1>
 
       <p className="mt-5 text-[15px] leading-7 text-muted-foreground max-w-2xl">
-        Open-OX Studio 是一个全栈 AI 建站引擎。用户只需一句话描述需求，系统自动完成需求分析、设计系统生成、
-        并行组件编写、构建验证和云端预览。全程零代码。
+        Open-OX Studio 是一个全栈 AI 建站引擎。用户用一句话（可附参考图）描述需求，系统完成需求分析、设计系统、
+        并行实现、构建验证与预览；之后可在 Studio 对话修改或 Design Mode 点选微调。Workspace 默认私有，可发布到 Community。
       </p>
 
-      {/* Metrics strip */}
       <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {METRICS.map((m) => (
           <div key={m.label} className="rounded-xl border border-white/8 bg-white/[0.02] px-4 py-3">
@@ -121,7 +151,6 @@ export default function DocsPage() {
         ))}
       </div>
 
-      {/* Quick start callout */}
       <div className="mt-8 rounded-xl border border-primary/20 bg-primary/5 px-5 py-4">
         <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-primary mb-1">快速开始</p>
         <p className="text-[13px] text-muted-foreground">
@@ -129,15 +158,18 @@ export default function DocsPage() {
           <Link href="/docs/architecture" className="text-foreground underline underline-offset-4 hover:text-primary transition-colors">
             系统架构
           </Link>{" "}
-          了解全局设计，然后阅读{" "}
+          了解产品面与全局设计，然后阅读{" "}
           <Link href="/docs/pipeline" className="text-foreground underline underline-offset-4 hover:text-primary transition-colors">
             AI 生成流水线
           </Link>{" "}
-          深入生成流程细节。
+          或{" "}
+          <Link href="/docs/design-mode" className="text-foreground underline underline-offset-4 hover:text-primary transition-colors">
+            Design Mode
+          </Link>
+          。
         </p>
       </div>
 
-      {/* Changelog + API */}
       <div className="mt-6 grid gap-3 sm:grid-cols-2">
         <Link
           href="/changelog"
@@ -148,7 +180,7 @@ export default function DocsPage() {
           </div>
           <div className="min-w-0">
             <p className="font-heading text-[14px] font-semibold text-foreground group-hover:text-primary transition-colors">更新日志</p>
-            <p className="mt-0.5 text-[12px] leading-5 text-muted-foreground">版本迭代、工程决策与能力变更时间线。</p>
+            <p className="mt-0.5 text-[12px] leading-5 text-muted-foreground">至 v1.12：工作台、社区、Design Mode、工作记忆等。</p>
           </div>
         </Link>
         <Link
@@ -160,12 +192,11 @@ export default function DocsPage() {
           </div>
           <div className="min-w-0">
             <p className="font-heading text-[14px] font-semibold text-foreground group-hover:text-accent-tertiary transition-colors">API 参考</p>
-            <p className="mt-0.5 text-[12px] leading-5 text-muted-foreground">HTTP 路由速查：项目、生成、预览、认证等。</p>
+            <p className="mt-0.5 text-[12px] leading-5 text-muted-foreground">HTTP 路由速查：Workspace、Community、Design Mode、认证等。</p>
           </div>
         </Link>
       </div>
 
-      {/* Cards grid */}
       <div className="mt-10 grid gap-3 sm:grid-cols-2">
         {CARDS.map(({ icon: Icon, href, title, desc, tag, accent }) => (
           <Link
@@ -191,11 +222,10 @@ export default function DocsPage() {
         ))}
       </div>
 
-      {/* Stack note */}
       <div className="mt-10 border-t border-white/8 pt-8">
         <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground/40 mb-4">// 技术栈</p>
         <div className="flex flex-wrap gap-2">
-          {["Next.js 16", "React 19", "TypeScript", "Tailwind CSS v4", "Supabase", "Preview: Storage / local / E2B", "OpenAI-compatible API"].map((t) => (
+          {["Next.js 16", "React 19", "TypeScript", "Tailwind CSS v4", "Supabase", "Preview: Storage / local / E2B", "OpenAI-compatible API", "飞书 / Google OAuth"].map((t) => (
             <span key={t} className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 font-mono text-[11px] text-muted-foreground/70">
               {t}
             </span>

@@ -154,6 +154,8 @@ export interface BuildStudioState {
   pendingModifyInstruction: string | null;
   pendingModifyImage: string | null;
   iframeRef: React.RefObject<HTMLIFrameElement | null>;
+  /** Bumped when modify writes workspace files — CODE panel refreshes clean tabs. */
+  codeWorkspaceEpoch: number;
 }
 
 const AUTO_PREVIEW_STORAGE_KEY = "open-ox:studio:autoPreviewAfterBuild";
@@ -384,6 +386,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
   const [modifyImage, setModifyImage] = useState<string | null>(null);
   const [intentImage, setIntentImage] = useState<string | null>(null);
   const [modifying, setModifying] = useState(false);
+  const [codeWorkspaceEpoch, setCodeWorkspaceEpoch] = useState(0);
   const [modifySteps, setModifySteps] = useState<ModifyStep[]>([]);
   const [modifyPlan, setModifyPlan] = useState<ModifyPlan | null>(null);
   const [modifyDiffs, setModifyDiffs] = useState<ModifyDiff[]>([]);
@@ -1561,6 +1564,8 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
           }]);
         }
 
+        setCodeWorkspaceEpoch((n) => n + 1);
+
         if (autoPreviewAfterBuildRef.current) {
           void openPreviewAfterBuild(projectId, true);
         }
@@ -1625,5 +1630,6 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     pendingModifyInstruction,
     pendingModifyImage,
     iframeRef,
+    codeWorkspaceEpoch,
   };
 }

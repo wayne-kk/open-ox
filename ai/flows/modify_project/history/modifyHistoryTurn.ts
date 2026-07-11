@@ -234,11 +234,3 @@ export function formatRecentHistoryForRouter(turns: ModifyHistoryTurn[]): string
     .join("\n")}\n`;
 }
 
-export function buildHistoryContext(
-  dbHistory: ModifyHistoryTurn[],
-  sessionHistory: ModifyHistoryTurn[],
-  maxTurns = 10
-): string {
-  const recent = mergeModifyHistoryTurns(dbHistory, sessionHistory).slice(-maxTurns);
-  return formatHistoryForAgent(recent);
-}

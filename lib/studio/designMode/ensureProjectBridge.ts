@@ -3,7 +3,7 @@ import path from "path";
 
 import { WORKSPACE_ROOT } from "@/lib/projectManager";
 import { backfillOxAnchorsInProject } from "./backfillOxAnchors";
-import { backfillOxSourceInProject } from "./sourceInstrumentation/backfillOxSource";
+import { stripOxSourceFromProject } from "./sourceInstrumentation/stripOxSource";
 
 const BRIDGE_IMPORT = `import { OpenOxPreviewBridge } from "@/components/open-ox/OpenOxPreviewBridge";`;
 const TEMPLATE_BRIDGE = path.join(
@@ -20,7 +20,8 @@ export interface DesignModeProjectSetupResult {
   bridgeCopied: boolean;
   layoutPatched: boolean;
   instrumentationSynced: boolean;
-  sourceBackfilled: boolean;
+  /** True when previously persisted data-ox-source attrs were stripped from disk. */
+  sourceAttrsStripped: boolean;
   anchorsAdded: number;
   anchorFiles: string[];
 }
@@ -75,7 +76,7 @@ export async function ensureDesignModeProjectSetup(projectDir: string): Promise<
     bridgeCopied: false,
     layoutPatched: false,
     instrumentationSynced: false,
-    sourceBackfilled: false,
+    sourceAttrsStripped: false,
     anchorsAdded: 0,
     anchorFiles: [],
   };
@@ -103,14 +104,15 @@ export async function ensureDesignModeProjectSetup(projectDir: string): Promise<
     /* no layout */
   }
 
-  // Keep loader/config in sync for optional webpack path, but prefer disk backfill + Turbopack.
+  // Sync webpack loader + next.config so `next dev --webpack` can inject data-ox-source at compile time.
   const instrumentationSynced = await ensureSourceInstrumentationInProject(projectDir);
 
-  const sourceBackfill = await backfillOxSourceInProject(projectDir);
-  const sourceBackfilled = sourceBackfill.nodesAdded > 0 || sourceBackfill.filesTouched.length > 0;
-  if (sourceBackfilled) {
+  // Clean up any leftover disk backfill from older Turbopack workaround builds.
+  const sourceStrip = await stripOxSourceFromProject(projectDir);
+  const sourceAttrsStripped = sourceStrip.attrsRemoved > 0 || sourceStrip.filesTouched.length > 0;
+  if (sourceAttrsStripped) {
     console.log(
-      `[designMode] Backfilled data-ox-source on ${sourceBackfill.nodesAdded} node(s) in ${sourceBackfill.filesTouched.length} file(s)`
+      `[designMode] Stripped persisted data-ox-source from ${sourceStrip.filesTouched.length} file(s) (${sourceStrip.attrsRemoved} attr(s))`
     );
   }
 
@@ -125,7 +127,7 @@ export async function ensureDesignModeProjectSetup(projectDir: string): Promise<
     bridgeCopied: true,
     layoutPatched,
     instrumentationSynced,
-    sourceBackfilled,
+    sourceAttrsStripped,
     anchorsAdded: backfill.anchorsAdded,
     anchorFiles: backfill.files,
   };

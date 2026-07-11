@@ -12,6 +12,67 @@ interface ChangeEntry {
 
 const CHANGELOG: ChangeEntry[] = [
   {
+    version: "v1.12",
+    date: "2026-07-11",
+    tag: "minor",
+    title: "Modify · 工作记忆投影",
+    body: "短程续写不再依赖「最近 10 轮全文」。每次请求从 turn 列表确定性投影状态卡（焦点文件 / 未决问题），再配最近 2 轮原文（非对称截断），压低历史噪音、稳住「再大一点」类指代。",
+    items: [
+      "projectWorkingMemory：focusFiles / pendingQuestion / lastIntent 等由纯函数投影，不新增 DB 列",
+      "主 Agent 与 Intent Router 共用投影；/clear 清空后自然无工作记忆",
+      "GET /api/projects/[id]/memory 与 Studio MemoryDebugPanel 可观测注入内容",
+    ],
+  },
+  {
+    version: "v1.11",
+    date: "2026-07-10",
+    tag: "major",
+    title: "工作台改版 · /dashboard + App Shell",
+    body: "登录后主入口迁到 /dashboard：大号构建 composer、侧栏「我的项目 / 文件夹 / 社区」、统一产品壳在 dashboard ↔ community 间保持挂载。旧 /projects 列表 URL 重定向并保留 query。",
+    items: [
+      "路由：/dashboard 为 Workspace；/community 为发现；Studio 仍独立全屏",
+      "AppShell：开始构建锚点、文件夹展开、返回路径 captureAppReturnTo",
+      "项目卡片：发布 / Remix 开关、封面、生成中可进 Studio",
+    ],
+  },
+  {
+    version: "v1.10",
+    date: "2026-07-09",
+    tag: "major",
+    title: "Workspace 默认私有 · Community · Publish / Remix",
+    body: "下线「已登录全员可读」广场。Workspace 只看自己的项目；开启 Publish Preview 后进入 /community 静态发现；Allow Remix 为独立拷贝许可轴。见 ADR-0002。",
+    items: [
+      "默认私有：列表 API / RLS 仅所有者；社区列表走 Publish Preview + listed",
+      "两轴：Publish Preview（上架+静态预览）与 Allow Remix（登录后拷贝）；关 Preview 自动关 Remix",
+      "POST /api/projects/[id]/remix：拷源码快照+血缘，不含 Studio 对话与密钥",
+      "非所有者不可进他人 Studio；未发布预览/封面对非所有者硬切断",
+      "Admin 保留全量项目与强制下架，不进入社区产品面",
+    ],
+  },
+  {
+    version: "v1.9",
+    date: "2026-07-07",
+    tag: "major",
+    title: "Studio Design Mode · 点选直改源码",
+    body: "Live preview 点选元素，调色 / 字号 / 间距 / 圆角后 Direct Apply：编译期 data-ox-source 坐标定位 + 服务端 JSX AST 写盘。不可 Direct 时预填 Modify 草稿由用户确认。见 ADR-0001。",
+    items: [
+      "P0-A Design Mode Lite：overlay + bridge；local next-dev 预览下可 Direct Apply",
+      "M2：源坐标锚点、POST /api/projects/[id]/design-mode/patch、失败走 Modify 人工出口",
+      "backfill 接口补齐历史项目锚点；静态 site-previews 无锚点时预检后改走 Modify",
+    ],
+  },
+  {
+    version: "v1.8",
+    date: "2026-06-18",
+    tag: "minor",
+    title: "Google 登录",
+    body: "认证增加 Google OAuth，与飞书并列；/auth 按配置展示可用提供商，登录后按 redirect 回跳（含未登录构建草稿续写）。",
+    items: [
+      "GET /api/auth/google/start + callback；safeRedirect 防开放重定向",
+      "GET /api/auth/config 暴露当前启用的登录方式",
+    ],
+  },
+  {
     version: "v1.7",
     date: "2026-06-05",
     tag: "minor",
@@ -21,6 +82,17 @@ const CHANGELOG: ChangeEntry[] = [
       "编排：scaffold → page_implement_agent ×N → chrome_optimize → await_images / install_deps",
       "checkpoint：skipScaffold / skipChromeOptimize；旧 architect_agent 完成记录视为 scaffold 已完成",
       "Page Agent：单页主区块须带 section id；禁止在 page 内重复全局 Nav/Footer",
+    ],
+  },
+  {
+    version: "v1.7",
+    date: "2026-05-21",
+    tag: "minor",
+    title: "多模态生成 · 参考图进流水线",
+    body: "创建项目可携带参考图（imageBase64）；生成链路按 screenshotIntentMode（复刻布局 / 提取灵感）把视觉上下文注入 design intent 与 page implement，配合既有 screenshot guardrail。",
+    items: [
+      "POST /api/projects 支持 imageBase64；HeroPrompt / Studio 粘贴截图 chip",
+      "resolveScreenshotIntentMode + vision content 贯穿 blueprint / 设计系统 / 页面实现",
     ],
   },
   {

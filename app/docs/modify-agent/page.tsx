@@ -58,7 +58,7 @@ const TOC = [
   { id: "loop", label: "Agent 循环" },
   { id: "tools", label: "工具集" },
   { id: "stop-hooks", label: "Stop Hook" },
-  { id: "memory", label: "对话记忆" },
+  { id: "memory", label: "工作记忆" },
   { id: "vision", label: "图片输入" },
 ];
 
@@ -184,21 +184,24 @@ export default function ModifyAgentPage() {
         </section>
 
         <section id="memory" className="scroll-mt-24">
-          <H2>对话记忆</H2>
+          <H2>对话记忆与工作记忆</H2>
           <P>
-            每次修改运行都可以访问之前的修改记录作为上下文。记忆从两个来源合并并去重：
+            持久层仍是 turn 列表（DB <Code>modificationHistory</Code> + session 合并去重）。
+            注入主 Agent / Router 时不再塞「最近 10 轮全文」，而是：
           </P>
-          <Pre>{`// Modify history turn（结构化一轮对话）
-// instruction · assistantText · touchedFiles · intentCategory? · awaitingReply
-const dbHistory = project.modificationHistory.map(fromModificationRecord);
-const sessionHistory = conversationHistory.map(fromClientPayload);
+          <Pre>{`merged = mergeModifyHistoryTurns(dbHistory, sessionHistory)
 
-const merged = mergeModifyHistoryTurns(dbHistory, sessionHistory).slice(-10);
-// agent prompt: formatHistoryForAgent（正文 + 另行列 Files）
-// router prompt: formatRecentHistoryForRouter（只要正文）`}</Pre>
+// 工作记忆 = 从 turn 列表确定性投影（不落新 DB 列）
+workingMemory = projectWorkingMemory(merged)
+//   focusFiles (≤3) · pendingQuestion · lastIntent …
+
+// 主 Agent：状态卡 + 最近 2 轮原文（非最近轮 Result 截断）
+// Router：状态卡 + 短历史
+// /clear → 两侧输入为空 → 投影为空`}</Pre>
           <P>
-            用户可以在修改输入框中输入 <Code>/clear</Code> 重置 session 记忆。
-            <Code>/memory</Code> 命令打开调试面板，显示将注入下次 prompt 的完整合并历史。
+            用于稳住「再大一点」类短程指代，同时压低旧 Result 噪音。
+            <Code>/clear</Code> 重置 session；<Code>/memory</Code> 打开调试面板（
+            <Code>GET /api/projects/[id]/memory</Code>）查看将注入的投影与历史。
           </P>
         </section>
 

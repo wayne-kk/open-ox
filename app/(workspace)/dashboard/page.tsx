@@ -1107,7 +1107,7 @@ function ProjectsPageContent() {
               今天想构建什么，{greetName}？
             </h1>
             <p className="mt-3 text-[14px] text-white/55 sm:text-[15px]">
-              描述你的想法，生成可运行的 Next.js 站点
+              描述你的想法，生成可运行的 website 站点
             </p>
           </div>
           <Suspense

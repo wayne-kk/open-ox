@@ -66,7 +66,13 @@ export function parseModifyIntentRouterPayload(parsed: unknown): ModifyIntentRou
  */
 export async function stepModifyIntentRouter(
   userInstruction: string,
-  options?: { fileTree?: string; recentHistory?: ModifyHistoryTurn[] }
+  options?: {
+    fileTree?: string;
+    /** Preferred: working-memory card only (no raw turns). */
+    workingMemoryBlock?: string;
+    /** Legacy fallback when workingMemoryBlock is omitted. */
+    recentHistory?: ModifyHistoryTurn[];
+  }
 ): Promise<ModifyIntentRouterResult> {
   const trimmed = userInstruction.trim();
   if (!trimmed) {
@@ -79,7 +85,10 @@ export async function stepModifyIntentRouter(
     loadGuardrail("outputJson"),
   ]);
 
-  const historyBlock = formatRecentHistoryForRouter(options?.recentHistory ?? []);
+  const historyBlock =
+    options?.workingMemoryBlock !== undefined
+      ? options.workingMemoryBlock
+      : formatRecentHistoryForRouter(options?.recentHistory ?? []);
   const userPayload = [
     trimmed,
     historyBlock,

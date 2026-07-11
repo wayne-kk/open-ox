@@ -11,14 +11,24 @@ import { BlueprintOverview } from "./BlueprintOverview";
 import { MemoryDebugPanel } from "./MemoryDebugPanel";
 import { StudioMessageMarkdown } from "./StudioMessageMarkdown";
 import { StudioMarkdownTextarea } from "./StudioMarkdownTextarea";
+import { DiffBlock } from "./DiffPatchView";
+import { ModifyDetailsPreviewToggle } from "./ModifyDetailsPreviewToggle";
 import { SlashMenu } from "@/app/components/ui/SlashMenu";
 import { useSlashMenu } from "@/app/hooks/useSlashMenu";
 import {
   isRecoverableGenerationError,
   stripRecoverablePrefixForDisplay,
 } from "@/lib/generationRecovery";
-import type { BuildStudioState, ModifyRecord, ModifyDiff } from "../hooks/useBuildStudio";
+import type { BuildStudioState, ModifyRecord } from "../hooks/useBuildStudio";
 import { filterPipelineSteps } from "../lib/pipelineSteps";
+import {
+  formatTouchedFilesLabel,
+  extractModifyHeadline,
+  isCodeChangeTurn,
+  sumDiffStats,
+  type ModifyPreviewSlot,
+} from "../lib/modifyHistoryView";
+import { cn } from "@/lib/utils";
 
 function formatMs(ms: number): string {
     if (ms < 1000) return `${ms}ms`;
@@ -85,54 +95,6 @@ function GeneratedFilesList({ files }: { files: string[] }) {
     );
 }
 
-function DiffBlock({ diff }: { diff: ModifyDiff }) {
-    const [open, setOpen] = useState(false);
-    const lines = diff.patch.split("\n");
-
-    return (
-        <div className="rounded-lg border border-white/8 overflow-hidden text-[11px] font-mono">
-            {/* Header row */}
-            <button
-                type="button"
-                onClick={() => setOpen((v) => !v)}
-                className="w-full flex items-center justify-between bg-white/3 px-3 py-2 hover:bg-white/5 transition-colors text-left"
-            >
-                <span className="text-foreground/80 truncate max-w-[60%]">{diff.file}</span>
-                <div className="flex items-center gap-3 shrink-0">
-                    <span className="text-green-400/80">+{diff.stats.additions}</span>
-                    <span className="text-red-400/80">-{diff.stats.deletions}</span>
-                    <span className={`text-muted-foreground/50 transition-transform ${open ? "rotate-180" : ""}`}>▾</span>
-                </div>
-            </button>
-
-            {/* Diff lines */}
-            {open && (
-                <div className="overflow-x-auto bg-[#080a0d]">
-                    {lines.map((line, i) => {
-                        const isAdd = line.startsWith("+") && !line.startsWith("+++");
-                        const isDel = line.startsWith("-") && !line.startsWith("---");
-                        const isHunk = line.startsWith("@@");
-                        const isMeta = line.startsWith("---") || line.startsWith("+++");
-                        return (
-                            <div
-                                key={i}
-                                className={`px-3 py-px whitespace-pre leading-5 ${isAdd ? "bg-green-500/10 text-green-300/90" :
-                                    isDel ? "bg-red-500/10 text-red-300/80" :
-                                        isHunk ? "text-blue-400/60 bg-blue-500/5" :
-                                            isMeta ? "text-muted-foreground/40" :
-                                                "text-muted-foreground/60"
-                                    }`}
-                            >
-                                {line || " "}
-                            </div>
-                        );
-                    })}
-                </div>
-            )}
-        </div>
-    );
-}
-
 function normalizeMessageDedupe(s: string): string {
     return s.trim().replace(/\s+/g, " ");
 }
@@ -193,7 +155,19 @@ function changeActionBadge(action: string): { label: string; className: string }
     return { label: "MOD", className: "text-amber-300" };
 }
 
-function ModifyResultBubble({ record }: { record: ModifyRecord }) {
+function ModifyResultBubble({
+    record,
+    historyIndex,
+    previewSlot,
+    onOpenDetails,
+    onShowCurrentPreview,
+}: {
+    record: ModifyRecord;
+    historyIndex: number;
+    previewSlot: ModifyPreviewSlot;
+    onOpenDetails: (historyIndex: number) => void;
+    onShowCurrentPreview: (historyIndex: number) => void;
+}) {
     if (record.isSystemMessage) {
         return (
             <ChatBubble role="assistant">
@@ -209,6 +183,7 @@ function ModifyResultBubble({ record }: { record: ModifyRecord }) {
     const dedupedThinking = filterThinkingDedupe(record.thinking ?? [], analysisPrimary);
     const toolCalls = record.toolCalls ?? [];
     const hasTrace = dedupedThinking.length > 0 || toolCalls.length > 0;
+    const showPreviewToggle = isCodeChangeTurn(record);
 
     const assistantTitle = record.intentLabel ? `${record.intentLabel}助手` : "修改助手";
     const analysisTitle =
@@ -222,6 +197,16 @@ function ModifyResultBubble({ record }: { record: ModifyRecord }) {
         <ChatBubble role="assistant">
             <div className="text-[11px] font-medium text-foreground">{assistantTitle}</div>
             <div className="mt-3 space-y-3">
+                {showPreviewToggle ? (
+                    <ModifyDetailsPreviewToggle
+                        detailsActive={
+                            previewSlot.mode === "details" && previewSlot.historyIndex === historyIndex
+                        }
+                        previewActive={previewSlot.mode === "live"}
+                        onDetails={() => onOpenDetails(historyIndex)}
+                        onPreview={() => onShowCurrentPreview(historyIndex)}
+                    />
+                ) : null}
                 {record.plan && (
                     <LogSection title={analysisTitle}>
                         <StudioMessageMarkdown content={record.plan.analysis} />
@@ -351,16 +336,38 @@ export function BuildConversation({
     setIntentImage,
     designSelectionLabel = null,
     onClearDesignSelection,
+    previewSlot,
+    onOpenModifyDetails,
+    onShowCurrentPreview,
+    leftPaneView,
+    changesFocusIndex = null,
 }: BuildStudioState & {
     designSelectionLabel?: string | null;
     onClearDesignSelection?: () => void;
+    previewSlot: ModifyPreviewSlot;
+    onOpenModifyDetails: (historyIndex: number) => void;
+    onShowCurrentPreview: (historyIndex: number) => void;
+    leftPaneView: "conversation" | "changes";
+    /** When Timeline jumps here, highlight this history index in the changes list. */
+    changesFocusIndex?: number | null;
 }) {
     const chatRef = useRef<HTMLDivElement>(null);
     const userMessageRefs = useRef(new Map<string, HTMLDivElement>());
     const pendingModifyUserRef = useRef<HTMLDivElement>(null);
+    const changeItemRefs = useRef(new Map<number, HTMLDivElement>());
     const lastUserInputScrollNonceRef = useRef(0);
     const [slashHint, setSlashHint] = useState<string | null>(null);
     const [memoryOpen, setMemoryOpen] = useState(false);
+
+    const codeChangeTurns = modifyHistory
+        .map((record, historyIndex) => ({ record, historyIndex }))
+        .filter(({ record }) => isCodeChangeTurn(record));
+
+    useEffect(() => {
+        if (leftPaneView !== "changes" || changesFocusIndex == null) return;
+        const el = changeItemRefs.current.get(changesFocusIndex);
+        el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }, [leftPaneView, changesFocusIndex]);
 
     const slashCommands = [
         {
@@ -456,19 +463,62 @@ export function BuildConversation({
 
     return (
         <aside className="flex h-full min-h-0 w-full shrink-0 flex-col overflow-hidden lg:w-[540px] lg:max-h-full scrollbar-hidden">
-            <div className="flex items-center justify-between border-b border-white/8 px-5 py-2">
-                <div>
-                    <div className="text-sm font-semibold text-foreground">Build conversation</div>
-                    <div className="mt-1 text-xs text-muted-foreground">
-                        Describe what to build and watch the flow respond.
-                    </div>
-                </div>
-                <span className="rounded-full border border-white/10 bg-white/4 px-3 py-1 text-[11px] text-muted-foreground">
-                    Live
-                </span>
-            </div>
-
             <div ref={chatRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-5 scrollbar-hidden">
+                {leftPaneView === "changes" ? (
+                    <div className="space-y-3">
+                        {codeChangeTurns.length === 0 ? (
+                            <div className="px-1 py-8 text-center text-[13px] leading-relaxed text-muted-foreground/70">
+                                还没有代码变更。完成一次修改后会出现在这里。
+                            </div>
+                        ) : (
+                            [...codeChangeTurns].reverse().map(({ record, historyIndex }) => {
+                                const headline = extractModifyHeadline(record);
+                                const { additions, deletions } = sumDiffStats(record.diffs);
+                                const focused =
+                                    changesFocusIndex === historyIndex ||
+                                    (previewSlot.mode === "details" &&
+                                        previewSlot.historyIndex === historyIndex);
+                                return (
+                                <div
+                                    key={`change-${historyIndex}-${record.completedAt}`}
+                                    ref={(el) => {
+                                        if (el) changeItemRefs.current.set(historyIndex, el);
+                                        else changeItemRefs.current.delete(historyIndex);
+                                    }}
+                                    className={cn(
+                                        "group rounded-xl px-3.5 py-3 transition-colors",
+                                        focused
+                                            ? "bg-white/[0.07] ring-1 ring-inset ring-white/14"
+                                            : "bg-white/3 ring-1 ring-inset ring-white/6 hover:bg-white/5"
+                                    )}
+                                >
+                                    <p className="text-[13px] font-medium leading-snug tracking-tight text-foreground/95">
+                                        {headline}
+                                    </p>
+                                    <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground/70">
+                                        <span>{formatTouchedFilesLabel(record.diffs)}</span>
+                                        <span className="text-white/15" aria-hidden>
+                                            ·
+                                        </span>
+                                        <span className="tabular-nums text-emerald-400/75">+{additions}</span>
+                                        <span className="tabular-nums text-rose-400/70">−{deletions}</span>
+                                    </div>
+                                    <ModifyDetailsPreviewToggle
+                                        className="mt-3"
+                                        detailsActive={
+                                            previewSlot.mode === "details" &&
+                                            previewSlot.historyIndex === historyIndex
+                                        }
+                                        previewActive={previewSlot.mode === "live"}
+                                        onDetails={() => onOpenModifyDetails(historyIndex)}
+                                        onPreview={() => onShowCurrentPreview(historyIndex)}
+                                    />
+                                </div>
+                                );
+                            })
+                        )}
+                    </div>
+                ) : (
                 <div className="space-y-5">
                     {!response && !loading && conversationMessages.length === 0 ? (
                         <ChatBubble role="assistant">
@@ -770,7 +820,13 @@ export function BuildConversation({
                     {modifyHistory.map((record, i) => (
                         <div key={i} className="space-y-5">
                             <ModifyBubble record={record} />
-                            <ModifyResultBubble record={record} />
+                            <ModifyResultBubble
+                                record={record}
+                                historyIndex={i}
+                                previewSlot={previewSlot}
+                                onOpenDetails={onOpenModifyDetails}
+                                onShowCurrentPreview={onShowCurrentPreview}
+                            />
                         </div>
                     ))}
 
@@ -893,6 +949,7 @@ export function BuildConversation({
                         </ChatBubble>
                     )}
                 </div>
+                )}
             </div>
 
             {/* Memory debug panel */}

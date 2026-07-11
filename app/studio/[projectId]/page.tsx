@@ -4,7 +4,7 @@ import { use, useState, useEffect, useCallback, useRef } from "react";
 import { Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { GitBranch, Monitor, RefreshCw, ExternalLink, PanelLeftClose, PanelLeftOpen, FileCode2, ImagePlus, Loader2, MousePointer2, X } from "lucide-react";
+import { GitBranch, History, Monitor, RefreshCw, ExternalLink, PanelLeftClose, PanelLeftOpen, FileCode2, ImagePlus, Loader2, MousePointer2, X } from "lucide-react";
 import { AppBackButton } from "@/app/components/AppBackButton";
 import { BrandMark } from "@/app/components/BrandMark";
 import { StudioPublishMenu } from "@/app/components/ProjectPublishPanel";
@@ -17,9 +17,12 @@ import { useFaviconSync } from "@/app/hooks/useFaviconSync";
 import { BuildConversation } from "@/app/studio/components/BuildConversation";
 import { DesignModePreviewOverlay } from "@/app/studio/components/DesignModePreviewOverlay";
 import { GenerationAtlas } from "@/app/studio/components/GenerationAtlas";
+import { ModifyTurnDetailsPane } from "@/app/studio/components/ModifyTurnDetailsPane";
 import { ProjectCodePanel } from "@/app/studio/components/ProjectCodePanel";
 import { useDesignMode } from "@/app/studio/hooks/useDesignMode";
 import { filterPipelineSteps } from "@/app/studio/lib/pipelineSteps";
+import type { ModifyPreviewSlot } from "@/app/studio/lib/modifyHistoryView";
+import { isCodeChangeTurn } from "@/app/studio/lib/modifyHistoryView";
 import {
   COVER_CAPTURE_POLL_INTERVAL_MS,
   COVER_CAPTURE_POLL_TIMEOUT_MS,
@@ -94,6 +97,56 @@ function StudioInner({ projectId }: { projectId: string }) {
   const [coverCaptureBusy, setCoverCaptureBusy] = useState(false);
   const previewContainerRef = useRef<HTMLDivElement | null>(null);
   const [coverCaptureHint, setCoverCaptureHint] = useState<string | null>(null);
+  const [leftPaneView, setLeftPaneView] = useState<"conversation" | "changes">("conversation");
+  const [previewSlot, setPreviewSlot] = useState<ModifyPreviewSlot>({
+    mode: "live",
+    fromIndex: null,
+  });
+  const [changesFocusIndex, setChangesFocusIndex] = useState<number | null>(null);
+  const [codePanelMounted, setCodePanelMounted] = useState(false);
+
+  useEffect(() => {
+    if (rightPanel === "code") setCodePanelMounted(true);
+  }, [rightPanel]);
+
+  useEffect(() => {
+    if (!studio.modifying) return;
+    setPreviewSlot({ mode: "live", fromIndex: null });
+  }, [studio.modifying]);
+
+  const openModifyDetails = useCallback(
+    (historyIndex: number) => {
+      const record = studio.modifyHistory[historyIndex];
+      const firstFile = record?.diffs?.[0]?.file;
+      if (!record || !firstFile) return;
+      setRightPanel("preview");
+      setPreviewSlot({
+        mode: "details",
+        historyIndex,
+        filePath: firstFile,
+      });
+      setChangesFocusIndex(historyIndex);
+    },
+    [setRightPanel, studio.modifyHistory]
+  );
+
+  const showCurrentPreview = useCallback(
+    (historyIndex: number) => {
+      setRightPanel("preview");
+      setPreviewSlot({
+        mode: "live",
+        fromIndex: historyIndex >= 0 ? historyIndex : null,
+      });
+      if (previewState === "idle" && projectId) {
+        void startPreview();
+      }
+    },
+    [previewState, projectId, setRightPanel, startPreview]
+  );
+
+  const detailsRecord =
+    previewSlot.mode === "details" ? studio.modifyHistory[previewSlot.historyIndex] ?? null : null;
+  const codeChangeCount = studio.modifyHistory.filter(isCodeChangeTurn).length;
 
   useEffect(() => {
     if (!coverCaptureHint || coverCaptureBusy) return;
@@ -262,7 +315,7 @@ function StudioInner({ projectId }: { projectId: string }) {
                       <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
                       <span className="font-mono text-[10px] text-green-400 tracking-[0.15em]">
                         {typeof response.buildTotalDuration === "number" &&
-                        Number.isFinite(response.buildTotalDuration)
+                          Number.isFinite(response.buildTotalDuration)
                           ? `DONE · ${formatMs(response.buildTotalDuration)}`
                           : "DONE"}
                       </span>
@@ -275,8 +328,46 @@ function StudioInner({ projectId }: { projectId: string }) {
                   )}
                 </div>
 
-                {/* Right: actions */}
+                {/* Right: history + live + actions */}
                 <div className="flex items-center gap-2 shrink-0">
+                  {hasGeneratedProject ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConversationCollapsed(false);
+                        setLeftPaneView((v) => (v === "changes" ? "conversation" : "changes"));
+                      }}
+                      className={cn(
+                        "relative flex h-7 w-7 items-center justify-center rounded-md border transition-colors",
+                        leftPaneView === "changes"
+                          ? "border-primary/35 bg-primary/10 text-primary"
+                          : "border-white/10 bg-white/3 text-muted-foreground/70 hover:border-white/18 hover:text-foreground"
+                      )}
+                      title={leftPaneView === "changes" ? "返回对话" : "查看变更历史"}
+                      aria-label={leftPaneView === "changes" ? "返回对话" : "查看变更历史"}
+                    >
+                      <History className="h-3.5 w-3.5" />
+                      {codeChangeCount > 0 && leftPaneView !== "changes" ? (
+                        <span className="absolute -right-1 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-white/15 px-0.5 font-mono text-[8px] text-foreground/80">
+                          {codeChangeCount > 9 ? "9+" : codeChangeCount}
+                        </span>
+                      ) : null}
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    disabled={previewSlot.mode === "live"}
+                    onClick={() => showCurrentPreview(-1)}
+                    title={previewSlot.mode === "live" ? "已在当前预览" : "返回当前预览"}
+                    className={cn(
+                      "rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider transition-colors",
+                      previewSlot.mode === "live"
+                        ? "cursor-not-allowed border-white/8 bg-white/3 text-muted-foreground/35"
+                        : "border-white/12 bg-white/6 text-foreground/85 hover:border-white/20 hover:text-foreground"
+                    )}
+                  >
+                    Live
+                  </button>
                   {projectId ? <StudioPublishMenu projectId={projectId} /> : null}
                   <Link
                     href="/dashboard"
@@ -322,6 +413,11 @@ function StudioInner({ projectId }: { projectId: string }) {
                 {...studio}
                 designSelectionLabel={designMode.selectionBadgeLabel}
                 onClearDesignSelection={designMode.clearSelection}
+                previewSlot={previewSlot}
+                onOpenModifyDetails={openModifyDetails}
+                onShowCurrentPreview={showCurrentPreview}
+                leftPaneView={leftPaneView}
+                changesFocusIndex={changesFocusIndex}
               />
             </div>
           </div>
@@ -330,141 +426,141 @@ function StudioInner({ projectId }: { projectId: string }) {
             {/* Right panel toolbar */}
             <div className="flex shrink-0 flex-col border-b border-white/8">
               <div className="flex h-11 items-center px-3 gap-2">
-              <button
-                onClick={() => setConversationCollapsed((v) => !v)}
-                className="flex items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-2.5 h-7 font-mono text-[10px] text-muted-foreground/70 transition-all hover:border-white/15 hover:text-foreground"
-                title={conversationCollapsed ? "展开对话流" : "收起对话流"}
-              >
-                {conversationCollapsed ? (
-                  <>
-                    <PanelLeftOpen className="h-3 w-3" />
-                    Conversation
-                  </>
-                ) : (
-                  <>
-                    <PanelLeftClose className="h-3 w-3" />
-                    Conversation
-                  </>
-                )}
-              </button>
-
-              {/* Tab switcher — left */}
-              <div className="flex items-center rounded-lg border border-white/8 bg-white/3 overflow-hidden">
                 <button
-                  onClick={() => setRightPanel("topology")}
-                  className={`flex items-center gap-1.5 px-3 h-7 font-mono text-[10px] uppercase tracking-widest transition-all ${rightPanel === "topology"
-                    ? "bg-white/8 text-foreground"
-                    : "text-muted-foreground/50 hover:text-muted-foreground"
-                    }`}
+                  onClick={() => setConversationCollapsed((v) => !v)}
+                  className="flex items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-2.5 h-7 font-mono text-[10px] text-muted-foreground/70 transition-all hover:border-white/15 hover:text-foreground"
+                  title={conversationCollapsed ? "展开对话流" : "收起对话流"}
                 >
-                  <GitBranch className="h-3 w-3" />
-                  Topology
-                  {response && (
-                    <span className={`ml-1 font-mono text-[9px] ${rightPanel === "topology" ? "text-primary" : "text-muted-foreground/40"}`}>
-                      {buildSteps.length}
-                    </span>
+                  {conversationCollapsed ? (
+                    <>
+                      <PanelLeftOpen className="h-3 w-3" />
+                      Conversation
+                    </>
+                  ) : (
+                    <>
+                      <PanelLeftClose className="h-3 w-3" />
+                      Conversation
+                    </>
                   )}
                 </button>
-                <button
-                  onClick={() => setRightPanel("code")}
-                  disabled={!canCode}
-                  className={`flex items-center gap-1.5 px-3 h-7 font-mono text-[10px] uppercase tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed ${rightPanel === "code"
-                    ? "bg-white/8 text-foreground"
-                    : "text-muted-foreground/50 hover:text-muted-foreground"
-                    }`}
-                >
-                  <FileCode2 className="h-3 w-3" />
-                  Code
-                </button>
-                <button
-                  onClick={() => setRightPanel("preview")}
-                  disabled={!canPreview}
-                  className={`flex items-center gap-1.5 px-3 h-7 font-mono text-[10px] uppercase tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed ${rightPanel === "preview"
-                    ? "bg-white/8 text-foreground"
-                    : "text-muted-foreground/50 hover:text-muted-foreground"
-                    }`}
-                >
-                  <Monitor className="h-3 w-3" />
-                  Preview
-                </button>
-              </div>
 
-              <div className="hidden sm:flex flex-wrap items-center gap-2">
-                <div className="flex items-center gap-2 rounded-lg border border-white/8 bg-white/3 px-2.5 h-7">
-                  <Checkbox
-                    id="auto-preview-after-build"
-                    checked={autoPreviewAfterBuild}
-                    onCheckedChange={(v) => setAutoPreviewAfterBuild(v === true)}
-                  />
-                  <Label
-                    htmlFor="auto-preview-after-build"
-                    className="cursor-pointer font-mono text-[9px] uppercase tracking-widest text-muted-foreground/80"
+                {/* Tab switcher — left */}
+                <div className="flex items-center rounded-lg border border-white/8 bg-white/3 overflow-hidden">
+                  <button
+                    onClick={() => setRightPanel("topology")}
+                    className={`flex items-center gap-1.5 px-3 h-7 font-mono text-[10px] uppercase tracking-widest transition-all ${rightPanel === "topology"
+                      ? "bg-white/8 text-foreground"
+                      : "text-muted-foreground/50 hover:text-muted-foreground"
+                      }`}
                   >
-                    生成后预览
-                  </Label>
+                    <GitBranch className="h-3 w-3" />
+                    Topology
+                    {response && (
+                      <span className={`ml-1 font-mono text-[9px] ${rightPanel === "topology" ? "text-primary" : "text-muted-foreground/40"}`}>
+                        {buildSteps.length}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setRightPanel("code")}
+                    disabled={!canCode}
+                    className={`flex items-center gap-1.5 px-3 h-7 font-mono text-[10px] uppercase tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed ${rightPanel === "code"
+                      ? "bg-white/8 text-foreground"
+                      : "text-muted-foreground/50 hover:text-muted-foreground"
+                      }`}
+                  >
+                    <FileCode2 className="h-3 w-3" />
+                    Code
+                  </button>
+                  <button
+                    onClick={() => setRightPanel("preview")}
+                    disabled={!canPreview}
+                    className={`flex items-center gap-1.5 px-3 h-7 font-mono text-[10px] uppercase tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed ${rightPanel === "preview"
+                      ? "bg-white/8 text-foreground"
+                      : "text-muted-foreground/50 hover:text-muted-foreground"
+                      }`}
+                  >
+                    <Monitor className="h-3 w-3" />
+                    Preview
+                  </button>
                 </div>
-              </div>
 
-              {/* Spacer */}
-              <div className="flex-1" />
+                <div className="hidden sm:flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-2 rounded-lg border border-white/8 bg-white/3 px-2.5 h-7">
+                    <Checkbox
+                      id="auto-preview-after-build"
+                      checked={autoPreviewAfterBuild}
+                      onCheckedChange={(v) => setAutoPreviewAfterBuild(v === true)}
+                    />
+                    <Label
+                      htmlFor="auto-preview-after-build"
+                      className="cursor-pointer font-mono text-[9px] uppercase tracking-widest text-muted-foreground/80"
+                    >
+                      生成后预览
+                    </Label>
+                  </div>
+                </div>
 
-              {/* Action buttons — right */}
-              {rightPanel === "preview" && previewState === "ready" && previewUrl && (
-                <>
-                  {hasGeneratedProject ? (
+                {/* Spacer */}
+                <div className="flex-1" />
+
+                {/* Action buttons — right */}
+                {rightPanel === "preview" && previewSlot.mode === "live" && previewState === "ready" && previewUrl && (
+                  <>
+                    {hasGeneratedProject ? (
+                      <button
+                        type="button"
+                        onClick={() => designMode.setActive(!designMode.active)}
+                        className={cn(
+                          "flex items-center gap-1.5 rounded-md border px-2.5 h-7 font-mono text-[10px] transition-all",
+                          designMode.active
+                            ? "border-primary/40 bg-primary/10 text-primary"
+                            : "border-white/8 bg-white/3 text-muted-foreground/70 hover:border-white/15 hover:text-foreground"
+                        )}
+                        title={
+                          designMode.directEditCapable
+                            ? "Pick elements to Direct-edit or send to Modify"
+                            : "Pick an element, then describe the change in Modify"
+                        }
+                      >
+                        <MousePointer2 className="h-3 w-3" />
+                        {designMode.active ? "Exit pick" : "Design pick"}
+                      </button>
+                    ) : null}
                     <button
                       type="button"
-                      onClick={() => designMode.setActive(!designMode.active)}
-                      className={cn(
-                        "flex items-center gap-1.5 rounded-md border px-2.5 h-7 font-mono text-[10px] transition-all",
-                        designMode.active
-                          ? "border-primary/40 bg-primary/10 text-primary"
-                          : "border-white/8 bg-white/3 text-muted-foreground/70 hover:border-white/15 hover:text-foreground"
-                      )}
-                      title={
-                        designMode.directEditCapable
-                          ? "Pick elements to Direct-edit or send to Modify"
-                          : "Pick an element, then describe the change in Modify"
-                      }
+                      onClick={requestCoverCapture}
+                      disabled={coverCaptureBusy}
+                      className="flex items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-2.5 h-7 font-mono text-[10px] text-muted-foreground/70 transition-all hover:border-white/15 hover:text-foreground disabled:opacity-40"
+                      title="用当前预览首页重新生成项目列表封面图"
                     >
-                      <MousePointer2 className="h-3 w-3" />
-                      {designMode.active ? "Exit pick" : "Design pick"}
+                      {coverCaptureBusy ? (
+                        <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                      ) : (
+                        <ImagePlus className="h-3 w-3" aria-hidden />
+                      )}
+                      更新封面
                     </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={requestCoverCapture}
-                    disabled={coverCaptureBusy}
-                    className="flex items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-2.5 h-7 font-mono text-[10px] text-muted-foreground/70 transition-all hover:border-white/15 hover:text-foreground disabled:opacity-40"
-                    title="用当前预览首页重新生成项目列表封面图"
-                  >
-                    {coverCaptureBusy ? (
-                      <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-                    ) : (
-                      <ImagePlus className="h-3 w-3" aria-hidden />
-                    )}
-                    更新封面
-                  </button>
-                  <button
-                    onClick={studio.rebuildPreview}
-                    className="flex items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-2.5 h-7 font-mono text-[10px] text-muted-foreground/70 transition-all hover:border-white/15 hover:text-foreground"
-                    title="Rebuild preview"
-                  >
-                    <RefreshCw className="h-3 w-3" />
-                    Rebuild
-                  </button>
-                  <a
-                    href={previewIframeSrc ?? previewUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-2.5 h-7 font-mono text-[10px] text-muted-foreground/70 transition-all hover:border-white/15 hover:text-foreground"
-                    title="Open in new tab"
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    Open
-                  </a>
-                </>
-              )}
+                    <button
+                      onClick={studio.rebuildPreview}
+                      className="flex items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-2.5 h-7 font-mono text-[10px] text-muted-foreground/70 transition-all hover:border-white/15 hover:text-foreground"
+                      title="Rebuild preview"
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                      Rebuild
+                    </button>
+                    <a
+                      href={previewIframeSrc ?? previewUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-2.5 h-7 font-mono text-[10px] text-muted-foreground/70 transition-all hover:border-white/15 hover:text-foreground"
+                      title="Open in new tab"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      Open
+                    </a>
+                  </>
+                )}
               </div>
               {rightPanel === "preview" && coverCaptureHint ? (
                 <div className="border-t border-white/6 px-3 py-1.5 font-mono text-[10px] leading-snug text-primary/80">
@@ -473,7 +569,7 @@ function StudioInner({ projectId }: { projectId: string }) {
               ) : null}
             </div>
 
-            <div className="flex-1 min-h-0 overflow-hidden">
+            <div className="flex-1 min-h-0 overflow-hidden relative">
               {rightPanel === "topology" ? (
                 <div className="h-full overflow-hidden bg-[linear-gradient(180deg,rgba(255,255,255,0.02),rgba(0,0,0,0.16))]">
                   <GenerationAtlas
@@ -486,53 +582,92 @@ function StudioInner({ projectId }: { projectId: string }) {
                     showEventStream={false}
                   />
                 </div>
-              ) : rightPanel === "code" ? (
-                <div className="h-full min-h-0 overflow-hidden">
-                  <ProjectCodePanel projectId={projectId} />
+              ) : null}
+
+              {codePanelMounted ? (
+                <div
+                  className={cn(
+                    "h-full min-h-0 overflow-hidden",
+                    rightPanel !== "code" && "hidden",
+                  )}
+                  aria-hidden={rightPanel !== "code"}
+                  inert={rightPanel !== "code" ? true : undefined}
+                >
+                  <ProjectCodePanel
+                    projectId={projectId}
+                    workspaceEpoch={studio.codeWorkspaceEpoch}
+                  />
                 </div>
-              ) : (
+              ) : null}
+
+              {rightPanel === "preview" ? (
                 <div className="relative flex h-full min-h-0 flex-col">
-                  {previewState === "starting" && (
-                    <div className="flex flex-1 flex-col items-center justify-center gap-3">
-                      <HamsterLoader size="sm" />
-                      <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Starting preview…</p>
-                      <p className="font-mono text-[10px] text-muted-foreground/70">Usually a few seconds when cache is warm</p>
-                    </div>
-                  )}
-                  {previewState === "error" && (
-                    <div className="flex flex-1 flex-col items-center justify-center gap-3">
-                      <p className="font-mono text-xs text-red-400">Preview failed</p>
-                      <p className="font-mono text-[10px] text-muted-foreground max-w-sm text-center">{previewError}</p>
-                      <button onClick={startPreview} className="defi-button-outline px-4 py-2 text-[11px] font-medium flex items-center gap-1.5">
-                        <RefreshCw className="h-3 w-3" /> Retry
-                      </button>
-                    </div>
-                  )}
-                  {previewState === "idle" && projectId && (
-                    <div className="flex flex-1 flex-col items-center justify-center gap-3">
-                      <button onClick={startPreview} className="defi-button-outline px-5 py-2.5 text-[11px] font-medium flex items-center gap-2">
-                        <Monitor className="h-4 w-4" /> Start Preview
-                      </button>
-                    </div>
-                  )}
-                  {previewState === "ready" && previewUrl && (
-                    <div ref={previewContainerRef} className="relative flex flex-1 min-h-0">
-                      <iframe
-                        key={previewIframeSrc ?? `${previewUrl}_${previewVersion}`}
-                        ref={iframeRef}
-                        src={previewIframeSrc ?? previewUrl}
-                        className="flex-1 w-full border-0"
-                        title="Project Preview"
-                      />
-                      <DesignModePreviewOverlay
-                        designMode={designMode}
-                        iframeRef={iframeRef}
-                        containerRef={previewContainerRef}
-                      />
-                    </div>
+                  {detailsRecord && previewSlot.mode === "details" ? (
+                    <ModifyTurnDetailsPane
+                      record={detailsRecord}
+                      filePath={previewSlot.filePath}
+                      onFilePathChange={(path) =>
+                        setPreviewSlot((prev) =>
+                          prev.mode === "details" ? { ...prev, filePath: path } : prev
+                        )
+                      }
+                      onBackToPreview={() =>
+                        setPreviewSlot({
+                          mode: "live",
+                          fromIndex: previewSlot.historyIndex,
+                        })
+                      }
+                      onOpenTimeline={() => {
+                        setLeftPaneView("changes");
+                        setChangesFocusIndex(previewSlot.historyIndex);
+                        setConversationCollapsed(false);
+                      }}
+                    />
+                  ) : (
+                    <>
+                      {previewState === "starting" && (
+                        <div className="flex flex-1 flex-col items-center justify-center gap-3">
+                          <HamsterLoader size="sm" />
+                          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Starting preview…</p>
+                          <p className="font-mono text-[10px] text-muted-foreground/70">Usually a few seconds when cache is warm</p>
+                        </div>
+                      )}
+                      {previewState === "error" && (
+                        <div className="flex flex-1 flex-col items-center justify-center gap-3">
+                          <p className="font-mono text-xs text-red-400">Preview failed</p>
+                          <p className="font-mono text-[10px] text-muted-foreground max-w-sm text-center">{previewError}</p>
+                          <button onClick={startPreview} className="defi-button-outline px-4 py-2 text-[11px] font-medium flex items-center gap-1.5">
+                            <RefreshCw className="h-3 w-3" /> Retry
+                          </button>
+                        </div>
+                      )}
+                      {previewState === "idle" && projectId && (
+                        <div className="flex flex-1 flex-col items-center justify-center gap-3">
+                          <button onClick={startPreview} className="defi-button-outline px-5 py-2.5 text-[11px] font-medium flex items-center gap-2">
+                            <Monitor className="h-4 w-4" /> Start Preview
+                          </button>
+                        </div>
+                      )}
+                      {previewState === "ready" && previewUrl && (
+                        <div ref={previewContainerRef} className="relative flex flex-1 min-h-0">
+                          <iframe
+                            key={previewIframeSrc ?? `${previewUrl}_${previewVersion}`}
+                            ref={iframeRef}
+                            src={previewIframeSrc ?? previewUrl}
+                            className="flex-1 w-full border-0"
+                            title="Project Preview"
+                          />
+                          <DesignModePreviewOverlay
+                            designMode={designMode}
+                            iframeRef={iframeRef}
+                            containerRef={previewContainerRef}
+                          />
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
-              )}
+              ) : null}
             </div>
           </section>
         </div>

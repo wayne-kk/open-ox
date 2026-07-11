@@ -56,6 +56,8 @@ export function formatModifySummaryFallback(input: ModifyCompletionSummaryInput)
       : "\n\n⚠️ **构建验证未通过**，请查看执行日志或说明要修复的问题。";
 
   return [
+    `已更新 ${diffs.length} 个文件。`,
+    "",
     "### 修改完成",
     "",
     `已更新 **${diffs.length}** 个文件：`,

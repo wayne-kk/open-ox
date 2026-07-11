@@ -18,7 +18,21 @@ interface MemoryData {
   projectName: string;
   layer1_db: { label: string; count: number; records: DbRecord[] };
   layer2_session: { label: string; note: string };
-  layer3_prompt: { label: string; maxTurns: number; activeCount: number; preview: string };
+  workingMemory?: {
+    label: string;
+    focusFiles: string[];
+    pendingQuestion?: string;
+    lastIntent?: string;
+    lastChangeSummary?: string;
+  };
+  layer3_prompt: {
+    label: string;
+    maxTurns?: number;
+    maxRecentTurns?: number;
+    activeCount: number;
+    preview: string;
+    routerPreview?: string;
+  };
 }
 
 export function MemoryDebugPanel({
@@ -129,14 +143,38 @@ export function MemoryDebugPanel({
                 )}
               </section>
 
+              {/* Working memory card */}
+              {data.workingMemory && (
+                <section>
+                  <h4 className="text-[10px] font-mono uppercase tracking-widest text-violet-300/70 mb-2">
+                    {data.workingMemory.label}
+                  </h4>
+                  <div className="rounded-lg border border-violet-400/10 bg-violet-400/5 p-3 space-y-1 text-[10px] leading-5 text-foreground/60 font-mono">
+                    <p>focusFiles: {data.workingMemory.focusFiles.length > 0 ? data.workingMemory.focusFiles.join(", ") : "(none)"}</p>
+                    <p>pendingQuestion: {data.workingMemory.pendingQuestion ?? "(none)"}</p>
+                    <p>lastIntent: {data.workingMemory.lastIntent ?? "(none)"}</p>
+                    <p>lastChangeSummary: {data.workingMemory.lastChangeSummary ?? "(none)"}</p>
+                  </div>
+                </section>
+              )}
+
               {/* Layer 3: Prompt */}
               <section>
                 <h4 className="text-[10px] font-mono uppercase tracking-widest text-emerald-300/70 mb-2">
-                  {data.layer3_prompt.label} ({data.layer3_prompt.activeCount}/{data.layer3_prompt.maxTurns} turns)
+                  {data.layer3_prompt.label} (agent recent {data.layer3_prompt.activeCount}/{data.layer3_prompt.maxRecentTurns ?? data.layer3_prompt.maxTurns ?? 2})
                 </h4>
+                <p className="text-[9px] text-muted-foreground/30 mb-1">Agent injection</p>
                 <pre className="rounded-lg border border-emerald-400/10 bg-emerald-400/5 p-3 text-[10px] leading-5 text-foreground/60 whitespace-pre-wrap overflow-x-hidden">
                   {data.layer3_prompt.preview}
                 </pre>
+                {data.layer3_prompt.routerPreview != null && (
+                  <>
+                    <p className="text-[9px] text-muted-foreground/30 mb-1 mt-3">Router injection</p>
+                    <pre className="rounded-lg border border-emerald-400/10 bg-emerald-400/5 p-3 text-[10px] leading-5 text-foreground/60 whitespace-pre-wrap overflow-x-hidden">
+                      {data.layer3_prompt.routerPreview}
+                    </pre>
+                  </>
+                )}
               </section>
             </>
           )}

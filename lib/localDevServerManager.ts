@@ -9,6 +9,7 @@
  * Optional `OPEN_OX_PREVIEW_PORT` for a fixed port (firewall). Cloud: `OPEN_OX_PREVIEW_BACKEND=e2b`.
  */
 import fs from "fs/promises";
+import { existsSync } from "node:fs";
 import type { ChildProcess } from "node:child_process";
 import { execFile, spawn } from "node:child_process";
 import path from "path";
@@ -37,7 +38,7 @@ async function preparePreviewProjectForStudio(projectDir: string): Promise<boole
     pkgSynced ||
     designModeSetup.layoutPatched ||
     designModeSetup.instrumentationSynced ||
-    designModeSetup.sourceBackfilled ||
+    designModeSetup.sourceAttrsStripped ||
     designModeSetup.anchorsAdded > 0
   );
 }
@@ -228,6 +229,8 @@ async function teardownLocalPreviewDevServer(projectId: string, projectDir: stri
   // Brief pause so SIGTERM can release the port/lock; lock waiter covers the rest.
   await sleep(hadLiveChild ? 350 : 150);
   await waitForNextDevLockReleased(projectDir);
+  // Belt-and-suspenders: Next 16 refuses to start if this file remains after a killed orphan.
+  await fs.unlink(path.join(projectDir, ".next/dev/lock")).catch(() => {});
 }
 
 type LocalInstance = { port: number; url: string; dev: ChildProcess | null };
@@ -284,14 +287,19 @@ function previewBindHost(): string {
 }
 
 /**
- * `OPEN_OX_STATIC_BASE_PATH` is only for Storage static-export builds (`next build`).
- * If it is present in the **host** process env (shell export, shared `.env`, etc.), spawning `next dev` for a
- * generated site makes `sites/template/next.config.ts` apply `basePath` while preview URLs stay at `/` —
- * Chrome reports ERR_TOO_MANY_REDIRECTS.
+ * Env for the child `next dev --webpack` (Design Mode instrumentation).
+ *
+ * - Drop `OPEN_OX_STATIC_BASE_PATH`: host-only Storage export flag; if inherited, site
+ *   next.config applies `basePath` while preview URLs stay at `/` → redirect loops.
+ * - Drop `TURBOPACK` / related: Studio's own `next dev` sets `TURBOPACK=1`; Next 16 refuses
+ *   to start when both that env and `--webpack` are present ("Multiple bundler flags").
  */
 function envForLocalPreviewDevServer(): NodeJS.ProcessEnv {
   const env = { ...process.env, NODE_ENV: "development" } as Record<string, string | undefined>;
   delete env.OPEN_OX_STATIC_BASE_PATH;
+  delete env.TURBOPACK;
+  delete env.TURBO;
+  delete env.NEXT_TURBOPACK;
   return env as NodeJS.ProcessEnv;
 }
 
@@ -577,11 +585,27 @@ function nextDevOutputMeansReady(t: string): boolean {
   return false;
 }
 
-function startNextDevAndWait(
+function resolveProjectNextBin(projectDir: string): string {
+  // Prefer the site's own Next binary so Studio's PATH / root next cannot hijack the child.
+  const candidates = [
+    path.join(projectDir, "node_modules", "next", "dist", "bin", "next"),
+    path.join(projectDir, "node_modules", ".bin", "next"),
+  ];
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return "next";
+}
+
+function isNextDevLockError(output: string): boolean {
+  return /unable to acquire lock/i.test(output) || /\.next\/dev\/lock/i.test(output);
+}
+
+function startNextDevOnce(
   projectId: string,
   projectDir: string,
   port: number,
-  timeoutMs = 120_000
+  timeoutMs: number
 ): Promise<ChildProcess> {
   return new Promise((resolve, reject) => {
     const spawnToReadyStart = performance.now();
@@ -589,17 +613,25 @@ function startNextDevAndWait(
       reject(new Error(`next dev did not become ready within ${timeoutMs / 1000}s`));
     }, timeoutMs);
     const shell = process.platform === "win32";
-    // Prefer Turbopack (Next 16 default). Design Mode source maps are written to disk
-    // via backfillOxSourceInProject — do not force --webpack (very slow cold start).
-    const child = spawn("npx", ["next", "dev", "-H", previewBindHost(), "-p", String(port)], {
-      cwd: projectDir,
-      stdio: ["ignore", "pipe", "pipe"],
-      env: envForLocalPreviewDevServer(),
-      shell,
-    });
+    const nextBin = resolveProjectNextBin(projectDir);
+    // Force webpack so Design Mode's source-instrumentation-loader injects data-ox-source
+    // at compile time (never on disk). Turbopack cannot run that webpack loader.
+    const child = spawn(
+      nextBin,
+      ["dev", "--webpack", "-H", previewBindHost(), "-p", String(port)],
+      {
+        cwd: projectDir,
+        stdio: ["ignore", "pipe", "pipe"],
+        env: envForLocalPreviewDevServer(),
+        shell,
+      }
+    );
     let settled = false;
+    let output = "";
     const onData = (data: Buffer) => {
       const t = data.toString();
+      output += t;
+      if (output.length > 8_000) output = output.slice(-8_000);
       console.log("[local preview] next dev", t.trim().slice(0, 200));
       if (nextDevOutputMeansReady(t)) {
         if (!settled) {
@@ -623,7 +655,15 @@ function startNextDevAndWait(
       if (!settled) {
         settled = true;
         clearTimeout(timer);
-        reject(new Error(`next dev exited before ready (code ${code})`));
+        const tail = output.trim().slice(-1500);
+        const detail = tail ? `\n${tail}` : "";
+        const err = new Error(`next dev exited before ready (code ${code})${detail}`) as Error & {
+          nextOutput?: string;
+          lockError?: boolean;
+        };
+        err.nextOutput = output;
+        err.lockError = isNextDevLockError(output);
+        reject(err);
       } else {
         void (async () => {
           const persisted = await readPersistedLocalPreview(projectId);
@@ -643,6 +683,31 @@ function startNextDevAndWait(
       }
     });
   });
+}
+
+/**
+ * Spawn `next dev --webpack`, retrying once after an aggressive lock teardown when
+ * Next exits immediately with ".next/dev/lock" contention (common after Studio HMR
+ * orphans a previous turbopack/webpack preview).
+ */
+async function startNextDevAndWait(
+  projectId: string,
+  projectDir: string,
+  port: number,
+  timeoutMs = 120_000
+): Promise<ChildProcess> {
+  try {
+    return await startNextDevOnce(projectId, projectDir, port, timeoutMs);
+  } catch (err) {
+    const lockError = Boolean((err as Error & { lockError?: boolean }).lockError);
+    if (!lockError) throw err;
+    console.warn(
+      `[local preview] next dev lock contention for ${projectId}; clearing lock and retrying once`
+    );
+    await teardownLocalPreviewDevServer(projectId, projectDir);
+    await fs.unlink(path.join(projectDir, ".next/dev/lock")).catch(() => {});
+    return startNextDevOnce(projectId, projectDir, port, timeoutMs);
+  }
 }
 
 function stopDevInRegistry(projectId: string): void {

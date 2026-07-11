@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildHistoryContext,
   computeAwaitingReply,
   formatHistoryForAgent,
   formatRecentHistoryForRouter,
@@ -10,6 +9,7 @@ import {
   toClientHistoryPayload,
   type ModifyHistoryTurn,
 } from "./modifyHistoryTurn";
+import { buildHistoryContext } from "./modifyWorkingMemory";
 
 describe("modifyHistoryTurn", () => {
   it("splits legacy summary Files: suffix", () => {
@@ -105,7 +105,7 @@ describe("modifyHistoryTurn", () => {
     expect(router).not.toContain("Files:");
   });
 
-  it("buildHistoryContext merges and caps turns", () => {
+  it("buildHistoryContext projects working memory + recent turns", () => {
     const db: ModifyHistoryTurn[] = [
       {
         instruction: "a",
@@ -120,11 +120,16 @@ describe("modifyHistoryTurn", () => {
         assistantText: "B",
         touchedFiles: ["x.ts"],
         awaitingReply: false,
+        intentCategory: "code_change",
       },
     ];
     const ctx = buildHistoryContext(db, session);
+    expect(ctx).toContain("## Working memory");
+    expect(ctx).toContain("focusFiles: x.ts");
+    expect(ctx).toContain("## Recent turns");
     expect(ctx).toContain('User: "a"');
     expect(ctx).toContain('User: "b"');
     expect(ctx).toContain("Files: x.ts");
+    expect(ctx).not.toContain("Previous Modifications");
   });
 });

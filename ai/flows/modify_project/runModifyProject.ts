@@ -7,7 +7,7 @@ import type { ModificationRecord } from "@/lib/projectManager";
 import { clearFileTracking } from "@/ai/tools";
 import { createArtifactLogger } from "@/ai/flows/generate_project/shared/logging";
 import { setRevertSnapshots, clearRevertSnapshots } from "@/ai/tools/system/revertFileTool";
-import { buildFileTree, buildHistoryContext, buildInitialMessages, tryReadFile } from "./context/buildContext";
+import { buildFileTree, buildInitialMessages, tryReadFile } from "./context/buildContext";
 import { loadPreloadedFileContents } from "./context/loadPreloadedFileContents";
 import { FileSnapshotTracker, type DiffStats } from "./tracking/fileSnapshotTracker";
 import { runAgentLoop } from "./engine/loopEngine";
@@ -24,6 +24,7 @@ import {
   stepModifyIntentRouter,
   type ModifyIntentCategory,
 } from "./intent/modifyIntentRouter";
+import { buildModifyWorkingMemoryContext } from "./history/modifyWorkingMemory";
 import {
   fromModificationRecord,
   mergeModifyHistoryTurns,
@@ -144,7 +145,7 @@ async function runModifyProjectInner(
     : (project.modificationHistory ?? []).map(fromModificationRecord);
   const sessionHistory = conversationHistory ?? [];
   const mergedHistory = mergeModifyHistoryTurns(dbHistory, sessionHistory);
-  const recentHistoryForRouter = mergedHistory.slice(-2);
+  const workingMemory = buildModifyWorkingMemoryContext(dbHistory, sessionHistory);
 
   const isContinuation = detectContinuationReply(userInstruction, mergedHistory);
   const effectiveInstruction = isContinuation
@@ -164,7 +165,7 @@ async function runModifyProjectInner(
       () =>
         stepModifyIntentRouter(effectiveInstruction, {
           fileTree,
-          recentHistory: recentHistoryForRouter,
+          workingMemoryBlock: workingMemory.routerPromptBlock,
         }),
       { metadata: { projectId, continuation: isContinuation } }
     );
@@ -332,7 +333,7 @@ async function runModifyProjectInner(
       onEvent(event);
     };
 
-    const historyContext = buildHistoryContext(dbHistory, sessionHistory);
+    const historyContext = workingMemory.agentPromptBlock;
     const messages = buildInitialMessages({
       modifyCategory: routed.category,
       userInstruction: effectiveInstruction,

@@ -165,7 +165,7 @@ sequenceDiagram
 
 | 后端 | 源坐标 |
 | ---- | ------ |
-| `OPEN_OX_PREVIEW_BACKEND=local` | preview 启动时 **磁盘 backfill** `data-ox-source`；默认 **Turbopack**（快）。可选 webpack loader 仅作遗留兜底 |
+| `OPEN_OX_PREVIEW_BACKEND=local` | `next dev --webpack` + template `source-instrumentation-loader` **编译期注入** `data-ox-source`（不写盘）。启动时会 strip 历史磁盘 backfill 残留 |
 | `site-previews` 静态代理 | 无编译期注入 → 预检无 source → Modify 出口（或提示切 local preview） |
 
 ---

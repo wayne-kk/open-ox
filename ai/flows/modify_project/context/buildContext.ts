@@ -2,10 +2,8 @@ import fs from "fs/promises";
 import path from "path";
 import type { ChatMessage } from "@/ai/flows/generate_project/shared/llm";
 import type { ModifyIntentCategory } from "../intent/modifyIntentRouter";
-import {
-  buildHistoryContext,
-  type ModifyHistoryTurn,
-} from "../history/modifyHistoryTurn";
+import type { ModifyHistoryTurn } from "../history/modifyHistoryTurn";
+import { buildHistoryContext } from "../history/modifyWorkingMemory";
 import { READ_ONLY_SYSTEM_PROMPT, SYSTEM_PROMPT } from "../prompt/systemPrompt";
 
 export type { ModifyHistoryTurn };
