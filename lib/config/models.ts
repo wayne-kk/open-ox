@@ -79,6 +79,7 @@ export function setStepThinkingLevel(stepName: string, level: StepThinkingLevel 
 export function clearStepModels(): void {
     _stepModelMap.clear();
     _stepThinkingLevelMap.clear();
+    _stepModelsLoadedAt = 0;
 }
 
 export function getStepModel(stepName: string): ModelId | null {
@@ -137,46 +138,70 @@ export function modelSupportsThinking(modelId: string): boolean {
  * Load step-level model overrides from Supabase into memory.
  * Call this before any generation flow to ensure DB settings are applied
  * even after process restarts or serverless cold starts.
+ *
+ * In-process TTL cache avoids a Supabase round-trip on every intent turn /
+ * generation enqueue (common on Studio chat).
  */
+const STEP_MODELS_CACHE_TTL_MS = 60_000;
+let _stepModelsLoadedAt = 0;
+let _stepModelsLoadPromise: Promise<void> | null = null;
+
 export async function loadStepModelsFromDB(): Promise<void> {
-    try {
-        const { supabase } = await import("@/lib/supabase");
-        const { data: rows, error } = await supabase
-            .from("step_model_configs")
-            .select("step_name, model_id, thinking_level");
+    const now = Date.now();
+    if (_stepModelsLoadedAt > 0 && now - _stepModelsLoadedAt < STEP_MODELS_CACHE_TTL_MS) {
+        return;
+    }
+    if (_stepModelsLoadPromise) {
+        await _stepModelsLoadPromise;
+        return;
+    }
 
-        // Backward compatibility: if DB hasn't run the thinking_level migration yet,
-        // fall back to loading step→model mapping only.
-        if (error) {
-            const needsFallback = error.message?.toLowerCase().includes("thinking_level");
-            if (!needsFallback) throw error;
-            const { data: legacyRows, error: legacyError } = await supabase
+    _stepModelsLoadPromise = (async () => {
+        try {
+            const { supabase } = await import("@/lib/supabase");
+            const { data: rows, error } = await supabase
                 .from("step_model_configs")
-                .select("step_name, model_id");
-            if (legacyError) throw legacyError;
-            clearStepModels();
-            for (const row of legacyRows ?? []) {
-                const { step_name, model_id } = row as { step_name: string; model_id: string };
-                _stepModelMap.set(step_name, model_id);
-            }
-            return;
-        }
+                .select("step_name, model_id, thinking_level");
 
-        clearStepModels();
-        if (rows) {
-            for (const row of rows) {
-                const { step_name, model_id, thinking_level } = row as {
-                    step_name: string;
-                    model_id: string;
-                    thinking_level?: string | null;
-                };
-                _stepModelMap.set(step_name, model_id);
-                if (thinking_level && isStepThinkingLevel(thinking_level)) {
-                    _stepThinkingLevelMap.set(step_name, thinking_level);
+            // Backward compatibility: if DB hasn't run the thinking_level migration yet,
+            // fall back to loading step→model mapping only.
+            if (error) {
+                const needsFallback = error.message?.toLowerCase().includes("thinking_level");
+                if (!needsFallback) throw error;
+                const { data: legacyRows, error: legacyError } = await supabase
+                    .from("step_model_configs")
+                    .select("step_name, model_id");
+                if (legacyError) throw legacyError;
+                clearStepModels();
+                for (const row of legacyRows ?? []) {
+                    const { step_name, model_id } = row as { step_name: string; model_id: string };
+                    _stepModelMap.set(step_name, model_id);
+                }
+                _stepModelsLoadedAt = Date.now();
+                return;
+            }
+
+            clearStepModels();
+            if (rows) {
+                for (const row of rows) {
+                    const { step_name, model_id, thinking_level } = row as {
+                        step_name: string;
+                        model_id: string;
+                        thinking_level?: string | null;
+                    };
+                    _stepModelMap.set(step_name, model_id);
+                    if (thinking_level && isStepThinkingLevel(thinking_level)) {
+                        _stepThinkingLevelMap.set(step_name, thinking_level);
+                    }
                 }
             }
+            _stepModelsLoadedAt = Date.now();
+        } catch (err) {
+            console.warn("[loadStepModelsFromDB] Failed to load step models:", err);
+        } finally {
+            _stepModelsLoadPromise = null;
         }
-    } catch (err) {
-        console.warn("[loadStepModelsFromDB] Failed to load step models:", err);
-    }
+    })();
+
+    await _stepModelsLoadPromise;
 }

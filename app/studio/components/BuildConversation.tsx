@@ -20,6 +20,7 @@ import {
   stripRecoverablePrefixForDisplay,
 } from "@/lib/generationRecovery";
 import type { BuildStudioState, ModifyRecord } from "../hooks/useBuildStudio";
+import type { IntentProgressEvent } from "@/ai/flows/generate_project/intentAgent/types";
 import { filterPipelineSteps } from "../lib/pipelineSteps";
 import {
   formatTouchedFilesLabel,
@@ -33,6 +34,53 @@ import { cn } from "@/lib/utils";
 function formatMs(ms: number): string {
     if (ms < 1000) return `${ms}ms`;
     return `${(ms / 1000).toFixed(1)}s`;
+}
+
+const INTENT_TOOL_LABELS: Record<string, string> = {
+    yield_to_user: "整理回复",
+    commit_generate: "确认并开始生成",
+    reference_site_digest: "分析参考站",
+    brand_kit_from_url: "提取品牌信息",
+    single_page_ia_proposal: "规划页面结构",
+    accessibility_and_seo_brief: "整理 SEO / 无障碍要点",
+    competitive_landscape_snapshot: "扫一眼竞品",
+};
+
+function intentProgressHeadline(events: IntentProgressEvent[]): string {
+    if (events.length === 0) return "正在理解你的需求...";
+    const latest = events[events.length - 1];
+    if (latest.kind === "tool") {
+        const label = INTENT_TOOL_LABELS[latest.toolName] ?? latest.toolName;
+        return `已完成：${label}`;
+    }
+    if (latest.kind === "reasoning") {
+        const text = latest.text.trim();
+        return text ? text.slice(0, 96) : "正在思考...";
+    }
+    if (latest.toolCallNames.length > 0) {
+        const labels = latest.toolCallNames.map((n) => INTENT_TOOL_LABELS[n] ?? n);
+        return `正在${labels.join("、")}…`;
+    }
+    if (latest.textPreview?.trim()) {
+        return latest.textPreview.trim().slice(0, 96);
+    }
+    return "正在分析需求...";
+}
+
+function intentProgressLines(events: IntentProgressEvent[]): string[] {
+    const lines: string[] = [];
+    for (const event of events) {
+        if (event.kind === "tool") {
+            const label = INTENT_TOOL_LABELS[event.toolName] ?? event.toolName;
+            lines.push(label);
+        } else if (event.kind === "assistant_round" && event.toolCallNames.length > 0) {
+            for (const name of event.toolCallNames) {
+                if (name === "yield_to_user" || name === "commit_generate") continue;
+                lines.push(INTENT_TOOL_LABELS[name] ?? name);
+            }
+        }
+    }
+    return [...new Set(lines)].slice(-4);
 }
 
 function buildFileTree(files: string[]): string {
@@ -302,6 +350,7 @@ export function BuildConversation({
     response,
     mergedBrief,
     conversationMessages,
+    intentProgressLog,
     userInputScrollNonce,
     lastRunInput,
     elapsed,
@@ -419,6 +468,8 @@ export function BuildConversation({
         loading &&
         !hasBuildActivity &&
         conversationMessages[conversationMessages.length - 1]?.role !== "assistant";
+    const thinkingHeadline = intentProgressHeadline(intentProgressLog ?? []);
+    const thinkingLines = intentProgressLines(intentProgressLog ?? []);
 
     // Auto-scroll only when the user is already near the bottom.
     // If they scrolled up to read earlier content, don't yank them back.
@@ -459,7 +510,7 @@ export function BuildConversation({
         if (isNearBottomRef.current && chatRef.current) {
             chatRef.current.scrollTop = chatRef.current.scrollHeight;
         }
-    }, [response, conversationMessages, loading, modifying, modifyToolCalls, modifyThinking, modifySteps, modifyDiffs, modifyError, modifyHistory]);
+    }, [response, conversationMessages, intentProgressLog, loading, modifying, modifyToolCalls, modifyThinking, modifySteps, modifyDiffs, modifyError, modifyHistory]);
 
     return (
         <aside className="flex h-full min-h-0 w-full shrink-0 flex-col overflow-hidden lg:w-[540px] lg:max-h-full scrollbar-hidden">
@@ -648,7 +699,14 @@ export function BuildConversation({
                             <div className="text-[11px] font-medium text-foreground">意图助手</div>
                             <div className="mt-2 space-y-3">
                                 <div className="text-[13px] leading-7 text-foreground">
-                                    <p className="text-muted-foreground">正在理解你的需求...</p>
+                                    <p className="animate-pulse text-muted-foreground">{thinkingHeadline}</p>
+                                    {thinkingLines.length > 0 ? (
+                                        <ul className="mt-2 space-y-1 text-[11px] text-muted-foreground/75">
+                                            {thinkingLines.map((line) => (
+                                                <li key={line} className="font-mono">· {line}</li>
+                                            ))}
+                                        </ul>
+                                    ) : null}
                                 </div>
                             </div>
                         </ChatBubble>

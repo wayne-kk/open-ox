@@ -17,6 +17,25 @@ import {
 } from "../tools/userProvidedContentTools";
 import { seedUserProvidedImagesFromTexts } from "../shared/seedUserProvidedImagesFromPrompt";
 
+const CONTENT_PACK_SIGNAL_RE =
+  /\b(hours|opening\s+hours|营业时间|menu|菜单|testimonial|review|评价|address|地址|phone|电话|palette|配色|#[0-9a-f]{3,8}\b)/i;
+
+/**
+ * Simple briefs without assets / contact packs don't need a 32-round extract loop.
+ */
+export function resolveExtractUserContentMaxIterations(params: {
+  userInput: string;
+  imageSourceTexts?: string[];
+  referenceImageBase64?: string | null;
+}): number {
+  if (params.referenceImageBase64?.trim()) return 32;
+  const texts = [params.userInput, ...(params.imageSourceTexts ?? [])].join("\n");
+  if (/https?:\/\//i.test(texts)) return 32;
+  if (CONTENT_PACK_SIGNAL_RE.test(texts)) return 32;
+  if (texts.trim().length >= 800) return 32;
+  return 4;
+}
+
 /**
  * Organize the user query into categories and write content/user-provided.md.
  * Image URLs are kept remote — Page Agent uses them directly (no server download).
@@ -26,6 +45,8 @@ export async function stepExtractUserProvidedContent(params: {
   /** Original/bootstrap/intent-session texts — scanned for image URLs alongside `userInput`. */
   imageSourceTexts?: string[];
   referenceImageBase64?: string | null;
+  /** Cap tool-loop rounds (default 32; simple briefs use a lower cap). */
+  maxIterations?: number;
 }): Promise<{ content: UserProvidedContent | undefined; trace: StepTrace }> {
   const acc = createUserProvidedContentAccumulator();
   const scanTexts = [params.userInput, ...(params.imageSourceTexts ?? [])].filter((t) => t.trim());
@@ -46,13 +67,15 @@ export async function stepExtractUserProvidedContent(params: {
   const userContent = buildUserVisionContent(userMessage, params.referenceImageBase64 ?? null);
   const traceUserLabel = visionTraceUserLabel(userMessage, Boolean(params.referenceImageBase64?.trim()));
 
+  const maxIterations = Math.max(1, Math.min(32, params.maxIterations ?? 32));
+
   const { content: assistantSummary, toolCalls } = await callLLMWithTools({
     systemPrompt,
     userMessage,
     userContent,
     tools: userProvidedContentExtractionTools,
     temperature: 0.15,
-    maxIterations: 32,
+    maxIterations,
     maxTokens: 8_192,
     parallelToolCalls: false,
     model,

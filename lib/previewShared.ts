@@ -168,7 +168,11 @@ export async function computeProjectFingerprint(projectId: string): Promise<stri
   const { createHash } = await import("crypto");
   const projectDir = getSiteRoot(projectId);
   const files = (await collectFiles(projectDir, projectDir)).filter(
-    (rel) => rel !== "out" && !rel.startsWith("out/")
+    (rel) =>
+      rel !== "out" &&
+      !rel.startsWith("out/") &&
+      // Build stamp is metadata for preview reuse — must not change the fingerprint it records.
+      rel !== ".open-ox/static-preview-build-stamp.json"
   );
   files.sort();
   const hash = createHash("sha256");

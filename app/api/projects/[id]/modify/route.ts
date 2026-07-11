@@ -28,6 +28,10 @@ import { requireOwnedProject } from "@/lib/auth/projectAccess";
 import { flushLangfuse, resolveLangfuseSessionId, runWithLangfuseTraceRoot } from "@/lib/observability/langfuseTracing";
 import { LfTrace } from "@/lib/observability/langfuseTraceCatalog";
 import { trackServerAnalyticsEventFireAndForget } from "@/lib/analytics/serverEvents";
+import { canAfford } from "@/lib/billing/account";
+import { isCreditsEnabled, MIN_MODIFY_CREDITS } from "@/lib/billing/credits";
+import { runWithUsageAccounting } from "@/lib/billing/usageContext";
+import { chargeUsageForRun } from "@/lib/billing/chargeRun";
 
 export const runtime = "nodejs";
 
@@ -91,6 +95,21 @@ export async function POST(
     );
   }
 
+  if (isCreditsEnabled()) {
+    const afford = await canAfford(db, user.id, MIN_MODIFY_CREDITS);
+    if (!afford.ok) {
+      return NextResponse.json(
+        {
+          error: "Insufficient credits",
+          code: "INSUFFICIENT_CREDITS",
+          balance: afford.balance,
+          required: MIN_MODIFY_CREDITS,
+        },
+        { status: 402 }
+      );
+    }
+  }
+
   const encoder = new TextEncoder();
   const secureSession = tryCreateAgentStreamServerSession(clientPublicKey);
 
@@ -128,39 +147,57 @@ export async function POST(
           sessionId: langfuseSessionKey,
         });
 
-        await runWithLangfuseTraceRoot(
-          {
-            name: LfTrace.modifyProject,
-            userId: user.id,
-            sessionId: langfuseSessionKey,
-            tags: ["flow:modify_project", "route:api_modify"],
-            input: { userInstruction },
-            metadata: { projectId: id, modelOverride: modelOverride ?? null },
-          },
-          () =>
-            runModifyProject(
-              db,
-              id,
-              userInstruction,
-              (event) => {
-                send(event);
-                if (event.type === "diff") {
-                  collectedDiffs.push({
-                    file: (event as { file: string }).file,
-                    reasoning: (event as { reasoning: string }).reasoning,
-                    patch: (event as { patch: string }).patch,
-                    stats: (event as { stats: { additions: number; deletions: number } }).stats,
-                  });
-                } else if (event.type === "step" && event.name === "agent_loop") {
-                  if (event.message?.includes("build=passed")) buildPassed = true;
-                }
-              },
-              conversationHistory,
-              clearContext,
-              imageBase64,
-              modelOverride
-            )
+        const { usage } = await runWithUsageAccounting(() =>
+          runWithLangfuseTraceRoot(
+            {
+              name: LfTrace.modifyProject,
+              userId: user.id,
+              sessionId: langfuseSessionKey,
+              tags: ["flow:modify_project", "route:api_modify"],
+              input: { userInstruction },
+              metadata: { projectId: id, modelOverride: modelOverride ?? null },
+            },
+            () =>
+              runModifyProject(
+                db,
+                id,
+                userInstruction,
+                (event) => {
+                  send(event);
+                  if (event.type === "diff") {
+                    collectedDiffs.push({
+                      file: (event as { file: string }).file,
+                      reasoning: (event as { reasoning: string }).reasoning,
+                      patch: (event as { patch: string }).patch,
+                      stats: (event as { stats: { additions: number; deletions: number } }).stats,
+                    });
+                  } else if (event.type === "step" && event.name === "agent_loop") {
+                    if (event.message?.includes("build=passed")) buildPassed = true;
+                  }
+                },
+                conversationHistory,
+                clearContext,
+                imageBase64,
+                modelOverride
+              )
+          )
         );
+
+        await chargeUsageForRun(db, {
+          userId: user.id,
+          usage,
+          kind: "spend_modify",
+          projectId: id,
+          reason: "modify turn",
+        });
+
+        if (usage.totalCredits > 0) {
+          send({
+            type: "credits",
+            charged: usage.totalCredits,
+            usd: usage.totalUsd,
+          });
+        }
 
         const touchedFiles = collectedDiffs.map((d) => d.file);
         if (touchedFiles.length > 0) {

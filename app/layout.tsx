@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { JetBrains_Mono, Orbitron, Share_Tech_Mono } from "next/font/google";
 import { ConditionalFooter } from "./components/ConditionalFooter";
 import { ConditionalNav } from "./components/ConditionalNav";
+import { ConsoleEasterEgg } from "./components/ConsoleEasterEgg";
 import { AnalyticsProvider } from "@/components/analytics/AnalyticsProvider";
 import { FaviconProvider } from "./contexts/FaviconContext";
 import { DynamicFavicon } from "./components/DynamicFavicon";
@@ -41,6 +42,7 @@ export default function RootLayout({
       >
         <FaviconProvider>
           <DynamicFavicon />
+          <ConsoleEasterEgg />
           <AnalyticsProvider>
             <ConditionalNav />
             {children}

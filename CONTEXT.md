@@ -29,8 +29,12 @@ _See also_: `ai/flows/modify_project/history/modifyHistoryTurn.ts`
 ## Workspace & Community
 
 **Workspace**:
-The owner-only project list surface where a user manages their own projects (folders included). Default home for creation and editing.
+The owner-only project list surface where a user manages their own projects (folders included). Default home for creation and editing. Credit balance v0.1 is keyed to the owner `user_id` (no multi-member workspace table yet).
 _Avoid_: global gallery, “全部成员” list as the default member surface
+
+**Credits**:
+User-facing unit for AI build usage (generate / modify). Metered from LLM tokens → USD → credits. Free tier: daily grant + monthly cap. Pro / top-ups via Stripe (`/pricing`). Design Mode local writeback does not spend credits.
+_See also_: `docs/product/credits-v0.1.md`, `docs/product/credits-v0.2-stripe.md`, `docs/research/ai-builder-credits-pricing-20260711.md`
 
 **Community**:
 The public discovery surface of projects that have Publish Preview enabled. Anyone may browse, including anonymous users.

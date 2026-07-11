@@ -12,6 +12,19 @@ interface ChangeEntry {
 
 const CHANGELOG: ChangeEntry[] = [
   {
+    version: "v1.13",
+    date: "2026-07-11",
+    tag: "minor",
+    title: "Credits · Stripe Pro / top-up / pricing",
+    body: "积分进入可付费阶段：Pro 月订阅、一次性加量包、/pricing 页与 Stripe Webhook 入账。Free 日额度保留；取消订阅后余额不立刻清零。",
+    items: [
+      "迁移 027：stripe_customer / subscription 字段 + billing_stripe_events 幂等表",
+      "Checkout + Customer Portal；ledger grant_monthly / grant_topup",
+      "GET /api/billing/catalog · POST /api/billing/checkout|portal|webhook",
+      "侧栏积分徽章链到 /pricing",
+    ],
+  },
+  {
     version: "v1.12",
     date: "2026-07-11",
     tag: "minor",

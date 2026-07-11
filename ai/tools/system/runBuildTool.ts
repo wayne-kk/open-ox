@@ -31,21 +31,27 @@ export const executeRunBuild: ToolExecutor = async (
   args: Record<string, unknown>
 ): Promise<ToolResult | string> => {
   const script = (args.script as string) || "build";
+  const staticBasePath =
+    typeof args.openOxStaticBasePath === "string" ? args.openOxStaticBasePath.trim() : "";
   const projectDir = getSiteRoot();
   try {
     await ensureProjectNodeModules(projectDir);
     return await withSiteBuildLock(projectDir, async () => {
       // Prefer explicit `next build --webpack`: Next 16 Turbopack + site webpack()
       // config without turbopack:{} hard-fails (see sites/template/next.config.ts).
-      const args =
+      const pnpmArgs =
         script === "build"
           ? (["exec", "next", "build", "--webpack"] as const)
           : (["run", script] as const);
-      const { stdout, stderr } = await execFileAsync("pnpm", [...args], {
+      const { stdout, stderr } = await execFileAsync("pnpm", [...pnpmArgs], {
         cwd: projectDir,
         encoding: "utf8",
         maxBuffer: 1024 * 1024,
-        env: { ...process.env, NODE_ENV: "production" },
+        env: {
+          ...process.env,
+          NODE_ENV: "production",
+          ...(staticBasePath ? { OPEN_OX_STATIC_BASE_PATH: staticBasePath } : {}),
+        },
       });
       const output = [stdout, stderr].filter(Boolean).join("\n").trim();
       return { success: true, output };

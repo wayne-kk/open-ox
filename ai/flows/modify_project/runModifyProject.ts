@@ -83,6 +83,7 @@ export type ModifySSEEvent =
   | { type: "diff"; file: string; reasoning: string; patch: string; stats: DiffStats }
   | { type: "tool_call"; tool: string; args: Record<string, unknown>; result: string }
   | { type: "thinking"; content: string }
+  | { type: "credits"; charged: number; usd: number }
   | { type: "done" }
   | { type: "error"; message: string };
 
@@ -376,7 +377,9 @@ async function runModifyProjectInner(
 
     if (profile.allowEdits && loopState.hasEdited && loopState.touchedFiles.length > 0) {
       onEvent({ type: "step", name: "final_verification", status: "running" });
-      const finalVerify = await runFinalVerification(profile, loopState.touchedFiles);
+      const finalVerify = await runFinalVerification(profile, loopState.touchedFiles, {
+        projectId,
+      });
       loopState.hasBuild = !finalVerify.skippedBuild;
       loopState.buildPassed = finalVerify.buildPassed;
       loopState.lastBuildOutput = finalVerify.buildOutput;

@@ -69,7 +69,7 @@ function PipelineDisclosure() {
 
 export function HomeMarketingPage() {
   return (
-    <main className="cyber-scanlines relative isolate min-h-screen overflow-hidden">
+    <main className="relative isolate min-h-screen overflow-hidden">
       {/* ─── HERO ─── */}
       <section className="relative flex flex-col items-center px-6 pb-12 pt-28 lg:px-8">
         <div className="pointer-events-none absolute inset-0 -z-10">
@@ -107,7 +107,7 @@ export function HomeMarketingPage() {
 
       {/* ─── COMMUNITY DISCOVER (below HeroPrompt) ─── */}
       <section className="relative px-6 pb-20 pt-8 lg:px-8">
-        <div className="mx-auto max-w-7xl">
+        <div className="container mx-auto">
           <HomeCommunitySectionHeader />
           <HomeCommunityPreview />
         </div>
@@ -115,7 +115,7 @@ export function HomeMarketingPage() {
 
       {/* ─── THREE-STEP STORY ─── */}
       <section className="relative border-t border-white/6 px-6 py-24 lg:px-8">
-        <div className="mx-auto max-w-7xl">
+        <div className="container mx-auto">
           <div className="mb-12 text-center">
             <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.4em] text-primary">
               // How it works

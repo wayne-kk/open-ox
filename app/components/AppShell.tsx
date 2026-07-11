@@ -14,6 +14,7 @@ import {
   ScrollText,
   Sparkles,
   BookOpen,
+  CreditCard,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,7 @@ import {
 } from "@/lib/projectFolders";
 import { BrandMark } from "@/app/components/BrandMark";
 import { WorkspaceWaterBg } from "@/app/components/WorkspaceWaterBg";
+import { CreditsBalanceBadge } from "@/app/components/CreditsBalanceBadge";
 
 const SIDEBAR_COLLAPSED_KEY = "open-ox:app-sidebar-collapsed";
 export const WORKSPACE_PROMPT_ID = "workspace-prompt";
@@ -159,13 +161,13 @@ function SidebarBody({
         )}
       >
         <Link
-          href="/dashboard"
+          href="/home"
           onClick={onNavigate}
           className={cn(
             "group flex min-w-0 items-center overflow-hidden transition-[gap,justify-content] duration-300",
             collapsed ? "w-full justify-center gap-0" : "gap-2.5"
           )}
-          aria-label="OPEN-OX 工作台"
+          aria-label="OPEN-OX 首页"
         >
           <BrandMark size={collapsed ? 24 : 28} className="transition-[width,height] duration-300" />
           <span
@@ -292,6 +294,22 @@ function SidebarBody({
         <div className={cn("my-2 border-t border-white/6", collapsed && "mx-1")} />
 
         <NavItem
+          href="/home"
+          label="首页"
+          icon={Sparkles}
+          collapsed={collapsed}
+          onClick={onNavigate}
+          newTab
+        />
+        <NavItem
+          href="/pricing"
+          label="定价"
+          icon={CreditCard}
+          collapsed={collapsed}
+          onClick={onNavigate}
+          newTab
+        />
+        <NavItem
           href="/docs"
           label="文档"
           icon={BookOpen}
@@ -388,12 +406,15 @@ export function AppSidebar({
           )}
         />
       ) : user ? (
-        <UserMenuDropdown
-          user={user}
-          afterSignOut="home"
-          variant="sidebar"
-          collapsed={collapsed}
-        />
+        <div className={cn("flex flex-col gap-1.5", collapsed && "items-center")}>
+          {!collapsed ? <CreditsBalanceBadge className="mx-0.5 self-start" /> : null}
+          <UserMenuDropdown
+            user={user}
+            afterSignOut="home"
+            variant="sidebar"
+            collapsed={collapsed}
+          />
+        </div>
       ) : null}
     </div>
   );
@@ -446,12 +467,15 @@ export function AppSidebar({
               )}
             />
           ) : user ? (
-            <UserMenuDropdown
-              user={user}
-              afterSignOut="home"
-              variant="sidebar"
-              collapsed={collapsed}
-            />
+            <div className={cn("flex flex-col gap-1.5", collapsed && "items-center")}>
+              {!collapsed ? <CreditsBalanceBadge className="mx-0.5 self-start" /> : null}
+              <UserMenuDropdown
+                user={user}
+                afterSignOut="home"
+                variant="sidebar"
+                collapsed={collapsed}
+              />
+            </div>
           ) : null}
         </div>
       </aside>
@@ -465,7 +489,7 @@ export function AppSidebar({
         >
           <Menu className="h-4 w-4" />
         </button>
-        <Link href="/dashboard" className="flex items-center gap-2">
+        <Link href="/home" className="flex items-center gap-2">
           <BrandMark size={24} />
           <span className="font-heading text-[11px] font-bold tracking-[0.16em]">OPEN-OX</span>
         </Link>

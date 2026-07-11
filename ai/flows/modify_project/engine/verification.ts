@@ -3,6 +3,14 @@ import {
   checkGeneratedTypeScriptFiles,
   isGeneratedTypeScriptPath,
 } from "@/ai/flows/generate_project/shared/tsxDiagnostics";
+import { getSiteRoot } from "@/lib/projectManager";
+import { computeProjectFingerprint, ensureGlobalErrorFromTemplateForProject } from "@/lib/previewShared";
+import { shouldPublishStaticSitePreview } from "@/lib/previewMode";
+import {
+  getStoragePreviewBasePath,
+  prepareProjectDirForStaticExport,
+} from "@/lib/staticSitePreview";
+import { writeStaticPreviewBuildStamp } from "@/lib/staticPreviewBuildStamp";
 import type { ModifyProfile } from "../profile/modifyProfile";
 
 export type FinalVerificationResult = {
@@ -32,10 +40,14 @@ export async function runScopedTypecheck(touchedFiles: string[]): Promise<{
 
 /**
  * End-of-flow verification: scoped tsc first; full `pnpm build` only when scope requires it or tsc fails on structural files.
+ *
+ * When Storage static preview is enabled, builds with `OPEN_OX_STATIC_BASE_PATH` and stamps `out/`
+ * so `syncStaticSitePreview` can upload without a second webpack build.
  */
 export async function runFinalVerification(
   profile: ModifyProfile,
-  touchedFiles: string[]
+  touchedFiles: string[],
+  options?: { projectId?: string }
 ): Promise<FinalVerificationResult> {
   const unique = [...new Set(touchedFiles.map((f) => f.replace(/\\/g, "/")))];
 
@@ -70,7 +82,20 @@ export async function runFinalVerification(
     };
   }
 
-  const build = await executeRunBuild({});
+  const projectId = options?.projectId?.trim() || "";
+  const useStaticPreviewBuild = Boolean(projectId) && shouldPublishStaticSitePreview();
+  let staticBasePath = "";
+
+  if (useStaticPreviewBuild) {
+    await ensureGlobalErrorFromTemplateForProject(projectId);
+    const projectDir = getSiteRoot(projectId);
+    await prepareProjectDirForStaticExport(projectDir);
+    staticBasePath = getStoragePreviewBasePath(projectId);
+  }
+
+  const build = await executeRunBuild(
+    staticBasePath ? { openOxStaticBasePath: staticBasePath } : {}
+  );
   const buildPassed = typeof build === "object" ? build.success : !String(build).includes("failed");
   const buildOutput =
     typeof build === "object"
@@ -78,6 +103,20 @@ export async function runFinalVerification(
         ? (build.output ?? "build ok")
         : (build.error ?? build.output ?? "build failed")
       : String(build);
+
+  if (buildPassed && useStaticPreviewBuild && staticBasePath) {
+    try {
+      const projectDir = getSiteRoot(projectId);
+      const filesFingerprint = await computeProjectFingerprint(projectId);
+      await writeStaticPreviewBuildStamp(projectDir, {
+        filesFingerprint,
+        basePath: staticBasePath,
+        builtAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.warn("[modify] writeStaticPreviewBuildStamp failed:", err);
+    }
+  }
 
   return {
     tscPassed: true,

@@ -64,16 +64,37 @@ export function formatLocalProjectFingerprintHash(
 /**
  * After modify (or any local edit), mark disk as canonical so restore paths do
  * not treat newer local files as stale vs Storage.
+ *
+ * Also marks Storage static preview **dirty**: clears `static_preview_synced_at` and
+ * drops the origin suffix from `files_hash` until `syncStaticSitePreview` republishes.
+ * Otherwise fingerprint short-circuit / instant preview would serve a stale export.
  */
 export async function syncLocalProjectFingerprint(
   db: SupabaseClient,
   projectId: string
 ): Promise<string> {
   const localFp = await computeProjectFingerprint(projectId);
-  const hash = formatLocalProjectFingerprintHash(
-    localFp,
-    await getSavedFingerprint(db, projectId)
-  );
-  await saveFingerprint(db, projectId, hash);
-  return hash;
+  const prev = await getSavedFingerprint(db, projectId);
+  const saved = parseProjectsFilesHash(prev);
+
+  // Unchanged sources already in published aggregate form — leave alone.
+  if (saved.filesFingerprint === localFp && saved.storageOriginFingerprint != null) {
+    return prev ?? localFp;
+  }
+
+  const { error } = await db
+    .from("projects")
+    .update({
+      files_hash: localFp,
+      static_preview_synced_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", projectId);
+
+  if (error) {
+    // Fallback: at least persist fingerprint so restore does not clobber local edits.
+    await saveFingerprint(db, projectId, localFp);
+  }
+
+  return localFp;
 }

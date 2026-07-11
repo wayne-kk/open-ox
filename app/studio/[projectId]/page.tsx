@@ -104,10 +104,24 @@ function StudioInner({ projectId }: { projectId: string }) {
   });
   const [changesFocusIndex, setChangesFocusIndex] = useState<number | null>(null);
   const [codePanelMounted, setCodePanelMounted] = useState(false);
+  /** Keep the live preview iframe mounted across Topology/Code tab switches (avoid reload black flash). */
+  const [previewFrameMounted, setPreviewFrameMounted] = useState(false);
 
   useEffect(() => {
     if (rightPanel === "code") setCodePanelMounted(true);
   }, [rightPanel]);
+
+  useEffect(() => {
+    if (previewState === "ready" && previewUrl) {
+      setPreviewFrameMounted(true);
+    }
+  }, [previewState, previewUrl]);
+
+  useEffect(() => {
+    if (!previewUrl) {
+      setPreviewFrameMounted(false);
+    }
+  }, [previewUrl]);
 
   useEffect(() => {
     if (!studio.modifying) return;
@@ -354,20 +368,6 @@ function StudioInner({ projectId }: { projectId: string }) {
                       ) : null}
                     </button>
                   ) : null}
-                  <button
-                    type="button"
-                    disabled={previewSlot.mode === "live"}
-                    onClick={() => showCurrentPreview(-1)}
-                    title={previewSlot.mode === "live" ? "已在当前预览" : "返回当前预览"}
-                    className={cn(
-                      "rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider transition-colors",
-                      previewSlot.mode === "live"
-                        ? "cursor-not-allowed border-white/8 bg-white/3 text-muted-foreground/35"
-                        : "border-white/12 bg-white/6 text-foreground/85 hover:border-white/20 hover:text-foreground"
-                    )}
-                  >
-                    Live
-                  </button>
                   {projectId ? <StudioPublishMenu projectId={projectId} /> : null}
                   <Link
                     href="/dashboard"
@@ -600,71 +600,97 @@ function StudioInner({ projectId }: { projectId: string }) {
                 </div>
               ) : null}
 
-              {rightPanel === "preview" ? (
-                <div className="relative flex h-full min-h-0 flex-col">
-                  {detailsRecord && previewSlot.mode === "details" ? (
-                    <ModifyTurnDetailsPane
-                      record={detailsRecord}
-                      filePath={previewSlot.filePath}
-                      onFilePathChange={(path) =>
-                        setPreviewSlot((prev) =>
-                          prev.mode === "details" ? { ...prev, filePath: path } : prev
-                        )
-                      }
-                      onBackToPreview={() =>
-                        setPreviewSlot({
-                          mode: "live",
-                          fromIndex: previewSlot.historyIndex,
-                        })
-                      }
-                      onOpenTimeline={() => {
-                        setLeftPaneView("changes");
-                        setChangesFocusIndex(previewSlot.historyIndex);
-                        setConversationCollapsed(false);
-                      }}
+              {/* Keep iframe alive across Topology/Code switches — remounting reloads and flashes black. */}
+              {previewFrameMounted && previewUrl ? (
+                <div
+                  className={cn(
+                    "relative flex h-full min-h-0 flex-col",
+                    (rightPanel !== "preview" ||
+                      previewSlot.mode !== "live" ||
+                      previewState !== "ready") &&
+                      "hidden",
+                  )}
+                  aria-hidden={
+                    rightPanel !== "preview" ||
+                    previewSlot.mode !== "live" ||
+                    previewState !== "ready"
+                  }
+                  inert={
+                    rightPanel !== "preview" ||
+                    previewSlot.mode !== "live" ||
+                    previewState !== "ready"
+                      ? true
+                      : undefined
+                  }
+                >
+                  <div ref={previewContainerRef} className="relative flex min-h-0 flex-1">
+                    <iframe
+                      key={previewIframeSrc ?? `${previewUrl}_${previewVersion}`}
+                      ref={iframeRef}
+                      src={previewIframeSrc ?? previewUrl}
+                      className="w-full flex-1 border-0 bg-[#0a0a0a]"
+                      title="Project Preview"
                     />
-                  ) : (
-                    <>
-                      {previewState === "starting" && (
-                        <div className="flex flex-1 flex-col items-center justify-center gap-3">
-                          <HamsterLoader size="sm" />
-                          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Starting preview…</p>
-                          <p className="font-mono text-[10px] text-muted-foreground/70">Usually a few seconds when cache is warm</p>
-                        </div>
-                      )}
-                      {previewState === "error" && (
-                        <div className="flex flex-1 flex-col items-center justify-center gap-3">
-                          <p className="font-mono text-xs text-red-400">Preview failed</p>
-                          <p className="font-mono text-[10px] text-muted-foreground max-w-sm text-center">{previewError}</p>
-                          <button onClick={startPreview} className="defi-button-outline px-4 py-2 text-[11px] font-medium flex items-center gap-1.5">
-                            <RefreshCw className="h-3 w-3" /> Retry
-                          </button>
-                        </div>
-                      )}
-                      {previewState === "idle" && projectId && (
-                        <div className="flex flex-1 flex-col items-center justify-center gap-3">
-                          <button onClick={startPreview} className="defi-button-outline px-5 py-2.5 text-[11px] font-medium flex items-center gap-2">
-                            <Monitor className="h-4 w-4" /> Start Preview
-                          </button>
-                        </div>
-                      )}
-                      {previewState === "ready" && previewUrl && (
-                        <div ref={previewContainerRef} className="relative flex flex-1 min-h-0">
-                          <iframe
-                            key={previewIframeSrc ?? `${previewUrl}_${previewVersion}`}
-                            ref={iframeRef}
-                            src={previewIframeSrc ?? previewUrl}
-                            className="flex-1 w-full border-0"
-                            title="Project Preview"
-                          />
-                          <DesignModePreviewOverlay
-                            designMode={designMode}
-                            iframeRef={iframeRef}
-                            containerRef={previewContainerRef}
-                          />
-                        </div>
-                      )}
-                    </>
+                    <DesignModePreviewOverlay
+                      designMode={designMode}
+                      iframeRef={iframeRef}
+                      containerRef={previewContainerRef}
+                    />
+                  </div>
+                </div>
+              ) : null}
+
+              {rightPanel === "preview" && detailsRecord && previewSlot.mode === "details" ? (
+                <div className="relative flex h-full min-h-0 flex-col">
+                  <ModifyTurnDetailsPane
+                    record={detailsRecord}
+                    filePath={previewSlot.filePath}
+                    onFilePathChange={(path) =>
+                      setPreviewSlot((prev) =>
+                        prev.mode === "details" ? { ...prev, filePath: path } : prev
+                      )
+                    }
+                    onBackToPreview={() =>
+                      setPreviewSlot({
+                        mode: "live",
+                        fromIndex: previewSlot.historyIndex,
+                      })
+                    }
+                    onOpenTimeline={() => {
+                      setLeftPaneView("changes");
+                      setChangesFocusIndex(previewSlot.historyIndex);
+                      setConversationCollapsed(false);
+                    }}
+                  />
+                </div>
+              ) : null}
+
+              {rightPanel === "preview" &&
+              previewSlot.mode === "live" &&
+              previewState !== "ready" ? (
+                <div className="absolute inset-0 z-10 flex flex-col bg-background/95">
+                  {previewState === "starting" && (
+                    <div className="flex flex-1 flex-col items-center justify-center gap-3">
+                      <HamsterLoader size="sm" />
+                      <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Starting preview…</p>
+                      <p className="font-mono text-[10px] text-muted-foreground/70">Usually a few seconds when cache is warm</p>
+                    </div>
+                  )}
+                  {previewState === "error" && (
+                    <div className="flex flex-1 flex-col items-center justify-center gap-3">
+                      <p className="font-mono text-xs text-red-400">Preview failed</p>
+                      <p className="font-mono text-[10px] text-muted-foreground max-w-sm text-center">{previewError}</p>
+                      <button onClick={startPreview} className="defi-button-outline px-4 py-2 text-[11px] font-medium flex items-center gap-1.5">
+                        <RefreshCw className="h-3 w-3" /> Retry
+                      </button>
+                    </div>
+                  )}
+                  {previewState === "idle" && projectId && (
+                    <div className="flex flex-1 flex-col items-center justify-center gap-3">
+                      <button onClick={startPreview} className="defi-button-outline px-5 py-2.5 text-[11px] font-medium flex items-center gap-2">
+                        <Monitor className="h-4 w-4" /> Start Preview
+                      </button>
+                    </div>
                   )}
                 </div>
               ) : null}

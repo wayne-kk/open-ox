@@ -80,6 +80,8 @@ export interface BuildStudioState {
   intentAgent: IntentAgentTurn | null;
   mergedBrief: string | null;
   conversationMessages: ConversationMessage[];
+  /** Live intent-agent progress for the in-flight turn (cleared when the turn completes). */
+  intentProgressLog: IntentProgressEvent[];
   /** Bumps when the user sends build/modify input so the conversation pane can scroll it into view. */
   userInputScrollNonce: number;
   lastRunInput: string | null;
@@ -335,6 +337,8 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
   const [intentAgent, setIntentAgent] = useState<IntentAgentTurn | null>(null);
   const [mergedBrief, setMergedBrief] = useState<string | null>(null);
   const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>([]);
+  const [intentProgressLog, setIntentProgressLog] = useState<IntentProgressEvent[]>([]);
+  const intentProgressLogRef = useRef<IntentProgressEvent[]>([]);
   const [userInputScrollNonce, setUserInputScrollNonce] = useState(0);
   const [lastRunInput, setLastRunInput] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(null);
@@ -827,6 +831,8 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     setStartedAt(t0);
     setElapsed(0);
     setLoading(true);
+    intentProgressLogRef.current = [];
+    setIntentProgressLog([]);
     // Preserve existing buildSteps to avoid topology flash.
     // New SSE steps will upsert into the existing array.
     setResponse((prev) => prev
@@ -884,14 +890,22 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       await runBuildSite(
         textForApi,
         {
+          onIntentProgress: (event) => {
+            intentProgressLogRef.current = [...intentProgressLogRef.current, event];
+            setIntentProgressLog(intentProgressLogRef.current);
+          },
           onIntentTurn: (turn) => {
             setIntentAgent(turn);
+            const activitySnapshot = intentProgressLogRef.current;
+            intentProgressLogRef.current = [];
+            setIntentProgressLog([]);
             // commit_generate: `onIntentCommit` appends the confirmation line.
             if (shouldAppendIntentAssistant(turn)) {
               appendConversationMessage({
                 role: "assistant",
                 content: intentAssistantContent(turn),
                 intentPayload: turn.yieldPayload,
+                activityLog: activitySnapshot.length > 0 ? activitySnapshot : undefined,
               });
             }
             setResponse((prev) => ({
@@ -914,16 +928,25 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
           onIntentCommit: (brief) => {
             const cleanBrief = brief.trim();
             setMergedBrief(cleanBrief || null);
+            intentProgressLogRef.current = [];
+            setIntentProgressLog([]);
             appendConversationMessage({
               role: "assistant",
               content: "需求已确认，开始生成项目...",
             });
+            const queuedStep: BuildStep = {
+              step: "generation_queued",
+              status: "ok",
+              detail: "生成任务已排队，正在启动分析…",
+              timestamp: Date.now(),
+              duration: 0,
+            };
             setResponse((prev) => ({
               content: "需求已确认，开始生成项目...",
               projectId: projectId ?? prev?.projectId ?? undefined,
               intentAgent: prev?.intentAgent,
               mergedBrief: cleanBrief || prev?.mergedBrief,
-              buildSteps: prev?.buildSteps ?? [],
+              buildSteps: [...(prev?.buildSteps ?? []).filter((s) => s.step !== "generation_queued"), queuedStep],
             }));
           },
           onStep: handleStepEvent,
@@ -1039,7 +1062,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
               projectIdFromGenerationRef.current = nextProjectId;
               setProjectId(nextProjectId);
               if (autoPreviewAfterBuildRef.current && result.verificationStatus === "passed") {
-                void openPreviewAfterBuild(nextProjectId, true);
+                void openPreviewAfterBuild(nextProjectId, false);
               }
             }
           },
@@ -1146,7 +1169,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
               projectIdFromGenerationRef.current = nextProjectId;
               setProjectId(nextProjectId);
               if (autoPreviewAfterBuildRef.current && result.verificationStatus === "passed") {
-                void openPreviewAfterBuild(nextProjectId, true);
+                void openPreviewAfterBuild(nextProjectId, false);
               }
             }
           },
@@ -1348,7 +1371,8 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         }
         return; // all good
       }
-      // Serve is down — trigger a full restart
+      // Serve is down — only clear after a confirmed failure. Tab-switch health
+      // checks must not flash the preview black on a single flake.
       console.warn("[ensurePreviewAlive] Serve is down, restarting preview");
       setPreviewUrl(null);
       setPreviewState("idle"); // will trigger startPreview via the effect below
@@ -1375,7 +1399,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         previewUrl &&
         prevPanel !== "preview"
       ) {
-        // Switching BACK to preview tab — verify serve is still alive
+        // Switching BACK to preview tab — soft health check only (iframe stays mounted).
         ensurePreviewAlive();
       }
     }
@@ -1567,7 +1591,9 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         setCodeWorkspaceEpoch((n) => n + 1);
 
         if (autoPreviewAfterBuildRef.current) {
-          void openPreviewAfterBuild(projectId, true);
+          // Storage backend: share in-flight sync with post-modify pipeline (no force).
+          // Forced rebuild doubled next build cost on every modify.
+          void openPreviewAfterBuild(projectId, false);
         }
       }
     } catch (err) {
@@ -1599,7 +1625,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       : startedAt ?? 0;
 
   return {
-    input, setInput, loading, clearing, response, intentAgent, mergedBrief, conversationMessages, userInputScrollNonce, lastRunInput, elapsed, flowStart,
+    input, setInput, loading, clearing, response, intentAgent, mergedBrief, conversationMessages, intentProgressLog, userInputScrollNonce, lastRunInput, elapsed, flowStart,
     handleRun, handleClear, handleRetry,
     generationSeemsStuck,
     recoveryUnlocking,

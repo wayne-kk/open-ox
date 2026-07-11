@@ -195,7 +195,7 @@ function ProjectCard({
   const StatusIcon = statusBadge?.icon;
 
   const menuItemClass =
-    "cursor-pointer gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-white/85 focus:bg-white/[0.06] focus:text-white data-[highlighted]:bg-white/[0.06] data-[highlighted]:text-white";
+    "cursor-pointer gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-white/85 outline-none focus:bg-white/[0.08] focus:!text-white focus:!**:text-white data-[highlighted]:bg-white/[0.08] data-[highlighted]:!text-white data-[highlighted]:!**:text-white";
 
   return (
     <article
@@ -318,7 +318,7 @@ function ProjectCard({
               <DropdownMenuContent
                 align="end"
                 sideOffset={8}
-                className="w-52 rounded-xl border border-white/10 bg-[#0e1118]/98 p-1.5 text-white shadow-[0_16px_48px_-12px_rgba(0,0,0,0.75)] backdrop-blur-xl"
+                className="w-56 overflow-visible rounded-xl border border-white/10 bg-[#0e1118] p-1.5 text-white shadow-[0_16px_48px_-12px_rgba(0,0,0,0.75)] ring-0"
               >
                 <DropdownMenuItem
                   disabled={publishBusy || (!hasStaticPreview && !publishPreview)}
@@ -347,15 +347,18 @@ function ProjectCard({
                     需先有静态预览才能发布
                   </p>
                 ) : null}
-                <DropdownMenuSeparator className="my-1.5 bg-white/[0.08]" />
+                <DropdownMenuSeparator className="mx-0 my-1 bg-white/[0.08]" />
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger
-                    className={cn(menuItemClass, "focus:bg-white/[0.06] data-[state=open]:bg-white/[0.06]")}
+                    className={cn(
+                      menuItemClass,
+                      "bg-transparent focus:bg-white/[0.08] data-[state=open]:bg-white/[0.08] data-[state=open]:!text-white data-[state=open]:!**:text-white data-open:bg-white/[0.08] data-open:!text-white data-open:!**:text-white"
+                    )}
                   >
                     <FolderInput className="h-3.5 w-3.5 shrink-0 text-white/50" />
-                    移动到…
+                    <span className="flex-1 whitespace-nowrap text-left">移动到文件夹</span>
                   </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="max-h-64 w-48 overflow-y-auto rounded-xl border border-white/10 bg-[#0e1118]/98 p-1.5 text-white shadow-[0_16px_48px_-12px_rgba(0,0,0,0.75)] backdrop-blur-xl">
+                  <DropdownMenuSubContent className="max-h-64 w-48 overflow-y-auto overflow-x-hidden rounded-xl border border-white/10 bg-[#0e1118] p-1.5 text-white shadow-[0_16px_48px_-12px_rgba(0,0,0,0.75)] ring-0">
                     <DropdownMenuItem
                       disabled={!project.folderId}
                       className={menuItemClass}
@@ -388,11 +391,11 @@ function ProjectCard({
                     })}
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
-                <DropdownMenuSeparator className="my-1.5 bg-white/[0.08]" />
+                <DropdownMenuSeparator className="mx-0 my-1 bg-white/[0.08]" />
                 <DropdownMenuItem
                   variant="destructive"
                   disabled={deleting}
-                  className="cursor-pointer gap-2.5 rounded-lg px-2.5 py-2 text-[13px] focus:bg-red-500/12 data-[highlighted]:bg-red-500/12"
+                  className="cursor-pointer gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-red-400 focus:bg-red-500/12 focus:!text-red-400 focus:!**:text-red-400 data-[highlighted]:bg-red-500/12 data-[highlighted]:!text-red-400 data-[highlighted]:!**:text-red-400"
                   onSelect={() => onDelete()}
                 >
                   <Trash2 className="h-3.5 w-3.5 shrink-0" />
@@ -1164,22 +1167,6 @@ function ProjectsPageContent() {
                 switchingFolder && "pointer-events-none opacity-45"
               )}
             >
-              <button
-                type="button"
-                onClick={focusCreatePrompt}
-                className="group flex min-h-[180px] w-full flex-col items-center justify-center gap-3 self-stretch rounded-2xl border border-dashed border-white/[0.12]
-                  bg-[#0a0c10]/60 p-6
-                  transition-[border-color,background-color,transform] duration-200 ease-out
-                  hover:-translate-y-0.5 hover:border-primary/35 hover:bg-primary/[0.04]"
-              >
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] transition-colors group-hover:border-primary/30 group-hover:bg-primary/10">
-                  <Plus className="h-5 w-5 text-white/45 transition-colors group-hover:text-primary" />
-                </div>
-                <span className="text-[12px] font-medium text-white/50 transition-colors group-hover:text-primary/80">
-                  新建项目
-                </span>
-              </button>
-
               {projects.map((project) => (
                 <ProjectCard
                   key={project.id}

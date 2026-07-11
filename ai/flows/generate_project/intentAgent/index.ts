@@ -6,7 +6,7 @@ export {
   saveIntentAgentSession,
   isSafeProjectId,
 } from "./sessionStore";
-export { buildIntentAgentTools, PIPELINE_CONSTRAINTS_TEXT } from "./tools";
+export { buildIntentAgentTools, buildIntentAgentToolsForTurn, buildIntentAgentControlTools, PIPELINE_CONSTRAINTS_TEXT } from "./tools";
 export {
   coerceAdditionalToolsFromJson,
   INTENT_AGENT_RESERVED_TOOL_NAMES,

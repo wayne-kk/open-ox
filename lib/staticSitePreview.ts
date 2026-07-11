@@ -34,6 +34,10 @@ import {
   saveFingerprint,
 } from "@/lib/previewFingerprintDb";
 import { canUseInstantStaticPreview } from "@/lib/staticSitePreviewFastPath";
+import {
+  canReuseStaticExportOut,
+  writeStaticPreviewBuildStamp,
+} from "@/lib/staticPreviewBuildStamp";
 import { rewriteExportedPublicRootPathsInText } from "@/lib/staticExportPublicPathRewrite";
 import {
   contentTypeForRelPath,
@@ -370,6 +374,16 @@ async function ensureWebpackBuildScript(projectDir: string): Promise<void> {
   await fs.writeFile(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`, "utf-8");
 }
 
+/**
+ * Patch next.config / package.json so Storage static export builds succeed.
+ * Exported for modify verification to build once with the same basePath as preview sync.
+ */
+export async function prepareProjectDirForStaticExport(projectDir: string): Promise<void> {
+  await ensurePreviewBasePathInNextConfig(projectDir);
+  await ensureTurbopackConfigSilence(projectDir);
+  await ensureWebpackBuildScript(projectDir);
+}
+
 async function runStaticExportBuild(projectId: string, projectDir: string): Promise<void> {
   const basePath = getStoragePreviewBasePath(projectId);
   await withSiteBuildLock(projectDir, async () => {
@@ -525,18 +539,18 @@ export async function syncStaticSitePreview(
     }
 
     await ensureGlobalErrorFromTemplateForProject(projectId);
-    await ensurePreviewBasePathInNextConfig(projectDir);
-    await ensureTurbopackConfigSilence(projectDir);
-    await ensureWebpackBuildScript(projectDir);
+    await prepareProjectDirForStaticExport(projectDir);
 
     const filesFp = await computeProjectFingerprint(projectId);
     const originFp = storagePreviewOriginFingerprint();
     const aggregateKey = `${filesFp}:${originFp}`;
     const url = getStaticPreviewUrl(projectId);
+    const basePath = getStoragePreviewBasePath(projectId);
 
     const saved = parseProjectsFilesHash(await getSavedFingerprint(db, projectId));
     const skip =
       !force &&
+      Boolean((await loadStaticPreviewRow(db, projectId))?.static_preview_synced_at) &&
       saved.filesFingerprint === filesFp &&
       saved.storageOriginFingerprint !== null &&
       saved.storageOriginFingerprint === originFp;
@@ -557,10 +571,23 @@ export async function syncStaticSitePreview(
 
     try {
       await ensureProjectNodeModules(projectDir);
-      await runStaticExportBuild(projectId, projectDir);
+
+      const reuseOut = await canReuseStaticExportOut(projectDir, filesFp, basePath);
+      if (reuseOut) {
+        console.log(
+          `[staticPreview] reuse existing out/ (verification stamp) projectId=${projectId}`
+        );
+      } else {
+        await runStaticExportBuild(projectId, projectDir);
+        await writeStaticPreviewBuildStamp(projectDir, {
+          filesFingerprint: filesFp,
+          basePath,
+          builtAt: new Date().toISOString(),
+        });
+      }
 
       const outDir = path.join(projectDir, "out");
-      await rewriteExportedPublicPathsInOutDir(outDir, getStoragePreviewBasePath(projectId));
+      await rewriteExportedPublicPathsInOutDir(outDir, basePath);
       await uploadOutDir(storage, projectId, outDir);
       await removeLocalOutDir(projectDir);
 
@@ -598,11 +625,17 @@ async function remoteIndexHtmlReachable(indexUrl: string): Promise<boolean> {
 }
 
 export async function ensureStaticPreviewAlive(
-  _db: SupabaseClient,
+  db: SupabaseClient,
   projectId: string
 ): Promise<{ status: "ok" | "down"; url?: string }> {
   const indexUrl = getStaticPreviewUrl(projectId);
   if (await remoteIndexHtmlReachable(indexUrl)) {
+    return { status: "ok", url: indexUrl };
+  }
+  // HEAD/GET can flake (proxy, cold start). If we already published, keep serving —
+  // wiping the iframe on tab switch causes a black flash and a pointless restart.
+  const row = await loadStaticPreviewRow(db, projectId);
+  if (row?.static_preview_synced_at) {
     return { status: "ok", url: indexUrl };
   }
   return { status: "down" };

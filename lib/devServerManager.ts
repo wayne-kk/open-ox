@@ -605,7 +605,9 @@ export async function hotRefreshDevServer(
   changedFiles: string[]
 ): Promise<{ url: string; port: number; mode: "hot" }> {
   if (isPreviewStorage()) {
-    const r = await staticSitePreview.syncStaticSitePreview(db, projectId, { force: true });
+    // Do not force — dirty fingerprint after modify already requires a rebuild;
+    // force:true prevented sharing work with the background pipeline.
+    const r = await staticSitePreview.syncStaticSitePreview(db, projectId);
     return { ...r, mode: "hot" };
   }
   if (!isPreviewE2B()) {

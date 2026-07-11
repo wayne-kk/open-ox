@@ -36,7 +36,7 @@ import {
   CHROME_OPTIMIZE_AGENT_STEP,
   type PageImplementSummary,
 } from "./steps/chromeOptimizeAgent";
-import { stepExtractUserProvidedContent } from "./steps/extractUserProvidedContent";
+import { stepExtractUserProvidedContent, resolveExtractUserContentMaxIterations } from "./steps/extractUserProvidedContent";
 import { hasUserProvidedContent } from "./schema/normalizeUserProvidedContent";
 import { USER_PROVIDED_CONTENT_PATH } from "@/lib/content/userProvidedContentText";
 import { prepareUserProvidedContentForPageAgent } from "./shared/userProvidedContentContext";
@@ -793,6 +793,8 @@ async function runGenerateProjectInner(
       logger.logStep("validate_skill_prompts", "ok", "all skill files validated");
     }
 
+    logger.logStep("generation_started", "ok", "starting requirement analysis");
+
     await persistJsonArtifact(artifactLogger, "run", "input", {
       userInput,
       enableIntentGuide: options.enableIntentGuide === true,
@@ -909,6 +911,11 @@ async function runGenerateProjectInner(
               userInput: effectiveUserInput,
               imageSourceTexts: options.userImageSourceTexts,
               referenceImageBase64: referenceScreenshot,
+              maxIterations: resolveExtractUserContentMaxIterations({
+                userInput: effectiveUserInput,
+                imageSourceTexts: options.userImageSourceTexts,
+                referenceImageBase64: referenceScreenshot,
+              }),
             });
 
         const [analyzeResult, inferResult, extractResult] = await Promise.all([
@@ -1026,6 +1033,13 @@ async function runGenerateProjectInner(
           return `## Design Intent\n- Mood: ${di.mood.join(", ")}\n- Color Direction: ${di.colorDirection}\n- Style: ${di.style}\n- Keywords: ${di.keywords.join(", ")}`;
         })();
 
+        // Design system only needs design-intent markdown (+ optional style guide), not plan sections.
+        logger.startStep("generate_project_design_system");
+        const designPromise = stepGenerateProjectDesignSystem(
+          designIntentForSystem,
+          options.styleGuide
+        );
+
         const planOutcome = await stepPlanProject(normalizedBlueprint).then((out) => {
           logger.logStep("plan_project", "ok", "page-level blueprints prepared", undefined, out.trace);
           return out;
@@ -1057,11 +1071,7 @@ async function runGenerateProjectInner(
           );
         }
 
-        logger.startStep("generate_project_design_system");
-        const dsOutcome = await stepGenerateProjectDesignSystem(
-          designIntentForSystem,
-          options.styleGuide
-        );
+        const dsOutcome = await designPromise;
         designSystem = dsOutcome.designSystem;
         logger.logStep(
           "generate_project_design_system",

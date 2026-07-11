@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -177,7 +178,10 @@ const EyeBall = ({
 type AuthMode = "login" | "register";
 
 function AuthPage() {
-  const [mode, setMode] = useState<AuthMode>("login");
+  const searchParams = useSearchParams();
+  const [mode, setMode] = useState<AuthMode>(
+    searchParams.get("mode") === "register" ? "register" : "login"
+  );
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [name, setName] = useState("");
@@ -201,6 +205,10 @@ function AuthPage() {
   const secretFieldFocused = isTyping;
   const anyPasswordVisible =
     mode === "login" ? showPassword : showPassword || showConfirmPassword;
+
+  useEffect(() => {
+    setMode(searchParams.get("mode") === "register" ? "register" : "login");
+  }, [searchParams]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {

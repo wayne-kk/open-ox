@@ -11,7 +11,6 @@ const SAFE_PREFIXES = [
   "/community",
   "/llm-test",
   "/changelog",
-  "/style-eval",
 ] as const;
 
 /** Map legacy workspace list URLs to /dashboard (keep /projects/:id). */

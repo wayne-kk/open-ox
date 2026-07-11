@@ -26,8 +26,8 @@ const LEASE_SECONDS = Math.max(
   Number.parseInt(process.env.OPEN_OX_GENERATION_LEASE_SECONDS ?? "240", 10) || 240
 );
 const POLL_MS = Math.max(
-  500,
-  Number.parseInt(process.env.OPEN_OX_GENERATION_POLL_MS ?? "1500", 10) || 1500
+  300,
+  Number.parseInt(process.env.OPEN_OX_GENERATION_POLL_MS ?? "500", 10) || 500
 );
 
 function sleep(ms: number): Promise<void> {

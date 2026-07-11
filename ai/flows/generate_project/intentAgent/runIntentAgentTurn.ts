@@ -3,7 +3,7 @@ import { callLLMWithToolsFromMessages } from "@/ai/shared/llm/toolLoop";
 import type { AgentToolCallRecord, ChatMessage } from "@/ai/shared/llm/types";
 import { getModelForStep } from "@/lib/config/models";
 import { clearIntentAgentSession, loadIntentAgentSession, saveIntentAgentSession } from "./sessionStore";
-import { buildIntentAgentTools, PIPELINE_CONSTRAINTS_TEXT } from "./tools";
+import { buildIntentAgentToolsForTurn, PIPELINE_CONSTRAINTS_TEXT } from "./tools";
 import { mergeIntentAgentTools, INTENT_AGENT_RESERVED_TOOL_NAMES } from "./toolSurface";
 import { classifyBriefSubstanceForCommit } from "./briefSubstanceClassifier";
 import { resolveCommitMergedBrief } from "./commitMergeBrief";
@@ -24,7 +24,10 @@ import type {
 } from "./types";
 import { collectIntentAgentImageSourceTexts } from "./collectImageSourceTexts";
 import { buildUserVisionContent, userTurnPlainTextForClassifier } from "../shared/userVisionContent";
-import { classifyIntentAgentInputProfile } from "./intentAgentInputProfile";
+import {
+  classifyIntentAgentInputProfile,
+  listReferenceSiteCandidateUrls,
+} from "./intentAgentInputProfile";
 import type { IntentAgentTraceStep } from "./types";
 
 function truncatePreview(s: string, max: number): string {
@@ -137,14 +140,23 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
   const tailPlainForCommit = userTurnPlainTextForClassifier(userMessage, hasUserImage);
   const model = getModelForStep("intent_agent");
   const inputProfile = classifyIntentAgentInputProfile(userMessage);
+  const needsHeavyTools =
+    hasUserImage ||
+    inputProfile === "reference_site_focus" ||
+    listReferenceSiteCandidateUrls(userMessage).length > 0 ||
+    Boolean(toolExtensions?.tools?.length);
   const systemPrompt = composePromptBlocks([
     loadStepPrompt("projectIntentAgent"),
     PIPELINE_CONSTRAINTS_TEXT,
+    needsHeavyTools
+      ? ""
+      : "\n\n### 本轮工具面（轻量）\n当前消息**没有**参考站 URL / 截图。你只能使用 `yield_to_user` 与 `commit_generate`。信息不够时**第一轮必须** `yield_to_user`，不要空转。",
   ]);
   const tools = mergeIntentAgentTools({
-    base: buildIntentAgentTools(),
+    base: buildIntentAgentToolsForTurn({ needsHeavyTools }),
     extensions: toolExtensions?.tools,
   });
+  const maxIterations = needsHeavyTools ? 14 : 4;
   const trace: IntentAgentTraceStep[] = [];
   let llmRoundCount = 0;
 
@@ -249,7 +261,7 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
     messages,
     tools,
     temperature: 0.35,
-    maxIterations: 14,
+    maxIterations,
     model,
     executeToolOverrides,
     onMessage,

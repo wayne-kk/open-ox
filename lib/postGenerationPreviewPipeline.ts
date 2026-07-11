@@ -6,8 +6,8 @@ import { uploadFullProject } from "@/lib/storage";
 import { syncStaticSitePreview } from "@/lib/staticSitePreview";
 
 /**
- * After generation/modify: upload snapshot (manifest + zip) first, then static build, then cover capture.
- * Serializes work that previously raced and caused slow recursive Storage restores on deploy.
+ * After generation/modify: publish static preview from local disk first (user-visible),
+ * then upload source snapshot for cross-device restore, then cover capture.
  */
 export function schedulePostGenerationPreviewPipeline(
   db: SupabaseClient,
@@ -15,10 +15,10 @@ export function schedulePostGenerationPreviewPipeline(
 ): void {
   void (async () => {
     try {
-      await uploadFullProject(projectId);
       if (shouldPublishStaticSitePreview()) {
         await syncStaticSitePreview(db, projectId);
       }
+      await uploadFullProject(projectId);
       scheduleCaptureProjectCover(projectId);
     } catch (err) {
       console.error(`[preview pipeline] post-generation failed ${projectId}:`, err);

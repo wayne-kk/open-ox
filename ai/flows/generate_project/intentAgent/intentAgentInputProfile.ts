@@ -1,6 +1,5 @@
 /**
- * Classifies intent-agent input for observability (trace / metrics).
- * Does NOT change which tools are registered — all tools stay available.
+ * Classifies intent-agent input for observability and lightweight tool-surface selection.
  */
 
 const HTTP_URL_RE = /https?:\/\/[^\s<>"')\]]+/gi;

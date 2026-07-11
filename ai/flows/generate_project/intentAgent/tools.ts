@@ -12,13 +12,8 @@ export const PIPELINE_CONSTRAINTS_TEXT = `## open-ox 生成流水线（硬约束
 - 布局形态（是否有顶 nav、是否有 sidebar、是否有 footer、是否使用 nested layout 等）由下游实现 Agent 根据产品形态决定，**不在需求分析阶段表态**。
 - 忠实用户已述需求：不擅自添加未提及的产品机制。`;
 
-export function buildIntentAgentTools(): ChatCompletionTool[] {
+export function buildIntentAgentControlTools(): ChatCompletionTool[] {
   return [
-    referenceSiteDigestTool,
-    brandKitFromUrlTool,
-    singlePageIaProposalTool,
-    accessibilitySeoBriefTool,
-    competitiveLandscapeSnapshotTool,
     {
       type: "function",
       function: {
@@ -86,3 +81,26 @@ export function buildIntentAgentTools(): ChatCompletionTool[] {
     },
   ];
 }
+
+/** Full tool surface (control + silent research tools). Prefer {@link buildIntentAgentToolsForTurn}. */
+export function buildIntentAgentTools(): ChatCompletionTool[] {
+  return [
+    referenceSiteDigestTool,
+    brandKitFromUrlTool,
+    singlePageIaProposalTool,
+    accessibilitySeoBriefTool,
+    competitiveLandscapeSnapshotTool,
+    ...buildIntentAgentControlTools(),
+  ];
+}
+
+/**
+ * Slim tool schemas for clarify-only turns (no reference URL / screenshot).
+ * Heavy silent tools stay available when the turn needs them.
+ */
+export function buildIntentAgentToolsForTurn(params: {
+  needsHeavyTools: boolean;
+}): ChatCompletionTool[] {
+  return params.needsHeavyTools ? buildIntentAgentTools() : buildIntentAgentControlTools();
+}
+

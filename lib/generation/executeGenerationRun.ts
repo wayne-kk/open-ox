@@ -20,6 +20,8 @@ import {
 import { redactBuildStepForTransport } from "@/ai/flows/generate_project/shared/buildStepPayload";
 import { shouldSkipNamingFromBlueprintTitle } from "@/ai/flows/generate_project/intentAgent/commitMergeBrief";
 import { flushLangfuse, resolveLangfuseSessionId } from "@/lib/observability/langfuseTracing";
+import { runWithUsageAccounting } from "@/lib/billing/usageContext";
+import { chargeUsageForRun } from "@/lib/billing/chargeRun";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { GenerationRunRow } from "./types";
@@ -191,40 +193,56 @@ export async function executeGenerationRun(args: {
       scheduleLiveBuildSteps();
     };
 
-    const result = await withCorePromptRuntime(
-      {
-        promptProfile,
-        useDatabasePrompts,
-        dbPromptByStepId: corePromptOverrides,
-      },
-      () =>
-        runGenerateProject(effectivePrompt, onStepForPipeline, {
-          projectId,
-          styleGuide: payload.styleGuide,
-          enableSkills: true,
+    const { result, usage } = await runWithUsageAccounting(() =>
+      withCorePromptRuntime(
+        {
+          promptProfile,
           useDatabasePrompts,
-          checkpoint,
-          enableIntentGuide: payload.enableIntentGuide !== false,
-          userImageSourceTexts:
-            userImageSourceTexts.length > 0 ? userImageSourceTexts : undefined,
-          userReferenceImageBase64: resolvedReferenceScreenshot ?? undefined,
-          langfuseUserId: requestingUserId,
-          langfuseSessionId: langfuseSessionKey,
-          langfuseTraceTags: ["route:generation_worker"],
-          langfuseTraceMetadata: {
-            generationRunId: generationRunUuid,
-            retry: retryProjectId != null,
-            preCreatedProjectId: preCreatedProjectId != null,
-          },
-          langfuseTraceInput: {
-            userPrompt: effectivePrompt,
-            hasReferenceScreenshot: Boolean(resolvedReferenceScreenshot),
-          },
-        })
+          dbPromptByStepId: corePromptOverrides,
+        },
+        () =>
+          runGenerateProject(effectivePrompt, onStepForPipeline, {
+            projectId,
+            styleGuide: payload.styleGuide,
+            enableSkills: true,
+            useDatabasePrompts,
+            checkpoint,
+            enableIntentGuide: payload.enableIntentGuide !== false,
+            userImageSourceTexts:
+              userImageSourceTexts.length > 0 ? userImageSourceTexts : undefined,
+            userReferenceImageBase64: resolvedReferenceScreenshot ?? undefined,
+            langfuseUserId: requestingUserId,
+            langfuseSessionId: langfuseSessionKey,
+            langfuseTraceTags: ["route:generation_worker"],
+            langfuseTraceMetadata: {
+              generationRunId: generationRunUuid,
+              retry: retryProjectId != null,
+              preCreatedProjectId: preCreatedProjectId != null,
+            },
+            langfuseTraceInput: {
+              userPrompt: effectivePrompt,
+              hasReferenceScreenshot: Boolean(resolvedReferenceScreenshot),
+            },
+          })
+      )
     );
 
     cancelLiveStepsSchedule();
     await persistTail;
+
+    if (requestingUserId) {
+      await chargeUsageForRun(admin, {
+        userId: requestingUserId,
+        usage,
+        kind: "spend_generate",
+        projectId,
+        reason: result.success
+          ? "generate succeeded"
+          : result.intentGuideDeferred
+            ? "intent guide"
+            : "generate run",
+      });
+    }
 
     const projectSnapshot = await getProject(admin, projectId);
 

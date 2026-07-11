@@ -1,6 +1,7 @@
 import type { ChatCompletionParams, ChatCompletionResponse } from "./types";
 import { getLangfuseGenerationParent } from "@/lib/observability/langfuseTracing";
 import { OXGEN_PREFIX } from "@/lib/observability/langfuseGenerationCatalog";
+import { recordLlmUsage } from "@/lib/billing/usageContext";
 import { Agent, request } from "undici";
 
 const MIN_CONNECT_TIMEOUT_MS = 60_000;
@@ -175,6 +176,14 @@ export async function chatCompletion(params: ChatCompletionParams): Promise<Chat
       usage: lfUsage,
       metadata: { finishReason: parsed.choices[0]?.finish_reason, attempt },
     });
+
+    if (parsed.usage) {
+      recordLlmUsage({
+        modelId: params.model,
+        inputTokens: parsed.usage.prompt_tokens ?? 0,
+        outputTokens: parsed.usage.completion_tokens ?? 0,
+      });
+    }
 
     return parsed;
   }

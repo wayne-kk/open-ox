@@ -19,6 +19,8 @@ import {
   getActiveQueuedOrRunningRunId,
 } from "@/lib/generation/enqueueGenerationJob";
 import { scheduleInlineGenerationRun } from "@/lib/generation/inlineGeneration";
+import { canAfford } from "@/lib/billing/account";
+import { isCreditsEnabled, MIN_GENERATE_CREDITS } from "@/lib/billing/credits";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -66,6 +68,21 @@ export async function POST(req: Request) {
         { error: "Missing or invalid 'userPrompt' field" },
         { status: 400 }
       );
+    }
+
+    if (isCreditsEnabled()) {
+      const afford = await canAfford(db, user.id, MIN_GENERATE_CREDITS);
+      if (!afford.ok) {
+        return NextResponse.json(
+          {
+            error: "Insufficient credits",
+            code: "INSUFFICIENT_CREDITS",
+            balance: afford.balance,
+            required: MIN_GENERATE_CREDITS,
+          },
+          { status: 402 }
+        );
+      }
     }
 
     let projectId: string;

@@ -133,7 +133,7 @@ async function waitForBackgroundGeneration(
     let sawGenerating = false;
     while (!signal?.aborted) {
       if (!firstPoll) {
-        await delay(1200, signal);
+        await delay(700, signal);
       }
       firstPoll = false;
       pollCount += 1;
