@@ -71,7 +71,7 @@ function PipelineDisclosure() {
 export function HomeMarketingPage() {
   return (
     <main className="relative isolate min-h-dvh overflow-hidden">
-      <section className="relative flex min-h-[min(100dvh,1120px)] flex-col items-center justify-center px-6 pb-36 pt-28 sm:pb-44 sm:pt-32 lg:px-8">
+      <section className="relative flex min-h-[min(100dvh,1120px)] flex-col items-center justify-center px-6 pb-44 pt-20 sm:pb-60 sm:pt-24 lg:px-8">
         <GLSLHills
           className="z-0 [mask-image:linear-gradient(to_bottom,black_0%,black_58%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_bottom,black_0%,black_58%,transparent_100%)]"
           cameraZ={125}

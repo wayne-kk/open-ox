@@ -1,0 +1,14 @@
+@media (prefers-reduced-motion: reduce) {
+  .cyber-glitch,
+  .cyber-glitch:hover,
+  .animate-float,
+  .animate-pulse-glow,
+  .animate-fade-up,
+  .blink-cursor::after {
+    animation: none !important;
+  }
+
+  .cyber-glitch {
+    text-shadow: none;
+  }
+}

@@ -62,8 +62,7 @@ function CommunityCard({
   return (
     <div
       className={cn(
-        "group/card relative flex h-full flex-col overflow-hidden rounded-2xl border border-white/[0.07] bg-[#080a0e]",
-        "shadow-[0_4px_20px_-8px_rgba(0,0,0,0.65)]",
+        "group/card relative flex h-full flex-col overflow-hidden rounded-xl border border-white/[0.07] bg-[#080a0e]",
         "transition-[box-shadow,border-color] duration-200 ease-out",
         "hover:border-primary/40 hover:shadow-[var(--box-shadow-neon)]"
       )}
@@ -72,13 +71,13 @@ function CommunityCard({
         href={previewHref}
         target="_blank"
         rel="noopener noreferrer"
-        className="relative block w-full shrink-0 bg-[#030406] p-2 sm:p-2.5"
+        className="relative block w-full shrink-0 overflow-hidden bg-[#030406]"
       >
         <div
           className={cn(
-            "relative aspect-[1480/960] w-full overflow-hidden rounded-[11px] ring-1 ring-inset ring-white/[0.07]",
+            "relative aspect-[16/10] w-full overflow-hidden",
             !hasCover && `bg-gradient-to-br ${colors.bg}`,
-            hasCover && "bg-[#020309] shadow-[inset_0_0_52px_rgba(0,0,0,0.42)]"
+            hasCover && "bg-[#020309]"
           )}
         >
           {hasCover ? (
@@ -93,7 +92,7 @@ function CommunityCard({
           ) : (
             <span
               className={cn(
-                "relative z-[1] flex h-full items-center justify-center font-heading text-3xl font-bold tracking-tight sm:text-4xl",
+                "relative z-[1] flex h-full items-center justify-center font-heading text-2xl font-bold tracking-tight sm:text-3xl",
                 colors.text,
                 "opacity-[0.88]"
               )}
@@ -104,13 +103,13 @@ function CommunityCard({
         </div>
       </a>
 
-      <div className="flex min-h-0 flex-1 flex-col bg-[#080b10] px-3 py-2.5 sm:px-3.5 sm:py-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-1.5 px-3 py-2.5">
         <div className="flex items-start justify-between gap-2">
           <a
             href={previewHref}
             target="_blank"
             rel="noopener noreferrer"
-            className="min-w-0 flex-1 truncate font-heading text-[14px] font-semibold leading-tight text-white transition-colors duration-150 group-hover/card:text-primary"
+            className="min-w-0 flex-1 truncate text-[13px] font-semibold leading-snug text-white transition-colors duration-150 group-hover/card:text-primary"
           >
             {project.name || "未命名项目"}
           </a>
@@ -120,8 +119,8 @@ function CommunityCard({
             </span>
           ) : null}
         </div>
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-white/65">
+        <div className="mt-auto flex items-center justify-between gap-2 border-t border-white/[0.06] pt-2">
+          <div className="flex min-w-0 items-center gap-1.5 text-[10px] text-white/65">
             <User className="h-3 w-3 shrink-0 opacity-70" />
             <span className="truncate font-mono">{owner}</span>
           </div>
@@ -273,14 +272,14 @@ export default function CommunityPage() {
 
   return (
     <main className="relative min-h-screen">
-      <div className="relative z-[1] container mx-auto min-h-screen px-4 py-8 sm:px-6 md:py-10 lg:px-8">
-        <div className="mb-8 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <div className="relative z-[1]  mx-auto min-h-screen px-8 py-8 sm:px-6 md:py-10 lg:px-8">
+        <div className="mb-8 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 text-[10px] font-mono tracking-wider text-primary">
               <Globe2 className="h-3 w-3" />
               COMMUNITY
             </div>
-            <h1 className="font-heading text-2xl font-semibold tracking-tight text-white sm:text-[28px]">
+            <h1 className="font-heading text-lg font-semibold tracking-tight text-white sm:text-xl">
               社区
             </h1>
             <p className="mt-1.5 max-w-xl text-[13px] leading-relaxed text-white/65">
@@ -289,7 +288,7 @@ export default function CommunityPage() {
           </div>
           <Link
             href="/dashboard"
-            className="text-[12px] text-white/60 transition-colors hover:text-primary/80"
+            className="font-heading text-lg font-semibold tracking-tight text-white/60 transition-colors hover:text-primary/80 sm:text-xl"
           >
             我的项目 →
           </Link>
@@ -325,7 +324,7 @@ export default function CommunityPage() {
           </div>
         ) : (
           <>
-            <div className="grid items-stretch gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
+            <div className="grid items-stretch gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
               {projects.map((project) => (
                 <CommunityCard
                   key={project.id}

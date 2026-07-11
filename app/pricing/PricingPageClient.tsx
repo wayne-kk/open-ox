@@ -17,13 +17,6 @@ type Catalog = {
     highlight: boolean;
     available: boolean;
   }>;
-  topups: Array<{
-    id: string;
-    name: string;
-    credits: number;
-    priceUsd: number;
-    available: boolean;
-  }>;
 };
 
 type CreditsSnap = {
@@ -58,8 +51,7 @@ const FAQ: Array<{ q: string; a: React.ReactNode }> = [
     a: (
       <>
         Pro is priced by monthly credit capacity (100 / 200 / 400). You pick the pool size that
-        matches how much you build. Credits are added to your balance each billing cycle and can be
-        topped up anytime.
+        matches how much you build. Credits are added to your balance each billing cycle.
       </>
     ),
   },
@@ -80,15 +72,6 @@ const FAQ: Array<{ q: string; a: React.ReactNode }> = [
         You keep any remaining balance. After cancel, your account returns to Free daily grants.
         Remaining Pro/top-up credits are not wiped by the next daily grant if your balance is
         already higher than the daily amount.
-      </>
-    ),
-  },
-  {
-    q: "Can I buy more credits without upgrading?",
-    a: (
-      <>
-        Yes. Top-up packs are one-time purchases available on Free and Pro. They add credits to the
-        same balance used for generate and modify.
       </>
     ),
   },
@@ -162,9 +145,9 @@ export function PricingPageClient() {
   );
 
   const startCheckout = useCallback(
-    async (body: { kind: "subscription"; tierId: string } | { kind: "topup"; packId: string }) => {
+    async (body: { kind: "subscription"; tierId: string }) => {
       setError(null);
-      setBusy(body.kind === "subscription" ? body.tierId : body.packId);
+      setBusy(body.tierId);
       try {
         const res = await fetch("/api/billing/checkout", {
           method: "POST",
@@ -315,7 +298,6 @@ export function PricingPageClient() {
                 {selectedTier?.monthlyCredits ?? "—"} credits each billing cycle
               </Feature>
               <Feature>No daily wipe on your Pro pool</Feature>
-              <Feature>Top-up packs anytime</Feature>
               <Feature>Everything in Free</Feature>
             </ul>
 
@@ -361,36 +343,6 @@ export function PricingPageClient() {
               Contact us
             </a>
           </article>
-        </section>
-
-        <section className="mt-20">
-          <div className="mx-auto max-w-xl text-center">
-            <h2 className="text-[22px] font-medium tracking-[-0.02em] text-foreground">
-              Need more credits?
-            </h2>
-            <p className="mt-2 text-[14px] text-muted-foreground">
-              One-time top-ups. Available on Free and Pro — added to the same balance.
-            </p>
-          </div>
-          <div className="mx-auto mt-8 grid max-w-3xl gap-3 sm:grid-cols-3">
-            {(catalog?.topups ?? []).map((pack) => (
-              <div
-                key={pack.id}
-                className="flex flex-col items-center rounded-2xl border border-white/8 bg-card px-4 py-5 text-center"
-              >
-                <p className="text-[15px] font-medium text-foreground">{pack.credits} credits</p>
-                <p className="mt-1 text-[13px] text-muted-foreground">${pack.priceUsd}</p>
-                <button
-                  type="button"
-                  disabled={!pack.available || busy !== null}
-                  onClick={() => startCheckout({ kind: "topup", packId: pack.id })}
-                  className="mt-4 text-[13px] font-medium text-brand-signal hover:underline disabled:opacity-40"
-                >
-                  {busy === pack.id ? "…" : "Buy"}
-                </button>
-              </div>
-            ))}
-          </div>
         </section>
 
         <section className="mx-auto mt-24 max-w-2xl">

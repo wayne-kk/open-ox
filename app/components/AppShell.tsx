@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -24,11 +24,19 @@ import {
   isRootFolderParam,
 } from "@/lib/projectFolders";
 import { BrandMark } from "@/app/components/BrandMark";
-import { WorkspaceWaterBg } from "@/app/components/WorkspaceWaterBg";
 import { CreditsBalanceBadge } from "@/app/components/CreditsBalanceBadge";
 
 const SIDEBAR_COLLAPSED_KEY = "open-ox:app-sidebar-collapsed";
+const SIDEBAR_WIDTH_KEY = "open-ox:app-sidebar-width";
+const SIDEBAR_WIDTH_MIN = 200;
+const SIDEBAR_WIDTH_MAX = 360;
+const SIDEBAR_WIDTH_DEFAULT = 240;
+const SIDEBAR_WIDTH_COLLAPSED = 64;
 export const WORKSPACE_PROMPT_ID = "workspace-prompt";
+
+function clampSidebarWidth(n: number) {
+  return Math.min(SIDEBAR_WIDTH_MAX, Math.max(SIDEBAR_WIDTH_MIN, Math.round(n)));
+}
 
 type ProjectFolder = {
   id: string;
@@ -63,7 +71,7 @@ function NavItem({
   newTab?: boolean;
 }) {
   const className = cn(
-    "flex w-full items-center rounded-lg py-2 text-[13px] font-medium transition-[padding,background-color,color,box-shadow,gap] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+    "flex w-full items-center rounded-lg py-2 text-left text-[13px] font-medium transition-[padding,background-color,color,box-shadow,gap] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
     collapsed ? "justify-center gap-0 px-0" : "gap-2.5 px-2.5",
     active
       ? "bg-primary/15 text-primary shadow-[var(--box-shadow-neon-sm)]"
@@ -76,7 +84,7 @@ function NavItem({
       <span
         className={cn(
           "truncate transition-[opacity,max-width,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-          collapsed ? "ml-0 max-w-0 opacity-0" : "max-w-[140px] opacity-100"
+          collapsed ? "ml-0 max-w-0 opacity-0" : "min-w-0 flex-1 opacity-100"
         )}
       >
         {label}
@@ -219,7 +227,7 @@ function SidebarBody({
               <span
                 className={cn(
                   "truncate transition-[opacity,max-width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-                  collapsed ? "max-w-0 opacity-0" : "max-w-[140px] opacity-100"
+                  collapsed ? "max-w-0 opacity-0" : "min-w-0 flex-1 opacity-100"
                 )}
               >
                 我的项目
@@ -294,14 +302,6 @@ function SidebarBody({
         <div className={cn("my-2 border-t border-white/6", collapsed && "mx-1")} />
 
         <NavItem
-          href="/home"
-          label="首页"
-          icon={Sparkles}
-          collapsed={collapsed}
-          onClick={onNavigate}
-          newTab
-        />
-        <NavItem
           href="/pricing"
           label="定价"
           icon={CreditCard}
@@ -353,17 +353,23 @@ function SidebarBodySuspense(props: {
 export function AppSidebar({
   collapsed,
   onCollapsedChange,
+  width,
+  onWidthChange,
   mobileOpen,
   onMobileOpenChange,
 }: {
   collapsed: boolean;
   onCollapsedChange: (v: boolean) => void;
+  width: number;
+  onWidthChange: (v: number) => void;
   mobileOpen: boolean;
   onMobileOpenChange: (v: boolean) => void;
 }) {
   const { user, ready } = useAuthUser();
   const [folders, setFolders] = useState<ProjectFolder[]>([]);
   const [foldersOpen, setFoldersOpen] = useState(true);
+  const [resizing, setResizing] = useState(false);
+  const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -396,6 +402,58 @@ export function AppSidebar({
     return () => window.removeEventListener("keydown", onKey);
   }, [collapsed, onCollapsedChange]);
 
+  useEffect(() => {
+    if (!resizing) return;
+    const onMove = (e: PointerEvent) => {
+      const drag = dragRef.current;
+      if (!drag) return;
+      onWidthChange(clampSidebarWidth(drag.startWidth + (e.clientX - drag.startX)));
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      setResizing(false);
+      document.body.style.removeProperty("cursor");
+      document.body.style.removeProperty("user-select");
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, [resizing, onWidthChange]);
+
+  const startResize = (e: React.PointerEvent) => {
+    if (collapsed || e.button !== 0) return;
+    e.preventDefault();
+    dragRef.current = { startX: e.clientX, startWidth: width };
+    setResizing(true);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  };
+
+  const onResizeKeyDown = (e: React.KeyboardEvent) => {
+    if (collapsed) return;
+    const step = e.shiftKey ? 24 : 8;
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      onWidthChange(clampSidebarWidth(width - step));
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      onWidthChange(clampSidebarWidth(width + step));
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      onWidthChange(SIDEBAR_WIDTH_MIN);
+    } else if (e.key === "End") {
+      e.preventDefault();
+      onWidthChange(SIDEBAR_WIDTH_MAX);
+    }
+  };
+
+  const sidebarWidth = collapsed ? SIDEBAR_WIDTH_COLLAPSED : width;
+
   const userSlot = (
     <div className={cn("border-t border-white/[0.05] p-2", collapsed && "flex justify-center")}>
       {!ready ? (
@@ -423,9 +481,10 @@ export function AppSidebar({
     <>
       {/* Desktop */}
       <aside
+        style={{ width: sidebarWidth }}
         className={cn(
-          "app-sidebar-surface relative sticky top-0 z-20 hidden h-screen shrink-0 flex-col overflow-hidden border-r border-sidebar-border transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] md:flex",
-          collapsed ? "w-16" : "w-60"
+          "app-sidebar-surface relative sticky top-0 z-20 hidden h-screen shrink-0 flex-col overflow-hidden border-r border-sidebar-border md:flex",
+          !resizing && "transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
         )}
       >
         <button
@@ -478,6 +537,25 @@ export function AppSidebar({
             </div>
           ) : null}
         </div>
+        {!collapsed ? (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="调整侧栏宽度"
+            aria-valuemin={SIDEBAR_WIDTH_MIN}
+            aria-valuemax={SIDEBAR_WIDTH_MAX}
+            aria-valuenow={width}
+            tabIndex={0}
+            onPointerDown={startResize}
+            onKeyDown={onResizeKeyDown}
+            className={cn(
+              "absolute inset-y-0 right-0 z-30 w-1.5 translate-x-1/2 cursor-col-resize touch-none",
+              "after:absolute after:inset-y-0 after:left-1/2 after:w-px after:-translate-x-1/2 after:bg-transparent after:transition-colors",
+              "hover:after:bg-primary/50 focus-visible:outline-none focus-visible:after:bg-primary",
+              resizing && "after:bg-primary"
+            )}
+          />
+        ) : null}
       </aside>
 
       <div className="fixed inset-x-0 top-0 z-40 flex h-12 items-center gap-2 border-b border-sidebar-border bg-[#08090c]/95 px-3 backdrop-blur-xl md:hidden">
@@ -533,12 +611,17 @@ export function AppSidebar({
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
+  const [width, setWidth] = useState(SIDEBAR_WIDTH_DEFAULT);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
-      if (raw === "1") setCollapsed(true);
+      if (localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1") setCollapsed(true);
+      const rawWidth = localStorage.getItem(SIDEBAR_WIDTH_KEY);
+      if (rawWidth) {
+        const parsed = Number(rawWidth);
+        if (Number.isFinite(parsed)) setWidth(clampSidebarWidth(parsed));
+      }
     } catch {
       /* ignore */
     }
@@ -553,16 +636,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const onWidthChange = useCallback((v: number) => {
+    const next = clampSidebarWidth(v);
+    setWidth(next);
+    try {
+      localStorage.setItem(SIDEBAR_WIDTH_KEY, String(next));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   return (
     <div className="flex min-h-screen bg-[#07090d]">
       <AppSidebar
         collapsed={collapsed}
         onCollapsedChange={onCollapsedChange}
+        width={width}
+        onWidthChange={onWidthChange}
         mobileOpen={mobileOpen}
         onMobileOpenChange={setMobileOpen}
       />
       <div className="relative min-w-0 flex-1 overflow-x-hidden pt-12 md:pt-0">
-
         <div className="relative z-[1]">{children}</div>
       </div>
     </div>

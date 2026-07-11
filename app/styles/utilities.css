@@ -1,0 +1,238 @@
+@layer utilities {
+  .scrollbar-unified {
+    scrollbar-color: rgb(255 255 255 / 18%) rgb(17 17 19 / 90%);
+    scrollbar-width: thin;
+  }
+
+  .scrollbar-unified::-webkit-scrollbar {
+    height: 8px;
+    width: 8px;
+  }
+
+  .scrollbar-unified::-webkit-scrollbar-track {
+    background: rgb(17 17 19 / 90%);
+  }
+
+  .scrollbar-unified::-webkit-scrollbar-thumb {
+    background: rgb(255 255 255 / 14%);
+    border: 1px solid rgb(9 9 11 / 80%);
+    border-radius: 999px;
+  }
+
+  .scrollbar-hidden {
+    -ms-overflow-style: none !important;
+    scrollbar-width: none !important;
+  }
+
+  .scrollbar-hidden::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .font-heading {
+    font-family: var(--font-jakarta), "PingFang SC", "Hiragino Sans GB", "Noto Sans SC",
+      "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
+  }
+
+  .font-body {
+    font-family: var(--font-jakarta), "PingFang SC", "Hiragino Sans GB", "Noto Sans SC",
+      "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
+  }
+
+  .font-label {
+    font-family: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .atlas-node-in {
+    animation: atlas-node-in 0.3s ease-out forwards;
+  }
+
+  .bg-grid-pattern {
+    background-image: none;
+  }
+
+  .cyber-chamfer {
+    border-radius: 0.875rem;
+    clip-path: none;
+  }
+
+  .cyber-chamfer-sm {
+    border-radius: 0.625rem;
+    clip-path: none;
+  }
+
+  .cyber-glitch {
+    animation: none;
+    position: relative;
+  }
+
+  .cyber-glitch:hover {
+    animation: none;
+  }
+
+  .defi-panel {
+    background: linear-gradient(180deg, rgb(17 17 19 / 98%), rgb(9 9 11 / 96%));
+    border: 1px solid var(--border);
+    border-radius: 1rem;
+    box-shadow: var(--shadow-orange-soft);
+    clip-path: none;
+    position: relative;
+  }
+
+  .defi-panel:hover {
+    border-color: rgb(255 255 255 / 18%);
+    box-shadow: var(--box-shadow-neon);
+    transform: translateY(-1px);
+  }
+
+  .defi-glass {
+    backdrop-filter: blur(18px);
+    background: rgb(17 17 19 / 55%);
+    border: 1px solid rgb(255 255 255 / 10%);
+    border-radius: 0.875rem;
+    box-shadow: var(--box-shadow-neon-sm);
+    position: relative;
+  }
+
+  /* Brand purple pill CTA */
+  .defi-button {
+    align-items: center;
+    background: var(--primary);
+    border: 1px solid transparent;
+    border-radius: 9999px;
+    box-shadow: none;
+    clip-path: none;
+    color: var(--primary-foreground);
+    display: inline-flex;
+    font-family: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+    font-weight: 600;
+    gap: 0.5rem;
+    justify-content: center;
+    letter-spacing: -0.01em;
+    min-height: 40px;
+    padding-inline: 1.25rem;
+    text-transform: none;
+    transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .defi-button:hover {
+    background: var(--primary-hover);
+    box-shadow: none;
+    color: var(--primary-foreground);
+    transform: translateY(-1px);
+  }
+
+  .defi-button:active {
+    background: var(--primary-active);
+    transform: scale(0.98) translateY(0);
+  }
+
+  .defi-button-outline {
+    align-items: center;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 9999px;
+    clip-path: none;
+    color: var(--foreground);
+    display: inline-flex;
+    justify-content: center;
+    min-height: 40px;
+    padding-inline: 1.25rem;
+    transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .defi-button-outline:hover {
+    border-color: rgb(255 255 255 / 22%);
+    background: rgb(255 255 255 / 4%);
+    box-shadow: none;
+    color: var(--foreground);
+  }
+
+  .defi-badge {
+    align-items: center;
+    background: rgb(255 255 255 / 4%);
+    border: 1px solid rgb(255 255 255 / 10%);
+    border-radius: 9999px;
+    color: var(--muted-foreground);
+    display: inline-flex;
+    font-family: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .defi-input {
+    background: var(--input);
+    border: 1px solid var(--border);
+    border-radius: 0.875rem;
+    color: var(--foreground);
+    font-family: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+    min-height: 48px;
+  }
+
+  .defi-input:focus-visible {
+    border-color: rgb(255 255 255 / 28%);
+    box-shadow: 0 0 0 3px rgb(255 255 255 / 6%);
+    outline: none;
+  }
+
+  .bitcoin-gradient-text {
+    background-image: none;
+    color: var(--foreground);
+    filter: none;
+    -webkit-background-clip: unset;
+    background-clip: unset;
+  }
+
+  .orange-glow,
+  .gold-glow,
+  .neon-glow {
+    box-shadow: var(--box-shadow-neon);
+  }
+
+  .neon-glow-lg {
+    box-shadow: var(--box-shadow-neon-lg);
+  }
+
+  .animate-float {
+    animation: float 10s ease-in-out infinite;
+  }
+
+  .animate-pulse-glow {
+    animation: pulse-glow 3.2s ease-in-out infinite;
+  }
+
+  .animate-fade-up {
+    animation: fade-up 0.75s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .blink-cursor::after {
+    animation: none;
+    content: "";
+  }
+
+  .text-brand-signal {
+    color: var(--brand-signal);
+  }
+
+  .bg-brand-signal {
+    background-color: var(--brand-signal);
+  }
+
+  .app-sidebar-surface {
+    background: linear-gradient(180deg, rgb(12 12 14 / 100%) 0%, rgb(9 9 11 / 100%) 100%);
+    isolation: isolate;
+  }
+
+  .app-sidebar-surface::before {
+    background: linear-gradient(180deg, rgb(255 255 255 / 3%) 0%, transparent 28%);
+    content: "";
+    inset: 0;
+    pointer-events: none;
+    position: absolute;
+    z-index: 0;
+  }
+}

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowRight, ArrowUp, ImagePlus, Plus } from "lucide-react";
+import { ArrowRight, ImagePlus } from "lucide-react";
 import { type InjectedChip } from "@/app/hooks/usePromptTriggers";
 import { PromptChips } from "@/app/components/ui/PromptChips";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -53,18 +53,12 @@ function composeUserPrompt(snapshot: PendingBuildPayload): string | null {
   return text;
 }
 
-export function HeroPrompt({
-  variant = "default",
-}: {
-  /** `workspace` = Lovable-style large composer on /dashboard */
-  variant?: "default" | "workspace";
-}) {
+export function HeroPrompt() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const folderId = resolveFolderIdFromSearchParam(searchParams.get("folder"));
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const isWorkspace = variant === "workspace";
 
   const [value, setValue] = useState("");
   const [chips, setChips] = useState<InjectedChip[]>([]);
@@ -244,117 +238,10 @@ export function HeroPrompt({
   };
 
   const canSubmit = Boolean(composeUserPrompt({ v: 1, value, chips, folderId })) && !submitting;
-  const showEmptyHints = chips.length === 0 && value.trim().length < 1;
   const placeholder =
     chips.length > 0
       ? "描述你想要的网站..."
       : displayed + (phase !== "erasing" && !focused && !value ? "▌" : "");
-
-  const fileInput = (
-    <input
-      ref={fileInputRef}
-      type="file"
-      accept="image/*"
-      className="hidden"
-      onChange={(e) => {
-        const file = e.target.files?.[0];
-        if (file) addImageChip(file);
-        e.target.value = "";
-      }}
-    />
-  );
-
-  const emptyHint = showEmptyHints ? (
-    <p className="min-w-0 flex-1 truncate text-left text-[12px] leading-snug text-muted-foreground/80 sm:text-[13px]">
-      说清站点目标与风格 · 可附截图参考
-    </p>
-  ) : (
-    <div className="min-w-0 flex-1" />
-  );
-
-  if (isWorkspace) {
-    return (
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void submit();
-        }}
-        className="mx-auto w-full max-w-3xl"
-      >
-        <div
-          className={cn(
-            "relative flex flex-col gap-3 rounded-[28px] border bg-[#0a0c10]/92 px-5 pb-3.5 pt-5 shadow-[0_20px_60px_-24px_rgba(0,0,0,0.85)] backdrop-blur-xl transition-all duration-200 sm:px-6 sm:pb-4 sm:pt-6",
-            focused
-              ? "border-white/20 shadow-[var(--box-shadow-neon)]"
-              : "border-white/10 hover:border-white/16"
-          )}
-        >
-          <PromptChips chips={chips} onRemove={removeChip} />
-
-          <textarea
-            ref={textareaRef}
-            rows={4}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
-            onKeyDown={handleKeyDown}
-            onPaste={(e) => {
-              const items = Array.from(e.clipboardData.items);
-              const imageItem = items.find((item) => item.type.startsWith("image/"));
-              if (imageItem) {
-                e.preventDefault();
-                const file = imageItem.getAsFile();
-                if (file) addImageChip(file);
-              }
-            }}
-            placeholder={
-              chips.length > 0
-                ? "描述你想要的网站..."
-                : `让 OPEN-OX 帮你构建${displayed ? ` ${displayed}` : "…"}${
-                    phase !== "erasing" && !focused && !value ? "▌" : ""
-                  }`
-            }
-            className="min-h-[7.5rem] w-full resize-none bg-transparent text-[16px] leading-relaxed tracking-wide text-foreground outline-none placeholder:text-muted-foreground/80 sm:min-h-[8.5rem] sm:text-[17px]"
-          />
-
-          <div className="flex min-w-0 items-end gap-2 sm:gap-3">
-            {fileInput}
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 text-white/70 transition-colors hover:border-white/20 hover:bg-white/5 hover:text-white"
-              title="添加截图参考"
-              aria-label="添加截图参考"
-            >
-              <Plus className="h-4 w-4" />
-            </button>
-
-            {emptyHint}
-
-            <button
-              type="submit"
-              disabled={!canSubmit}
-              title="开始构建（Enter）"
-              aria-label="开始构建"
-              className={cn(
-                "flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-all",
-                canSubmit
-                  ? "bg-primary text-primary-foreground shadow-[var(--box-shadow-neon-sm)] hover:brightness-110"
-                  : "bg-white/10 text-white/35"
-              )}
-            >
-              {submitting ? (
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-              ) : (
-                <ArrowUp className="h-4 w-4" strokeWidth={2.5} />
-              )}
-            </button>
-          </div>
-        </div>
-      </form>
-    );
-  }
 
   return (
     <form
@@ -398,7 +285,17 @@ export function HeroPrompt({
         </div>
 
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-          {fileInput}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) addImageChip(file);
+              e.target.value = "";
+            }}
+          />
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
@@ -409,7 +306,7 @@ export function HeroPrompt({
             截图参考
           </button>
 
-          {emptyHint}
+          <div className="min-w-0 flex-1" />
 
           <div className="flex shrink-0 items-center gap-2.5">
             <button

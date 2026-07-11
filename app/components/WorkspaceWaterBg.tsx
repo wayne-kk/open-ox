@@ -1,3 +1,5 @@
+import "./WorkspaceWaterBg.css";
+
 /**
  * Decorative flowing-water atmosphere for the workspace main pane.
  * CSS/SVG only — no scroll listeners. Honors prefers-reduced-motion.

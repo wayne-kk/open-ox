@@ -172,25 +172,25 @@ function ProjectCard({
 
   const statusBadge = publishPreview
     ? {
-        icon: Globe2,
-        label: "已发布",
-        className: "border-primary/25 bg-primary/15 text-primary",
-        spin: false,
-      }
+      icon: Globe2,
+      label: "已发布",
+      className: "border-primary/40 bg-black/65 text-primary",
+      spin: false,
+    }
     : isGenerating
       ? {
-          icon: Loader2,
-          label: "生成中",
-          className: "border-white/10 bg-black/55 text-primary",
-          spin: true,
-        }
+        icon: Loader2,
+        label: "生成中",
+        className: "border-white/10 bg-black/55 text-primary",
+        spin: true,
+      }
       : isFailed
         ? {
-            icon: AlertCircle,
-            label: "失败",
-            className: "border-red-400/30 bg-black/55 text-red-300",
-            spin: false,
-          }
+          icon: AlertCircle,
+          label: "失败",
+          className: "border-red-400/30 bg-black/55 text-red-300",
+          spin: false,
+        }
         : null;
   const StatusIcon = statusBadge?.icon;
 
@@ -200,7 +200,7 @@ function ProjectCard({
   return (
     <article
       className={cn(
-        "group/card relative flex h-full flex-col overflow-hidden rounded-2xl",
+        "group/card relative flex h-full flex-col overflow-hidden rounded-xl",
         "border border-white/[0.08] bg-[#0a0c10]",
         "transition-[border-color,transform,box-shadow] duration-200 ease-out",
         isClickable && "hover:-translate-y-0.5 hover:border-white/16 hover:shadow-[0_12px_40px_-18px_rgba(0,0,0,0.85)]",
@@ -222,7 +222,7 @@ function ProjectCard({
             : undefined
         }
         className={cn(
-          "relative block w-full overflow-hidden text-left aspect-[1480/960]",
+          "relative block w-full overflow-hidden text-left aspect-[16/10]",
           !hasCover && `bg-gradient-to-br ${colors.bg}`,
           hasCover && "bg-[#05070b]",
           isClickable
@@ -250,7 +250,7 @@ function ProjectCard({
             />
             <span
               className={cn(
-                "relative z-[1] flex h-full items-center justify-center font-heading text-3xl font-bold tracking-tight sm:text-4xl",
+                "relative z-[1] flex h-full items-center justify-center font-heading text-2xl font-bold tracking-tight sm:text-3xl",
                 colors.text,
                 "opacity-80"
               )}
@@ -260,7 +260,7 @@ function ProjectCard({
           </>
         )}
 
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#0a0c10]/90 to-transparent" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-[#0a0c10]/90 to-transparent" />
 
         {isGenerating && (
           <div className="pointer-events-none absolute inset-0 z-10 animate-[shimmer_2s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/[0.04] to-transparent" />
@@ -283,7 +283,7 @@ function ProjectCard({
         ) : null}
       </button>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-2 px-3.5 py-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-1.5 px-3 py-2.5">
         <div className="flex items-start gap-2">
           <button
             type="button"
@@ -291,7 +291,7 @@ function ProjectCard({
             onClick={openStudioOrPreview}
             onAuxClick={openPreviewTab}
             className={cn(
-              "min-w-0 flex-1 text-left text-[14px] font-semibold leading-snug text-white/95 transition-colors line-clamp-2",
+              "min-w-0 flex-1 text-left text-[13px] font-semibold leading-snug text-white/95 transition-colors line-clamp-2",
               isClickable
                 ? "cursor-pointer hover:text-primary focus-visible:outline-none focus-visible:text-primary"
                 : "cursor-default"
@@ -415,19 +415,19 @@ function ProjectCard({
         ) : null}
 
         {project.userPrompt?.trim() ? (
-          <p className="line-clamp-2 text-[12px] leading-relaxed text-white/55">
+          <p className="line-clamp-2 text-[11px] leading-relaxed text-white/55">
             {project.userPrompt.trim()}
           </p>
         ) : (
-          <p className="text-[12px] text-white/30">暂无描述</p>
+          <p className="text-[11px] text-white/30">暂无描述</p>
         )}
 
         {publishError ? (
           <p className="text-[10px] text-red-400/85">{publishError}</p>
         ) : null}
 
-        <div className="mt-auto border-t border-white/[0.06] pt-2.5">
-          <span className="text-[11px] tabular-nums text-white/40">
+        <div className="mt-auto border-t border-white/[0.06] pt-2">
+          <span className="text-[10px] tabular-nums text-white/40">
             {timeAgo(project.createdAt)}
           </span>
         </div>
@@ -1024,11 +1024,11 @@ function ProjectsPageContent() {
       prev.map((p) =>
         p.id === projectId
           ? {
-              ...p,
-              publishPreview: state.publishPreview,
-              allowRemix: state.allowRemix,
-              staticPreviewSyncedAt: state.staticPreviewSyncedAt,
-            }
+            ...p,
+            publishPreview: state.publishPreview,
+            allowRemix: state.allowRemix,
+            staticPreviewSyncedAt: state.staticPreviewSyncedAt,
+          }
           : p
       )
     );
@@ -1092,7 +1092,7 @@ function ProjectsPageContent() {
         />
       )}
 
-      <div className="relative z-[1] container mx-auto min-h-screen px-4 py-8 sm:px-6 md:py-10 lg:px-8">
+      <div className="relative z-[1]  mx-auto min-h-screen px-8 py-8 sm:px-6 md:py-10 lg:px-8">
         <section
           id={WORKSPACE_PROMPT_ID}
           className="relative mb-12 scroll-mt-4 overflow-hidden rounded-[32px] border border-white/[0.06] px-4 py-12 sm:px-8 sm:py-16 md:py-20"
@@ -1115,14 +1115,14 @@ function ProjectsPageContent() {
           </div>
           <Suspense
             fallback={
-              <div className="mx-auto h-48 max-w-3xl animate-pulse rounded-[28px] border border-white/10 bg-white/[0.03]" />
+              <div className="mx-auto h-40 w-full max-w-4xl animate-pulse rounded-2xl border border-white/8 bg-card" />
             }
           >
-            <HeroPrompt variant="workspace" />
+            <HeroPrompt />
           </Suspense>
         </section>
 
-        <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mb-8 px-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="font-heading text-lg font-semibold tracking-tight text-white sm:text-xl">
             {currentFolderTitle}
           </h2>
@@ -1163,7 +1163,7 @@ function ProjectsPageContent() {
           <>
             <div
               className={cn(
-                "grid items-stretch gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 transition-opacity duration-200",
+                "grid items-stretch gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4 transition-opacity duration-200",
                 switchingFolder && "pointer-events-none opacity-45"
               )}
             >

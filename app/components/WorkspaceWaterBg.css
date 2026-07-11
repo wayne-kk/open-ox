@@ -1,0 +1,176 @@
+@keyframes water-caustic-a {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.4;
+  }
+  40% {
+    transform: translate3d(4%, -3%, 0) scale(1.08);
+    opacity: 0.55;
+  }
+  70% {
+    transform: translate3d(-3%, 4%, 0) scale(0.96);
+    opacity: 0.35;
+  }
+}
+
+@keyframes water-caustic-b {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1.05);
+    opacity: 0.3;
+  }
+  35% {
+    transform: translate3d(-5%, 2%, 0) scale(1);
+    opacity: 0.45;
+  }
+  65% {
+    transform: translate3d(3%, -4%, 0) scale(1.12);
+    opacity: 0.28;
+  }
+}
+
+@keyframes water-caustic-c {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.25;
+  }
+  50% {
+    transform: translate3d(2%, 5%, 0) scale(1.1);
+    opacity: 0.4;
+  }
+}
+
+@keyframes water-wave-drift {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-8%, 0, 0);
+  }
+}
+
+@keyframes water-wave-drift-alt {
+  0% {
+    transform: translate3d(-6%, 0, 0);
+  }
+  100% {
+    transform: translate3d(2%, 0, 0);
+  }
+}
+
+@keyframes water-sheen {
+  0%,
+  100% {
+    opacity: 0.2;
+    transform: translate3d(-4%, 0, 0) skewX(-8deg);
+  }
+  50% {
+    opacity: 0.35;
+    transform: translate3d(6%, 0, 0) skewX(-4deg);
+  }
+}
+
+.workspace-water {
+  z-index: 0;
+}
+
+.workspace-water__base {
+  background:
+    radial-gradient(ellipse 90% 55% at 50% -10%, rgb(255 255 255 / 4%), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 85% 30%, rgb(176 160 234 / 5%), transparent 50%),
+    radial-gradient(ellipse 50% 35% at 10% 70%, rgb(130 150 180 / 4%), transparent 45%),
+    linear-gradient(180deg, #08080a 0%, #09090b 45%, #070709 100%);
+  inset: 0;
+  position: absolute;
+}
+
+.workspace-water__caustic {
+  border-radius: 50%;
+  filter: blur(56px);
+  position: absolute;
+  will-change: transform, opacity;
+}
+
+.workspace-water__caustic--a {
+  animation: water-caustic-a 22s ease-in-out infinite;
+  background: radial-gradient(circle, rgb(255 255 255 / 8%) 0%, transparent 70%);
+  height: 55vmin;
+  left: 8%;
+  top: 12%;
+  width: 55vmin;
+}
+
+.workspace-water__caustic--b {
+  animation: water-caustic-b 26s ease-in-out infinite;
+  background: radial-gradient(circle, rgb(176 160 234 / 12%) 0%, transparent 68%);
+  bottom: 18%;
+  height: 48vmin;
+  right: 5%;
+  width: 48vmin;
+}
+
+.workspace-water__caustic--c {
+  animation: water-caustic-c 30s ease-in-out infinite;
+  background: radial-gradient(circle, rgb(130 150 180 / 10%) 0%, transparent 70%);
+  height: 40vmin;
+  left: 40%;
+  top: 45%;
+  width: 40vmin;
+}
+
+.workspace-water__waves {
+  bottom: 0;
+  height: min(42vh, 360px);
+  left: -10%;
+  opacity: 0.5;
+  position: absolute;
+  width: 120%;
+}
+
+.workspace-water__wave-layer {
+  transform-origin: center bottom;
+  will-change: transform;
+}
+
+.workspace-water__wave-layer--1 {
+  animation: water-wave-drift 32s linear infinite;
+}
+
+.workspace-water__wave-layer--2 {
+  animation: water-wave-drift-alt 40s linear infinite;
+}
+
+.workspace-water__wave-layer--3 {
+  animation: water-wave-drift 48s linear infinite reverse;
+}
+
+.workspace-water__sheen {
+  animation: water-sheen 16s ease-in-out infinite;
+  background: linear-gradient(
+    105deg,
+    transparent 30%,
+    rgb(255 255 255 / 3%) 48%,
+    rgb(255 255 255 / 5%) 50%,
+    rgb(176 160 234 / 4%) 52%,
+    transparent 70%
+  );
+  inset: 0;
+  position: absolute;
+  will-change: transform, opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-water__caustic,
+  .workspace-water__wave-layer,
+  .workspace-water__sheen {
+    animation: none !important;
+  }
+
+  .workspace-water__caustic--a,
+  .workspace-water__caustic--b,
+  .workspace-water__caustic--c {
+    opacity: 0.45;
+  }
+}
