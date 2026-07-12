@@ -96,9 +96,10 @@
     "language": "语言",
     "languageZh": "中文",
     "languageEn": "English",
-    "integrations": "集成",
+    "integrations": "集成 & 部署",
+    "integrationsDescription": "查看已推到你自己 Vercel 账号的站点，并可回到 Studio 继续修改。与社区 Publish Preview 无关。",
     "navAppearance": "外观",
-    "navIntegrations": "集成"
+    "navIntegrations": "集成 & 部署"
   },
   "theme": {
     "system": "系统",

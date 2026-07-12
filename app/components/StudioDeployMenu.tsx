@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ExternalLink, Loader2, Rocket } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { notifyDeployTerminal } from "@/lib/vercel/deployNotify";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -97,6 +99,8 @@ export function StudioDeployMenu({ projectId }: { projectId: string }) {
   const [busy, setBusy] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const autoDeployStarted = useRef(false);
+  const prevStatusRef = useRef<DeployStatus | null>(null);
+  const statusToastReady = useRef(false);
   const [state, setState] = useState<DeployState>({
     configured: true,
     connected: false,
@@ -116,6 +120,19 @@ export function StudioDeployMenu({ projectId }: { projectId: string }) {
       configured: conn.configured && deploy.configured,
       connected: conn.connected,
     };
+
+    if (statusToastReady.current) {
+      notifyDeployTerminal({
+        projectLabel: "站点",
+        prev: prevStatusRef.current,
+        next: next.status,
+        productionUrl: next.productionUrl,
+        lastError: next.lastError,
+      });
+    }
+    prevStatusRef.current = next.status;
+    statusToastReady.current = true;
+
     setState(next);
     setHydrated(true);
     return next;
@@ -147,6 +164,7 @@ export function StudioDeployMenu({ projectId }: { projectId: string }) {
           status: "error",
           lastError: body.error ?? `部署失败（${res.status}）`,
         }));
+        toast.error("部署失败", { description: body.error ?? `HTTP ${res.status}` });
         return;
       }
       setState((s) => ({
@@ -157,12 +175,18 @@ export function StudioDeployMenu({ projectId }: { projectId: string }) {
         lastError: body.lastError ?? null,
         deployId: body.deployId ?? null,
       }));
+      prevStatusRef.current = body.status ?? "queued";
+      toast.message("部署已开始", {
+        description: "约 1–3 分钟，可继续编辑；完成后会通知你。",
+      });
     } catch (e) {
+      const msg = e instanceof Error ? e.message : "网络错误";
       setState((s) => ({
         ...s,
         status: "error",
-        lastError: e instanceof Error ? e.message : "网络错误",
+        lastError: msg,
       }));
+      toast.error("部署失败", { description: msg });
     } finally {
       setBusy(false);
     }
@@ -178,14 +202,14 @@ export function StudioDeployMenu({ projectId }: { projectId: string }) {
     void refresh();
   }, [open, refresh]);
 
+  // Poll while in progress even if the menu is closed.
   useEffect(() => {
-    if (!open) return;
     if (!state.status || !IN_PROGRESS.includes(state.status)) return;
     const t = window.setInterval(() => {
       void refresh();
     }, 2500);
     return () => window.clearInterval(t);
-  }, [open, state.status, refresh]);
+  }, [state.status, refresh]);
 
   // After OAuth: /studio/:id?deploy=1&vercel=connected → open menu + auto Deploy once.
   useEffect(() => {
@@ -243,10 +267,16 @@ export function StudioDeployMenu({ projectId }: { projectId: string }) {
             "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 font-mono text-[10px] transition-colors",
             ready
               ? "border-emerald-400/35 bg-emerald-500/12 text-emerald-200 hover:bg-emerald-500/18"
-              : "border-white/8 bg-white/3 text-muted-foreground hover:border-white/15 hover:text-foreground"
+              : inProgress
+                ? "border-amber-400/30 bg-amber-500/10 text-amber-100 hover:bg-amber-500/16"
+                : "border-white/8 bg-white/3 text-muted-foreground hover:border-white/15 hover:text-foreground"
           )}
         >
-          <Rocket className="h-3 w-3" />
+          {inProgress ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : (
+            <Rocket className="h-3 w-3" />
+          )}
           Deploy
         </button>
       </DropdownMenuTrigger>
@@ -292,6 +322,12 @@ export function StudioDeployMenu({ projectId }: { projectId: string }) {
                 {statusLabel(state.status)}
               </span>
             </div>
+
+            {inProgress ? (
+              <p className="text-[10px] leading-relaxed text-muted-foreground/70">
+                约 1–3 分钟。可关闭此菜单继续编辑，完成后会通知你。
+              </p>
+            ) : null}
 
             {ready && state.productionUrl ? (
               <a

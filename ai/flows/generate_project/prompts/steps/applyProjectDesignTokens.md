@@ -53,7 +53,8 @@ If the current `globals.css` contains `theme(...)`, rewrite those sites to `var(
 /* 4. @layer base — global resets, :root vars for non-Tailwind values, body styles */
 @layer base {
   :root {
-    /* CSS vars NOT tied to Tailwind utilities (complex gradients, transitions, composited effects, etc.) */
+    /* CSS vars NOT tied to Tailwind utilities (page shell, complex gradients, transitions, composited effects, etc.) */
+    --page-max-width: 1280px;
     --transition-pop: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
     --gradient-chrome: linear-gradient(135deg, rgba(255, 255, 255, 0.35), transparent 60%);
   }

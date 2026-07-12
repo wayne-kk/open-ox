@@ -80,6 +80,53 @@ export async function getProjectDeployStatus(projectId: string): Promise<Project
   return rowToPublic((data as DeployRow | null) ?? null);
 }
 
+export type UserDeployListItem = ProjectDeployPublic & {
+  projectId: string;
+  projectName: string;
+};
+
+const IN_PROGRESS_STATUSES: DeployStatus[] = ["queued", "building", "uploading"];
+const LIST_LIMIT = 100;
+
+function deploySortKey(row: UserDeployListItem): number {
+  const inProgress = row.status && IN_PROGRESS_STATUSES.includes(row.status) ? 1 : 0;
+  const ts = row.lastDeployedAt ? Date.parse(row.lastDeployedAt) : 0;
+  return inProgress * 1e15 + ts;
+}
+
+/** Owner's deploy bindings for the Integrations & Deploy dashboard (latest per project). */
+export async function listUserProjectDeployments(userId: string): Promise<UserDeployListItem[]> {
+  const db = admin();
+  const { data, error } = await db
+    .from("project_vercel_deployments")
+    .select(
+      "project_id, vercel_project_id, vercel_project_name, production_url, last_deploy_id, last_status, last_error, last_deployed_at, projects!inner(id, name, user_id)"
+    )
+    .eq("projects.user_id", userId)
+    .limit(LIST_LIMIT);
+  if (error) {
+    throw new Error(`[vercelDeploy] list deployments failed: ${error.message}`);
+  }
+
+  type Joined = DeployRow & {
+    projects: { id: string; name: string; user_id: string } | { id: string; name: string; user_id: string }[] | null;
+  };
+
+  const items: UserDeployListItem[] = ((data ?? []) as unknown as Joined[]).map((row) => {
+    const proj = Array.isArray(row.projects) ? row.projects[0] : row.projects;
+    const projectName =
+      (typeof proj?.name === "string" && proj.name.trim()) || row.project_id;
+    return {
+      projectId: row.project_id,
+      projectName,
+      ...rowToPublic(row),
+    };
+  });
+
+  items.sort((a, b) => deploySortKey(b) - deploySortKey(a));
+  return items;
+}
+
 async function patchDeploy(
   projectId: string,
   patch: Partial<{

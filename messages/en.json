@@ -96,9 +96,10 @@
     "language": "Language",
     "languageZh": "中文",
     "languageEn": "English",
-    "integrations": "Integrations",
+    "integrations": "Integrations & Deploy",
+    "integrationsDescription": "See sites pushed to your own Vercel account, and jump back to Studio to edit. Separate from community Publish Preview.",
     "navAppearance": "Appearance",
-    "navIntegrations": "Integrations"
+    "navIntegrations": "Integrations & Deploy"
   },
   "theme": {
     "system": "System",

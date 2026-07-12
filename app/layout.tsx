@@ -7,6 +7,7 @@ import { FaviconProvider } from "@/app/contexts/FaviconContext";
 import { AnalyticsProvider } from "@/components/analytics/AnalyticsProvider";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { AuthUserProvider } from "@/app/contexts/AuthUserContext";
+import { Toaster } from "@/components/ui/sonner";
 import { getSiteOrigin } from "@/lib/seo/siteUrl";
 import "./globals.css";
 
@@ -57,6 +58,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <DynamicFavicon />
               <ConsoleEasterEgg />
               <AnalyticsProvider>{children}</AnalyticsProvider>
+              <Toaster />
             </FaviconProvider>
           </AuthUserProvider>
         </ThemeProvider>
