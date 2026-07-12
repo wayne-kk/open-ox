@@ -53,7 +53,7 @@ export async function HomeMarketingPage() {
             className="animate-fade-up mb-16 mt-10 bg-gradient-to-br from-foreground via-primary/80 to-primary bg-clip-text font-heading text-[clamp(2.5rem,6.5vw,3.75rem)] font-semibold leading-[0.95] tracking-[-0.04em] text-transparent"
             style={{ animationDelay: "80ms" }}
           >
-            THINK IT. BUILD IT.
+            {t("headline")}
           </h1>
 
           <div className="animate-fade-up mt-10" style={{ animationDelay: "200ms" }}>

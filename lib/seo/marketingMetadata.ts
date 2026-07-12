@@ -8,7 +8,7 @@ import {
 
 const OG_IMAGE_PATH = "/og/default.png";
 
-type MarketingSeoKey = "home" | "pricing" | "changelog";
+type MarketingSeoKey = "home" | "pricing" | "changelog" | "compare" | "compareLovable" | "compareV0" | "compareBase44" | "alternatives";
 
 type BuildOpts = {
   locale: string;
@@ -20,6 +20,8 @@ type BuildOpts = {
    * (e.g. `/home` → `/`).
    */
   canonicalPathname?: string;
+  /** Extra robots directives (e.g. noindex for `/home`). */
+  robots?: Metadata["robots"];
 };
 
 export async function buildMarketingMetadata({
@@ -27,6 +29,7 @@ export async function buildMarketingMetadata({
   pathname,
   seoKey,
   canonicalPathname,
+  robots,
 }: BuildOpts): Promise<Metadata> {
   const t = await getTranslations({ locale, namespace: "seo" });
   const title = t(`${seoKey}.title`);
@@ -35,17 +38,21 @@ export async function buildMarketingMetadata({
   const canonical = absoluteLocaleUrl(canonicalPath, locale);
   const languages = languageAlternates(canonicalPath);
   const ogImage = `${getSiteOrigin()}${OG_IMAGE_PATH}`;
+  const ogLocale = locale === "zh-CN" ? "zh_CN" : "en_US";
+  const alternateLocale = locale === "zh-CN" ? "en_US" : "zh_CN";
 
   return {
     title,
     description,
+    robots,
     alternates: {
       canonical,
       languages,
     },
     openGraph: {
       type: "website",
-      locale: locale === "zh-CN" ? "zh_CN" : "en_US",
+      locale: ogLocale,
+      alternateLocale: [alternateLocale],
       url: canonical,
       siteName: "Open-OX",
       title,

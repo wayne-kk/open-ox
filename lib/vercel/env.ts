@@ -1,13 +1,4 @@
-/**
- * Whether BYO Vercel deploy can run end-to-end (OAuth + encrypted token store).
- */
-export function isVercelDeployConfigured(): boolean {
-  const clientId = process.env.VERCEL_CLIENT_ID?.trim();
-  const clientSecret = process.env.VERCEL_CLIENT_SECRET?.trim();
-  const encKey = process.env.VERCEL_TOKEN_ENCRYPTION_KEY?.trim();
-  const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-  return Boolean(clientId && clientSecret && encKey && serviceRole);
-}
+export { isVercelDeployConfigured } from "@/lib/env";
 
 /** Integration slug for install URL (`https://vercel.com/integrations/{slug}/new`). */
 export function getVercelIntegrationSlug(): string | null {

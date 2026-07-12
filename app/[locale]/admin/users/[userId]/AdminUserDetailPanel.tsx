@@ -3,8 +3,16 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import type { UserAnalyticsResponse } from "@/lib/admin/analytics/userAnalytics";
+import type { UserActivityStatus } from "@/lib/admin/userDirectory";
 import { MetricCard } from "../../components/MetricCard";
 import { TimeSeriesChart } from "../../components/TimeSeriesChart";
+
+const STATUS_LABEL: Record<UserActivityStatus, string> = {
+  active: "活跃",
+  silent: "沉默",
+  churned: "流失",
+  never: "从未活跃",
+};
 
 export function AdminUserDetailPanel({ userId }: { userId: string }) {
   const [loading, setLoading] = useState(true);
@@ -40,10 +48,27 @@ export function AdminUserDetailPanel({ userId }: { userId: string }) {
         <Link href="/admin/users" className="text-xs text-muted-foreground hover:text-primary">
           ← 返回用户列表
         </Link>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight">{data?.name ?? "用户详情"}</h1>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <h1 className="text-2xl font-semibold tracking-tight">{data?.name ?? "用户详情"}</h1>
+          {data?.isAdmin ? (
+            <span className="rounded border border-primary/35 bg-primary/15 px-2 py-0.5 text-[11px] text-primary">
+              Admin
+            </span>
+          ) : null}
+          {data ? (
+            <span className="rounded border border-white/15 px-2 py-0.5 text-[11px] text-muted-foreground">
+              {STATUS_LABEL[data.activityStatus]}
+            </span>
+          ) : null}
+        </div>
         <p className="mt-1 text-sm text-muted-foreground">
-          {data?.email ?? "—"} · {userId}
+          {data?.email ?? "—"} · {data?.provider ?? "—"} · {userId}
         </p>
+        {data?.lastActiveAt ? (
+          <p className="mt-1 text-xs text-muted-foreground">
+            最后活跃 {new Date(data.lastActiveAt).toLocaleString()}
+          </p>
+        ) : null}
       </div>
 
       {loading && !data ? <p className="text-sm text-muted-foreground">加载中…</p> : null}
@@ -56,9 +81,56 @@ export function AdminUserDetailPanel({ userId }: { userId: string }) {
             <MetricCard title="Ready" value={data.readyCount} />
             <MetricCard title="Modify 次数" value={data.modifyCount} />
             <MetricCard
+              title="Credits"
+              value={
+                data.creditBalance == null
+                  ? "—"
+                  : `${data.creditBalance} (${data.creditPlan ?? "free"})`
+              }
+            />
+            <MetricCard
               title="注册时间"
               value={data.registeredAt ? new Date(data.registeredAt).toLocaleDateString() : "—"}
             />
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+            <h2 className="mb-3 text-sm font-medium">项目（最多 30）</h2>
+            {data.projects.length === 0 ? (
+              <p className="text-sm text-muted-foreground">暂无项目</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="text-xs uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                      <th className="pb-2 pr-3">名称</th>
+                      <th className="pb-2 pr-3">状态</th>
+                      <th className="pb-2 pr-3">创建</th>
+                      <th className="pb-2">Studio</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.projects.map((project) => (
+                      <tr key={project.id} className="border-t border-white/5">
+                        <td className="py-2 pr-3">{project.name}</td>
+                        <td className="py-2 pr-3 text-xs text-muted-foreground">{project.status}</td>
+                        <td className="py-2 pr-3 text-xs text-muted-foreground">
+                          {new Date(project.createdAt).toLocaleDateString()}
+                        </td>
+                        <td className="py-2">
+                          <Link
+                            href={`/studio/${project.id}`}
+                            className="text-xs text-primary hover:underline"
+                          >
+                            打开
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           <TimeSeriesChart
@@ -75,7 +147,10 @@ export function AdminUserDetailPanel({ userId }: { userId: string }) {
                 <p className="text-sm text-muted-foreground">暂无事件</p>
               ) : (
                 data.timeline.map((event, index) => (
-                  <div key={`${event.at}-${index}`} className="flex gap-3 border-t border-white/5 pt-2 first:border-0 first:pt-0">
+                  <div
+                    key={`${event.at}-${index}`}
+                    className="flex gap-3 border-t border-white/5 pt-2 first:border-0 first:pt-0"
+                  >
                     <span className="w-36 shrink-0 text-xs text-muted-foreground">
                       {new Date(event.at).toLocaleString()}
                     </span>
@@ -84,7 +159,9 @@ export function AdminUserDetailPanel({ userId }: { userId: string }) {
                     </span>
                     <div className="min-w-0 flex-1 text-sm">
                       <p>{event.label}</p>
-                      {event.meta ? <p className="truncate text-xs text-muted-foreground">{event.meta}</p> : null}
+                      {event.meta ? (
+                        <p className="truncate text-xs text-muted-foreground">{event.meta}</p>
+                      ) : null}
                     </div>
                   </div>
                 ))

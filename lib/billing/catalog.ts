@@ -2,6 +2,10 @@
  * Public pricing catalog. Stripe Price IDs come from env so test/live can differ.
  */
 
+import { isStripeBillingConfigured } from "@/lib/env";
+
+export { isStripeBillingConfigured };
+
 export type ProTierId = "pro_100" | "pro_200" | "pro_400";
 
 export type ProTier = {
@@ -102,10 +106,6 @@ export function lookupByStripePriceId(priceId: string): {
     if (id && id === priceId) return { kind: "topup", pack };
   }
   return null;
-}
-
-export function isStripeBillingConfigured(): boolean {
-  return Boolean(process.env.STRIPE_SECRET_KEY?.trim());
 }
 
 export function catalogForClient() {

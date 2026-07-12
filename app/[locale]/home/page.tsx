@@ -13,6 +13,7 @@ export async function generateMetadata({ params }: Props) {
     pathname: "/home",
     seoKey: "home",
     canonicalPathname: "/",
+    robots: { index: false, follow: true },
   });
 }
 

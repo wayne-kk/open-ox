@@ -1,27 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { JetBrains_Mono, Plus_Jakarta_Sans } from "next/font/google";
-import { ConsoleEasterEgg } from "@/app/components/ConsoleEasterEgg";
-import { DynamicFavicon } from "@/app/components/DynamicFavicon";
-import { FaviconProvider } from "@/app/contexts/FaviconContext";
-import { AnalyticsProvider } from "@/components/analytics/AnalyticsProvider";
-import { ThemeProvider } from "@/components/theme/ThemeProvider";
-import { AuthUserProvider } from "@/app/contexts/AuthUserContext";
-import { Toaster } from "@/components/ui/sonner";
 import { getSiteOrigin } from "@/lib/seo/siteUrl";
-import "./globals.css";
-
-const plusJakarta = Plus_Jakarta_Sans({
-  variable: "--font-jakarta",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
-
-const jetBrainsMono = JetBrains_Mono({
-  variable: "--font-jetbrains",
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-});
 
 export const metadata: Metadata = {
   metadataBase: new URL(getSiteOrigin()),
@@ -31,6 +10,15 @@ export const metadata: Metadata = {
   },
   description:
     "AI-powered website builder — describe your idea, get a live site in minutes.",
+  icons: {
+    icon: [
+      { url: "/brand-mark.svg", type: "image/svg+xml" },
+      { url: "/favicon.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon.ico", sizes: "48x48" },
+    ],
+    shortcut: "/favicon.ico",
+    apple: [{ url: "/favicon-48.png", sizes: "48x48", type: "image/png" }],
+  },
   openGraph: {
     type: "website",
     siteName: "Open-OX",
@@ -43,26 +31,9 @@ export const metadata: Metadata = {
 };
 
 /**
- * Stable shell: theme + chrome providers live here so locale navigations
- * (`/settings` ↔ `/en/settings`) do not remount next-themes and flash.
+ * Passthrough root: `<html lang>` lives in `[locale]/layout` so SSR matches the URL locale.
+ * Providers that must survive locale switches also live there (next-themes uses localStorage).
  */
 export default function RootLayout({ children }: { children: ReactNode }) {
-  return (
-    <html lang="zh-CN" suppressHydrationWarning>
-      <body
-        className={`${plusJakarta.variable} ${jetBrainsMono.variable} min-h-screen bg-background text-foreground antialiased`}
-      >
-        <ThemeProvider>
-          <AuthUserProvider>
-            <FaviconProvider>
-              <DynamicFavicon />
-              <ConsoleEasterEgg />
-              <AnalyticsProvider>{children}</AnalyticsProvider>
-              <Toaster />
-            </FaviconProvider>
-          </AuthUserProvider>
-        </ThemeProvider>
-      </body>
-    </html>
-  );
+  return children;
 }

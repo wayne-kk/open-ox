@@ -45,10 +45,7 @@ export function utcMonthKey(d: Date = new Date()): string {
   return d.toISOString().slice(0, 7);
 }
 
-export function isCreditsEnabled(): boolean {
-  const v = process.env.CREDITS_ENABLED?.trim().toLowerCase();
-  return v === "1" || v === "true" || v === "yes";
-}
+export { isCreditsEnabled } from "@/lib/env";
 
 /** Minimum balance to start a full generate (gate). */
 export const MIN_GENERATE_CREDITS = 2;

@@ -66,12 +66,14 @@ function createSupabaseFromRequest(
 export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
 
-  // Skip i18n for API, health, auth callback, and site preview assets.
+  // Skip i18n for API, health, auth callback, site previews, and SEO files.
   if (
     path.startsWith("/api") ||
     path.startsWith("/health") ||
     path.startsWith("/auth/callback") ||
-    path.startsWith("/site-previews")
+    path.startsWith("/site-previews") ||
+    path === "/sitemap.xml" ||
+    path === "/robots.txt"
   ) {
     return NextResponse.next({ request });
   }

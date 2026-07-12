@@ -33,10 +33,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files — commit only the public template
 .env*
-!.env.local.example
-!.env.production.example
+!.env.example
 sites/*
 !sites/template/
 # vercel

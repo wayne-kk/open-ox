@@ -26,8 +26,10 @@
 - `app/[locale]/page.tsx` must stay free of `getSessionUser()`.
 - `NEXT_PUBLIC_SITE_URL` (or `NEXT_PUBLIC_APP_URL`) must be set in production for correct absolute canonicals / sitemap / OG URLs.
 - Future SEO for docs/community should extend sitemap + metadata without undoing the marketing SSG seam.
+- Competitor compare / alternatives pages (`/compare/*`, `/alternatives`) use nominative fair use only: no logos, no affiliation claims, acknowledge competitor strengths, link to official sites, show last-updated dates.
 
 ## References
 
 - Grilling session 2026-07-12 (decisions locked)
 - `lib/seo/marketingMetadata.ts`, `app/sitemap.ts`, `app/robots.ts`, `proxy.ts`
+- `lib/seo/competitors.ts`

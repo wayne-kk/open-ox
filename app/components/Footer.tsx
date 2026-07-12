@@ -16,9 +16,11 @@ export function Footer() {
 
   const productLinks = [
     { href: "/dashboard", label: t("workspace") },
+    { href: "/pricing", label: t("pricing") },
     { href: "/community", label: t("community") },
     { href: "/docs", label: t("docs") },
     { href: "/changelog", label: t("changelog") },
+    { href: "/compare", label: t("compare") },
   ] as const;
 
   const resourceLinks = [

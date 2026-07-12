@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { Check, ChevronDown, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link } from "@/i18n/navigation";
@@ -26,58 +27,7 @@ type CreditsSnap = {
   proTier?: string | null;
 };
 
-const FAQ: Array<{ q: string; a: React.ReactNode }> = [
-  {
-    q: "What is a credit?",
-    a: (
-      <>
-        Credits measure AI build usage — generate and modify runs. Cost scales with how much work
-        the model does (tokens), then converts to credits. Design Mode edits that write source
-        locally without an LLM do not spend credits.
-      </>
-    ),
-  },
-  {
-    q: "What is included in Free?",
-    a: (
-      <>
-        Free includes 5 credits per day, capped at 30 per calendar month. Unused daily credits do
-        not roll to the next day. Enough to try generate and a few modify turns.
-      </>
-    ),
-  },
-  {
-    q: "How does Pro pricing work?",
-    a: (
-      <>
-        Pro is priced by monthly credit capacity (100 / 200 / 400). You pick the pool size that
-        matches how much you build. Credits are added to your balance each billing cycle.
-      </>
-    ),
-  },
-  {
-    q: "Do credits expire?",
-    a: (
-      <>
-        Free daily grants expire at the end of each UTC day. Pro monthly credits stay on your
-        balance while your subscription is active. Top-up credits are added immediately and remain
-        until spent.
-      </>
-    ),
-  },
-  {
-    q: "What happens if I cancel Pro?",
-    a: (
-      <>
-        You keep any remaining balance. After cancel, your account returns to Free daily grants.
-        Remaining Pro/top-up credits are not wiped by the next daily grant if your balance is
-        already higher than the daily amount.
-      </>
-    ),
-  },
-];
-
-function FaqItem({ q, a }: { q: string; a: React.ReactNode }) {
+function FaqItem({ q, a }: { q: string; a: string }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="border-b border-white/[0.08]">
@@ -112,6 +62,7 @@ function Feature({ children }: { children: React.ReactNode }) {
 }
 
 export function PricingPageClient() {
+  const t = useTranslations("pricing");
   const search = useSearchParams();
   const checkout = search.get("checkout");
   const [catalog, setCatalog] = useState<Catalog | null>(null);
@@ -119,6 +70,18 @@ export function PricingPageClient() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedTierId, setSelectedTierId] = useState<string>("pro_200");
+
+  const faq = useMemo(
+    () =>
+      [
+        { q: t("faq1q"), a: t("faq1a") },
+        { q: t("faq2q"), a: t("faq2a") },
+        { q: t("faq3q"), a: t("faq3a") },
+        { q: t("faq4q"), a: t("faq4a") },
+        { q: t("faq5q"), a: t("faq5a") },
+      ] as const,
+    [t]
+  );
 
   useEffect(() => {
     void (async () => {
@@ -200,10 +163,10 @@ export function PricingPageClient() {
       <main className="relative z-10 mx-auto max-w-6xl px-6 pb-28 pt-14 md:pt-16">
         <div className="mx-auto max-w-2xl text-center">
           <h1 className="font-heading text-4xl font-semibold tracking-[-0.035em] text-foreground md:text-5xl">
-            Pricing
+            {t("title")}
           </h1>
           <p className="mt-4 text-[16px] leading-relaxed text-muted-foreground md:text-[17px]">
-            Start for free. Upgrade to get the capacity that matches how much you build.
+            {t("subtitle")}
           </p>
           {credits?.plan === "pro" ? (
             <button
@@ -212,20 +175,19 @@ export function PricingPageClient() {
               disabled={busy !== null}
               className="mt-4 text-[13px] text-brand-signal hover:underline disabled:opacity-50"
             >
-              {busy === "portal" ? "Opening…" : "Manage subscription"}
+              {busy === "portal" ? t("opening") : t("manageSubscription")}
             </button>
           ) : null}
         </div>
 
         {checkout === "success" ? (
           <p className="mx-auto mt-8 max-w-xl rounded-2xl border border-white/12 bg-white/4 px-4 py-3 text-center text-[13px] text-foreground/80">
-            Payment received. Credits usually appear within a few seconds — refresh if the balance
-            looks stale.
+            {t("checkoutSuccess")}
           </p>
         ) : null}
         {checkout === "cancel" ? (
           <p className="mx-auto mt-8 max-w-xl rounded-2xl border border-white/8 bg-white/2 px-4 py-3 text-center text-[13px] text-muted-foreground">
-            Checkout canceled. No charge was made.
+            {t("checkoutCancel")}
           </p>
         ) : null}
         {error ? (
@@ -236,46 +198,48 @@ export function PricingPageClient() {
 
         <section className="mt-14 grid gap-5 lg:grid-cols-3">
           <article className="flex flex-col rounded-2xl border border-white/8 bg-card p-7">
-            <h2 className="text-[15px] font-medium text-foreground">Free</h2>
-            <p className="mt-1 text-[13px] text-muted-foreground">Try Open-OX</p>
+            <h2 className="text-[15px] font-medium text-foreground">{t("freeName")}</h2>
+            <p className="mt-1 text-[13px] text-muted-foreground">{t("freeTagline")}</p>
             <div className="mt-6 flex items-baseline gap-1">
               <span className="font-heading text-4xl font-semibold tracking-[-0.03em] text-foreground">
                 $0
               </span>
             </div>
-            <p className="mt-2 text-[13px] text-muted-foreground">5 credits / day · 30 / month max</p>
+            <p className="mt-2 text-[13px] text-muted-foreground">{t("freeQuota")}</p>
 
             <ul className="mt-8 flex flex-1 flex-col gap-3">
-              <Feature>Generate & modify with daily credits</Feature>
-              <Feature>Design Mode local edits free</Feature>
-              <Feature>Workspace projects & Studio</Feature>
-              <Feature>Community publish & remix</Feature>
+              <Feature>{t("freeFeat1")}</Feature>
+              <Feature>{t("freeFeat2")}</Feature>
+              <Feature>{t("freeFeat3")}</Feature>
+              <Feature>{t("freeFeat4")}</Feature>
             </ul>
 
             <Link
               href="/dashboard"
               className="defi-button-outline mt-8 h-11 w-full text-[13px]"
             >
-              Get started
+              {t("getStarted")}
             </Link>
           </article>
 
           <article className="relative flex flex-col rounded-2xl border border-white/20 bg-card p-7 shadow-[0_0_0_1px_rgba(255,255,255,0.04)]">
             <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-0.5 text-[11px] font-semibold text-primary-foreground">
-              Popular
+              {t("popular")}
             </div>
-            <h2 className="text-[15px] font-medium text-foreground">Pro</h2>
-            <p className="mt-1 text-[13px] text-muted-foreground">For builders who ship often</p>
+            <h2 className="text-[15px] font-medium text-foreground">{t("proName")}</h2>
+            <p className="mt-1 text-[13px] text-muted-foreground">{t("proTagline")}</p>
 
             <div className="mt-6 flex items-baseline gap-1">
               <span className="font-heading text-4xl font-semibold tracking-[-0.03em] text-foreground">
                 ${selectedTier?.priceUsd ?? "—"}
               </span>
-              <span className="text-[14px] text-muted-foreground">/ month</span>
+              <span className="text-[14px] text-muted-foreground">{t("perMonth")}</span>
             </div>
 
             <label className="mt-5 block">
-              <span className="mb-1.5 block text-[12px] text-muted-foreground">Monthly credits</span>
+              <span className="mb-1.5 block text-[12px] text-muted-foreground">
+                {t("monthlyCredits")}
+              </span>
               <div className="relative">
                 <select
                   value={selectedTier?.id ?? ""}
@@ -284,8 +248,11 @@ export function PricingPageClient() {
                 >
                   {(catalog?.pro ?? []).map((tier) => (
                     <option key={tier.id} value={tier.id} disabled={!tier.available}>
-                      {tier.monthlyCredits} credits — ${tier.priceUsd}/mo
-                      {!tier.available ? " (unavailable)" : ""}
+                      {t("creditsPerMo", {
+                        credits: tier.monthlyCredits,
+                        price: tier.priceUsd,
+                      })}
+                      {!tier.available ? t("unavailable") : ""}
                     </option>
                   ))}
                 </select>
@@ -295,10 +262,10 @@ export function PricingPageClient() {
 
             <ul className="mt-8 flex flex-1 flex-col gap-3">
               <Feature>
-                {selectedTier?.monthlyCredits ?? "—"} credits each billing cycle
+                {t("proFeat1", { credits: selectedTier?.monthlyCredits ?? "—" })}
               </Feature>
-              <Feature>No daily wipe on your Pro pool</Feature>
-              <Feature>Everything in Free</Feature>
+              <Feature>{t("proFeat2")}</Feature>
+              <Feature>{t("proFeat3")}</Feature>
             </ul>
 
             <button
@@ -315,42 +282,42 @@ export function PricingPageClient() {
               {busy === selectedTier?.id ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : null}
-              {isCurrentPro ? "Current plan" : "Get Pro"}
+              {isCurrentPro ? t("currentPlan") : t("getPro")}
             </button>
           </article>
 
           <article className="flex flex-col rounded-2xl border border-white/8 bg-card p-7">
-            <h2 className="text-[15px] font-medium text-foreground">Enterprise</h2>
-            <p className="mt-1 text-[13px] text-muted-foreground">Volume & governance</p>
+            <h2 className="text-[15px] font-medium text-foreground">{t("enterpriseName")}</h2>
+            <p className="mt-1 text-[13px] text-muted-foreground">{t("enterpriseTagline")}</p>
             <div className="mt-6 flex items-baseline gap-1">
               <span className="font-heading text-4xl font-semibold tracking-[-0.03em] text-foreground">
-                Custom
+                {t("custom")}
               </span>
             </div>
-            <p className="mt-2 text-[13px] text-muted-foreground">Invoicing · SSO · volume credits</p>
+            <p className="mt-2 text-[13px] text-muted-foreground">{t("enterpriseQuota")}</p>
 
             <ul className="mt-8 flex flex-1 flex-col gap-3">
-              <Feature>Custom credit volume</Feature>
-              <Feature>Centralized billing</Feature>
-              <Feature>Priority support</Feature>
-              <Feature>Security & compliance review</Feature>
+              <Feature>{t("entFeat1")}</Feature>
+              <Feature>{t("entFeat2")}</Feature>
+              <Feature>{t("entFeat3")}</Feature>
+              <Feature>{t("entFeat4")}</Feature>
             </ul>
 
             <a
               href="mailto:hello@open-ox.dev?subject=Open-OX%20Enterprise"
               className="defi-button-outline mt-8 h-11 w-full text-[13px]"
             >
-              Contact us
+              {t("contactUs")}
             </a>
           </article>
         </section>
 
         <section className="mx-auto mt-24 max-w-2xl">
           <h2 className="text-center text-[22px] font-medium tracking-[-0.02em] text-foreground">
-            Frequently asked questions
+            {t("faqTitle")}
           </h2>
           <div className="mt-8">
-            {FAQ.map((item) => (
+            {faq.map((item) => (
               <FaqItem key={item.q} q={item.q} a={item.a} />
             ))}
           </div>
@@ -358,8 +325,7 @@ export function PricingPageClient() {
 
         {!catalog?.stripeConfigured ? (
           <p className="mx-auto mt-12 max-w-xl text-center text-[12px] text-amber-200/60">
-            Stripe is not configured in this environment. Checkout buttons stay disabled until price
-            IDs are set.
+            {t("stripeMissing")}
           </p>
         ) : null}
       </main>

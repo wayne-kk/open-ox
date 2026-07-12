@@ -18,7 +18,9 @@
     "workspace": "工作台",
     "community": "社区",
     "docs": "文档",
+    "pricing": "定价",
     "changelog": "更新日志",
+    "compare": "对比与替代",
     "architecture": "架构",
     "api": "API",
     "github": "GitHub",
@@ -27,7 +29,8 @@
   },
   "landing": {
     "badge": "想法即刻实现，构建即刻运行",
-    "howItWorks": "How it works",
+    "howItWorks": "工作原理",
+    "headline": "THINK IT. BUILD IT.",
     "storyTitle": "从描述到可交付站点，三步",
     "storySubtitle": "Harness 管住生成与验证；你负责方向与迭代。",
     "step1Title": "描述想法",
@@ -64,11 +67,83 @@
     "changelog": {
       "title": "更新日志 · Open-OX",
       "description": "Open-OX 产品更新：生成流水线、Studio、积分计费与平台改进。"
+    },
+    "compare": {
+      "title": "Open-OX 对比 · AI 建站工具",
+      "description": "客观对比 Open-OX 与 Lovable、v0、Base44：输出形态、迭代方式、部署与适用场景。非附属关系，信息基于公开资料。"
+    },
+    "compareLovable": {
+      "title": "Open-OX vs Lovable · 对比",
+      "description": "Open-OX 与 Lovable 的公开能力对比：真实 Next.js 工程输出、Studio / Design Mode、社区 Remix 与自有 Vercel 部署。非附属或背书。"
+    },
+    "compareV0": {
+      "title": "Open-OX vs v0 · 对比",
+      "description": "Open-OX 与 Vercel v0 的定位差异：完整站点流水线 vs 组件级生成。帮助你选择合适工具。非附属或背书。"
+    },
+    "compareBase44": {
+      "title": "Open-OX vs Base44 · 对比",
+      "description": "Open-OX 与 Base44 的公开能力对比：网站工程交付、Studio 迭代与部署路径。非附属或背书。"
+    },
+    "alternatives": {
+      "title": "Lovable / v0 / Base44 替代方案 · Open-OX",
+      "description": "在寻找 Lovable、v0 或 Base44 的替代方案？了解 Open-OX 如何用可运行的 Next.js 站点与 Studio 工作流满足类似需求。"
     }
   },
   "pricing": {
     "title": "定价",
-    "subtitle": "按用量付费，随时升级。"
+    "subtitle": "免费开始。按你的构建量升级容量。",
+    "manageSubscription": "管理订阅",
+    "opening": "打开中…",
+    "checkoutSuccess": "付款成功。积分通常几秒内到账 — 若余额未更新请刷新。",
+    "checkoutCancel": "已取消结账，未产生扣款。",
+    "freeName": "Free",
+    "freeTagline": "试用 Open-OX",
+    "freeQuota": "每日 5 积分 · 每月上限 30",
+    "freeFeat1": "用每日积分进行生成与修改",
+    "freeFeat2": "Design Mode 本地改源码不耗积分",
+    "freeFeat3": "工作台项目与 Studio",
+    "freeFeat4": "社区发布与 Remix",
+    "getStarted": "开始使用",
+    "popular": "热门",
+    "proName": "Pro",
+    "proTagline": "适合频繁交付的构建者",
+    "perMonth": "/ 月",
+    "monthlyCredits": "每月积分",
+    "creditsPerMo": "{credits} 积分 — ${price}/月",
+    "unavailable": "（暂不可用）",
+    "proFeat1": "每个计费周期 {credits} 积分",
+    "proFeat2": "Pro 积分池不会按日清零",
+    "proFeat3": "包含 Free 全部能力",
+    "currentPlan": "当前方案",
+    "getPro": "开通 Pro",
+    "enterpriseName": "Enterprise",
+    "enterpriseTagline": "用量与治理",
+    "custom": "定制",
+    "enterpriseQuota": "对公结算 · SSO · 批量积分",
+    "entFeat1": "定制积分额度",
+    "entFeat2": "集中账单",
+    "entFeat3": "优先支持",
+    "entFeat4": "安全与合规评审",
+    "contactUs": "联系我们",
+    "faqTitle": "常见问题",
+    "faq1q": "什么是积分？",
+    "faq1a": "积分衡量 AI 构建用量 — 生成与修改运行。费用随模型工作量（token）变化，再换算为积分。Design Mode 本地写源码且不走 LLM 的编辑不消耗积分。",
+    "faq2q": "Free 包含什么？",
+    "faq2a": "Free 含每日 5 积分，自然月上限 30。未用完的每日积分不结转。足够试用生成和若干次修改。",
+    "faq3q": "Pro 如何计费？",
+    "faq3a": "Pro 按月积分容量定价（100 / 200 / 400）。按构建量选择池大小。每个计费周期将积分加入余额。",
+    "faq4q": "积分会过期吗？",
+    "faq4a": "Free 每日发放在每个 UTC 日结束时失效。Pro 月度积分在订阅有效期内保留。加量包立即入账，用完为止。",
+    "faq5q": "取消 Pro 会怎样？",
+    "faq5a": "剩余余额保留。取消后回到 Free 每日发放。若余额已高于每日额度，下一次每日发放不会清掉剩余的 Pro/加量积分。",
+    "stripeMissing": "当前环境未配置 Stripe。在设置价格 ID 之前，结账按钮保持禁用。"
+  },
+  "changelogPage": {
+    "eyebrow": "changelog",
+    "title": "更新日志",
+    "subtitle": "新功能、体验优化与工程改进。",
+    "docsCta": "查看技术文档",
+    "entryLangNote": ""
   },
   "workspace": {
     "title": "工作台",
@@ -109,5 +184,12 @@
   "locale": {
     "zh-CN": "中文",
     "en": "English"
+  },
+  "notFound": {
+    "title": "页面不存在",
+    "body": "链接可能已失效，或地址有误。",
+    "home": "回首页",
+    "pricing": "定价",
+    "compare": "产品对比"
   }
 }

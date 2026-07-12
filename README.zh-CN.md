@@ -241,6 +241,19 @@ Browser · Studio UI
 
 ---
 
+## 本地启动
+
+```bash
+cp .env.example .env.local
+# 填写 Core 段（Supabase + OpenAI 兼容 API + 站点 URL）
+pnpm check:env
+pnpm dev
+```
+
+可选能力（飞书 / Google / Stripe / Vercel / E2B / Langfuse / Ark）按需配置；未配置时对应 UI 不会出现。完整变量见 `.env.example`，能力判断见 `lib/env.ts`。
+
+---
+
 ## 文档
 
 - 术语表 — [`CONTEXT.md`](./CONTEXT.md)  

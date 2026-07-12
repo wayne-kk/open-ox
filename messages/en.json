@@ -18,7 +18,9 @@
     "workspace": "Workspace",
     "community": "Community",
     "docs": "Docs",
+    "pricing": "Pricing",
     "changelog": "Changelog",
+    "compare": "Compare & alternatives",
     "architecture": "Architecture",
     "api": "API",
     "github": "GitHub",
@@ -28,6 +30,7 @@
   "landing": {
     "badge": "Think it. Build it. Run it.",
     "howItWorks": "How it works",
+    "headline": "THINK IT. BUILD IT.",
     "storyTitle": "From description to a shippable site in three steps",
     "storySubtitle": "Harness owns generation and verification; you own direction and iteration.",
     "step1Title": "Describe the idea",
@@ -64,11 +67,83 @@
     "changelog": {
       "title": "Changelog · Open-OX",
       "description": "Product updates for Open-OX: generation pipeline, Studio, billing, and platform improvements."
+    },
+    "compare": {
+      "title": "Open-OX comparisons · AI website builders",
+      "description": "Factual comparisons of Open-OX with Lovable, v0, and Base44: output shape, iteration, deploy, and fit. Not affiliated; based on public information."
+    },
+    "compareLovable": {
+      "title": "Open-OX vs Lovable · comparison",
+      "description": "Compare Open-OX and Lovable on public capabilities: real Next.js projects, Studio / Design Mode, community remix, and BYO Vercel deploy. Not affiliated or endorsed."
+    },
+    "compareV0": {
+      "title": "Open-OX vs v0 · comparison",
+      "description": "How Open-OX differs from Vercel v0: full-site pipeline vs component generation. Choose the right tool. Not affiliated or endorsed."
+    },
+    "compareBase44": {
+      "title": "Open-OX vs Base44 · comparison",
+      "description": "Compare Open-OX and Base44 on public capabilities: shippable website engineering, Studio iteration, and deploy path. Not affiliated or endorsed."
+    },
+    "alternatives": {
+      "title": "Lovable / v0 / Base44 alternatives · Open-OX",
+      "description": "Looking for Lovable, v0, or Base44 alternatives? See how Open-OX delivers runnable Next.js sites with a Studio workflow."
     }
   },
   "pricing": {
     "title": "Pricing",
-    "subtitle": "Pay for usage. Upgrade anytime."
+    "subtitle": "Start for free. Upgrade to get the capacity that matches how much you build.",
+    "manageSubscription": "Manage subscription",
+    "opening": "Opening…",
+    "checkoutSuccess": "Payment received. Credits usually appear within a few seconds — refresh if the balance looks stale.",
+    "checkoutCancel": "Checkout canceled. No charge was made.",
+    "freeName": "Free",
+    "freeTagline": "Try Open-OX",
+    "freeQuota": "5 credits / day · 30 / month max",
+    "freeFeat1": "Generate & modify with daily credits",
+    "freeFeat2": "Design Mode local edits free",
+    "freeFeat3": "Workspace projects & Studio",
+    "freeFeat4": "Community publish & remix",
+    "getStarted": "Get started",
+    "popular": "Popular",
+    "proName": "Pro",
+    "proTagline": "For builders who ship often",
+    "perMonth": "/ month",
+    "monthlyCredits": "Monthly credits",
+    "creditsPerMo": "{credits} credits — ${price}/mo",
+    "unavailable": " (unavailable)",
+    "proFeat1": "{credits} credits each billing cycle",
+    "proFeat2": "No daily wipe on your Pro pool",
+    "proFeat3": "Everything in Free",
+    "currentPlan": "Current plan",
+    "getPro": "Get Pro",
+    "enterpriseName": "Enterprise",
+    "enterpriseTagline": "Volume & governance",
+    "custom": "Custom",
+    "enterpriseQuota": "Invoicing · SSO · volume credits",
+    "entFeat1": "Custom credit volume",
+    "entFeat2": "Centralized billing",
+    "entFeat3": "Priority support",
+    "entFeat4": "Security & compliance review",
+    "contactUs": "Contact us",
+    "faqTitle": "Frequently asked questions",
+    "faq1q": "What is a credit?",
+    "faq1a": "Credits measure AI build usage — generate and modify runs. Cost scales with how much work the model does (tokens), then converts to credits. Design Mode edits that write source locally without an LLM do not spend credits.",
+    "faq2q": "What is included in Free?",
+    "faq2a": "Free includes 5 credits per day, capped at 30 per calendar month. Unused daily credits do not roll to the next day. Enough to try generate and a few modify turns.",
+    "faq3q": "How does Pro pricing work?",
+    "faq3a": "Pro is priced by monthly credit capacity (100 / 200 / 400). You pick the pool size that matches how much you build. Credits are added to your balance each billing cycle.",
+    "faq4q": "Do credits expire?",
+    "faq4a": "Free daily grants expire at the end of each UTC day. Pro monthly credits stay on your balance while your subscription is active. Top-up credits are added immediately and remain until spent.",
+    "faq5q": "What happens if I cancel Pro?",
+    "faq5a": "You keep any remaining balance. After cancel, your account returns to Free daily grants. Remaining Pro/top-up credits are not wiped by the next daily grant if your balance is already higher than the daily amount.",
+    "stripeMissing": "Stripe is not configured in this environment. Checkout buttons stay disabled until price IDs are set."
+  },
+  "changelogPage": {
+    "eyebrow": "changelog",
+    "title": "Changelog",
+    "subtitle": "New features, UX polish, and engineering improvements.",
+    "docsCta": "Read the technical docs",
+    "entryLangNote": "Entry details below are written primarily for the engineering team (mixed Chinese/English)."
   },
   "workspace": {
     "title": "Workspace",
@@ -109,5 +184,12 @@
   "locale": {
     "zh-CN": "中文",
     "en": "English"
+  },
+  "notFound": {
+    "title": "Page not found",
+    "body": "The link may be broken, or the address is wrong.",
+    "home": "Home",
+    "pricing": "Pricing",
+    "compare": "Comparisons"
   }
 }

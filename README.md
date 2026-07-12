@@ -241,6 +241,19 @@ A **repeatable, auditable, shippable** production line for sites.
 
 ---
 
+## Local setup
+
+```bash
+cp .env.example .env.local
+# Fill the Core section (Supabase + OpenAI-compatible API + site URL)
+pnpm check:env
+pnpm dev
+```
+
+Optional features (Feishu / Google / Stripe / Vercel / E2B / Langfuse / Ark) are capability-gated — leave them unset and the matching UI stays off. See `.env.example` for the full matrix. Capability helpers live in `lib/env.ts`.
+
+---
+
 ## Docs
 
 - Glossary — [`CONTEXT.md`](./CONTEXT.md)  

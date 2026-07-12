@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
-import { setRequestLocale } from "next-intl/server";
+import { getTranslations, setRequestLocale } from "next-intl/server";
+import { Link } from "@/i18n/navigation";
 import { buildMarketingMetadata } from "@/lib/seo/marketingMetadata";
 
 interface ChangeEntry {
@@ -410,16 +410,20 @@ export async function generateMetadata({ params }: Props) {
 export default async function ChangelogPage({ params }: Props) {
   const { locale } = await params;
   setRequestLocale(locale);
+  const t = await getTranslations("changelogPage");
   return (
     <main className="relative min-h-screen ">
       <div className="mx-auto max-w-3xl px-6 py-12 lg:px-8">
         <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-primary mb-4">
-          // changelog
+          // {t("eyebrow")}
         </p>
-        <h1 className="text-3xl font-bold tracking-tight">更新日志</h1>
+        <h1 className="text-3xl font-bold tracking-tight">{t("title")}</h1>
         <p className="mt-3 text-[14px] text-muted-foreground">
-          新功能、体验优化与工程改进。
+          {t("subtitle")}
         </p>
+        {t("entryLangNote") ? (
+          <p className="mt-2 text-[12px] text-muted-foreground/70">{t("entryLangNote")}</p>
+        ) : null}
 
         <div className="mt-12 space-y-0">
           {CHANGELOG.map((entry, i) => (
@@ -462,7 +466,7 @@ export default async function ChangelogPage({ params }: Props) {
             className="flex items-center gap-2 text-[13px] text-muted-foreground hover:text-primary transition-colors"
           >
             <ArrowUpRight className="h-3.5 w-3.5" />
-            查看技术文档
+            {t("docsCta")}
           </Link>
         </div>
       </div>

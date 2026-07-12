@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start",
+    "check:env": "tsx scripts/check-env.ts",
     "generation:worker": "tsx scripts/generation-worker.ts",
     "lint": "eslint",
     "clear:template": "bash scripts/clear-template.sh",
