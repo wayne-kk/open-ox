@@ -29,6 +29,7 @@ import {
   COVER_CAPTURE_POLL_TIMEOUT_MS,
   evaluateCoverCapturePoll,
 } from "@/lib/coverCaptureOrchestration";
+import { resolveStudioHeaderTitle } from "@/app/[locale]/studio/lib/studioHeaderTitle";
 
 function formatMs(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
@@ -299,9 +300,10 @@ function StudioInner({ projectId }: { projectId: string }) {
                     </span>
                     <span className="text-white/15 hidden sm:block">/</span>
                     <span className="font-mono text-[11px] text-muted-foreground/50 truncate max-w-[180px] hidden md:block">
-                      {studio.lastRunInput
-                        ? (studio.lastRunInput.length > 40 ? studio.lastRunInput.slice(0, 40) + "…" : studio.lastRunInput)
-                        : projectId.slice(0, 32) + "…"}
+                      {resolveStudioHeaderTitle({
+                        projectName: studio.projectName,
+                        projectId,
+                      })}
                     </span>
                   </div>
                 </div>

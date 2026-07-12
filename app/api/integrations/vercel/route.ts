@@ -7,7 +7,7 @@ import {
   getVercelConnectionPublic,
   updateVercelDefaultTeam,
 } from "@/lib/vercel/connections";
-import { listVercelTeams } from "@/lib/vercel/oauth";
+import { fetchVercelTeam } from "@/lib/vercel/oauth";
 
 /** GET — connection status (no tokens). */
 export async function GET() {
@@ -63,15 +63,10 @@ export async function PATCH(request: NextRequest) {
   let teamName: string | null = null;
   if (teamId) {
     try {
-      const teams = await listVercelTeams(creds.accessToken);
-      const match = teams.find((t) => t.id === teamId);
-      if (!match) {
-        return NextResponse.json({ error: "Unknown team", code: "TEAM_NOT_FOUND" }, { status: 400 });
-      }
-      teamName = match.name;
+      teamName = (await fetchVercelTeam(creds.accessToken, teamId)).name;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      return NextResponse.json({ error: msg, code: "TEAMS_LIST_FAILED" }, { status: 502 });
+      return NextResponse.json({ error: msg, code: "TEAM_LOOKUP_FAILED" }, { status: 502 });
     }
   }
 

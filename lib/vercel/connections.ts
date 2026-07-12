@@ -52,6 +52,7 @@ export async function getVercelAccessToken(userId: string): Promise<{
   accessToken: string;
   teamId: string | null;
   teamName: string | null;
+  configurationId: string | null;
 } | null> {
   const { data, error } = await admin()
     .from("user_vercel_connections")
@@ -67,6 +68,7 @@ export async function getVercelAccessToken(userId: string): Promise<{
     accessToken: decryptSecret(row.access_token_enc),
     teamId: row.default_team_id,
     teamName: row.default_team_name,
+    configurationId: row.configuration_id,
   };
 }
 

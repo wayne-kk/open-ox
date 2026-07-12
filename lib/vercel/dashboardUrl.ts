@@ -14,3 +14,25 @@ export function vercelProjectDashboardUrl(params: {
   }
   return "https://vercel.com/dashboard";
 }
+
+/** Account-level list of installed Integrations (Manage Access / Project write). */
+export function vercelIntegrationsDashboardUrl(): string {
+  return "https://vercel.com/dashboard/integrations";
+}
+
+/** Team-scoped Integrations list when we know the team slug. */
+export function vercelTeamIntegrationsUrl(teamSlug: string | null | undefined): string | null {
+  const slug = teamSlug?.trim();
+  if (!slug) return null;
+  return `https://vercel.com/${encodeURIComponent(slug)}/~/integrations`;
+}
+
+/** Official docs: integration permissions / project access. */
+export function vercelIntegrationPermissionsDocsUrl(): string {
+  return "https://vercel.com/docs/integrations/install-an-integration/manage-integrations-reference";
+}
+
+/** Open-OX OAuth reconnect entry (same-origin path). */
+export function openOxVercelReconnectHref(): string {
+  return "/api/integrations/vercel/start?next=/settings/integrations";
+}

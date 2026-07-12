@@ -69,11 +69,8 @@ function CommunityCard({
 
   return (
     <div
-      className={cn(
-        "group/card relative flex h-full flex-col overflow-hidden rounded-xl border border-white/[0.07] bg-[#080a0e]",
-        "transition-[box-shadow,border-color,transform] duration-200 ease-out",
-        "hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[var(--box-shadow-neon)]"
-      )}
+      data-hoverable="true"
+      className="group/card ox-project-card relative flex h-full flex-col overflow-hidden rounded-xl border border-white/[0.07] bg-[#080a0e]"
     >
       <a
         href={previewHref}
@@ -93,7 +90,7 @@ function CommunityCard({
             <img
               src={projectCoverDisplayUrl(project.id, project.coverImageUpdatedAt)}
               alt=""
-              className="absolute inset-0 z-0 h-full w-full object-cover object-center transition-transform duration-200 ease-out"
+              className="ox-card-cover ox-card-cover-zoom absolute inset-0 z-0 h-full w-full object-cover object-center"
               loading="lazy"
               decoding="async"
             />
@@ -117,7 +114,7 @@ function CommunityCard({
           ) : null}
 
           <span
-            className="pointer-events-none absolute bottom-2.5 right-2.5 z-10 flex h-7 w-7 items-center justify-center rounded-lg border border-white/15 bg-black/55 text-white/90 opacity-0 backdrop-blur-md transition-opacity duration-200 group-hover/card:opacity-100"
+            className="ox-card-affordance pointer-events-none absolute bottom-2.5 right-2.5 z-10 flex h-7 w-7 items-center justify-center rounded-lg border border-white/15 bg-black/55 text-white/90 backdrop-blur-md"
             aria-hidden
           >
             <ArrowUpRight className="h-3.5 w-3.5" />
@@ -130,7 +127,7 @@ function CommunityCard({
           href={previewHref}
           target="_blank"
           rel="noopener noreferrer"
-          className="line-clamp-2 text-[13px] font-semibold leading-snug text-foreground transition-colors duration-150 group-hover/card:text-primary"
+          className="ox-card-title ox-card-title-accent line-clamp-2 text-[13px] font-semibold leading-snug text-foreground"
         >
           {project.name || "未命名项目"}
         </a>

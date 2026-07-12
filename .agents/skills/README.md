@@ -1,6 +1,6 @@
 # Agent Skills 使用指南
 
-本目录共 **22** 个 skill。在 Cursor Agent 对话中启用：
+本目录共 **24** 个 skill。在 Cursor Agent 对话中启用：
 
 ```text
 @.agents/skills/<name>/SKILL.md
@@ -10,13 +10,38 @@
 
 ---
 
+## 新需求主链
+
+多数功能走最短路径；有未知再插可选步。
+
+```text
+intake → grilling → to-prd → to-issues → implement
+         ↑                  ↑
+    可选 research /    可选 codebase-design /
+    prototype          domain-modeling / grill-with-docs
+```
+
+| 阶段 | Skill | 产出 |
+| --- | --- | --- |
+| 澄清问题空间 | [intake](intake/SKILL.md) | Intake Brief（谁痛、成功标准、非目标） |
+| 压方案 | [grilling](grilling/SKILL.md) | 共享的设计理解 |
+| 写规格 | [to-prd](to-prd/SKILL.md) | `.scratch/<feature>/PRD.md` |
+| 拆活 | [to-issues](to-issues/SKILL.md) | 纵向 tracer-bullet issues |
+| 实现 | [implement](implement/SKILL.md) | 代码 + tdd + code-review |
+
+外来/半成品票才需要 [triage](triage/SKILL.md)。换会话用 [handoff](handoff/SKILL.md)。
+
+---
+
 ## 怎么选
 
 | 你说的话 | Skill |
 | --- | --- |
+| 「帮我把需求聊清楚」 | intake |
 | 「先出设计图再写代码」 | image-to-code |
 | 「别那么 AI 味，做 landing」 | design-taste-frontend |
 | 「把这个旧站改好看」 | redesign-existing-projects |
+| 「UI 层次/间距看着不对」 | refactoring-ui |
 | 「写 PRD / 拆 issue」 | to-prd / to-issues |
 | 「实现 #123」 | implement |
 | 「测试先行」 | tdd |
@@ -53,13 +78,16 @@
 
 | Skill | 何时用 |
 | --- | --- |
+| [intake](intake/SKILL.md) | 从想法做 **intake**：钉死问题空间，产出 Brief，再交给 grilling / to-prd |
 | [research](research/SKILL.md) | 查权威资料，产出 Markdown 调研文件 |
-| [to-prd](to-prd/SKILL.md) | 把当前对话合成 PRD 并发布到 Issue Tracker |
+| [to-prd](to-prd/SKILL.md) | 把当前对话合成 PRD 并发布到 Issue Tracker（不访谈） |
 | [to-issues](to-issues/SKILL.md) | 把 PRD/计划拆成可独立领取的 Issue（纵向切片） |
 | [domain-modeling](domain-modeling/SKILL.md) | 统一语言、术语表、ADR |
 | [handoff](handoff/SKILL.md) | 压缩对话为交接文档，换 Agent / 换会话继续 |
 
 ```text
+@intake 我有个想法，先把问题和成功标准聊清楚。
+@grilling 基于刚才的 Intake Brief 压方案。
 @to-prd 根据刚才讨论写 PRD 并创建 issue。
 @to-issues 把这份 PRD 拆成 tracer-bullet issues。
 @research 调研 XX，写到 docs/research/。
@@ -89,6 +117,7 @@
 | [image-to-code](image-to-code/SKILL.md) | 先出 section 设计图 → 深度分析 → 写代码；视觉质量是核心时 |
 | [design-taste-frontend](design-taste-frontend/SKILL.md) | brief 已清楚，直接 anti-slop 前端，不需要 Agent 生图 |
 | [redesign-existing-projects](redesign-existing-projects/SKILL.md) | 审计现有站并增量升级，不推翻功能 |
+| [refactoring-ui](refactoring-ui/SKILL.md) | 修层次、间距、色彩、depth；灰度优先再上色 |
 
 | 场景 | 用哪个 |
 | --- | --- |
@@ -96,6 +125,7 @@
 | 从零做页，brief 已很清楚 | **design-taste-frontend** |
 | 已有站要改视觉 | **redesign-existing-projects** |
 | 出图定稿后微调 | image-to-code → **design-taste-frontend** |
+| 现有 UI「看起来不对」 | **refactoring-ui** |
 
 详细用法：[image-to-code/USAGE.md](image-to-code/USAGE.md)
 

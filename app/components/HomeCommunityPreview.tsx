@@ -143,11 +143,8 @@ export function HomeCommunityPreview() {
             href={previewHref}
             target="_blank"
             rel="noopener noreferrer"
-            className={cn(
-              "group/card flex flex-col overflow-hidden rounded-2xl border border-border bg-card",
-              "transition-[box-shadow,border-color,transform] duration-200",
-              "hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[var(--box-shadow-neon)]"
-            )}
+            data-hoverable="true"
+            className="group/card ox-project-card flex flex-col overflow-hidden rounded-2xl border border-border bg-card"
           >
             <div
               className={cn(
@@ -163,7 +160,7 @@ export function HomeCommunityPreview() {
                   alt=""
                   width={640}
                   height={400}
-                  className="absolute inset-0 h-full w-full object-cover object-center transition-transform duration-200 ease-out "
+                  className="ox-card-cover ox-card-cover-zoom absolute inset-0 h-full w-full object-cover object-center"
                   loading="lazy"
                   decoding="async"
                 />
@@ -187,7 +184,7 @@ export function HomeCommunityPreview() {
               ) : null}
 
               <span
-                className="pointer-events-none absolute bottom-2.5 right-2.5 z-10 flex h-7 w-7 items-center justify-center rounded-lg border border-white/15 bg-black/55 text-white/90 opacity-0 backdrop-blur-md transition-opacity duration-200 group-hover/card:opacity-100"
+                className="ox-card-affordance pointer-events-none absolute bottom-2.5 right-2.5 z-10 flex h-7 w-7 items-center justify-center rounded-lg border border-white/15 bg-black/55 text-white/90 backdrop-blur-md"
                 aria-hidden
               >
                 <ArrowUpRight className="h-3.5 w-3.5" />
@@ -195,7 +192,7 @@ export function HomeCommunityPreview() {
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col gap-1.5 px-3.5 py-3">
-              <p className="line-clamp-2 text-[13px] font-semibold leading-snug text-foreground transition-colors group-hover/card:text-primary">
+              <p className="ox-card-title ox-card-title-accent line-clamp-2 text-[13px] font-semibold leading-snug text-foreground">
                 {project.name || t("untitledProject")}
               </p>
               {description ? (

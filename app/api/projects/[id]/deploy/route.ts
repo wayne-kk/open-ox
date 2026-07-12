@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
 import { requireOwnedProject } from "@/lib/auth/projectAccess";
@@ -6,6 +6,10 @@ import { isVercelDeployConfigured } from "@/lib/vercel/env";
 import { enqueueProjectDeploy, getProjectDeployStatus } from "@/lib/vercel/deploy";
 
 type Params = { params: Promise<{ id: string }> };
+
+export const runtime = "nodejs";
+/** Static export + Vercel upload can exceed the default serverless limit. */
+export const maxDuration = 300;
 
 /** GET /api/projects/[id]/deploy — latest deploy status. */
 export async function GET(_req: NextRequest, { params }: Params) {
@@ -54,9 +58,18 @@ export async function POST(_req: NextRequest, { params }: Params) {
   }
 
   try {
-    const { deployId } = await enqueueProjectDeploy({
+    const { deployId, job } = await enqueueProjectDeploy({
       projectId: id,
       userId: session.user.id,
+    });
+    // Keep the worker alive after the response — bare fire-and-forget dies in serverless
+    // and leaves last_status stuck on "queued" (endless spinner in Studio).
+    after(async () => {
+      try {
+        await job;
+      } catch (e) {
+        console.error(`[POST /api/projects/${id}/deploy] background job failed:`, e);
+      }
     });
     const status = await getProjectDeployStatus(id);
     return NextResponse.json({ ok: true, ...status, deployId });

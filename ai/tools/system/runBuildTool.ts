@@ -3,6 +3,7 @@ import { promisify } from "util";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import type { ToolResult, ToolExecutor } from "../types";
 import { ensureProjectNodeModules } from "@/lib/ensureProjectNodeModules";
+import { envForNextWebpackChild } from "@/lib/nextWebpackChildEnv";
 import { withSiteBuildLock } from "@/lib/siteBuildLock";
 import { getSiteRoot } from "./common";
 
@@ -47,11 +48,10 @@ export const executeRunBuild: ToolExecutor = async (
         cwd: projectDir,
         encoding: "utf8",
         maxBuffer: 1024 * 1024,
-        env: {
-          ...process.env,
+        env: envForNextWebpackChild({
           NODE_ENV: "production",
           ...(staticBasePath ? { OPEN_OX_STATIC_BASE_PATH: staticBasePath } : {}),
-        },
+        }),
       });
       const output = [stdout, stderr].filter(Boolean).join("\n").trim();
       return { success: true, output };

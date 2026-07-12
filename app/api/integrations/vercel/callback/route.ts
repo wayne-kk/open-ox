@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
 import { getPublicOrigin } from "@/lib/auth/request-origin";
 import { safeRedirectTarget } from "@/lib/auth/safe-redirect";
-import { timingSafeEqualString } from "@/lib/vercel/oauth";
 import {
   exchangeVercelCode,
+  fetchVercelTeam,
   fetchVercelUser,
-  listVercelTeams,
+  timingSafeEqualString,
 } from "@/lib/vercel/oauth";
 import { getVercelOAuthRedirectUri, isVercelDeployConfigured } from "@/lib/vercel/env";
 import { upsertVercelConnection } from "@/lib/vercel/connections";
@@ -101,12 +101,13 @@ export async function GET(request: NextRequest) {
     // token may still work for team-scoped deploy
   }
 
-  const teamId = teamIdFromQuery ?? token.team_id ?? null;
+  // Token exchange `team_id` is the Integration install scope (authoritative).
+  // Query teamId can disagree after UI drift; prefer token when present.
+  const teamId = token.team_id ?? teamIdFromQuery ?? null;
   let teamName: string | null = null;
   if (teamId) {
     try {
-      const teams = await listVercelTeams(token.access_token);
-      teamName = teams.find((t) => t.id === teamId)?.name ?? null;
+      teamName = (await fetchVercelTeam(token.access_token, teamId)).name;
     } catch {
       teamName = null;
     }

@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
-import { ChevronDown, LogOut, Shield } from "lucide-react";
+import { ChevronDown, LogOut, Palette, Shield } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   DropdownMenu,
@@ -110,6 +111,7 @@ export function UserMenuDropdown({
   collapsed?: boolean;
 }) {
   const router = useRouter();
+  const tSettings = useTranslations("settings");
   const displayName = getUserDisplayName(user);
   const subtitle = getUserAccountSubtitle(user);
   const { isAdmin } = useAuthProfile();
@@ -206,6 +208,13 @@ export function UserMenuDropdown({
               <DropdownMenuSeparator className="my-1 bg-white/10" />
             </>
           ) : null}
+          <DropdownMenuItem asChild className="cursor-pointer gap-2 rounded-xl px-3 py-2.5 text-[14px] leading-snug text-foreground/90">
+            <Link href="/settings/appearance">
+              <Palette className="h-4 w-4 shrink-0 opacity-80" />
+              {tSettings("navAppearance")}
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator className="my-1 bg-white/10" />
           <DropdownMenuItem
             onClick={() => void signOut()}
             className="cursor-pointer gap-2 rounded-xl px-3 py-2.5 text-[14px] leading-snug text-foreground/90 focus:bg-red-500/[0.12] focus:text-red-300 data-[highlighted]:bg-red-500/[0.12] data-[highlighted]:text-red-200"

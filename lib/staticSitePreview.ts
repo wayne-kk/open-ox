@@ -20,6 +20,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 import { ensureProjectNodeModules } from "@/lib/ensureProjectNodeModules";
+import { envForNextWebpackChild } from "@/lib/nextWebpackChildEnv";
 import { withSiteBuildLock } from "@/lib/siteBuildLock";
 import { getSiteRoot } from "@/lib/projectManager";
 import { ensureProjectSourcesOnDisk } from "@/lib/storage";
@@ -418,11 +419,10 @@ async function runStaticExportBuild(projectId: string, projectDir: string): Prom
         ["exec", "next", "build", "--webpack"],
         {
           cwd: projectDir,
-          env: {
-            ...process.env,
+          env: envForNextWebpackChild({
             NODE_ENV: "production",
             OPEN_OX_STATIC_BASE_PATH: basePath,
-          },
+          }),
           maxBuffer: 12 * 1024 * 1024,
         }
       );

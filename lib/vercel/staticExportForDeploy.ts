@@ -17,6 +17,7 @@ import {
   ensureGlobalErrorFromTemplateForProject,
 } from "@/lib/previewShared";
 import { prepareProjectDirForStaticExport } from "@/lib/staticSitePreview";
+import { envForNextWebpackChild } from "@/lib/nextWebpackChildEnv";
 
 const execFileAsync = promisify(execFile);
 
@@ -74,7 +75,7 @@ async function runRootStaticExportBuild(projectDir: string): Promise<void> {
     let stdout = "";
     let stderr = "";
     try {
-      const env: NodeJS.ProcessEnv = { ...process.env, NODE_ENV: "production" };
+      const env = envForNextWebpackChild({ NODE_ENV: "production" });
       // Must not inherit preview basePath — production URL is domain root.
       delete env.OPEN_OX_STATIC_BASE_PATH;
       const result = await execFileAsync("pnpm", ["exec", "next", "build", "--webpack"], {

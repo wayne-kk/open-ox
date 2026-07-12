@@ -1,6 +1,16 @@
 import { createHash } from "crypto";
 import fs from "fs/promises";
 import path from "path";
+import {
+  formatVercelCreateProjectError,
+  isVercelCreateProjectPermissionError,
+  teamIdCandidatesForCreateWithFallback,
+} from "./createProjectPermission";
+
+export {
+  coerceStoredProductionUrl,
+  productionUrlFromDeployment,
+} from "./productionUrl";
 
 function teamQuery(teamId: string | null | undefined): string {
   if (!teamId?.trim()) return "";
@@ -38,9 +48,11 @@ async function vercelFetch<T>(
 export type CreatedVercelProject = {
   id: string;
   name: string;
+  /** Team scope that succeeded (null = personal account). */
+  teamId: string | null;
 };
 
-export async function createVercelProject(params: {
+async function postCreateVercelProject(params: {
   accessToken: string;
   teamId: string | null;
   name: string;
@@ -58,7 +70,61 @@ export async function createVercelProject(params: {
       }),
     }
   );
-  return { id: json.id, name: json.name };
+  return { id: json.id, name: json.name, teamId: params.teamId };
+}
+
+/**
+ * Create a Vercel project under the Integration install scope.
+ * Retries alternate teamId when Vercel returns the classic create-permission 403
+ * (usually a drifted "default Team" vs installation team).
+ */
+export async function createVercelProject(params: {
+  accessToken: string;
+  teamId: string | null;
+  /** Team id from OAuth token / configuration — preferred over drifted stored default. */
+  installationTeamId?: string | null;
+  name: string;
+}): Promise<CreatedVercelProject> {
+  const candidates = teamIdCandidatesForCreateWithFallback(
+    params.teamId,
+    params.installationTeamId ?? null
+  );
+  let lastErr: unknown;
+  for (const teamId of candidates) {
+    try {
+      return await postCreateVercelProject({
+        accessToken: params.accessToken,
+        teamId,
+        name: params.name,
+      });
+    } catch (err) {
+      lastErr = err;
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!isVercelCreateProjectPermissionError(msg)) {
+        throw err instanceof Error ? err : new Error(msg);
+      }
+    }
+  }
+  const raw = lastErr instanceof Error ? lastErr.message : String(lastErr);
+  throw new Error(formatVercelCreateProjectError(raw));
+}
+
+/** Resolve the team the Integration was installed on (token scope). */
+export async function fetchVercelInstallationTeamId(params: {
+  accessToken: string;
+  configurationId: string | null;
+}): Promise<string | null> {
+  const id = params.configurationId?.trim();
+  if (!id) return null;
+  try {
+    const json = await vercelFetch<{ teamId?: string | null }>(
+      params.accessToken,
+      `https://api.vercel.com/v1/integrations/configuration/${encodeURIComponent(id)}`
+    );
+    return json.teamId?.trim() ? json.teamId.trim() : null;
+  } catch {
+    return null;
+  }
 }
 
 export type UploadedFileRef = {
@@ -126,8 +192,17 @@ export type VercelDeployment = {
   id: string;
   url?: string;
   readyState?: string;
-  aliasAssigned?: boolean | string | null;
+  aliasAssigned?: boolean | string | number | null;
+  alias?: string[];
 };
+
+function aliasAssignedReady(d: VercelDeployment): boolean {
+  const a = d.aliasAssigned;
+  if (a === true) return true;
+  if (typeof a === "number" && a > 0) return true;
+  if (typeof a === "string" && a.trim() && a !== "false") return true;
+  return Array.isArray(d.alias) && d.alias.length > 0;
+}
 
 export async function createVercelDeployment(params: {
   accessToken: string;
@@ -168,16 +243,39 @@ export async function getVercelDeployment(params: {
   );
 }
 
+export async function listVercelDeploymentAliases(params: {
+  accessToken: string;
+  teamId: string | null;
+  deploymentId: string;
+}): Promise<string[]> {
+  const q = teamQuery(params.teamId);
+  try {
+    const json = await vercelFetch<{ aliases?: Array<{ alias?: string }> }>(
+      params.accessToken,
+      `https://api.vercel.com/v2/deployments/${encodeURIComponent(params.deploymentId)}/aliases${q}`
+    );
+    return (json.aliases ?? [])
+      .map((a) => a.alias?.trim())
+      .filter((a): a is string => Boolean(a));
+  } catch {
+    return [];
+  }
+}
+
 export async function waitForVercelDeploymentReady(params: {
   accessToken: string;
   teamId: string | null;
   deploymentId: string;
   timeoutMs?: number;
   pollMs?: number;
+  /** Extra wait after READY for production aliases (default 20s). */
+  aliasGraceMs?: number;
 }): Promise<VercelDeployment> {
   const timeoutMs = params.timeoutMs ?? 180_000;
   const pollMs = params.pollMs ?? 2_000;
+  const aliasGraceMs = params.aliasGraceMs ?? 20_000;
   const start = Date.now();
+  let readyAt: number | null = null;
   for (;;) {
     const d = await getVercelDeployment({
       accessToken: params.accessToken,
@@ -185,9 +283,13 @@ export async function waitForVercelDeploymentReady(params: {
       deploymentId: params.deploymentId,
     });
     const state = (d.readyState ?? "").toUpperCase();
-    if (state === "READY") return d;
     if (state === "ERROR" || state === "CANCELED") {
       throw new Error(`Vercel deployment ${state}`);
+    }
+    if (state === "READY") {
+      if (aliasAssignedReady(d)) return d;
+      if (readyAt == null) readyAt = Date.now();
+      if (Date.now() - readyAt >= aliasGraceMs) return d;
     }
     if (Date.now() - start > timeoutMs) {
       throw new Error(`Timed out waiting for Vercel deployment (last state=${state || "unknown"})`);
@@ -196,8 +298,3 @@ export async function waitForVercelDeploymentReady(params: {
   }
 }
 
-export function productionUrlFromDeployment(d: VercelDeployment): string {
-  if (d.url?.startsWith("http")) return d.url;
-  if (d.url) return `https://${d.url}`;
-  throw new Error("Deployment ready but missing url");
-}

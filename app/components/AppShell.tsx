@@ -16,7 +16,6 @@ import {
   BookOpen,
   CreditCard,
   Plug,
-  Palette,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -146,8 +145,6 @@ function SidebarBody({
   const folderParam = searchParams.get("folder");
   const onDashboard = pathname === "/dashboard";
   const onCommunity = pathname === "/community" || pathname.startsWith("/community/");
-  const onAppearance =
-    pathname === "/settings/appearance" || pathname.startsWith("/settings/appearance/");
   const onIntegrations =
     pathname === "/settings/integrations" || pathname.startsWith("/settings/integrations");
   const onDashboardRoot = onDashboard && isRootFolderParam(folderParam);
@@ -307,17 +304,6 @@ function SidebarBody({
           collapsed={collapsed}
           onClick={onNavigate}
         />
-
-        <div className={cn("my-2 border-t border-border/60", collapsed && "mx-1")} />
-
-        <NavItem
-          href="/settings/appearance"
-          label={tSettings("navAppearance")}
-          icon={Palette}
-          active={onAppearance}
-          collapsed={collapsed}
-          onClick={onNavigate}
-        />
         <NavItem
           href="/settings/integrations"
           label={tSettings("navIntegrations")}
@@ -326,6 +312,9 @@ function SidebarBody({
           collapsed={collapsed}
           onClick={onNavigate}
         />
+
+        <div className={cn("my-2 border-t border-border/60", collapsed && "mx-1")} />
+
         <NavItem
           href="/pricing"
           label={t("pricing")}

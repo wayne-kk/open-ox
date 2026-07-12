@@ -18,6 +18,13 @@ function trackPreviewOpen(projectId: string) {
   trackEvent("preview_open", { projectId, path: "/studio" });
 }
 
+function projectNameFromBuildResult(result: {
+  blueprint?: { brief?: { projectTitle?: string } } | null;
+}): string | null {
+  const title = result.blueprint?.brief?.projectTitle;
+  return typeof title === "string" && title.trim() ? title.trim() : null;
+}
+
 export type RightPanel = "topology" | "preview" | "code";
 
 export interface ModifyStep {
@@ -110,6 +117,8 @@ export interface BuildStudioState {
   projectId: string | null;
   setProjectId: (id: string | null) => void;
   projectLoading: boolean;
+  /** DB display name (synced from blueprint title after generate). */
+  projectName: string | null;
   /** Remix lineage snapshots (display only). */
   remixedFromTitle: string | null;
   remixedFromOwnerUsername: string | null;
@@ -356,6 +365,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
 
   const [projectId, setProjectId] = useState<string | null>(initialProjectId ?? null);
   const [projectLoading, setProjectLoading] = useState<boolean>(!!initialProjectId);
+  const [projectName, setProjectName] = useState<string | null>(null);
   const [remixedFromTitle, setRemixedFromTitle] = useState<string | null>(null);
   const [remixedFromOwnerUsername, setRemixedFromOwnerUsername] = useState<string | null>(null);
   const [rightPanel, setRightPanel] = useState<RightPanel>("topology");
@@ -502,7 +512,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
   }, []);
 
   type ProjectData = {
-    id: string; status: string; userPrompt: string; modelId?: string;
+    id: string; status: string; name?: string; userPrompt: string; modelId?: string;
     referenceImageDataUrl?: string | null;
     buildSteps?: unknown[]; generatedFiles?: string[]; blueprint?: unknown;
     verificationStatus?: string; logDirectory?: string; error?: string;
@@ -568,6 +578,9 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
 
   const applyProjectData = useCallback((project: ProjectData) => {
     setLastRunInput(project.userPrompt ?? null);
+    setProjectName(
+      typeof project.name === "string" && project.name.trim() ? project.name.trim() : null
+    );
     setRemixedFromTitle(
       typeof project.remixedFromTitle === "string" && project.remixedFromTitle.trim()
         ? project.remixedFromTitle.trim()
@@ -683,6 +696,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     if (!projectId) {
       setResponse(null);
       setLastRunInput(null);
+      setProjectName(null);
       setIntentAgent(null);
       setConversationMessages([]);
       setPreviewUrl(null);
@@ -714,6 +728,9 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         if (sseActiveRef.current) {
           // Still apply non-step metadata (prompt, model, history)
           setLastRunInput(project.userPrompt ?? null);
+          setProjectName(
+            typeof project.name === "string" && project.name.trim() ? project.name.trim() : null
+          );
           setRemixedFromTitle(
             typeof project.remixedFromTitle === "string" && project.remixedFromTitle.trim()
               ? project.remixedFromTitle.trim()
@@ -974,6 +991,8 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
             if (result.intentAgent && !result.buildSteps?.length) {
               setInput("");
             }
+            const titled = projectNameFromBuildResult(result);
+            if (titled) setProjectName(titled);
             const nextProjectId = result.projectId ?? projectId ?? null;
             if (nextProjectId) {
               projectIdFromGenerationRef.current = nextProjectId;
@@ -1062,6 +1081,8 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
           onDone: (result) => {
             finishBuildLiveState(result.buildTotalDuration);
             setResponse((prev) => ({ ...result, buildSteps: result.buildSteps ?? prev?.buildSteps }));
+            const titled = projectNameFromBuildResult(result);
+            if (titled) setProjectName(titled);
             const nextProjectId = result.projectId ?? retryId;
             if (nextProjectId) {
               projectIdFromGenerationRef.current = nextProjectId;
@@ -1169,6 +1190,8 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
           onDone: (result) => {
             finishBuildLiveState(result.buildTotalDuration);
             setResponse((prev) => ({ ...result, buildSteps: result.buildSteps ?? prev?.buildSteps }));
+            const titled = projectNameFromBuildResult(result);
+            if (titled) setProjectName(titled);
             const nextProjectId = result.projectId ?? retryId;
             if (nextProjectId) {
               projectIdFromGenerationRef.current = nextProjectId;
@@ -1639,6 +1662,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     intentImage, setIntentImage,
     selectedModel, setSelectedModel, availableModels,
     projectId, setProjectId, projectLoading,
+    projectName,
     remixedFromTitle, remixedFromOwnerUsername,
     rightPanel, setRightPanel,
     previewUrl, previewState, previewError, previewVersion, previewBackend, directEditCapable,

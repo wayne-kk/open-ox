@@ -7,8 +7,10 @@ import {
   Trash2, Plus, FolderInput, Folder,
   AlertCircle, Loader2, Sparkles,
   AlertTriangle, MoreHorizontal, Globe2, FolderCog, Check, Pencil,
-  Repeat2, Clock, ArrowUpRight,
+  Repeat2, Clock, ArrowUpRight, Rocket,
 } from "lucide-react";
+import { toast } from "sonner";
+import { openOxVercelReconnectHref } from "@/lib/vercel/dashboardUrl";
 import { HamsterLoader } from "@/components/ui/hamster-loader";
 import { captureAppReturnTo } from "@/lib/navigation/appBack";
 import { useAuthUser, useAuthProfile } from "@/app/components/AuthHeaderActions";
@@ -172,6 +174,8 @@ function ProjectCard({
 
   const [publishBusy, setPublishBusy] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
+  const [deployConfirmOpen, setDeployConfirmOpen] = useState(false);
+  const [deployBusy, setDeployBusy] = useState(false);
 
   const openStudioOrPreview = (e: React.MouseEvent) => {
     if (!isClickable) return;
@@ -218,6 +222,51 @@ function ProjectCard({
     onPublishChange(project.id, result.state);
   };
 
+  const runDeploy = async () => {
+    if (deployBusy || !isClickable) return;
+    setDeployBusy(true);
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(project.id)}/deploy`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        code?: string;
+      };
+      if (!res.ok) {
+        if (body.code === "VERCEL_NOT_CONNECTED") {
+          setDeployConfirmOpen(false);
+          toast.message("需要先连接 Vercel", {
+            description: "授权后即可一键部署到你的账号。",
+          });
+          window.location.href = openOxVercelReconnectHref();
+          return;
+        }
+        toast.error("部署失败", {
+          description: body.error ?? `HTTP ${res.status}`,
+        });
+        return;
+      }
+      setDeployConfirmOpen(false);
+      toast.message("部署已开始", {
+        description: "约 1–3 分钟。可在「集成 & 部署」查看进度与线上 URL。",
+        action: {
+          label: "查看",
+          onClick: () => {
+            window.location.href = "/settings/integrations";
+          },
+        },
+      });
+    } catch (e) {
+      toast.error("部署失败", {
+        description: e instanceof Error ? e.message : "网络错误",
+      });
+    } finally {
+      setDeployBusy(false);
+    }
+  };
+
   const statusBadge = publishPreview
     ? {
       icon: Globe2,
@@ -251,13 +300,12 @@ function ProjectCard({
 
   return (
     <article
+      data-hoverable={isClickable ? "true" : "false"}
       className={cn(
-        "group/card relative flex h-full flex-col overflow-hidden rounded-xl",
+        "group/card ox-project-card relative flex h-full flex-col overflow-hidden rounded-xl",
         "border border-border bg-card",
-        "transition-[border-color,transform,box-shadow] duration-200 ease-out",
-        isClickable && "hover:-translate-y-0.5 hover:border-border hover:shadow-[var(--box-shadow-neon-lg)]",
-        isFailed && "border-red-400/20 hover:border-red-400/35",
-        isGenerating && "border-primary/20 hover:border-primary/35",
+        isFailed && "border-red-400/20",
+        isGenerating && "border-primary/20",
         !isClickable && "opacity-80"
       )}
     >
@@ -293,8 +341,8 @@ function ProjectCard({
               src={coverSrc}
               alt=""
               className={cn(
-                // scale-[1.08] crops letterboxing baked into older polished covers (CONTENT_SCALE 0.928)
-                "absolute inset-0 z-0 h-full w-full object-cover object-center scale-[1] transition-[opacity,transform] duration-200 ease-out",
+                "ox-card-cover absolute inset-0 z-0 h-full w-full object-cover object-center",
+                isClickable && "ox-card-cover-zoom",
                 coverLoaded ? "opacity-100" : "opacity-0"
               )}
               loading="lazy"
@@ -349,7 +397,7 @@ function ProjectCard({
 
         {isClickable ? (
           <span
-            className="pointer-events-none absolute bottom-2.5 right-2.5 z-20 flex h-7 w-7 items-center justify-center rounded-lg border border-white/15 bg-black/55 text-white/90 opacity-0 backdrop-blur-md transition-opacity duration-200 group-hover/card:opacity-100"
+            className="ox-card-affordance pointer-events-none absolute bottom-2.5 right-2.5 z-20 flex h-7 w-7 items-center justify-center rounded-lg border border-white/15 bg-black/55 text-white/90 backdrop-blur-md"
             aria-hidden
           >
             <ArrowUpRight className="h-3.5 w-3.5" />
@@ -365,9 +413,9 @@ function ProjectCard({
             onClick={openStudioOrPreview}
             onAuxClick={openPreviewTab}
             className={cn(
-              "min-w-0 flex-1 text-left text-[13px] font-semibold leading-snug text-foreground/95 transition-colors line-clamp-2",
+              "ox-card-title min-w-0 flex-1 text-left text-[13px] font-semibold leading-snug text-foreground/95 line-clamp-2",
               isClickable
-                ? "cursor-pointer hover:text-primary focus-visible:outline-none focus-visible:text-primary"
+                ? "ox-card-title-accent cursor-pointer focus-visible:outline-none focus-visible:text-primary"
                 : "cursor-default"
             )}
           >
@@ -421,6 +469,19 @@ function ProjectCard({
                     需先有静态预览才能发布
                   </p>
                 ) : null}
+                <DropdownMenuSeparator className="mx-0 my-1 bg-muted" />
+                <DropdownMenuItem
+                  disabled={!isClickable || deployBusy}
+                  className={menuItemClass}
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    if (!isClickable || deployBusy) return;
+                    setDeployConfirmOpen(true);
+                  }}
+                >
+                  <Rocket className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  部署到 Vercel
+                </DropdownMenuItem>
                 <DropdownMenuSeparator className="mx-0 my-1 bg-muted" />
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger
@@ -511,6 +572,18 @@ function ProjectCard({
           ) : null}
         </div>
       </div>
+
+      {deployConfirmOpen ? (
+        <ConfirmDeployModal
+          projectName={project.name || "未命名项目"}
+          busy={deployBusy}
+          onConfirm={() => void runDeploy()}
+          onCancel={() => {
+            if (deployBusy) return;
+            setDeployConfirmOpen(false);
+          }}
+        />
+      ) : null}
     </article>
   );
 }
@@ -736,6 +809,58 @@ function ManageFoldersModal({
               ))
             )}
           </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ConfirmDeployModal({
+  projectName,
+  busy,
+  onConfirm,
+  onCancel,
+}: {
+  projectName: string;
+  busy: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-2xl">
+        <div className="mb-4 flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-primary/25 bg-primary/10">
+            <Rocket className="h-5 w-5 text-primary" />
+          </div>
+          <h3 className="text-[15px] font-semibold text-foreground">部署到 Vercel？</h3>
+        </div>
+        <p className="mb-1 text-[13px] leading-relaxed text-muted-foreground">
+          将把{" "}
+          <span className="font-medium text-foreground/90">&ldquo;{projectName}&rdquo;</span>{" "}
+          推送到你自己的 Vercel 账号。
+        </p>
+        <p className="mb-6 text-[12px] text-muted-foreground/75">
+          约 1–3 分钟。可在「集成 & 部署」查看进度与线上 URL；未连接时会先引导授权。
+        </p>
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onCancel}
+            className="rounded-lg border border-border px-3.5 py-2 text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onConfirm}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-primary/35 bg-primary/15 px-3.5 py-2 text-[13px] font-medium text-primary transition-colors hover:bg-primary/22 disabled:opacity-50"
+          >
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Rocket className="h-3.5 w-3.5" />}
+            {busy ? "开始中…" : "确认部署"}
+          </button>
         </div>
       </div>
     </div>

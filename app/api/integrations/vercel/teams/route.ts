@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
 import { isVercelDeployConfigured } from "@/lib/vercel/env";
 import { getVercelAccessToken } from "@/lib/vercel/connections";
-import { listVercelTeams } from "@/lib/vercel/oauth";
+import { listAccessibleVercelTeams } from "@/lib/vercel/oauth";
 
-/** GET — list teams available to the connected Vercel token. */
+/** GET — teams visible to the connected Integration token (usually one install team). */
 export async function GET() {
   const session = await getSessionUser();
   if (!session) {
@@ -20,13 +20,18 @@ export async function GET() {
   }
 
   try {
-    const teams = await listVercelTeams(creds.accessToken);
+    const teams = await listAccessibleVercelTeams({
+      accessToken: creds.accessToken,
+      teamId: creds.teamId,
+      teamName: creds.teamName,
+    });
     return NextResponse.json({
       teams,
       defaultTeamId: creds.teamId,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    console.error("[vercel/teams] list failed:", msg);
     return NextResponse.json({ error: msg, code: "TEAMS_LIST_FAILED" }, { status: 502 });
   }
 }

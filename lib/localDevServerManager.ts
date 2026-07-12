@@ -21,6 +21,7 @@ import { ensureProjectSourcesOnDisk } from "./storage";
 import { syncLocalProjectFingerprint } from "./previewFingerprintDb";
 import { computeProjectFingerprint, getTemplateDepMap, readProjectPackageJson, SITES_TEMPLATE_DIR, syncProjectRuntimeVersionsFromTemplate } from "./previewShared";
 import { ensureDesignModeProjectSetup } from "./studio/designMode/ensureProjectBridge";
+import { envForNextWebpackChild } from "./nextWebpackChildEnv";
 
 /** Sync iframe base Next/React versions + Design Mode bridge/anchors before preview. */
 async function preparePreviewProjectForStudio(projectDir: string): Promise<boolean> {
@@ -295,12 +296,9 @@ function previewBindHost(): string {
  *   to start when both that env and `--webpack` are present ("Multiple bundler flags").
  */
 function envForLocalPreviewDevServer(): NodeJS.ProcessEnv {
-  const env = { ...process.env, NODE_ENV: "development" } as Record<string, string | undefined>;
+  const env = envForNextWebpackChild({ NODE_ENV: "development" });
   delete env.OPEN_OX_STATIC_BASE_PATH;
-  delete env.TURBOPACK;
-  delete env.TURBO;
-  delete env.NEXT_TURBOPACK;
-  return env as NodeJS.ProcessEnv;
+  return env;
 }
 
 /**
