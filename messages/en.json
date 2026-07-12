@@ -1,0 +1,110 @@
+{
+  "nav": {
+    "pricing": "Pricing",
+    "community": "Community",
+    "docs": "Docs",
+    "changelog": "Changelog",
+    "enterWorkspace": "Open workspace",
+    "signIn": "Sign in",
+    "signUp": "Sign up",
+    "toggleMenu": "Toggle menu",
+    "theme": "Theme",
+    "language": "Language"
+  },
+  "footer": {
+    "tagline": "AI-powered website builder. Describe your idea and get a deployable site in minutes.",
+    "product": "Product",
+    "resources": "Resources",
+    "workspace": "Workspace",
+    "community": "Community",
+    "docs": "Docs",
+    "changelog": "Changelog",
+    "architecture": "Architecture",
+    "api": "API",
+    "github": "GitHub",
+    "feedback": "Feedback",
+    "rights": "All rights reserved."
+  },
+  "landing": {
+    "badge": "Think it. Build it. Run it.",
+    "howItWorks": "How it works",
+    "storyTitle": "From description to a shippable site in three steps",
+    "storySubtitle": "Harness owns generation and verification; you own direction and iteration.",
+    "step1Title": "Describe the idea",
+    "step1Body": "Explain the site goals and style in natural language. It becomes structured requirements and design intent — not small talk.",
+    "step2Title": "Pipeline builds a runnable site",
+    "step2Body": "Fixed engineering nodes: planning, design system, page implementation, build verification, and auto-repair. Real Next.js code, not screenshot mocks.",
+    "step3Title": "Iterate and ship in Studio",
+    "step3Body": "Chat to modify, preview, and refine with Design Mode until it is ready to deliver.",
+    "pipelineToggle": "View engineering pipeline",
+    "pipelineHint": "8 core nodes — each with clear inputs and outputs; failed builds can auto-repair.",
+    "communityTitle": "Discover community work",
+    "communitySubtitle": "See what others are shipping with Open-OX.",
+    "communityEmpty": "No community projects published yet",
+    "communityFailed": "Could not load community projects",
+    "communityCta": "Browse community →",
+    "communityViewAll": "View all →",
+    "anonymousAuthor": "Anonymous",
+    "untitledProject": "Untitled project"
+  },
+  "auth": {
+    "loading": "Loading…"
+  },
+  "seo": {
+    "home": {
+      "title": "Open-OX — AI website builder",
+      "description": "Describe your idea in natural language and get a runnable Next.js site in minutes. Generate, iterate in Studio, and ship."
+    },
+    "pricing": {
+      "title": "Pricing · Open-OX",
+      "description": "Open-OX credits, Pro plans, and top-up packs. Pay for usage. Upgrade anytime."
+    },
+    "changelog": {
+      "title": "Changelog · Open-OX",
+      "description": "Product updates for Open-OX: generation pipeline, Studio, billing, and platform improvements."
+    }
+  },
+  "pricing": {
+    "title": "Pricing",
+    "subtitle": "Pay for usage. Upgrade anytime."
+  },
+  "workspace": {
+    "title": "Workspace",
+    "projects": "Projects",
+    "myProjects": "My projects",
+    "startBuild": "Start building",
+    "homeAria": "OPEN-OX home",
+    "foldersExpand": "Expand folders",
+    "foldersCollapse": "Collapse folders",
+    "noFolders": "No folders yet",
+    "newProject": "New project",
+    "empty": "No projects yet",
+    "community": "Community",
+    "pricing": "Pricing",
+    "docs": "Docs",
+    "changelog": "Changelog"
+  },
+  "settings": {
+    "appearance": "Appearance",
+    "appearanceDescription": "Choose your interface theme and display language.",
+    "theme": "Theme",
+    "themeSystem": "System",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "language": "Language",
+    "languageZh": "中文",
+    "languageEn": "English",
+    "integrations": "Integrations",
+    "navAppearance": "Appearance",
+    "navIntegrations": "Integrations"
+  },
+  "theme": {
+    "system": "System",
+    "light": "Light",
+    "dark": "Dark"
+  },
+  "locale": {
+    "zh-CN": "中文",
+    "en": "English"
+  }
+}

@@ -3,7 +3,7 @@
  */
 
 import type { BuildStep } from "@/ai";
-import type { IntentAgentTurn } from "@/app/studio/types/build-studio";
+import type { IntentAgentTurn } from "@/app/[locale]/studio/types/build-studio";
 import type { GraphNode, Stage, StageId, TopologyGraph } from "./types";
 
 const STAGE_MAP: Record<string, StageId> = {

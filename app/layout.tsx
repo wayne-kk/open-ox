@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import { JetBrains_Mono, Plus_Jakarta_Sans } from "next/font/google";
-import { ConditionalFooter } from "./components/ConditionalFooter";
-import { ConditionalNav } from "./components/ConditionalNav";
-import { ConsoleEasterEgg } from "./components/ConsoleEasterEgg";
+import { ConsoleEasterEgg } from "@/app/components/ConsoleEasterEgg";
+import { DynamicFavicon } from "@/app/components/DynamicFavicon";
+import { FaviconProvider } from "@/app/contexts/FaviconContext";
 import { AnalyticsProvider } from "@/components/analytics/AnalyticsProvider";
-import { FaviconProvider } from "./contexts/FaviconContext";
-import { DynamicFavicon } from "./components/DynamicFavicon";
+import { ThemeProvider } from "@/components/theme/ThemeProvider";
+import { AuthUserProvider } from "@/app/contexts/AuthUserContext";
+import { getSiteOrigin } from "@/lib/seo/siteUrl";
 import "./globals.css";
 
 const plusJakarta = Plus_Jakarta_Sans({
@@ -21,29 +23,43 @@ const jetBrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Open-OX Studio",
-  description: "AI-powered website builder — describe your idea, get a live site in seconds.",
+  metadataBase: new URL(getSiteOrigin()),
+  title: {
+    default: "Open-OX",
+    template: "%s",
+  },
+  description:
+    "AI-powered website builder — describe your idea, get a live site in minutes.",
+  openGraph: {
+    type: "website",
+    siteName: "Open-OX",
+    images: [{ url: "/og/default.png", width: 1200, height: 630, alt: "Open-OX" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    images: ["/og/default.png"],
+  },
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+/**
+ * Stable shell: theme + chrome providers live here so locale navigations
+ * (`/settings` ↔ `/en/settings`) do not remount next-themes and flash.
+ */
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="zh-CN" className="dark">
+    <html lang="zh-CN" suppressHydrationWarning>
       <body
         className={`${plusJakarta.variable} ${jetBrainsMono.variable} min-h-screen bg-background text-foreground antialiased`}
       >
-        <FaviconProvider>
-          <DynamicFavicon />
-          <ConsoleEasterEgg />
-          <AnalyticsProvider>
-            <ConditionalNav />
-            {children}
-            <ConditionalFooter />
-          </AnalyticsProvider>
-        </FaviconProvider>
+        <ThemeProvider>
+          <AuthUserProvider>
+            <FaviconProvider>
+              <DynamicFavicon />
+              <ConsoleEasterEgg />
+              <AnalyticsProvider>{children}</AnalyticsProvider>
+            </FaviconProvider>
+          </AuthUserProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

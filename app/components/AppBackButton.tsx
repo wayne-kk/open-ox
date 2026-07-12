@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/i18n/navigation";
 import { ArrowLeft } from "lucide-react";
 import { navigateAppBack } from "@/lib/navigation/appBack";
 import { cn } from "@/lib/utils";

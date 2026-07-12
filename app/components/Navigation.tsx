@@ -1,25 +1,28 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
 import { Menu, X } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { useEffect, useState } from "react";
 import { useAuthUser } from "./AuthHeaderActions";
 import { BrandMark } from "@/app/components/BrandMark";
-
-const NAV_LINKS = [
-  { href: "/pricing", label: "定价" },
-  { href: "/community", label: "社区" },
-  { href: "/docs", label: "文档" },
-  { href: "/changelog", label: "更新日志" },
-];
+import { LocaleSwitcher } from "@/components/i18n/LocaleSwitcher";
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
+import { Link, usePathname } from "@/i18n/navigation";
 
 export function Navigation() {
   const pathname = usePathname();
+  const t = useTranslations("nav");
   const { user, ready } = useAuthUser();
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
   const isMarketingHome = pathname === "/" || pathname === "/home";
+
+  const navLinks = [
+    { href: "/pricing", label: t("pricing") },
+    { href: "/community", label: t("community") },
+    { href: "/docs", label: t("docs") },
+    { href: "/changelog", label: t("changelog") },
+  ] as const;
 
   useEffect(() => {
     const handler = () => setScrolled(window.scrollY > 24);
@@ -34,7 +37,7 @@ export function Navigation() {
       <header
         className={`${isMarketingHome ? "fixed left-0 right-0 top-0" : "sticky top-0"} z-50 transition-[background-color,backdrop-filter,border-color] duration-300 ${
           scrolled || !isMarketingHome
-            ? "border-b border-white/8 bg-background/85 backdrop-blur-2xl"
+            ? "border-b border-border/80 bg-background/85 backdrop-blur-2xl"
             : "border-b border-transparent bg-transparent"
         }`}
       >
@@ -47,7 +50,7 @@ export function Navigation() {
           </Link>
 
           <nav className="hidden items-center gap-0.5 md:flex">
-            {NAV_LINKS.map(({ href, label }) => {
+            {navLinks.map(({ href, label }) => {
               const active = pathname === href || pathname.startsWith(`${href}/`);
               return (
                 <Link
@@ -65,15 +68,17 @@ export function Navigation() {
             })}
           </nav>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <ThemeToggle compact className="hidden sm:inline-flex" />
+            <LocaleSwitcher compact className="hidden sm:inline-flex" />
             {!ready ? (
-              <div className="hidden h-8 w-24 animate-pulse rounded-full bg-white/5 md:block" />
+              <div className="hidden h-8 w-24 animate-pulse rounded-full bg-muted md:block" />
             ) : user ? (
               <Link
                 href="/dashboard"
                 className="defi-button hidden h-8 px-4 text-[12px] md:inline-flex"
               >
-                进入工作台
+                {t("enterWorkspace")}
               </Link>
             ) : (
               <div className="hidden items-center gap-2 md:flex">
@@ -81,10 +86,10 @@ export function Navigation() {
                   href="/auth"
                   className="px-3 py-1.5 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground"
                 >
-                  登录
+                  {t("signIn")}
                 </Link>
                 <Link href="/auth?mode=register" className="defi-button h-8 px-4 text-[12px]">
-                  注册
+                  {t("signUp")}
                 </Link>
               </div>
             )}
@@ -92,7 +97,7 @@ export function Navigation() {
               type="button"
               onClick={() => setOpen((v) => !v)}
               className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:text-foreground md:hidden"
-              aria-label="Toggle menu"
+              aria-label={t("toggleMenu")}
             >
               {open ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
             </button>
@@ -104,10 +109,10 @@ export function Navigation() {
         <div className="fixed inset-0 z-40 md:hidden" onClick={() => setOpen(false)}>
           <div className="absolute inset-0 bg-background/95 backdrop-blur-xl" />
           <nav
-            className="absolute left-0 right-0 top-[56px] space-y-1 border-b border-white/8 bg-background px-6 py-5"
+            className="absolute left-0 right-0 top-[56px] space-y-1 border-b border-border bg-background px-6 py-5"
             onClick={(e) => e.stopPropagation()}
           >
-            {NAV_LINKS.map(({ href, label }) => {
+            {navLinks.map(({ href, label }) => {
               const active = pathname === href || pathname.startsWith(`${href}/`);
               return (
                 <Link
@@ -115,22 +120,26 @@ export function Navigation() {
                   href={href}
                   onClick={() => setOpen(false)}
                   className={`block rounded-xl px-4 py-3 text-[15px] font-medium transition-colors ${
-                    active ? "bg-white/6 text-foreground" : "text-muted-foreground"
+                    active ? "bg-muted text-foreground" : "text-muted-foreground"
                   }`}
                 >
                   {label}
                 </Link>
               );
             })}
+            <div className="flex items-center gap-2 px-2 pt-2">
+              <ThemeToggle compact />
+              <LocaleSwitcher compact />
+            </div>
             {!ready ? (
-              <div className="mt-2 h-12 animate-pulse rounded-xl bg-white/5" />
+              <div className="mt-2 h-12 animate-pulse rounded-xl bg-muted" />
             ) : user ? (
               <Link
                 href="/dashboard"
                 onClick={() => setOpen(false)}
                 className="defi-button mt-4 w-full py-2.5 text-[13px]"
               >
-                进入工作台
+                {t("enterWorkspace")}
               </Link>
             ) : (
               <div className="mt-4 space-y-2">
@@ -139,14 +148,14 @@ export function Navigation() {
                   onClick={() => setOpen(false)}
                   className="defi-button-outline w-full py-2.5 text-[13px]"
                 >
-                  登录
+                  {t("signIn")}
                 </Link>
                 <Link
                   href="/auth?mode=register"
                   onClick={() => setOpen(false)}
                   className="defi-button w-full py-2.5 text-[13px]"
                 >
-                  注册
+                  {t("signUp")}
                 </Link>
               </div>
             )}

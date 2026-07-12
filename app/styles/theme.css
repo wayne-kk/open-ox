@@ -47,8 +47,60 @@
   --radius-4xl: calc(var(--radius) * 3.5);
 }
 
+/* Light (default) — shadcn-style semantic tokens */
 :root {
-  /* Brand purple primary — solid CTA + accents share one token */
+  --background: #ffffff;
+  --foreground: #09090b;
+  --card: #ffffff;
+  --card-foreground: #09090b;
+  --popover: #ffffff;
+  --popover-foreground: #09090b;
+  --primary: #7c6bc4;
+  --primary-foreground: #fafafa;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #18181b;
+  --muted: #f4f4f5;
+  --muted-foreground: #52525b;
+  --accent: #7c6bc4;
+  --accent-foreground: #fafafa;
+  --accent-secondary: #52525b;
+  --accent-tertiary: #52525b;
+  --destructive: #dc2626;
+  --border: #e4e4e7;
+  --input: #ffffff;
+  --ring: #7c6bc4;
+  --chart-1: #7c6bc4;
+  --chart-2: #52525b;
+  --chart-3: #71717a;
+  --chart-4: #a1a1aa;
+  --chart-5: #d4d4d8;
+  --radius: 0.75rem;
+  --sidebar: #fafafa;
+  --sidebar-foreground: #09090b;
+  --sidebar-primary: #7c6bc4;
+  --sidebar-primary-foreground: #fafafa;
+  --sidebar-accent: #f4f4f5;
+  --sidebar-accent-foreground: #18181b;
+  --sidebar-border: #e4e4e7;
+  --sidebar-ring: #7c6bc4;
+
+  --brand-signal: var(--primary);
+  --primary-hover: #8f7fd4;
+  --primary-active: #6a5aad;
+
+  --box-shadow-neon: 0 0 0 1px rgb(0 0 0 / 6%), 0 8px 24px -12px rgb(0 0 0 / 18%);
+  --box-shadow-neon-sm: 0 0 0 1px rgb(0 0 0 / 5%), 0 4px 12px -8px rgb(0 0 0 / 14%);
+  --box-shadow-neon-lg: 0 0 0 1px rgb(0 0 0 / 8%), 0 16px 40px -16px rgb(0 0 0 / 22%);
+  --box-shadow-neon-secondary: 0 0 0 1px rgb(0 0 0 / 5%);
+  --box-shadow-neon-tertiary: 0 0 0 1px rgb(0 0 0 / 5%);
+  --shadow-orange: var(--box-shadow-neon);
+  --shadow-orange-lg: var(--box-shadow-neon-lg);
+  --shadow-orange-soft: 0 24px 64px -32px rgb(0 0 0 / 20%);
+  --shadow-gold: var(--box-shadow-neon-tertiary);
+}
+
+/* Dark — previous :root values */
+.dark {
   --background: #09090b;
   --foreground: #fafafa;
   --card: #111113;
@@ -74,7 +126,6 @@
   --chart-3: #a1a1aa;
   --chart-4: #52525b;
   --chart-5: #3f3f46;
-  --radius: 0.75rem;
   --sidebar: #0c0c0e;
   --sidebar-foreground: #fafafa;
   --sidebar-primary: #b0a0ea;

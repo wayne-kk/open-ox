@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { useRouter } from "@/i18n/navigation";
 import { ArrowRight, ImagePlus } from "lucide-react";
 import { type InjectedChip } from "@/app/hooks/usePromptTriggers";
 import { PromptChips } from "@/app/components/ui/PromptChips";
@@ -255,8 +256,8 @@ export function HeroPrompt() {
         className={cn(
           "relative flex flex-col gap-2.5 rounded-2xl border bg-card/80 px-5 pb-3.5 pt-4 backdrop-blur-sm transition-all duration-200",
           focused
-            ? "border-white/20 shadow-[var(--box-shadow-neon)]"
-            : "border-white/8 hover:border-white/14"
+            ? "border-border shadow-[var(--box-shadow-neon)]"
+            : "border-border/80 hover:border-border"
         )}
       >
         <PromptChips chips={chips} onRemove={removeChip} />
@@ -299,7 +300,7 @@ export function HeroPrompt() {
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-white/10 px-3 text-[12px] font-medium text-muted-foreground transition-colors hover:border-white/18 hover:bg-white/5 hover:text-foreground"
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-medium text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-foreground"
             title="添加截图参考"
           >
             <ImagePlus className="h-3.5 w-3.5" strokeWidth={1.75} />

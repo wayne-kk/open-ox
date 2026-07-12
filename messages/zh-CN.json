@@ -1,0 +1,110 @@
+{
+  "nav": {
+    "pricing": "定价",
+    "community": "社区",
+    "docs": "文档",
+    "changelog": "更新日志",
+    "enterWorkspace": "进入工作台",
+    "signIn": "登录",
+    "signUp": "注册",
+    "toggleMenu": "打开菜单",
+    "theme": "主题",
+    "language": "语言"
+  },
+  "footer": {
+    "tagline": "AI 驱动的网站构建引擎。描述你的想法，2分钟内获得一个可部署的站点。",
+    "product": "产品",
+    "resources": "资源",
+    "workspace": "工作台",
+    "community": "社区",
+    "docs": "文档",
+    "changelog": "更新日志",
+    "architecture": "架构",
+    "api": "API",
+    "github": "GitHub",
+    "feedback": "反馈",
+    "rights": "保留所有权利。"
+  },
+  "landing": {
+    "badge": "想法即刻实现，构建即刻运行",
+    "howItWorks": "How it works",
+    "storyTitle": "从描述到可交付站点，三步",
+    "storySubtitle": "Harness 管住生成与验证；你负责方向与迭代。",
+    "step1Title": "描述想法",
+    "step1Body": "用自然语言说明站点目标与风格。不是闲聊 — 描述会进入结构化需求与设计意图。",
+    "step2Title": "流水线生成可运行站点",
+    "step2Body": "固定工程节点：规划、设计系统、页面实现、构建验证与自动修复。输出真实 Next.js 代码，不是截图原型。",
+    "step3Title": "Studio 迭代上线",
+    "step3Body": "在 Studio 里对话修改、预览与 Design Mode 精修，持续迭代直到可交付。",
+    "pipelineToggle": "查看工程流水线",
+    "pipelineHint": "8 个核心节点 — 每步有明确输入输出，构建失败可自动修复。",
+    "communityTitle": "发现社区作品",
+    "communitySubtitle": "看看别人用 Open-OX 做出了什么。",
+    "communityEmpty": "还没有发布的社区作品",
+    "communityFailed": "暂时无法加载社区作品",
+    "communityCta": "前往社区 →",
+    "communityViewAll": "查看全部 →",
+    "anonymousAuthor": "匿名作者",
+    "untitledProject": "未命名项目"
+  },
+  "auth": {
+    "loading": "加载…"
+  },
+  "seo": {
+    "home": {
+      "title": "Open-OX — AI 网站构建引擎",
+      "description": "用自然语言描述想法，几分钟内得到可运行的 Next.js 站点。从生成到 Studio 迭代与上线。"
+    },
+    "pricing": {
+      "title": "定价 · Open-OX",
+      "description": "Open-OX 积分、Pro 订阅与加量包。按用量付费，随时升级。"
+    },
+    "changelog": {
+      "title": "更新日志 · Open-OX",
+      "description": "Open-OX 产品更新：生成流水线、Studio、积分计费与平台改进。"
+    }
+  },
+  "pricing": {
+    "title": "定价",
+    "subtitle": "按用量付费，随时升级。"
+  },
+  "workspace": {
+    "title": "工作台",
+    "projects": "项目",
+    "myProjects": "我的项目",
+    "startBuild": "开始构建",
+    "homeAria": "OPEN-OX 首页",
+    "foldersExpand": "展开文件夹",
+    "foldersCollapse": "收起文件夹",
+    "noFolders": "暂无文件夹",
+    "newProject": "新建项目",
+    "empty": "还没有项目",
+    "community": "社区",
+    "pricing": "定价",
+    "docs": "文档",
+    "changelog": "更新日志"
+  },
+  "settings": {
+    "appearance": "外观",
+    "appearanceDescription": "选择界面主题与显示语言。",
+    "theme": "主题",
+    "themeSystem": "跟随系统",
+    "themeLight": "浅色",
+    "themeDark": "深色",
+    "language": "语言",
+    "languageZh": "中文",
+    "languageEn": "English",
+    "integrations": "集成",
+    "navAppearance": "外观",
+    "navIntegrations": "集成"
+  },
+  "theme": {
+    "system": "系统",
+    "light": "浅色",
+    "dark": "深色"
+  },
+  "locale": {
+    "zh-CN": "中文",
+    "en": "English"
+  }
+}

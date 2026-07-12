@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { ChevronDown, LogOut, Shield } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -19,29 +17,13 @@ import {
   isPlaceholderAccountEmail,
 } from "@/lib/auth/display-name";
 import { clearAuthProfileCache, loadAuthProfile } from "@/lib/auth/authProfileClient";
+import { Link, useRouter } from "@/i18n/navigation";
+import { useAuthUserContext } from "@/app/contexts/AuthUserContext";
 
 export { getUserDisplayName, isPlaceholderAccountEmail };
 
 export function useAuthUser() {
-  const [user, setUser] = useState<User | null>(null);
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    const supabase = createSupabaseBrowserClient();
-    void supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setReady(true);
-    });
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      setReady(true);
-    });
-    return () => subscription.unsubscribe();
-  }, []);
-
-  return { user, ready };
+  return useAuthUserContext();
 }
 
 /** Shared admin flag — one deduped `/api/auth/user` fetch per tab. */
@@ -151,12 +133,12 @@ export function UserMenuDropdown({
           className={cn(
             "group flex shrink-0 items-center outline-none transition-[border-color,background-color,box-shadow,width,padding,gap] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-offset-0 data-[state=open]:[&_.nav-chevron]:rotate-180",
             variant === "nav" &&
-              "h-9 max-w-[min(100vw-8rem,220px)] gap-2 rounded-full border border-white/10 bg-white/[0.04] py-0 pl-0.5 pr-2 hover:border-primary/35 hover:bg-white/[0.07] data-[state=open]:border-primary/30 data-[state=open]:bg-white/[0.08] md:h-10 md:pr-2.5",
+              "h-9 max-w-[min(100vw-8rem,220px)] gap-2 rounded-full border border-border bg-muted/40 py-0 pl-0.5 pr-2 hover:border-primary/35 hover:bg-muted data-[state=open]:border-primary/30 data-[state=open]:bg-muted md:h-10 md:pr-2.5",
             variant === "sidebar" &&
               !sidebarCollapsed &&
-              "h-10 w-full gap-2.5 rounded-xl border border-white/[0.07] bg-white/[0.03] px-2 hover:border-white/12 hover:bg-white/[0.06] data-[state=open]:border-primary/25 data-[state=open]:bg-white/[0.07]",
+              "h-10 w-full gap-2.5 rounded-xl border border-sidebar-border bg-sidebar-accent/60 px-2 hover:border-sidebar-border hover:bg-sidebar-accent data-[state=open]:border-primary/25 data-[state=open]:bg-sidebar-accent",
             sidebarCollapsed &&
-              "h-10 w-10 justify-center rounded-xl border border-white/[0.07] bg-white/[0.03] p-0 hover:border-white/12 hover:bg-white/[0.06] data-[state=open]:border-primary/25 data-[state=open]:bg-white/[0.07]"
+              "h-10 w-10 justify-center rounded-xl border border-sidebar-border bg-sidebar-accent/60 p-0 hover:border-sidebar-border hover:bg-sidebar-accent data-[state=open]:border-primary/25 data-[state=open]:bg-sidebar-accent"
           )}
           aria-label="账户菜单"
           title={sidebarCollapsed ? displayName : undefined}
@@ -167,7 +149,7 @@ export function UserMenuDropdown({
               "transition",
               variant === "nav" &&
                 "h-8 w-8 ring-2 ring-primary/25 group-hover:ring-primary/40 md:h-9 md:w-9",
-              variant === "sidebar" && "h-7 w-7 border-white/12"
+              variant === "sidebar" && "h-7 w-7 border-sidebar-border"
             )}
           />
           {variant === "nav" ? (

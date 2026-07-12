@@ -89,8 +89,8 @@
 
   .defi-glass {
     backdrop-filter: blur(18px);
-    background: rgb(17 17 19 / 55%);
-    border: 1px solid rgb(255 255 255 / 10%);
+    background: color-mix(in oklab, var(--card) 70%, transparent);
+    border: 1px solid var(--border);
     border-radius: 0.875rem;
     box-shadow: var(--box-shadow-neon-sm);
     position: relative;
@@ -144,16 +144,16 @@
   }
 
   .defi-button-outline:hover {
-    border-color: rgb(255 255 255 / 22%);
-    background: rgb(255 255 255 / 4%);
+    border-color: color-mix(in oklab, var(--foreground) 22%, transparent);
+    background: color-mix(in oklab, var(--foreground) 4%, transparent);
     box-shadow: none;
     color: var(--foreground);
   }
 
   .defi-badge {
     align-items: center;
-    background: rgb(255 255 255 / 4%);
-    border: 1px solid rgb(255 255 255 / 10%);
+    background: color-mix(in oklab, var(--foreground) 4%, transparent);
+    border: 1px solid var(--border);
     border-radius: 9999px;
     color: var(--muted-foreground);
     display: inline-flex;
@@ -174,8 +174,8 @@
   }
 
   .defi-input:focus-visible {
-    border-color: rgb(255 255 255 / 28%);
-    box-shadow: 0 0 0 3px rgb(255 255 255 / 6%);
+    border-color: color-mix(in oklab, var(--ring) 55%, var(--border));
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 18%, transparent);
     outline: none;
   }
 
@@ -223,12 +223,17 @@
   }
 
   .app-sidebar-surface {
-    background: linear-gradient(180deg, rgb(12 12 14 / 100%) 0%, rgb(9 9 11 / 100%) 100%);
+    background: var(--sidebar);
+    color: var(--sidebar-foreground);
     isolation: isolate;
   }
 
   .app-sidebar-surface::before {
-    background: linear-gradient(180deg, rgb(255 255 255 / 3%) 0%, transparent 28%);
+    background: linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--sidebar-foreground) 4%, transparent) 0%,
+      transparent 28%
+    );
     content: "";
     inset: 0;
     pointer-events: none;

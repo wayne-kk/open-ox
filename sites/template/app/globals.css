@@ -71,14 +71,14 @@
   }
 
   html, body {
-    background-color: theme(--color-background);
-    color: theme(--color-foreground);
-    font-family: theme(--font-body);
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-body);
     -webkit-font-smoothing: antialiased;
   }
 
   * {
-    border-color: theme(--color-border);
+    border-color: var(--color-border);
   }
 
   @media (prefers-reduced-motion: reduce) {

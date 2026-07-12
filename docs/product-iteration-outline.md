@@ -84,7 +84,7 @@
 
 | 方向 | 说明 | 优先级建议 |
 |------|------|------------|
-| A1 一键部署 | 对接 Vercel / Cloudflare Pages / Netlify 等之一或组合；从静态导出产物触发部署 | P0 |
+| A1 一键部署 | **MVP shipped (ADR-0003):** BYO Vercel OAuth + static `out/` Deploy；GitHub / CF / Netlify / 自定义域名延后 | P0（Vercel BYO done） |
 | A2 部署引导 | 环境变量、自定义域名、常见问题（构建命令、Node 版本）的引导式 UI | P0 |
 | A3 导出体验 | 强化导出与 Storage/本地一致性说明；大项目分卷或后台异步导出（按需） | P1 |
 | A4 预览生命周期 | 沙箱过期预期、重建预览、失败重试的用户文案与状态机收敛 | P1 |

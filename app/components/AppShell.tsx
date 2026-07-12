@@ -1,8 +1,8 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import {
   ChevronDown,
   Folder,
@@ -15,6 +15,8 @@ import {
   Sparkles,
   BookOpen,
   CreditCard,
+  Plug,
+  Palette,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -25,6 +27,7 @@ import {
 } from "@/lib/projectFolders";
 import { BrandMark } from "@/app/components/BrandMark";
 import { CreditsBalanceBadge } from "@/app/components/CreditsBalanceBadge";
+import { Link, usePathname, useRouter } from "@/i18n/navigation";
 
 const SIDEBAR_COLLAPSED_KEY = "open-ox:app-sidebar-collapsed";
 const SIDEBAR_WIDTH_KEY = "open-ox:app-sidebar-width";
@@ -138,9 +141,15 @@ function SidebarBody({
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const t = useTranslations("workspace");
+  const tSettings = useTranslations("settings");
   const folderParam = searchParams.get("folder");
   const onDashboard = pathname === "/dashboard";
   const onCommunity = pathname === "/community" || pathname.startsWith("/community/");
+  const onAppearance =
+    pathname === "/settings/appearance" || pathname.startsWith("/settings/appearance/");
+  const onIntegrations =
+    pathname === "/settings/integrations" || pathname.startsWith("/settings/integrations");
   const onDashboardRoot = onDashboard && isRootFolderParam(folderParam);
 
   const handleStartBuild = () => {
@@ -175,7 +184,7 @@ function SidebarBody({
             "group flex min-w-0 items-center overflow-hidden transition-[gap,justify-content] duration-300",
             collapsed ? "w-full justify-center gap-0" : "gap-2.5"
           )}
-          aria-label="OPEN-OX 首页"
+          aria-label={t("homeAria")}
         >
           <BrandMark size={collapsed ? 24 : 28} className="transition-[width,height] duration-300" />
           <span
@@ -192,7 +201,7 @@ function SidebarBody({
 
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden px-2 pb-3">
         <NavItem
-          label="开始构建"
+          label={t("startBuild")}
           icon={Sparkles}
           collapsed={collapsed}
           onClick={handleStartBuild}
@@ -211,8 +220,8 @@ function SidebarBody({
             <Link
               href="/dashboard?mine=1&folder=all"
               onClick={onNavigate}
-              title={collapsed ? "我的项目" : undefined}
-              aria-label="我的项目"
+              title={collapsed ? t("myProjects") : undefined}
+              aria-label={t("myProjects")}
               aria-current={onDashboardRoot ? "page" : undefined}
               className={cn(
                 "flex min-w-0 flex-1 items-center py-2 text-[13px] font-medium transition-[gap,padding] duration-300",
@@ -230,7 +239,7 @@ function SidebarBody({
                   collapsed ? "max-w-0 opacity-0" : "min-w-0 flex-1 opacity-100"
                 )}
               >
-                我的项目
+                {t("myProjects")}
               </span>
             </Link>
             <button
@@ -240,12 +249,12 @@ function SidebarBody({
                 "shrink-0 rounded-md p-1.5 transition-[opacity,max-width,padding,color] duration-300",
                 onDashboardRoot
                   ? "text-primary/80 hover:bg-primary/10 hover:text-primary"
-                  : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 collapsed
                   ? "pointer-events-none max-w-0 overflow-hidden p-0 opacity-0"
                   : "max-w-[32px] opacity-100"
               )}
-              aria-label={foldersOpen ? "收起文件夹" : "展开文件夹"}
+              aria-label={foldersOpen ? t("foldersCollapse") : t("foldersExpand")}
               aria-expanded={foldersOpen}
               tabIndex={collapsed ? -1 : 0}
             >
@@ -260,7 +269,7 @@ function SidebarBody({
 
           <div
             className={cn(
-              "ml-3 overflow-hidden border-l border-white/8 pl-2 transition-[max-height,opacity,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+              "ml-3 overflow-hidden border-l border-border pl-2 transition-[max-height,opacity,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
               !collapsed && foldersOpen
                 ? "mt-0.5 max-h-64 opacity-100"
                 : "mt-0 max-h-0 opacity-0"
@@ -268,7 +277,7 @@ function SidebarBody({
           >
             <div className="space-y-0.5">
               {folders.length === 0 ? (
-                <p className="px-2 py-1.5 text-[11px] text-muted-foreground/70">暂无文件夹</p>
+                <p className="px-2 py-1.5 text-[11px] text-muted-foreground/70">{t("noFolders")}</p>
               ) : (
                 folders.map((f) => (
                   <Link
@@ -279,7 +288,7 @@ function SidebarBody({
                       "block truncate rounded-md px-2 py-1.5 text-[12px] transition-colors",
                       folderParam === f.id
                         ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
                     )}
                   >
                     {f.name}
@@ -292,18 +301,34 @@ function SidebarBody({
 
         <NavItem
           href="/community"
-          label="社区"
+          label={t("community")}
           icon={Globe2}
           active={onCommunity}
           collapsed={collapsed}
           onClick={onNavigate}
         />
 
-        <div className={cn("my-2 border-t border-white/6", collapsed && "mx-1")} />
+        <div className={cn("my-2 border-t border-border/60", collapsed && "mx-1")} />
 
         <NavItem
+          href="/settings/appearance"
+          label={tSettings("navAppearance")}
+          icon={Palette}
+          active={onAppearance}
+          collapsed={collapsed}
+          onClick={onNavigate}
+        />
+        <NavItem
+          href="/settings/integrations"
+          label={tSettings("navIntegrations")}
+          icon={Plug}
+          active={onIntegrations}
+          collapsed={collapsed}
+          onClick={onNavigate}
+        />
+        <NavItem
           href="/pricing"
-          label="定价"
+          label={t("pricing")}
           icon={CreditCard}
           collapsed={collapsed}
           onClick={onNavigate}
@@ -311,7 +336,7 @@ function SidebarBody({
         />
         <NavItem
           href="/docs"
-          label="文档"
+          label={t("docs")}
           icon={BookOpen}
           collapsed={collapsed}
           onClick={onNavigate}
@@ -319,7 +344,7 @@ function SidebarBody({
         />
         <NavItem
           href="/changelog"
-          label="更新日志"
+          label={t("changelog")}
           icon={ScrollText}
           collapsed={collapsed}
           onClick={onNavigate}
@@ -341,7 +366,7 @@ function SidebarBodySuspense(props: {
     <Suspense
       fallback={
         <div className="flex h-full flex-col px-2 py-3">
-          <div className="h-7 w-24 animate-pulse rounded bg-white/5" />
+          <div className="h-7 w-24 animate-pulse rounded bg-muted" />
         </div>
       }
     >
@@ -455,11 +480,11 @@ export function AppSidebar({
   const sidebarWidth = collapsed ? SIDEBAR_WIDTH_COLLAPSED : width;
 
   const userSlot = (
-    <div className={cn("border-t border-white/[0.05] p-2", collapsed && "flex justify-center")}>
+    <div className={cn("border-t border-border/60 p-2", collapsed && "flex justify-center")}>
       {!ready ? (
         <div
           className={cn(
-            "animate-pulse rounded-xl bg-white/5",
+            "animate-pulse rounded-xl bg-muted",
             collapsed ? "h-10 w-10" : "h-10 w-full"
           )}
         />
@@ -514,14 +539,14 @@ export function AppSidebar({
         </div>
         <div
           className={cn(
-            "relative z-[1] border-t border-white/[0.05] p-2 transition-[padding] duration-300",
+            "relative z-[1] border-t border-border/60 p-2 transition-[padding] duration-300",
             collapsed && "flex justify-center"
           )}
         >
           {!ready ? (
             <div
               className={cn(
-                "animate-pulse rounded-xl bg-white/5",
+                "animate-pulse rounded-xl bg-muted",
                 collapsed ? "h-10 w-10" : "h-10 w-full"
               )}
             />
@@ -558,7 +583,7 @@ export function AppSidebar({
         ) : null}
       </aside>
 
-      <div className="fixed inset-x-0 top-0 z-40 flex h-12 items-center gap-2 border-b border-sidebar-border bg-[#08090c]/95 px-3 backdrop-blur-xl md:hidden">
+      <div className="fixed inset-x-0 top-0 z-40 flex h-12 items-center gap-2 border-b border-sidebar-border bg-background/95 px-3 backdrop-blur-xl md:hidden">
         <button
           type="button"
           onClick={() => onMobileOpenChange(true)}
@@ -647,7 +672,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <div className="flex min-h-screen bg-[#07090d]">
+    <div className="flex min-h-screen bg-background">
       <AppSidebar
         collapsed={collapsed}
         onCollapsedChange={onCollapsedChange}

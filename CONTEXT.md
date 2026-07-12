@@ -44,6 +44,10 @@ _Avoid_: treating Community as an authenticated internal member gallery
 Author opt-in that lists the project in Community and allows non-owners to open its static preview. Does not grant Studio or source access.
 _Avoid_: Publish (ambiguous with deploy), Public project (implies source/editor access)
 
+**Deploy (Vercel BYO)**:
+Manual production publish of a root-path static export to the author’s own Vercel account (OAuth Integration). Independent of Publish Preview. Disconnect clears Open-OX tokens/bindings only — never deletes remote Vercel projects.
+_See also_: `docs/adr/0003-vercel-byo-deploy.md`
+
 **Allow Remix**:
 Author opt-in copy license, only valid while Publish Preview is on. Lets signed-in users Remix. Future monetization attaches here, not to Publish Preview.
 _Avoid_: bundling this into a single “publish to community” switch

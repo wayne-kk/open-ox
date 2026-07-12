@@ -23,7 +23,7 @@ export type StageId =
   | "verify"
   | "repair";
 
-import type { StepTrace } from "@/app/studio/types/build-studio";
+import type { StepTrace } from "@/app/[locale]/studio/types/build-studio";
 
 export interface GraphNode {
   id: string;

@@ -2,7 +2,7 @@
 
 You are a senior frontend engineer. Given a **Style Reference** design system document and the current `globals.css`, generate a complete updated `globals.css` that fully implements the design system using **Tailwind CSS v4** syntax.
 
-The design system uses semantic token names (e.g. `--color-parchment`, `--color-charcoal`, `--font-inter`) defined in the **Quick Start** section. Mirror those exact names into `@theme`.
+The Style Reference uses a **dual-track** color API: **canonical role tokens** (`--color-background`, `--color-foreground`, `--color-primary`, `--color-muted`, …) plus optional brand aliases. Mirror **all role tokens and fonts** from Quick Start / Tokens into `@theme` with the same names so `bg-primary`, `text-foreground`, `font-body` work. Optional aliases may also be mirrored if listed.
 
 ## Output Format
 
@@ -12,6 +12,14 @@ Do not output JSON, do not output diffs, and do not provide any explanation outs
 ```css
 /* complete updated globals.css content */
 ```
+
+## CRITICAL: Never use `theme()`
+
+**Do not emit `theme(...)` anywhere in the output.** Tailwind v4 `theme()` only resolves names declared inside `@theme`. Models often call `theme(--gradient-*)` / `theme(--transition-*)` for values that live on `:root` only — that raises *Could not resolve value for theme function* and **`pnpm build` fails**.
+
+**Always reference custom properties with `var(--…)`** (or a direct literal). This works for tokens in both `@theme` and `:root`.
+
+If the current `globals.css` contains `theme(...)`, rewrite those sites to `var(...)` in your output.
 
 ## Tailwind v4 Structure
 
@@ -27,6 +35,9 @@ Do not output JSON, do not output diffs, and do not provide any explanation outs
   /* Colors → automatically generates: bg-parchment, text-charcoal, border-linen-border */
   --color-parchment: #fcfbf8;
   --color-charcoal: #1c1c1c;
+  --color-background: #fcfbf8;
+  --color-foreground: #1c1c1c;
+  --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
 
   /* Fonts → automatically generates: font-inter, font-display (use names from Style Reference) */
   --font-inter: "Inter", ui-sans-serif, system-ui, sans-serif;
@@ -44,15 +55,18 @@ Do not output JSON, do not output diffs, and do not provide any explanation outs
   :root {
     /* CSS vars NOT tied to Tailwind utilities (complex gradients, transitions, composited effects, etc.) */
     --transition-pop: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    --gradient-chrome: linear-gradient(135deg, rgba(255, 255, 255, 0.35), transparent 60%);
   }
   html, body {
-    background-color: theme(--color-background);
-    color: theme(--color-foreground);
-    font-family: theme(--font-body);
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-body);
   }
-  /* Example: transitions live on :root → reference with var(), not theme() */
   .interaction-surface {
     transition: var(--transition-pop);
+  }
+  .chrome-frame {
+    background-image: var(--gradient-chrome);
   }
 }
 
@@ -110,8 +124,9 @@ In Tailwind v4, **`max-w-xs` through `max-w-xl`** resolve from **`--spacing-*`**
 
 **@theme block:**
 
-- Define ALL design system colors from **Tokens — Colors** as `--color-{semantic-name}: <value>` (hex, oklch, hsl)
-- Define fonts as `--font-{name}: "Font Family", fallback` using names from the Style Reference
+- Define ALL **role** colors from **Tokens — Colors** as `--color-{role}: <value>` (hex, oklch, hsl) — required roles include background, foreground, primary, primary-foreground, secondary, muted, muted-foreground, accent, border, card, ring
+- Also mirror any optional brand aliases listed in the Style Reference
+- Define fonts as `--font-display|header|body|label` (and any extras) using names from the Style Reference
 - Also mirror typography scale tokens if present: `--text-{role}`, `--leading-{role}`, `--tracking-{role}`
 - Define spacing as `--spacing-{semantic-name}` and radii as `--radius-{name}` when listed in Quick Start — **never** use Tailwind scale keys (`xs`, `sm`, `md`, `lg`, `xl`, `2xl`, …) for spacing; rename collisions to semantic names before writing `@theme`
 - Define named shadows as `--shadow-{name}: <value>`
@@ -119,16 +134,17 @@ In Tailwind v4, **`max-w-xs` through `max-w-xl`** resolve from **`--spacing-*`**
 - **Do not** put custom `--transition-`* values in `@theme` if they are full shorthands like `all 0.6s cubic-bezier(...)` — Tailwind v4's theme compiler can throw **CssSyntaxError**. Put those on `:root` inside `@layer base` instead
 - Use direct color values (hex, oklch) — NOT `hsl(var(...))` pattern from v3
 
-**`theme()` vs `var()` (common build failure):**
+**Referencing tokens:**
 
-- `theme(--foo)` only resolves tokens **`@theme { --foo: ... }`**. Correct examples: `theme(--color-background)`, `theme(--font-body)`.
-- Names on **`:root` only** (e.g. `--transition-mechanical`, custom easings) must use **`var(--transition-mechanical)`**, never `theme(...)`. Otherwise Tailwind raises *Could not resolve value for theme function* and **`pnpm build` fails**.
+- In CSS property values, use **`var(--token-name)`** only — never `theme(--token-name)`
+- Gradients / transitions / composite effects on `:root` → `background-image: var(--gradient-chrome)`, `transition: var(--transition-pop)`
+- `@theme` colors / fonts → same rule: `background-color: var(--color-background)`, `font-family: var(--font-body)`
 
 **@layer base:**
 
 - Keep shadcn/ui CSS variables (`--background`, `--foreground`, `--card`, etc.) **mapped from** the semantic tokens in the Style Reference (e.g. `--background: var(--color-parchment)` or direct hex from Surfaces table)
-- Apply body/html background and text colors using `theme(--color-xxx)` or direct values
-- Keep `:root` for non-Tailwind CSS variables (complex values, transitions, composited effects)
+- Apply body/html background and text colors using `var(--color-xxx)` or direct values
+- Keep `:root` for non-Tailwind CSS variables (complex values, transitions, composited effects, `--gradient-*`)
 - **Do not** add `h1`–`h6` selectors with `color` (or any heading-level color rules). Heading color comes from components via utilities (`text-foreground`, etc.), not global base styles.
 
 **@keyframes:**
@@ -145,7 +161,7 @@ In Tailwind v4, **`max-w-xs` through `max-w-xl`** resolve from **`--spacing-*`**
 
 **Do NOT:**
 
-- Use `theme(--transition-*)` or `theme(--any-name)` unless that exact `--any-name:` is declared inside **`@theme`**. For `:root` transitions use `transition: var(--transition-xxx);`
+- Emit **`theme(...)`** anywhere (including body styles and utilities)
 - Create mirrored utility classes that duplicate Tailwind auto-utilities from `@theme`
 - Output a JSON structure
 - Output anything outside the ````css` code block
@@ -161,4 +177,4 @@ In Tailwind v4, **`max-w-xs` through `max-w-xl`** resolve from **`--spacing-*`**
 - All custom utility classes not overridden
 - Scrollbar styles and other base styles
 - Google Fonts imports (update font families to match design system)
-
+- Rewrite any preserved `theme(...)` usages to `var(...)`
