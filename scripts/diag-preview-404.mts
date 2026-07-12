@@ -1,61 +1,91 @@
 /**
- * Feedback loop: start local preview and assert root is not 404.
- * Usage: OPEN_OX_PREVIEW_BACKEND=local pnpm exec tsx --env-file=.env.local scripts/diag-preview-404.mts [projectId]
+ * Feedback loop for preview false-down / 404-class failures.
+ *
+ * Asserts the exact bug: private project with Storage index.html present, but
+ * server-side health via auth-gated `/site-previews` proxy reports unreachable,
+ * and ensureStaticPreviewAlive returns "down" when static_preview_synced_at is null.
+ *
+ * Usage:
+ *   NEXT_PUBLIC_SITE_URL=http://127.0.0.1:3000 pnpm exec tsx --env-file=.env.local scripts/diag-preview-404.mts [projectId]
+ *
+ * Exit 2 = RED (bug present). Exit 0 = GREEN.
  */
-process.env.OPEN_OX_PREVIEW_BACKEND = "local";
-if (!process.env.NEXT_PUBLIC_SITE_URL?.trim()) {
-  process.env.NEXT_PUBLIC_SITE_URL = "http://127.0.0.1:3000";
-}
-
 import { createClient } from "@supabase/supabase-js";
 
 const id = process.argv[2] ?? "2026-07-12T04-52-26-826Z_project";
+const site = (process.env.NEXT_PUBLIC_SITE_URL ?? "http://127.0.0.1:3000").replace(/\/$/, "");
+
 const sb = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-function looksLike404(status: number, body: string): boolean {
-  if (status === 404) return true;
-  if (/This page could not be found/i.test(body)) return true;
-  if (/<title[^>]*>\s*404\s*</i.test(body)) return true;
-  return false;
-}
-
 async function main() {
-  const { startLocalDevServer } = await import("../lib/localDevServerManager.ts");
-  console.log(`[diag] starting local preview for ${id}`);
-  const t0 = Date.now();
-  const result = await startLocalDevServer(sb, id);
-  console.log(`[diag] started in ${Date.now() - t0}ms url=${result.url} port=${result.port}`);
+  const { data: row, error } = await sb
+    .from("projects")
+    .select("id, static_preview_synced_at, publish_preview, files_hash")
+    .eq("id", id)
+    .single();
+  if (error || !row) throw new Error(`project load failed: ${error?.message}`);
 
-  let red = 0;
-  for (let i = 0; i < 12; i++) {
-    const urls = [result.url, `${result.url}/`];
-    for (const url of urls) {
-      const r = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(20_000) });
-      const body = await r.text();
-      const bad = looksLike404(r.status, body);
-      if (bad) red += 1;
-      console.log(
-        JSON.stringify({
-          i,
-          url,
-          status: r.status,
-          len: body.length,
-          bad,
-          title: (body.match(/<title>([^<]*)/) || [])[1] ?? null,
-        })
-      );
-    }
-    await new Promise((r) => setTimeout(r, 300));
-  }
+  const storageUrl = sb.storage
+    .from("site-previews")
+    .getPublicUrl(`p/${id}/index.html`).data.publicUrl;
+  const storageHead = await fetch(storageUrl, {
+    method: "HEAD",
+    signal: AbortSignal.timeout(10_000),
+  });
 
-  if (red > 0) {
-    console.error(`[diag] RED: ${red} responses looked like 404`);
+  const proxySlash = `${site}/site-previews/${encodeURIComponent(id)}/`;
+  const proxyNoSlash = `${site}/site-previews/${encodeURIComponent(id)}`;
+  const proxyRes = await fetch(proxyNoSlash, {
+    method: "HEAD",
+    redirect: "follow",
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  process.env.NEXT_PUBLIC_SITE_URL = site;
+  const { ensureStaticPreviewAlive } = await import("../lib/staticSitePreview");
+  const alive = await ensureStaticPreviewAlive(sb, id);
+
+  const storageOk = storageHead.ok;
+  const proxyBlocked =
+    row.publish_preview !== true && (proxyRes.status === 401 || proxyRes.status === 403);
+  const falseDown =
+    storageOk &&
+    !row.static_preview_synced_at &&
+    alive.status === "down";
+
+  console.log(
+    JSON.stringify(
+      {
+        id,
+        synced_at: row.static_preview_synced_at,
+        publish_preview: row.publish_preview,
+        storageHead: storageHead.status,
+        proxyNoSlash: proxyRes.status,
+        proxySlashSample: proxySlash,
+        proxyBlocked,
+        alive,
+        falseDown,
+      },
+      null,
+      2
+    )
+  );
+
+  // Red-capable: Storage has the object, but health says down (auth-gated probe / synced_at gap).
+  if (falseDown) {
+    console.error("[diag] RED: Storage index exists but ensureStaticPreviewAlive=down");
     process.exit(2);
   }
-  console.log("[diag] GREEN: no 404-like responses");
+
+  if (!storageOk) {
+    console.error("[diag] SKIP/RED: Storage index missing — cannot assert false-down bug");
+    process.exit(2);
+  }
+
+  console.log("[diag] GREEN: health does not false-down when Storage index exists");
 }
 
 main().catch((e) => {

@@ -4,10 +4,10 @@ import { Suspense, useEffect, useState, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
-  Trash2, Plus, FolderInput,
+  Trash2, Plus, FolderInput, Folder,
   AlertCircle, Loader2, Sparkles,
   AlertTriangle, MoreHorizontal, Globe2, FolderCog, Check, Pencil,
-  Repeat2,
+  Repeat2, Clock, ArrowUpRight,
 } from "lucide-react";
 import { HamsterLoader } from "@/components/ui/hamster-loader";
 import { captureAppReturnTo } from "@/lib/navigation/appBack";
@@ -45,7 +45,6 @@ interface ProjectMetadata {
   createdAt: string;
   updatedAt: string;
   completedAt?: string;
-  verificationStatus?: "passed" | "failed";
   folderId?: string | null;
   modificationHistory: unknown[];
   ownerUserId?: string;
@@ -92,6 +91,31 @@ function hashColor(str: string): { bg: string; text: string; accent: string } {
   return palettes[Math.abs(hash) % palettes.length];
 }
 
+function ProjectCardSkeleton() {
+  return (
+    <div
+      className="flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card"
+      aria-hidden
+    >
+      <div className="aspect-[16/10] w-full animate-pulse bg-muted" />
+      <div className="flex flex-1 flex-col gap-2 px-3.5 py-3">
+        <div className="flex items-start gap-2">
+          <div className="h-4 flex-1 animate-pulse rounded bg-muted" />
+          <div className="mt-0.5 h-7 w-7 shrink-0 animate-pulse rounded-lg bg-muted" />
+        </div>
+        <div className="space-y-1.5">
+          <div className="h-3 w-full animate-pulse rounded bg-muted/70" />
+          <div className="h-3 w-3/5 animate-pulse rounded bg-muted/70" />
+        </div>
+        <div className="mt-auto flex items-center gap-2.5 border-t border-border/80 pt-2.5">
+          <div className="h-3 w-16 animate-pulse rounded bg-muted/60" />
+          <div className="h-3 w-14 animate-pulse rounded bg-muted/50" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ProjectCard({
   project, onDelete, onClick, deleting, canDelete, onPublishChange, folders, onMove,
 }: {
@@ -110,6 +134,30 @@ function ProjectCard({
   /** Studio 在生成中会轮询进度，列表应可进入 */
   const isClickable = isReady || isFailed || isGenerating;
   const hasCover = project.coverImageStatus === "ready";
+  const [coverLoaded, setCoverLoaded] = useState(false);
+  const [coverFailed, setCoverFailed] = useState(false);
+  const coverImgRef = useRef<HTMLImageElement | null>(null);
+  const coverSrc = hasCover
+    ? projectCoverDisplayUrl(project.id, project.coverImageUpdatedAt)
+    : null;
+  const showCoverImage = Boolean(coverSrc) && !coverFailed;
+
+  useEffect(() => {
+    setCoverLoaded(false);
+    setCoverFailed(false);
+  }, [coverSrc]);
+
+  useEffect(() => {
+    if (!showCoverImage) return;
+    const img = coverImgRef.current;
+    if (!img) return;
+    if (img.complete && img.naturalWidth > 0) {
+      setCoverLoaded(true);
+    } else if (img.complete && img.naturalWidth === 0) {
+      setCoverFailed(true);
+    }
+  }, [showCoverImage, coverSrc]);
+
   const colors = hashColor(project.id);
   const initials = (project.name || "P")
     .split(/[\s-_]+/)
@@ -197,6 +245,10 @@ function ProjectCard({
   const menuItemClass =
     "cursor-pointer gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-foreground/90 outline-none focus:bg-muted focus:!text-foreground focus:!**:text-foreground data-[highlighted]:bg-muted data-[highlighted]:!text-foreground data-[highlighted]:!**:text-foreground";
 
+  const folderName = project.folderId
+    ? folders.find((f) => f.id === project.folderId)?.name?.trim() || null
+    : null;
+
   return (
     <article
       className={cn(
@@ -223,22 +275,37 @@ function ProjectCard({
         }
         className={cn(
           "relative block w-full overflow-hidden text-left aspect-[16/10]",
-          !hasCover && `bg-gradient-to-br ${colors.bg}`,
-          hasCover && "bg-muted",
+          !showCoverImage && `bg-gradient-to-br ${colors.bg}`,
+          showCoverImage && "bg-muted",
           isClickable
             ? "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/45"
             : "cursor-default"
         )}
       >
-        {hasCover ? (
-          /* eslint-disable-next-line @next/next/no-img-element -- versioned app cover proxy */
-          <img
-            src={projectCoverDisplayUrl(project.id, project.coverImageUpdatedAt)}
-            alt=""
-            className="h-full w-full object-contain object-center transition-transform duration-500 ease-out group-hover/card:scale-[1.015]"
-            loading="lazy"
-            decoding="async"
-          />
+        {showCoverImage && coverSrc ? (
+          <>
+            {!coverLoaded ? (
+              <div className="absolute inset-0 z-[1] animate-pulse bg-muted" aria-hidden />
+            ) : null}
+            {/* eslint-disable-next-line @next/next/no-img-element -- versioned app cover proxy */}
+            <img
+              ref={coverImgRef}
+              src={coverSrc}
+              alt=""
+              className={cn(
+                // scale-[1.08] crops letterboxing baked into older polished covers (CONTENT_SCALE 0.928)
+                "absolute inset-0 z-0 h-full w-full object-cover object-center scale-[1] transition-[opacity,transform] duration-200 ease-out",
+                coverLoaded ? "opacity-100" : "opacity-0"
+              )}
+              loading="lazy"
+              decoding="async"
+              onLoad={() => setCoverLoaded(true)}
+              onError={() => {
+                setCoverFailed(true);
+                setCoverLoaded(false);
+              }}
+            />
+          </>
         ) : (
           <>
             <div
@@ -260,8 +327,6 @@ function ProjectCard({
           </>
         )}
 
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-[#0a0c10]/90 to-transparent" />
-
         {isGenerating && (
           <div className="pointer-events-none absolute inset-0 z-10 animate-[shimmer_2s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/[0.04] to-transparent" />
         )}
@@ -281,9 +346,18 @@ function ProjectCard({
             </span>
           </span>
         ) : null}
+
+        {isClickable ? (
+          <span
+            className="pointer-events-none absolute bottom-2.5 right-2.5 z-20 flex h-7 w-7 items-center justify-center rounded-lg border border-white/15 bg-black/55 text-white/90 opacity-0 backdrop-blur-md transition-opacity duration-200 group-hover/card:opacity-100"
+            aria-hidden
+          >
+            <ArrowUpRight className="h-3.5 w-3.5" />
+          </span>
+        ) : null}
       </button>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-1.5 px-3 py-2.5">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 px-3.5 py-3">
         <div className="flex items-start gap-2">
           <button
             type="button"
@@ -406,14 +480,6 @@ function ProjectCard({
           ) : null}
         </div>
 
-        {project.verificationStatus === "passed" ? (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="inline-flex items-center rounded-md border border-border bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">
-              已验证
-            </span>
-          </div>
-        ) : null}
-
         {project.userPrompt?.trim() ? (
           <p className="line-clamp-2 text-[11px] leading-relaxed text-foreground/55">
             {project.userPrompt.trim()}
@@ -426,10 +492,23 @@ function ProjectCard({
           <p className="text-[10px] text-red-400/85">{publishError}</p>
         ) : null}
 
-        <div className="mt-auto border-t border-border/80 pt-2">
-          <span className="text-[10px] tabular-nums text-muted-foreground">
+        <div className="mt-auto flex flex-wrap items-center gap-x-2.5 gap-y-1 border-t border-border/80 pt-2.5">
+          <span className="inline-flex items-center gap-1 text-[10px] tabular-nums text-muted-foreground">
+            <Clock className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
             {timeAgo(project.createdAt)}
           </span>
+          {folderName ? (
+            <span className="inline-flex min-w-0 max-w-[40%] items-center gap-1 text-[10px] text-muted-foreground">
+              <Folder className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+              <span className="truncate">{folderName}</span>
+            </span>
+          ) : null}
+          {allowRemix && publishPreview ? (
+            <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-medium text-emerald-700 dark:text-emerald-300/90">
+              <Repeat2 className="h-3 w-3 shrink-0" aria-hidden />
+              Remix
+            </span>
+          ) : null}
         </div>
       </div>
     </article>
@@ -1137,9 +1216,14 @@ function ProjectsPageContent() {
         </div>
 
         {loading ? (
-          <div className="flex flex-col items-center justify-center gap-4 py-32 min-h-screen">
-            <HamsterLoader size="sm" className="-mt-[200px]" />
-            <p className="font-mono text-xs text-foreground/65 tracking-wider">加载中...</p>
+          <div
+            className="grid items-stretch gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4"
+            aria-busy="true"
+            aria-label="加载项目中"
+          >
+            {Array.from({ length: 8 }).map((_, i) => (
+              <ProjectCardSkeleton key={i} />
+            ))}
           </div>
         ) : projects.length === 0 && !switchingFolder ? (
           <div className="flex flex-col items-center justify-center gap-6 py-32">

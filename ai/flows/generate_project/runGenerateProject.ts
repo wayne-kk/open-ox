@@ -683,7 +683,12 @@ export interface RunGenerateProjectOptions {
    * Routes should pass the same id as HTTP-level {@link resolveLangfuseSessionId}.
    */
   langfuseSessionId?: string;
-  /** Appended to default Langfuse trace tags (`flow:generate_project`). */
+  /**
+   * Continue an existing Langfuse root (intent commit → worker). When set,
+   * {@link ensureLangfuseGenerateTrace} upserts this id instead of minting a new one.
+   */
+  langfuseTraceId?: string;
+  /** Appended to default Langfuse trace tags (`flow:project_build`). */
   langfuseTraceTags?: string[];
   /** Shallow-merged into default trace metadata (`projectId` is always set). */
   langfuseTraceMetadata?: Record<string, unknown>;
@@ -711,8 +716,8 @@ async function ensureLangfuseGenerateTrace<T>(
   );
   const tags =
     extraTags && extraTags.length > 0
-      ? ["flow:generate_project", ...extraTags]
-      : ["flow:generate_project"];
+      ? ["flow:project_build", ...extraTags]
+      : ["flow:project_build"];
   const metadata: Record<string, unknown> = {
     ...(options.langfuseTraceMetadata ?? {}),
     projectId: options.projectId,
@@ -728,7 +733,8 @@ async function ensureLangfuseGenerateTrace<T>(
 
   return runWithLangfuseTraceRoot(
     {
-      name: LfTrace.generateProject,
+      ...(options.langfuseTraceId ? { id: options.langfuseTraceId } : {}),
+      name: LfTrace.projectBuild,
       userId: options.langfuseUserId,
       sessionId: options.langfuseSessionId ?? options.projectId,
       tags,
@@ -809,10 +815,19 @@ async function runGenerateProjectInner(
 
     if (options.enableIntentGuide !== false && !cp?.skipAnalyze) {
       logger.startStep("project_intent_guide");
-      const intentResult = await withLangfuseSpan(LfSpanGen.intentGuide, () =>
-        stepProjectIntentGuide(userInput, {
-          imageBase64: options.userReferenceImageBase64 ?? null,
-        })
+      const intentResult = await withLangfuseSpan(
+        LfSpanGen.intentGuide,
+        () =>
+          stepProjectIntentGuide(userInput, {
+            imageBase64: options.userReferenceImageBase64 ?? null,
+          }),
+        {
+          getOutput: (r) => ({
+            outcome: r.outcome,
+            phase: r.phase,
+            appendixChars: r.buildPromptAppendix?.length ?? 0,
+          }),
+        }
       );
       logger.logStep(
         "project_intent_guide",
@@ -1134,23 +1149,28 @@ async function runGenerateProjectInner(
     if (cp?.skipDesignTokens) {
       logger.logStep("apply_project_design_tokens", "ok", "resumed from checkpoint");
     } else {
-      const tokenResult = await withLangfuseSpan(LfSpanGen.applyDesignTokens, () =>
-        logger.timed(
-          "apply_project_design_tokens",
-          () =>
-            stepApplyProjectDesignTokens(designSystem, {
-              onProgress: (msg) => {
-                onStep?.({
-                  step: "apply_project_design_tokens",
-                  status: "active",
-                  detail: msg,
-                  timestamp: Date.now(),
-                  duration: 0,
-                });
-              },
-            }),
-          (r) => ({ detail: r.files.join(", "), trace: r.trace })
-        )
+      const tokenResult = await withLangfuseSpan(
+        LfSpanGen.applyDesignTokens,
+        () =>
+          logger.timed(
+            "apply_project_design_tokens",
+            () =>
+              stepApplyProjectDesignTokens(designSystem, {
+                onProgress: (msg) => {
+                  onStep?.({
+                    step: "apply_project_design_tokens",
+                    status: "active",
+                    detail: msg,
+                    timestamp: Date.now(),
+                    duration: 0,
+                  });
+                },
+              }),
+            (r) => ({ detail: r.files.join(", "), trace: r.trace })
+          ),
+        {
+          getOutput: (r) => ({ files: r.files }),
+        }
       );
       const tokenFiles = tokenResult.files;
       await persistJsonArtifact(artifactLogger, "apply_project_design_tokens", "output", {
@@ -1195,16 +1215,25 @@ async function runGenerateProjectInner(
       scaffoldSummary = "screenshot replicate: minimal pass-through layout";
       scaffoldChromeForm = "none";
     } else if (!cp?.skipScaffold) {
-      const scaffoldResult = await withLangfuseSpan(LfSpanGen.architectScaffoldAgent, () =>
-        runArchitectScaffoldStep({
-          blueprint,
-          designSystem,
-          artifactLogger,
-          logger,
-          onStep,
-          referenceScreenshotDataUrl: referenceScreenshot,
-          screenshotGuardrailId,
-        })
+      const scaffoldResult = await withLangfuseSpan(
+        LfSpanGen.architectScaffoldAgent,
+        () =>
+          runArchitectScaffoldStep({
+            blueprint,
+            designSystem,
+            artifactLogger,
+            logger,
+            onStep,
+            referenceScreenshotDataUrl: referenceScreenshot,
+            screenshotGuardrailId,
+          }),
+        {
+          getOutput: (r) => ({
+            chromeForm: r.chromeForm,
+            fileCount: r.files.length,
+            summary: r.summary.slice(0, 240),
+          }),
+        }
       );
       appendGeneratedFiles(result, scaffoldResult.files);
       scaffoldSummary = scaffoldResult.summary;
@@ -1215,17 +1244,26 @@ async function runGenerateProjectInner(
       scaffoldChromeForm = "resumed";
     }
 
-    const pageOutcome = await withLangfuseSpan(LfSpanGen.implementPages, () =>
-      generatePages({
-        blueprint,
-        designSystem,
-        runtimeContext,
-        artifactLogger,
-        logger,
-        skipImplementedPages: cp?.implementedPages,
-        onStep,
-        screenshotPageSpec,
-      })
+    const pageOutcome = await withLangfuseSpan(
+      LfSpanGen.implementPages,
+      () =>
+        generatePages({
+          blueprint,
+          designSystem,
+          runtimeContext,
+          artifactLogger,
+          logger,
+          skipImplementedPages: cp?.implementedPages,
+          onStep,
+          screenshotPageSpec,
+        }),
+      {
+        getOutput: (r) => ({
+          pageCount: r.pageSummaries.length,
+          fileCount: r.files.length,
+          pendingImageCount: r.pendingImages.length,
+        }),
+      }
     );
     appendGeneratedFiles(result, pageOutcome.files);
     const allPendingImages = pageOutcome.pendingImages;
@@ -1428,8 +1466,15 @@ async function runGenerateProjectInner(
       );
     }
 
-    const buildLifecycle = await withLangfuseSpan(LfSpanGen.buildVerifyAndRepair, () =>
-      runBuildWithRepair({ blueprint, artifactLogger, result, logger })
+    const buildLifecycle = await withLangfuseSpan(
+      LfSpanGen.buildVerifyAndRepair,
+      () => runBuildWithRepair({ blueprint, artifactLogger, result, logger }),
+      {
+        getOutput: (r) => ({
+          verificationStatus: r.verificationStatus,
+          outputChars: r.verificationOutput?.length ?? 0,
+        }),
+      }
     );
     result.verificationStatus = buildLifecycle.verificationStatus;
     result.verificationOutput = buildLifecycle.verificationOutput;
@@ -1467,7 +1512,21 @@ async function runGenerateProjectInner(
   };
 
   if (getLangfuse() && getLangfuseRunContext()) {
-    await withLangfuseSpan(LfSpanGen.fullPipeline, runPipeline);
+    await withLangfuseSpan(LfSpanGen.fullPipeline, runPipeline, {
+      input: {
+        projectId: options.projectId,
+        enableIntentGuide: options.enableIntentGuide !== false,
+        enableSkills: options.enableSkills !== false,
+      },
+      getOutput: () => ({
+        success: result.success,
+        error: result.error ?? null,
+        intentGuideDeferred: Boolean(result.intentGuideDeferred),
+        stepCount: result.steps.length,
+        totalDurationMs: result.totalDuration,
+        generatedFileCount: result.generatedFiles?.length ?? 0,
+      }),
+    });
   } else {
     await runPipeline();
   }

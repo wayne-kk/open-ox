@@ -186,10 +186,17 @@ async function waitForBackgroundGeneration(
   }
 }
 
-async function processSSEChunk(
+/** Per-SSE-stream flags so `done` fallbacks do not re-deliver an already-seen turn. */
+export type IntentSseStreamState = {
+  sawIntentAgentTurn: boolean;
+};
+
+/** Exported for unit tests — drives Studio intent/build SSE event handling. */
+export async function processSSEChunk(
   chunk: string,
   callbacks: BuildSiteCallbacks,
-  secureSession: AgentStreamClientSession | null
+  secureSession: AgentStreamClientSession | null,
+  streamState?: IntentSseStreamState
 ): Promise<QueuedHandshake | undefined> {
   const line = parseSseDataLine(chunk);
   if (!line) return;
@@ -200,6 +207,7 @@ async function processSSEChunk(
   try {
 
     if (event.type === "intent_agent_turn") {
+      if (streamState) streamState.sawIntentAgentTurn = true;
       callbacks.onIntentTurn?.(event.turn as IntentAgentTurn);
       return;
     }
@@ -246,12 +254,15 @@ async function processSSEChunk(
         };
       }
 
-      // Fallback: if the encrypted `intent_agent_turn` chunk was dropped client-side,
-      // `done` still carries the full turn — hydrate conversation from it.
+      // Fallback only when `intent_agent_turn` was dropped (e.g. secure-stream decode).
+      // Unconditional hydrate here double-fires onIntentTurn and duplicates chat bubbles
+      // once activityLog differs across the two appends.
       if (
+        !streamState?.sawIntentAgentTurn &&
         (phase === "intent_only" || phase === "commit_only") &&
         result.intentAgent
       ) {
+        if (streamState) streamState.sawIntentAgentTurn = true;
         callbacks.onIntentTurn?.(result.intentAgent as IntentAgentTurn);
       }
 
@@ -333,6 +344,7 @@ export async function runBuildSite(
 
     const decoder = new TextDecoder();
     let buffer = "";
+    const streamState: IntentSseStreamState = { sawIntentAgentTurn: false };
 
     let sseReadError: unknown;
     try {
@@ -345,7 +357,7 @@ export async function runBuildSite(
         buffer = lines.pop() ?? "";
 
         for (const chunk of lines) {
-          const handshake = await processSSEChunk(chunk, callbacks, secureSession);
+          const handshake = await processSSEChunk(chunk, callbacks, secureSession, streamState);
           if (handshake?.kind === "generation_queued") {
             await handleQueuedHandshake(handshake);
             return;
@@ -354,7 +366,7 @@ export async function runBuildSite(
       }
 
       if (buffer.trim()) {
-        const handshake = await processSSEChunk(buffer, callbacks, secureSession);
+        const handshake = await processSSEChunk(buffer, callbacks, secureSession, streamState);
         if (handshake?.kind === "generation_queued") {
           await handleQueuedHandshake(handshake);
           return;

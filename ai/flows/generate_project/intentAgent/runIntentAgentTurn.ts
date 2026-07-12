@@ -3,15 +3,10 @@ import { callLLMWithToolsFromMessages } from "@/ai/shared/llm/toolLoop";
 import type { AgentToolCallRecord, ChatMessage } from "@/ai/shared/llm/types";
 import { getModelForStep } from "@/lib/config/models";
 import { clearIntentAgentSession, loadIntentAgentSession, saveIntentAgentSession } from "./sessionStore";
-import { buildIntentAgentToolsForTurn, PIPELINE_CONSTRAINTS_TEXT } from "./tools";
+import { buildIntentAgentControlTools, PIPELINE_CONSTRAINTS_TEXT } from "./tools";
 import { mergeIntentAgentTools, INTENT_AGENT_RESERVED_TOOL_NAMES } from "./toolSurface";
 import { classifyBriefSubstanceForCommit } from "./briefSubstanceClassifier";
 import { resolveCommitMergedBrief } from "./commitMergeBrief";
-import { executeReferenceSiteDigest } from "@/ai/tools/system/referenceSiteDigestTool";
-import { executeBrandKitFromUrl } from "@/ai/tools/system/brandKitFromUrlTool";
-import { executeSinglePageIaProposal } from "@/ai/tools/system/singlePageIaProposalTool";
-import { executeAccessibilitySeoBrief } from "@/ai/tools/system/accessibilitySeoBriefTool";
-import { executeCompetitiveLandscapeSnapshot } from "@/ai/tools/system/competitiveLandscapeSnapshotTool";
 import { LfToolPhase } from "@/lib/observability/langfuseGenerationCatalog";
 import type { ToolResult } from "@/ai/tools/types";
 import type {
@@ -24,10 +19,6 @@ import type {
 } from "./types";
 import { collectIntentAgentImageSourceTexts } from "./collectImageSourceTexts";
 import { buildUserVisionContent, userTurnPlainTextForClassifier } from "../shared/userVisionContent";
-import {
-  classifyIntentAgentInputProfile,
-  listReferenceSiteCandidateUrls,
-} from "./intentAgentInputProfile";
 import type { IntentAgentTraceStep } from "./types";
 
 function truncatePreview(s: string, max: number): string {
@@ -94,6 +85,9 @@ export function parseYieldArgs(args: Record<string, unknown>): IntentAgentYieldP
   return { kind, message, suggestedReplies, options, briefDraftMarkdown };
 }
 
+const DEFAULT_FORCE_YIELD_MESSAGE =
+  "先把方向定清楚再生成会更稳。请用一两句话说明：这个单页主要给谁用、在首页上要完成什么、以及你希望的大致视觉气质。";
+
 export interface RunIntentAgentTurnParams {
   projectId: string;
   userMessage: string;
@@ -107,12 +101,9 @@ export interface RunIntentAgentTurnParams {
   onMessage?: (msg: ChatMessage) => void;
   /**
    * Extra tool schemas / handlers merged at runtime — never shadows `yield_to_user` / `commit_generate`.
-   * Tool calls without local handlers forward to global `executeSystemTool` when the name is registered project-wide.
    */
   toolExtensions?: IntentAgentToolExtensions;
-  /**
-   * Pasted screenshot (data URL or base64) for this turn — sent as vision alongside `userMessage`.
-   */
+  /** Pasted screenshot (data URL or base64) for this turn — sent as vision alongside `userMessage`. */
   userImageBase64?: string | null;
   /**
    * Streamed while the intent tool loop runs: assistant rounds, optional model reasoning
@@ -139,29 +130,13 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
   const hasUserImage = Boolean(userImageBase64?.trim());
   const tailPlainForCommit = userTurnPlainTextForClassifier(userMessage, hasUserImage);
   const model = getModelForStep("intent_agent");
-  const inputProfile = classifyIntentAgentInputProfile(userMessage);
-  const needsHeavyTools =
-    hasUserImage ||
-    inputProfile === "reference_site_focus" ||
-    listReferenceSiteCandidateUrls(userMessage).length > 0 ||
-    Boolean(toolExtensions?.tools?.length);
+
   const systemPrompt = composePromptBlocks([
     loadStepPrompt("projectIntentAgent"),
     PIPELINE_CONSTRAINTS_TEXT,
-    needsHeavyTools
-      ? ""
-      : "\n\n### 本轮工具面（轻量）\n当前消息**没有**参考站 URL / 截图。你只能使用 `yield_to_user` 与 `commit_generate`。信息不够时**第一轮必须** `yield_to_user`，不要空转。",
   ]);
-  const tools = mergeIntentAgentTools({
-    base: buildIntentAgentToolsForTurn({ needsHeavyTools }),
-    extensions: toolExtensions?.tools,
-  });
-  const maxIterations = needsHeavyTools ? 14 : 4;
-  const trace: IntentAgentTraceStep[] = [];
-  let llmRoundCount = 0;
 
   const persisted = resetSession ? null : await loadIntentAgentSession(projectId);
-
   const messages: ChatMessage[] = persisted?.messages?.length
     ? persisted.messages.map((m) => ({ ...m }))
     : [{ role: "system", content: systemPrompt }];
@@ -177,6 +152,14 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
     content: buildUserVisionContent(userMessage, userImageBase64 ?? null),
   });
 
+  const baseTools = buildIntentAgentControlTools();
+  const tools = mergeIntentAgentTools({
+    base: baseTools,
+    extensions: toolExtensions?.tools,
+  });
+  const maxIterations = 2;
+  const trace: IntentAgentTraceStep[] = [];
+  let llmRoundCount = 0;
   const turnCounter = (persisted?.turnCounter ?? 0) + 1;
   const toolCalls: AgentToolCallRecord[] = [];
 
@@ -185,8 +168,8 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
     | { type: "commit"; mergedBrief: string; imageSourceTexts: string[] };
 
   const box: { resolution: TurnResolution | null } = { resolution: null };
-
   let activeToolIteration = 0;
+  let forceYieldNextRound = false;
 
   const wrapTimedTool = (
     name: string,
@@ -237,25 +220,16 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
       };
       return JSON.stringify({ ok: true, halted: true, action: "commit_generate" });
     }),
-    reference_site_digest: wrapTimedTool("reference_site_digest", (args) =>
-      executeReferenceSiteDigest(args)
-    ),
-    brand_kit_from_url: wrapTimedTool("brand_kit_from_url", (args) => executeBrandKitFromUrl(args)),
-    single_page_ia_proposal: wrapTimedTool("single_page_ia_proposal", (args) =>
-      executeSinglePageIaProposal(args)
-    ),
-    accessibility_and_seo_brief: wrapTimedTool("accessibility_and_seo_brief", (args) =>
-      executeAccessibilitySeoBrief(args)
-    ),
-    competitive_landscape_snapshot: wrapTimedTool("competitive_landscape_snapshot", (args) =>
-      executeCompetitiveLandscapeSnapshot(args)
-    ),
   };
 
   for (const [name, fn] of Object.entries(toolExtensions?.toolHandlers ?? {})) {
     if (INTENT_AGENT_RESERVED_TOOL_NAMES.has(name)) continue;
     executeToolOverrides[name] = fn;
   }
+
+  const yieldOnlyTools = baseTools.filter(
+    (t) => t.type === "function" && t.function.name === "yield_to_user"
+  );
 
   const { content, toolCalls: calls } = await callLLMWithToolsFromMessages({
     messages,
@@ -267,6 +241,26 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
     onMessage,
     shouldAbortAfterToolResults: () => box.resolution !== null,
     langfusePhase: LfToolPhase.intentAgent,
+    resolveToolsForIteration: (iteration, defaultTools) => {
+      if (box.resolution === null && (forceYieldNextRound || iteration >= 1)) {
+        return yieldOnlyTools.length > 0 ? yieldOnlyTools : defaultTools;
+      }
+      return defaultTools;
+    },
+    resolveToolChoiceForIteration: (iteration) => {
+      if (box.resolution === null && (forceYieldNextRound || iteration >= 1)) {
+        return "required";
+      }
+      return "auto";
+    },
+    onApproachingLimit: ({ messages: msgs }) => {
+      msgs.push({
+        role: "system",
+        content:
+          "【系统】本轮必须立刻调用 `yield_to_user` 结束（澄清、选项或确认草稿）。禁止空转。",
+      });
+      forceYieldNextRound = true;
+    },
     onReasoning: onIntentProgress
       ? ({ iteration, text }) => {
           onIntentProgress({
@@ -279,6 +273,11 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
     onAssistantRound: ({ iteration, textPreview, toolCallNames }) => {
       activeToolIteration = iteration;
       llmRoundCount += 1;
+      const hasControl =
+        toolCallNames.includes("yield_to_user") || toolCallNames.includes("commit_generate");
+      if (!hasControl && box.resolution === null) {
+        forceYieldNextRound = true;
+      }
       trace.push({
         kind: "llm_round",
         iteration,
@@ -311,7 +310,6 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
 
   const resolution = box.resolution;
   const turnMeta = {
-    inputProfile,
     trace: [...trace],
     llmRoundCount,
   };
@@ -363,30 +361,6 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
     };
   }
 
-  if (content.trim()) {
-    await saveIntentAgentSession({
-      version: 1,
-      projectId,
-      updatedAt: new Date().toISOString(),
-      turnCounter,
-      messages,
-    });
-    const text = content.trim();
-    return {
-      status: "implicit_yield",
-      assistantText: text,
-      yieldPayload: {
-        kind: "clarify",
-        message: text,
-        suggestedReplies: [],
-        options: [],
-      },
-      turnCounter,
-      toolCalls,
-      ...turnMeta,
-    };
-  }
-
   await saveIntentAgentSession({
     version: 1,
     projectId,
@@ -394,9 +368,16 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
     turnCounter,
     messages,
   });
+  const text = content.trim() || DEFAULT_FORCE_YIELD_MESSAGE;
   return {
-    status: "error",
-    errorMessage: "Intent agent stopped without yield, commit, or assistant text.",
+    status: content.trim() ? "implicit_yield" : "yield",
+    assistantText: content.trim() || undefined,
+    yieldPayload: {
+      kind: "clarify",
+      message: text,
+      suggestedReplies: ["目标用户是……", "首页主要展示……", "视觉风格偏……"],
+      options: [],
+    },
     turnCounter,
     toolCalls,
     ...turnMeta,

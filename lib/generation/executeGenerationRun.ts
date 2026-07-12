@@ -19,7 +19,8 @@ import {
 } from "@/lib/config/corePrompts";
 import { redactBuildStepForTransport } from "@/ai/flows/generate_project/shared/buildStepPayload";
 import { shouldSkipNamingFromBlueprintTitle } from "@/ai/flows/generate_project/intentAgent/commitMergeBrief";
-import { flushLangfuse, resolveLangfuseSessionId } from "@/lib/observability/langfuseTracing";
+import { flushLangfuse, resolveLangfuseSessionId, runWithLangfuseTraceRoot, updateLangfuseActiveTrace, withLangfuseSpan } from "@/lib/observability/langfuseTracing";
+import { LfSpanIntent, LfTrace } from "@/lib/observability/langfuseTraceCatalog";
 import { runWithUsageAccounting } from "@/lib/billing/usageContext";
 import { chargeUsageForRun } from "@/lib/billing/chargeRun";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -193,37 +194,108 @@ export async function executeGenerationRun(args: {
       scheduleLiveBuildSteps();
     };
 
+    const continueTraceId =
+      typeof payload.langfuseTraceId === "string" && payload.langfuseTraceId.trim()
+        ? payload.langfuseTraceId.trim()
+        : undefined;
+    const previousTraceId =
+      typeof payload.previousLangfuseTraceId === "string" &&
+      payload.previousLangfuseTraceId.trim()
+        ? payload.previousLangfuseTraceId.trim()
+        : undefined;
+
     const { result, usage } = await runWithUsageAccounting(() =>
-      withCorePromptRuntime(
+      runWithLangfuseTraceRoot(
         {
-          promptProfile,
-          useDatabasePrompts,
-          dbPromptByStepId: corePromptOverrides,
-        },
-        () =>
-          runGenerateProject(effectivePrompt, onStepForPipeline, {
+          ...(continueTraceId ? { id: continueTraceId } : {}),
+          name: LfTrace.projectBuild,
+          userId: requestingUserId,
+          sessionId: langfuseSessionKey,
+          tags: [
+            "flow:project_build",
+            "route:generation_worker",
+            continueTraceId ? "source:intent_commit" : "source:generation_job",
+          ],
+          metadata: {
             projectId,
-            styleGuide: payload.styleGuide,
-            enableSkills: true,
-            useDatabasePrompts,
-            checkpoint,
-            enableIntentGuide: payload.enableIntentGuide !== false,
-            userImageSourceTexts:
-              userImageSourceTexts.length > 0 ? userImageSourceTexts : undefined,
-            userReferenceImageBase64: resolvedReferenceScreenshot ?? undefined,
-            langfuseUserId: requestingUserId,
-            langfuseSessionId: langfuseSessionKey,
-            langfuseTraceTags: ["route:generation_worker"],
-            langfuseTraceMetadata: {
+            generationRunId: generationRunUuid,
+            status: "generating",
+            retry: retryProjectId != null,
+            ...(previousTraceId ? { previousTraceId } : {}),
+          },
+          input: {
+            userPrompt: effectivePrompt,
+            hasReferenceScreenshot: Boolean(resolvedReferenceScreenshot),
+          },
+        },
+        async () => {
+          const runPipeline = () =>
+            withCorePromptRuntime(
+              {
+                promptProfile,
+                useDatabasePrompts,
+                dbPromptByStepId: corePromptOverrides,
+              },
+              () =>
+                runGenerateProject(effectivePrompt, onStepForPipeline, {
+                  projectId,
+                  styleGuide: payload.styleGuide,
+                  enableSkills: true,
+                  useDatabasePrompts,
+                  checkpoint,
+                  enableIntentGuide: payload.enableIntentGuide !== false,
+                  userImageSourceTexts:
+                    userImageSourceTexts.length > 0 ? userImageSourceTexts : undefined,
+                  userReferenceImageBase64: resolvedReferenceScreenshot ?? undefined,
+                  langfuseUserId: requestingUserId,
+                  langfuseSessionId: langfuseSessionKey,
+                })
+            );
+
+          const genResult = continueTraceId
+            ? await withLangfuseSpan(LfSpanIntent.mergedBriefGeneration, runPipeline, {
+                input: {
+                  generationRunId: generationRunUuid,
+                  briefChars: effectivePrompt.length,
+                },
+                getOutput: (r) => ({
+                  success: r.success,
+                  error: r.error ?? null,
+                  intentGuideDeferred: Boolean(r.intentGuideDeferred),
+                  stepCount: r.steps?.length ?? 0,
+                  totalDurationMs: r.totalDuration,
+                }),
+              })
+            : await runPipeline();
+
+          updateLangfuseActiveTrace({
+            tags: [
+              "flow:project_build",
+              "route:generation_worker",
+              continueTraceId ? "source:intent_commit" : "source:generation_job",
+              genResult.success ? "status:succeeded" : "status:failed",
+            ],
+            metadata: {
+              projectId,
               generationRunId: generationRunUuid,
+              status: genResult.success ? "succeeded" : "failed",
               retry: retryProjectId != null,
-              preCreatedProjectId: preCreatedProjectId != null,
+              ...(previousTraceId ? { previousTraceId } : {}),
+              ...(genResult.error ? { error: genResult.error } : {}),
             },
-            langfuseTraceInput: {
-              userPrompt: effectivePrompt,
-              hasReferenceScreenshot: Boolean(resolvedReferenceScreenshot),
+            output: {
+              success: genResult.success,
+              error: genResult.error ?? null,
+              intentGuideDeferred: Boolean(genResult.intentGuideDeferred),
+              verificationStatus: genResult.verificationStatus ?? null,
+              totalDurationMs: genResult.totalDuration,
+              generatedFileCount: genResult.generatedFiles?.length ?? 0,
+              stepCount: genResult.steps?.length ?? 0,
             },
-          })
+          });
+
+          return genResult;
+        }
       )
     );
 

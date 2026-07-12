@@ -24,8 +24,10 @@ describe("previewUrlAllowedForScreenshot", () => {
     const prev = process.env.NEXT_PUBLIC_SITE_URL;
     process.env.NEXT_PUBLIC_SITE_URL = "https://myapp.example";
     try {
-      const u = previewUrlAllowedForScreenshot("https://myapp.example/site-previews/p1/");
+      const u = previewUrlAllowedForScreenshot("https://myapp.example/site-previews/p1");
       expect(u.hostname).toBe("myapp.example");
+      const withSlash = previewUrlAllowedForScreenshot("https://myapp.example/site-previews/p1/");
+      expect(withSlash.pathname).toBe("/site-previews/p1/");
     } finally {
       process.env.NEXT_PUBLIC_SITE_URL = prev;
     }

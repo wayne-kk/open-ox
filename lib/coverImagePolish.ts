@@ -1,7 +1,6 @@
 /**
- * Post-processes raw viewport JPEGs into "cinema-safe" covers: inward vignette,
- * subtle letterboxing, centered scale on cool black — immersion without edges
- * feeling glued to the card frame.
+ * Post-processes raw viewport JPEGs into gallery covers: full-bleed frame fill
+ * with a light inward vignette for depth (no letterboxing).
  */
 
 import sharp from "sharp";
@@ -11,11 +10,8 @@ export type PolishCoverDimensions = {
   height: number;
 };
 
-/** Content scale inside the fixed frame — leaves breathing room around live UI while keeping immersion in the viewport. */
-const CONTENT_SCALE = 0.928;
-
-/** Frame fill — slightly blue-black so letterbox blends with cyber / dark UI. */
-const FRAME_BG = { r: 5, g: 7, b: 12 };
+/** Content fills the frame edge-to-edge — gallery cards crop with object-cover. */
+const CONTENT_SCALE = 1;
 
 function cinematicOverlaySvg(w: number, h: number): Buffer {
   const svg = `
@@ -60,7 +56,7 @@ export async function polishCoverJpeg(rawJpeg: Buffer, dimensions: PolishCoverDi
       width: fw,
       height: fh,
       channels: 3,
-      background: FRAME_BG,
+      background: { r: 5, g: 7, b: 12 },
     },
   })
     .composite([

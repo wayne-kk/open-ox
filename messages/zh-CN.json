@@ -45,7 +45,9 @@
     "communityCta": "前往社区 →",
     "communityViewAll": "查看全部 →",
     "anonymousAuthor": "匿名作者",
-    "untitledProject": "未命名项目"
+    "untitledProject": "未命名项目",
+    "noDescription": "暂无描述",
+    "remixedFrom": "Remix 自 {title}"
   },
   "auth": {
     "loading": "加载…"

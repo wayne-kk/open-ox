@@ -109,10 +109,30 @@ export function getStoragePreviewBasePath(projectId: string): string {
 /**
  * Browser entry URL for static Storage preview — proxied through this app (no `index.html` in the path;
  * `app/site-previews/.../route` serves `index.html` when the path segment is empty).
+ *
+ * No trailing slash: Next defaults to `trailingSlash: false` and 308s `/site-previews/id/` →
+ * `/site-previews/id`. Returning the canonical form avoids an extra redirect before the iframe paints.
  */
 export function getStaticPreviewUrl(projectId: string): string {
   const origin = getStoragePreviewProxyOrigin();
-  return `${origin}${getStoragePreviewBasePath(projectId)}/`;
+  return `${origin}${getStoragePreviewBasePath(projectId)}`;
+}
+
+/**
+ * Direct Supabase public object URL for a preview file (bypasses the auth-gated `/site-previews` proxy).
+ * Used for server-side health checks — probing the proxy without the owner's cookies falsely 403s private projects.
+ */
+export function getStoragePreviewPublicObjectUrl(projectId: string, rel = "index.html"): string {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()?.replace(/\/$/, "");
+  if (!supabaseUrl) {
+    throw new Error("NEXT_PUBLIC_SUPABASE_URL is required to probe site-previews storage");
+  }
+  const encodedPath = `p/${projectId}/${rel}`
+    .split("/")
+    .filter((segment) => segment.length > 0)
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  return `${supabaseUrl}/storage/v1/object/public/${SITE_PREVIEWS_BUCKET}/${encodedPath}`;
 }
 
 /** Stable 16-char hash of preview proxy origin (NEXT_PUBLIC_SITE_URL) for storage sync skip logic. */
@@ -589,10 +609,11 @@ export async function syncStaticSitePreview(
       const outDir = path.join(projectDir, "out");
       await rewriteExportedPublicPathsInOutDir(outDir, basePath);
       await uploadOutDir(storage, projectId, outDir);
-      await removeLocalOutDir(projectDir);
-
+      // Mark synced before deleting local out/ — otherwise a late failure leaves Storage
+      // populated while static_preview_synced_at stays null (health used to false-down).
       await saveFingerprint(db, projectId, aggregateKey);
       await persistSyncOk(db, projectId);
+      await removeLocalOutDir(projectDir);
 
       return { url, port: 0 };
     } catch (err) {
@@ -610,12 +631,23 @@ export async function syncStaticSitePreview(
   }
 }
 
-async function remoteIndexHtmlReachable(indexUrl: string): Promise<boolean> {
+/**
+ * Probe Storage directly (not `/site-previews` proxy). The proxy requires owner/publish cookies;
+ * a server-side fetch without them returns 403 for private projects and falsely marks preview down.
+ */
+async function remoteIndexHtmlReachable(projectId: string): Promise<boolean> {
+  let storageUrl: string;
   try {
-    const res = await fetch(indexUrl, { method: "HEAD", signal: AbortSignal.timeout(10_000) });
+    storageUrl = getStoragePreviewPublicObjectUrl(projectId, "index.html");
+  } catch {
+    return false;
+  }
+  try {
+    const res = await fetch(storageUrl, { method: "HEAD", signal: AbortSignal.timeout(10_000) });
     if (res.ok) return true;
-    if (res.status === 405) {
-      const get = await fetch(indexUrl, { method: "GET", signal: AbortSignal.timeout(10_000) });
+    // Supabase may reject HEAD; some gateways return 400 for missing keys — only GET confirms.
+    if (res.status === 405 || res.status === 400 || res.status === 403 || res.status === 404) {
+      const get = await fetch(storageUrl, { method: "GET", signal: AbortSignal.timeout(10_000) });
       return get.ok;
     }
   } catch {
@@ -629,10 +661,10 @@ export async function ensureStaticPreviewAlive(
   projectId: string
 ): Promise<{ status: "ok" | "down"; url?: string }> {
   const indexUrl = getStaticPreviewUrl(projectId);
-  if (await remoteIndexHtmlReachable(indexUrl)) {
+  if (await remoteIndexHtmlReachable(projectId)) {
     return { status: "ok", url: indexUrl };
   }
-  // HEAD/GET can flake (proxy, cold start). If we already published, keep serving —
+  // Storage HEAD/GET can flake. If we already published, keep serving —
   // wiping the iframe on tab switch causes a black flash and a pointless restart.
   const row = await loadStaticPreviewRow(db, projectId);
   if (row?.static_preview_synced_at) {
@@ -653,7 +685,7 @@ export async function getStaticPreviewStatus(
   }
 
   try {
-    if (await remoteIndexHtmlReachable(indexUrl)) return { status: "running", url: indexUrl };
+    if (await remoteIndexHtmlReachable(projectId)) return { status: "running", url: indexUrl };
   } catch {
     /* */
   }

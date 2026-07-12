@@ -887,6 +887,10 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     }
 
     try {
+      // Guards against layered SSE fallbacks appending the same assistant bubble twice
+      // (live `intent_agent_turn` vs `done`/`onDone` hydrate). activityLog often differs
+      // across those paths, so content-only dedupe in appendConversationMessage is not enough.
+      let intentAssistantAppended = false;
       await runBuildSite(
         textForApi,
         {
@@ -901,6 +905,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
             setIntentProgressLog([]);
             // commit_generate: `onIntentCommit` appends the confirmation line.
             if (shouldAppendIntentAssistant(turn)) {
+              intentAssistantAppended = true;
               appendConversationMessage({
                 role: "assistant",
                 content: intentAssistantContent(turn),
@@ -952,8 +957,8 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
           onStep: handleStepEvent,
           onDone: (result) => {
             const turn = result.intentAgent ?? null;
-            // Fallback: if `intent_agent_turn` SSE was dropped (e.g. secure-stream decode), still show reply.
-            if (shouldAppendIntentAssistant(turn)) {
+            // Last-resort hydrate only if neither live turn nor done→onIntentTurn appended.
+            if (!intentAssistantAppended && shouldAppendIntentAssistant(turn)) {
               appendConversationMessage({
                 role: "assistant",
                 content: intentAssistantContent(turn),

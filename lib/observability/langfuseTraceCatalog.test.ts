@@ -10,6 +10,8 @@ import {
 
 describe("langfuseTraceCatalog", () => {
   it("uses ox.trace prefix for root traces", () => {
+    expect(LfTrace.projectBuild.startsWith("ox.trace.")).toBe(true);
+    expect(LfTrace.projectBuild).toBe("ox.trace.project_build");
     expect(LfTrace.generateProject.startsWith("ox.trace.")).toBe(true);
     expect(LfTrace.intentAgent.startsWith("ox.trace.")).toBe(true);
     expect(LfTrace.modifyProject.startsWith("ox.trace.")).toBe(true);

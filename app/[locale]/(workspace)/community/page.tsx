@@ -1,15 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Globe2, Loader2, Sparkles, User } from "lucide-react";
+import { ArrowUpRight, Clock, Globe2, Loader2, Repeat2, Sparkles, User } from "lucide-react";
 import { HamsterLoader } from "@/components/ui/hamster-loader";
 import { useAuthUser } from "@/app/components/AuthHeaderActions";
+import { formatRelativeTime } from "@/lib/formatRelativeTime";
 import { projectCoverDisplayUrl } from "@/lib/projectCoverUrls";
 import { cn } from "@/lib/utils";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
+
 type CommunityProject = {
   id: string;
   name: string;
+  userPrompt?: string;
   ownerUsername?: string | null;
   coverImageStatus?: "pending" | "ready" | "failed" | null;
   coverImageUpdatedAt?: string | null;
@@ -17,6 +20,7 @@ type CommunityProject = {
   publishPreview?: boolean;
   createdAt?: string;
   updatedAt?: string;
+  remixedFromTitle?: string | null;
 };
 
 const PAGE_SIZE = 24;
@@ -57,13 +61,18 @@ function CommunityCard({
   const owner = project.ownerUsername?.trim() || "匿名作者";
   const allowRemix = project.allowRemix === true;
   const remixBusy = remixingId === project.id;
+  const description = project.userPrompt?.trim() || "";
+  const remixedFrom = project.remixedFromTitle?.trim() || "";
+  const relativeTime = project.createdAt
+    ? formatRelativeTime(project.createdAt, "zh-CN")
+    : "";
 
   return (
     <div
       className={cn(
         "group/card relative flex h-full flex-col overflow-hidden rounded-xl border border-white/[0.07] bg-[#080a0e]",
-        "transition-[box-shadow,border-color] duration-200 ease-out",
-        "hover:border-primary/40 hover:shadow-[var(--box-shadow-neon)]"
+        "transition-[box-shadow,border-color,transform] duration-200 ease-out",
+        "hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[var(--box-shadow-neon)]"
       )}
     >
       <a
@@ -84,7 +93,7 @@ function CommunityCard({
             <img
               src={projectCoverDisplayUrl(project.id, project.coverImageUpdatedAt)}
               alt=""
-              className="relative z-0 h-full w-full object-contain object-center"
+              className="absolute inset-0 z-0 h-full w-full object-cover object-center transition-transform duration-200 ease-out"
               loading="lazy"
               decoding="async"
             />
@@ -99,29 +108,57 @@ function CommunityCard({
               {initials || "?"}
             </span>
           )}
-        </div>
-      </a>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-1.5 px-3 py-2.5">
-        <div className="flex items-start justify-between gap-2">
-          <a
-            href={previewHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="min-w-0 flex-1 truncate text-[13px] font-semibold leading-snug text-foreground transition-colors duration-150 group-hover/card:text-primary"
-          >
-            {project.name || "未命名项目"}
-          </a>
           {allowRemix ? (
-            <span className="flex shrink-0 items-center gap-1 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[8px] font-mono font-bold tracking-wider text-emerald-700 dark:text-emerald-300/90">
+            <span className="absolute left-2.5 top-2.5 z-10 inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 text-[8px] font-mono font-bold tracking-wider text-emerald-700 backdrop-blur-md dark:text-emerald-300/90">
+              <Repeat2 className="h-2.5 w-2.5" aria-hidden />
               Remix
             </span>
           ) : null}
+
+          <span
+            className="pointer-events-none absolute bottom-2.5 right-2.5 z-10 flex h-7 w-7 items-center justify-center rounded-lg border border-white/15 bg-black/55 text-white/90 opacity-0 backdrop-blur-md transition-opacity duration-200 group-hover/card:opacity-100"
+            aria-hidden
+          >
+            <ArrowUpRight className="h-3.5 w-3.5" />
+          </span>
         </div>
-        <div className="mt-auto flex items-center justify-between gap-2 border-t border-border/80 pt-2">
-          <div className="flex min-w-0 items-center gap-1.5 text-[10px] text-foreground/65">
-            <User className="h-3 w-3 shrink-0 opacity-70" />
-            <span className="truncate font-mono">{owner}</span>
+      </a>
+
+      <div className="flex min-h-0 flex-1 flex-col gap-1.5 px-3.5 py-3">
+        <a
+          href={previewHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="line-clamp-2 text-[13px] font-semibold leading-snug text-foreground transition-colors duration-150 group-hover/card:text-primary"
+        >
+          {project.name || "未命名项目"}
+        </a>
+        {description ? (
+          <p className="line-clamp-2 text-[11px] leading-relaxed text-foreground/55">
+            {description}
+          </p>
+        ) : (
+          <p className="text-[11px] text-foreground/30">暂无描述</p>
+        )}
+        {remixedFrom ? (
+          <p className="inline-flex min-w-0 items-center gap-1 text-[10px] text-muted-foreground/80">
+            <Repeat2 className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+            <span className="truncate">Remix 自 {remixedFrom}</span>
+          </p>
+        ) : null}
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 border-t border-border/80 pt-2.5">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] text-foreground/65">
+            <span className="inline-flex min-w-0 items-center gap-1.5">
+              <User className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+              <span className="truncate font-mono">{owner}</span>
+            </span>
+            {relativeTime ? (
+              <span className="inline-flex items-center gap-1">
+                <Clock className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+                {relativeTime}
+              </span>
+            ) : null}
           </div>
           {allowRemix ? (
             <button
@@ -129,21 +166,29 @@ function CommunityCard({
               disabled={!authReady || remixBusy || remixingId != null}
               onClick={() => onRemix(project.id)}
               className={cn(
-                "shrink-0 rounded-lg border border-emerald-400/30 bg-emerald-500/15 px-2.5 py-1",
+                "inline-flex shrink-0 items-center gap-1 rounded-lg border border-emerald-400/30 bg-emerald-500/15 px-2.5 py-1",
                 "text-[10px] font-medium text-emerald-700 dark:text-emerald-200 transition-colors",
                 "hover:bg-emerald-500/25 disabled:opacity-50"
               )}
             >
               {remixBusy ? (
-                <span className="inline-flex items-center gap-1">
+                <>
                   <Loader2 className="h-3 w-3 animate-spin" />
                   Remix…
-                </span>
+                </>
               ) : (
-                "Remix"
+                <>
+                  <Repeat2 className="h-3 w-3" aria-hidden />
+                  Remix
+                </>
               )}
             </button>
-          ) : null}
+          ) : (
+            <span className="inline-flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground/70">
+              <Globe2 className="h-3 w-3" aria-hidden />
+              Preview
+            </span>
+          )}
         </div>
       </div>
     </div>

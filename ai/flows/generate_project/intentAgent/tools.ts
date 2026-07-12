@@ -1,9 +1,4 @@
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
-import { referenceSiteDigestTool } from "@/ai/tools/system/referenceSiteDigestTool";
-import { brandKitFromUrlTool } from "@/ai/tools/system/brandKitFromUrlTool";
-import { singlePageIaProposalTool } from "@/ai/tools/system/singlePageIaProposalTool";
-import { accessibilitySeoBriefTool } from "@/ai/tools/system/accessibilitySeoBriefTool";
-import { competitiveLandscapeSnapshotTool } from "@/ai/tools/system/competitiveLandscapeSnapshotTool";
 
 /** Inlined in intent-agent system prompt — not a separate tool (avoids an extra LLM round). */
 export const PIPELINE_CONSTRAINTS_TEXT = `## open-ox 生成流水线（硬约束）
@@ -82,25 +77,14 @@ export function buildIntentAgentControlTools(): ChatCompletionTool[] {
   ];
 }
 
-/** Full tool surface (control + silent research tools). Prefer {@link buildIntentAgentToolsForTurn}. */
+/** Intent Agent control surface only (`yield_to_user` / `commit_generate`). */
 export function buildIntentAgentTools(): ChatCompletionTool[] {
-  return [
-    referenceSiteDigestTool,
-    brandKitFromUrlTool,
-    singlePageIaProposalTool,
-    accessibilitySeoBriefTool,
-    competitiveLandscapeSnapshotTool,
-    ...buildIntentAgentControlTools(),
-  ];
+  return buildIntentAgentControlTools();
 }
 
-/**
- * Slim tool schemas for clarify-only turns (no reference URL / screenshot).
- * Heavy silent tools stay available when the turn needs them.
- */
-export function buildIntentAgentToolsForTurn(params: {
-  needsHeavyTools: boolean;
+/** @deprecated Alias of {@link buildIntentAgentTools} — silent research tools are disabled. */
+export function buildIntentAgentToolsForTurn(_params?: {
+  needsHeavyTools?: boolean;
 }): ChatCompletionTool[] {
-  return params.needsHeavyTools ? buildIntentAgentTools() : buildIntentAgentControlTools();
+  return buildIntentAgentControlTools();
 }
-

@@ -2,6 +2,23 @@
  * MIME mapping for `/site-previews/...` proxy responses (no Storage / env side effects; safe for unit tests).
  */
 
+/**
+ * Supabase public object API often returns HTTP 400 with JSON `{ statusCode: "404", error: "not_found" }`
+ * when the key is missing. Map that to a real 404 for browsers / iframe diagnostics.
+ */
+export function mapStorageUpstreamStatus(status: number, bodyText?: string | null): number {
+  if (status !== 400 || !bodyText) return status;
+  try {
+    const parsed = JSON.parse(bodyText) as { statusCode?: unknown; error?: unknown };
+    const code = parsed.statusCode;
+    const err = typeof parsed.error === "string" ? parsed.error.toLowerCase() : "";
+    if (code === "404" || code === 404 || err === "not_found") return 404;
+  } catch {
+    /* not JSON */
+  }
+  return status;
+}
+
 export function contentTypeForRelPath(rel: string): string {
   const lower = rel.toLowerCase();
   if (lower.endsWith(".html")) return "text/html";

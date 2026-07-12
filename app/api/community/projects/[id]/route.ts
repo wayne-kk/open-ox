@@ -45,6 +45,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     id: project.id,
     name: project.name,
     status: project.status,
+    userPrompt: project.userPrompt ?? "",
     ownerUsername: project.ownerUsername ?? null,
     coverImageStatus: project.coverImageStatus ?? null,
     coverImageUpdatedAt: project.coverImageUpdatedAt ?? null,

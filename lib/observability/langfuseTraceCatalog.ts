@@ -14,12 +14,21 @@ export const OX_SPAN_PREFIX = "ox.span" as const;
 
 /** Root traces — use for {@link runWithLangfuseTraceRoot}'s `name`. */
 export const LfTrace = {
+  /**
+   * Full build pipeline (intent commit + generate, or standalone generate).
+   * Clarification-only turns stay on {@link LfTrace.intentAgent}; modify uses
+   * {@link LfTrace.modifyProject}.
+   */
+  projectBuild: `${OX_TRACE_PREFIX}.project_build`,
+  /**
+   * @deprecated Prefer {@link LfTrace.projectBuild}. Kept so older traces remain findable by name.
+   */
   generateProject: `${OX_TRACE_PREFIX}.generate_project`,
   intentAgent: `${OX_TRACE_PREFIX}.intent_agent`,
   modifyProject: `${OX_TRACE_PREFIX}.modify_project`,
 } as const;
 
-/** Spans inside {@link LfTrace.generateProject} (and nested under intent-agent generation). */
+/** Spans inside {@link LfTrace.projectBuild} (and nested under intent commit continuation). */
 export const LfSpanGen = {
   /** Wraps the full generate inner pipeline when a parent trace already exists. */
   fullPipeline: `${OX_SPAN_PREFIX}.gen.00_full_pipeline`,

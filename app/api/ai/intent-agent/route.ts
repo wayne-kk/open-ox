@@ -20,8 +20,10 @@ import { requireOwnedProject } from "@/lib/auth/projectAccess";
 import { runWithSiteRoot } from "@/ai/tools/system/common";
 import {
   flushLangfuse,
+  getLangfuseTraceId,
   resolveLangfuseSessionId,
   runWithLangfuseTraceRoot,
+  updateLangfuseActiveTrace,
   withLangfuseSpan,
 } from "@/lib/observability/langfuseTracing";
 import { LfSpanIntent, LfTrace } from "@/lib/observability/langfuseTraceCatalog";
@@ -327,6 +329,22 @@ export async function POST(req: Request) {
               : {}),
           };
 
+          // T1: promote intent root → project_build and hand the same trace id to the worker.
+          const activeTraceId = getLangfuseTraceId();
+          if (activeTraceId) {
+            updateLangfuseActiveTrace({
+              name: LfTrace.projectBuild,
+              tags: ["flow:project_build", "route:api_intent_agent", "phase:generation_queued"],
+              metadata: {
+                projectId,
+                status: "generation_queued",
+                resetSession,
+                runGenerateOnCommit,
+              },
+            });
+            intentRunPayload.langfuseTraceId = activeTraceId;
+          }
+
           const { runId, attached } = await enqueueGenerationJob({
             db,
             projectId,
@@ -335,6 +353,18 @@ export async function POST(req: Request) {
             resumeFromCheckpoint: false,
             payload: intentRunPayload,
           });
+
+          if (activeTraceId) {
+            updateLangfuseActiveTrace({
+              metadata: {
+                projectId,
+                status: "generation_queued",
+                generationRunId: runId,
+                resetSession,
+                runGenerateOnCommit,
+              },
+            });
+          }
 
           scheduleInlineGenerationRun(runId);
 

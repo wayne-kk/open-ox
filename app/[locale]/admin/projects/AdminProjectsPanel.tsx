@@ -147,7 +147,7 @@ export function AdminProjectsPanel() {
               ) : (
                 projects.map((project) => {
                   const owner = project.ownerUsername?.trim() || "—";
-                  const previewHref = `/site-previews/${encodeURIComponent(project.id)}/`;
+                  const previewHref = `/site-previews/${encodeURIComponent(project.id)}`;
                   return (
                     <tr key={project.id} className="border-t border-white/10">
                       <td className="px-3 py-2">

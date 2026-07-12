@@ -1,5 +1,30 @@
 import { describe, expect, it } from "vitest";
-import { contentTypeForRelPath, resolveProxiedContentType } from "./staticSitePreviewProxyMime";
+import {
+  contentTypeForRelPath,
+  mapStorageUpstreamStatus,
+  resolveProxiedContentType,
+} from "./staticSitePreviewProxyMime";
+
+describe("mapStorageUpstreamStatus", () => {
+  it("maps Storage not_found JSON on HTTP 400 to 404", () => {
+    expect(
+      mapStorageUpstreamStatus(
+        400,
+        JSON.stringify({ statusCode: "404", error: "not_found", message: "Object not found" })
+      )
+    ).toBe(404);
+  });
+
+  it("leaves other 400s unchanged", () => {
+    expect(mapStorageUpstreamStatus(400, "Bad Request")).toBe(400);
+    expect(mapStorageUpstreamStatus(400, null)).toBe(400);
+  });
+
+  it("leaves non-400 statuses unchanged", () => {
+    expect(mapStorageUpstreamStatus(404, "")).toBe(404);
+    expect(mapStorageUpstreamStatus(500, '{"statusCode":"404"}')).toBe(500);
+  });
+});
 
 describe("resolveProxiedContentType", () => {
   it("uses path map for gif", () => {

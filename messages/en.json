@@ -45,7 +45,9 @@
     "communityCta": "Browse community →",
     "communityViewAll": "View all →",
     "anonymousAuthor": "Anonymous",
-    "untitledProject": "Untitled project"
+    "untitledProject": "Untitled project",
+    "noDescription": "No description",
+    "remixedFrom": "Remixed from {title}"
   },
   "auth": {
     "loading": "Loading…"

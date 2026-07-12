@@ -8,6 +8,7 @@ import {
   SITE_PREVIEWS_BUCKET,
   resolveProxiedContentType,
 } from "@/lib/staticSitePreview";
+import { mapStorageUpstreamStatus } from "@/lib/staticSitePreviewProxyMime";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 import {
   designModeBridgeScriptPath,
@@ -94,7 +95,12 @@ async function proxyFromStorage(
   }
 
   if (!upstream.ok) {
-    return new NextResponse(upstream.statusText, { status: upstream.status });
+    // Storage missing keys often return HTTP 400 + JSON `{ statusCode: "404" }` (body present on GET and HEAD).
+    const errBody = await upstream.text().catch(() => "");
+    const status = mapStorageUpstreamStatus(upstream.status, errBody);
+    return new NextResponse(status === 404 ? "Not found" : upstream.statusText || "Upstream error", {
+      status,
+    });
   }
 
   const contentType = resolveProxiedContentType(rel, upstream.headers.get("content-type"));
