@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { getSiteOrigin } from "@/lib/seo/siteUrl";
+import { isSeoOriginLocal, resolvePublicOrigin } from "@/lib/seo/siteUrl";
 
 const PRIVATE_PREFIXES = [
   "/studio",
@@ -14,8 +14,8 @@ const PRIVATE_PREFIXES = [
   "/site-previews",
 ] as const;
 
-export default function robots(): MetadataRoute.Robots {
-  const origin = getSiteOrigin();
+export default async function robots(): Promise<MetadataRoute.Robots> {
+  const origin = await resolvePublicOrigin();
   const disallow = [
     ...PRIVATE_PREFIXES,
     ...PRIVATE_PREFIXES.map((p) => `/en${p}`),
@@ -29,6 +29,7 @@ export default function robots(): MetadataRoute.Robots {
         disallow,
       },
     ],
-    sitemap: `${origin}/sitemap.xml`,
+    // Only advertise sitemap when it would contain public https URLs.
+    ...(isSeoOriginLocal(origin) ? {} : { sitemap: `${origin}/sitemap.xml` }),
   };
 }

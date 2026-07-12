@@ -2,7 +2,11 @@ import type { MetadataRoute } from "next";
 import { routing } from "@/i18n/routing";
 import { withLocalePrefix } from "@/lib/i18n/localePath";
 import { COMPETITORS } from "@/lib/seo/competitors";
-import { absoluteLocaleUrl, getSiteOrigin } from "@/lib/seo/siteUrl";
+import {
+  absoluteLocaleUrl,
+  isSeoOriginLocal,
+  resolvePublicOrigin,
+} from "@/lib/seo/siteUrl";
 
 const INDEXED_PATHS = [
   "/",
@@ -13,19 +17,25 @@ const INDEXED_PATHS = [
   ...COMPETITORS.map((c) => `/compare/${c.slug}`),
 ] as const;
 
-function localeAlternates(pathname: string): MetadataRoute.Sitemap[number]["alternates"] {
-  const languages: Record<string, string> = {};
-  for (const locale of routing.locales) {
-    languages[locale] = absoluteLocaleUrl(pathname, locale);
-  }
-  return { languages };
-}
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const origin = await resolvePublicOrigin();
 
-export default function sitemap(): MetadataRoute.Sitemap {
-  const origin = getSiteOrigin();
+  // Baidu / Google reject localhost (and private) URLs in a submitted sitemap.
+  if (isSeoOriginLocal(origin)) {
+    console.error(
+      "[sitemap] Refusing to emit localhost URLs. Set NEXT_PUBLIC_SITE_URL to your public https origin, rebuild, then submit https://YOUR_DOMAIN/sitemap.xml"
+    );
+    return [];
+  }
+
   const entries: MetadataRoute.Sitemap = [];
 
   for (const pathname of INDEXED_PATHS) {
+    const languages: Record<string, string> = {};
+    for (const locale of routing.locales) {
+      languages[locale] = absoluteLocaleUrl(pathname, locale, origin);
+    }
+
     for (const locale of routing.locales) {
       const path = withLocalePrefix(pathname, locale);
       entries.push({
@@ -38,7 +48,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
             : pathname.startsWith("/compare") || pathname === "/alternatives"
               ? 0.7
               : 0.8,
-        alternates: localeAlternates(pathname),
+        alternates: { languages },
       });
     }
   }

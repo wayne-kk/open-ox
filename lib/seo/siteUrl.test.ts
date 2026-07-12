@@ -1,9 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { absoluteLocaleUrl, languageAlternates } from "./siteUrl";
+import {
+  absoluteLocaleUrl,
+  getSiteOrigin,
+  isSeoOriginLocal,
+  languageAlternates,
+} from "./siteUrl";
 
 describe("siteUrl helpers", () => {
   const prevSite = process.env.NEXT_PUBLIC_SITE_URL;
   const prevApp = process.env.NEXT_PUBLIC_APP_URL;
+  const prevNode = process.env.NODE_ENV;
 
   beforeEach(() => {
     process.env.NEXT_PUBLIC_SITE_URL = "https://open-ox.example";
@@ -15,6 +21,8 @@ describe("siteUrl helpers", () => {
     else process.env.NEXT_PUBLIC_SITE_URL = prevSite;
     if (prevApp === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
     else process.env.NEXT_PUBLIC_APP_URL = prevApp;
+    if (prevNode === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = prevNode;
   });
 
   it("builds absolute locale URLs", () => {
@@ -30,5 +38,14 @@ describe("siteUrl helpers", () => {
     expect(langs["zh-CN"]).toBe("https://open-ox.example/pricing");
     expect(langs.en).toBe("https://open-ox.example/en/pricing");
     expect(langs["x-default"]).toBe("https://open-ox.example/pricing");
+  });
+
+  it("detects localhost SEO origins", () => {
+    expect(isSeoOriginLocal("http://localhost:3000")).toBe(true);
+    expect(isSeoOriginLocal("https://open-ox.example")).toBe(false);
+  });
+
+  it("prefers non-localhost SITE_URL", () => {
+    expect(getSiteOrigin()).toBe("https://open-ox.example");
   });
 });

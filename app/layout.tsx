@@ -28,6 +28,11 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     images: ["/og/default.png"],
   },
+  verification: {
+    other: {
+      "baidu-site-verification": "codeva-CDLENiAkSB",
+    },
+  },
 };
 
 /**
