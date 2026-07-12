@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
 import { isAdminUser } from "@/lib/auth/roles";
+import { listAllAuthAdminUsers } from "@/lib/admin/analytics/authUsers";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 
 async function requireAdmin() {
@@ -35,18 +36,8 @@ function getDisplayName(user: AuthUserLite): string {
   return user.id.slice(0, 8);
 }
 
-async function listAllUsers() {
-  const service = createSupabaseServiceRoleClient();
-  const users: AuthUserLite[] = [];
-  const perPage = 200;
-  for (let page = 1; page <= 20; page += 1) {
-    const { data, error } = await service.auth.admin.listUsers({ page, perPage });
-    if (error) throw error;
-    const current = (data?.users ?? []) as AuthUserLite[];
-    users.push(...current);
-    if (current.length < perPage) break;
-  }
-  return users;
+async function listAllUsers(): Promise<AuthUserLite[]> {
+  return (await listAllAuthAdminUsers()) as AuthUserLite[];
 }
 
 export async function GET(req: NextRequest) {

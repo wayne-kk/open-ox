@@ -5,7 +5,7 @@
  * env and `--webpack` are both present ("Multiple bundler flags set").
  */
 export function envForNextWebpackChild(
-  overrides: NodeJS.ProcessEnv = {}
+  overrides: Partial<NodeJS.ProcessEnv> = {}
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, ...overrides };
   delete env.TURBOPACK;

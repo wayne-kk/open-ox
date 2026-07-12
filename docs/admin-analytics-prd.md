@@ -78,7 +78,26 @@ Open-OX 是面向网站生产的 AI Harness 平台。运营团队需要回答：
 
 ## 4. 指标定义（Metrics Dictionary）
 
-> 所有指标需明确：**口径、数据源、更新频率、是否含 bot/内部账号**。
+> 所有指标需明确：**口径、数据源、更新频率、是否含 bot/内部账号**。  
+> 实现锚点：`lib/admin/analytics/metricsDictionary.ts`（v1 总览 + 队列）。
+
+### 4.0 v1 已落地口径（2026-07）
+
+| 指标 | 口径 | 内部账号 |
+|------|------|----------|
+| **DAU** | 已登录用户，当日 UTC 至少 1 次 `page_view` 或 `studio_heartbeat`。建项目 / 建 run **不计**。匿名 PV 不计。 | 分析默认排除 |
+| **新增注册** | Auth `created_at` 按 UTC 日聚合；census 翻完 Auth 分页（无静默 4000 顶） | 分析默认排除 |
+| **新增项目** | `projects.created_at` 按 UTC 日 | 分析默认排除 |
+| **首项目** | 每用户 lifetime 最早一次 `projects.created_at` 落在当日才 +1。API/图表字段：`firstProject`（不再使用误标的 `firstPrompt`） | 分析默认排除 |
+| **首 Prompt** | 等埋点 `prompt_submit` 后再上；**当前不做** | — |
+| **首次 Ready 用户** | 每用户 lifetime 最早 `status=ready` 的 `completed_at`（缺省则 `created_at`）日 | 分析默认排除 |
+| **生成成功率** | 终态 only：`succeeded / (succeeded + failed)`，按 `finished_at` 归 UTC 日；`queued`/`running` 不进分母 | 分析默认排除 |
+| **平均生成耗时** | `finished_at - started_at`（分钟），按完成日；P50 为样本中位 | 分析默认排除 |
+| **队列 queued / running** | 当前状态 exact count | **不排除**（系统负载） |
+| **队列 succeeded24h / failed24h** | `status` + `finished_at >= now-24h` 的 **exact count**（不得从「最近 N 条」推导） | **不排除** |
+| **队列平均等待** | 近 30 条样本均值（近似，非全量） | **不排除** |
+
+成本 / 留存 / 停留 / Modify 分布口径见下文，属 **v1.1**（尚未与代码字典对齐）。
 
 ### 4.1 用户规模类
 
@@ -86,9 +105,10 @@ Open-OX 是面向网站生产的 AI Harness 平台。运营团队需要回答：
 |------|------|------------------------|
 | **注册用户总数** | `auth.users` 累计 | ✅ Supabase Auth |
 | **新增注册（DAU 注册）** | 按 `created_at` 日聚合 | ✅ |
-| **DAU / WAU / MAU** | 当日/7日/30日至少 1 次有效行为 | ⚠️ 需埋点 `user_sessions` |
+| **DAU** | 见 §4.0：`page_view` ∪ `studio_heartbeat`（已登录） | ✅ analytics_events |
+| **WAU / MAU** | 7日/30日至少 1 次有效行为（同 DAU 事件集） | ⚠️ 未实现 |
 | **活跃 Studio 用户** | 进入 `/studio` 或触发 API 的用户 | ⚠️ 需埋点 |
-| **内部账号过滤** | 邮箱域名 / `user_roles` 标记排除 | ⚠️ 需配置 |
+| **内部账号过滤** | admin 角色 / `analytics_internal_accounts` / 邮箱域名；分析 KPI 默认排除，队列不排除 | ✅ |
 
 ### 4.2 激活与漏斗类
 
@@ -99,9 +119,10 @@ Open-OX 是面向网站生产的 AI Harness 平台。运营团队需要回答：
 | 访问首页 | `page_view: /` | — |
 | 开始登录 | `auth_start`（Google/Feishu） | 注册/登录率 |
 | 完成登录 | `auth_success` | — |
-| 首次输入 Prompt | `prompt_submit` | 注册→首 Prompt |
+| 首项目（v1 代理） | lifetime 首次 `projects.created_at` | 注册→首项目 |
+| 首次输入 Prompt | `prompt_submit`（待埋点） | 注册→首 Prompt |
 | 进入 Intent 对话 | `intent_agent_start` | — |
-| 开始生成 | `generation_run_queued` | 首 Prompt→开跑 |
+| 开始生成 | `generation_run_queued` | 首项目→开跑 |
 | 首次 Ready | `project_status: ready`（用户首个） | **核心激活率** |
 | 首次修改 | `modify_run_start` | 深度激活 |
 | 预览/导出 | `preview_open` / `export` | 交付率 |
@@ -134,7 +155,7 @@ Open-OX 是面向网站生产的 AI Harness 平台。运营团队需要回答：
 |------|------|--------|
 | **项目总数 / 新增** | `projects.created_at` | ✅ |
 | **按状态分布** | generating / awaiting_input / ready / failed | ✅ |
-| **生成成功率** | `succeeded runs / total runs` | ✅ `generation_runs` |
+| **生成成功率** | `succeeded / (succeeded + failed)`，按 `finished_at` 归日；不含 queued/running | ✅ `generation_runs` |
 | **平均生成耗时** | `finished_at - started_at` 或 `projects.total_duration` | ✅ 部分 |
 | **Build 修复轮数** | repair 步骤次数 | ✅ `generation_events` / build_steps |
 | **Modify 次数/项目** | `modification_history` 长度 | ✅ |
@@ -178,7 +199,7 @@ Open-OX 是面向网站生产的 AI Harness 平台。运营团队需要回答：
 | 图表 | Y 轴 | 说明 |
 |------|------|------|
 | 用户增长趋势 | 新增注册、DAU、WAU | 双 Y 或 normalization |
-| 激活漏斗趋势 | 注册→首 Prompt→首 Ready 各步转化率 | 3 条线 |
+| 激活漏斗趋势 | 注册→首项目→首 Ready 各步（首 Prompt 待埋点） | 3 条线 |
 | 项目生产趋势 | 新建 / Ready / Failed | 堆叠面积图可选 |
 | 停留时长趋势 | 平均 Session 时长、P50/P90 | 2~3 条线 |
 | 生成耗时趋势 | P50/P90 生成时长 | 识别性能回归 |

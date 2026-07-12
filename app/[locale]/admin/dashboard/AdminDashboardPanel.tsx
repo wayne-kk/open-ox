@@ -118,7 +118,7 @@ export function AdminDashboardPanel() {
             title="DAU"
             value={kpis.dau.today}
             delta={formatDelta(kpis.dau.today, kpis.dau.yesterday)}
-            hint={`7 日均 ${kpis.dau.avg7d} · 含埋点与业务活跃`}
+            hint={`7 日均 ${kpis.dau.avg7d} · page_view / studio_heartbeat`}
           />
           <MetricCard
             title="新增项目"
@@ -188,7 +188,7 @@ export function AdminDashboardPanel() {
             data={data.charts.activationFunnel}
             series={[
               { key: "registered", label: "注册", color: "#f7931a" },
-              { key: "firstPrompt", label: "首 Prompt", color: "#60a5fa" },
+              { key: "firstProject", label: "首项目", color: "#60a5fa" },
               { key: "firstReady", label: "首 Ready", color: "#34d399" },
             ]}
           />

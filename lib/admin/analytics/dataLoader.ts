@@ -1,4 +1,5 @@
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
+import { listAllAuthUsers } from "@/lib/admin/analytics/authUsers";
 import { filterExternalUsers, getInternalEmailDomains } from "@/lib/admin/analytics/internalAccounts";
 
 export interface AuthUserRecord {
@@ -42,25 +43,6 @@ export interface AnalyticsBaseData {
   adminUserIds: Set<string>;
   manualInternalIds: Set<string>;
   excludeInternal: boolean;
-}
-
-async function listAllAuthUsers(): Promise<AuthUserRecord[]> {
-  const service = createSupabaseServiceRoleClient();
-  const users: AuthUserRecord[] = [];
-  const perPage = 200;
-  for (let page = 1; page <= 20; page += 1) {
-    const { data, error } = await service.auth.admin.listUsers({ page, perPage });
-    if (error) throw error;
-    for (const user of data?.users ?? []) {
-      users.push({
-        id: user.id,
-        email: user.email ?? null,
-        created_at: user.created_at ?? new Date(0).toISOString(),
-      });
-    }
-    if ((data?.users ?? []).length < perPage) break;
-  }
-  return users;
 }
 
 export async function loadAnalyticsBase(params: {

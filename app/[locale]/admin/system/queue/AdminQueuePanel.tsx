@@ -61,6 +61,7 @@ export function AdminQueuePanel() {
               <span className="font-medium text-foreground">
                 {data.avgWaitSeconds != null ? `${data.avgWaitSeconds}s` : "—"}
               </span>
+              <span className="ml-2 text-xs">（近 30 条样本）</span>
             </p>
           </div>
 
