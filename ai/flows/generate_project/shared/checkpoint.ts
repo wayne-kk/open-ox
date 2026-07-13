@@ -169,13 +169,13 @@ export function detectCheckpoint(project: ProjectMetadata): CheckpointResult {
   if (result.implementedPages.size > 0 && !allPagesDone) {
     result.summary = `Resuming: skipping ${result.implementedPages.size} implemented page(s)`;
   } else if (allPagesDone && !result.skipChromeOptimize) {
-    result.summary = "Resuming: all pages done, running chrome optimize";
+    result.summary = "Resuming: all pages done, running chrome agent";
   } else if (allPagesDone) {
     result.summary = "Resuming from post-chrome build";
   } else if (result.skipScaffold) {
     result.summary = "Resuming from page implementation";
   } else {
-    result.summary = "Resuming from chrome scaffold";
+    result.summary = "Resuming from design tokens / page implementation";
   }
 
   return result;

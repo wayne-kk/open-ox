@@ -248,6 +248,36 @@ export function createBootstrapGuardedListDirExecutor(
   };
 }
 
+/**
+ * Block writes to layout / chrome / globals during page implementation so the
+ * later single Chrome Agent owns global Nav/Footer (chrome-deferred flow).
+ */
+export function isPageAgentForbiddenWritePath(relativePath: string): boolean {
+  const path = normalizeAgentRelativePath(relativePath);
+  if (!path) return false;
+  if (path === "app/layout.tsx" || path === "app/globals.css") return true;
+  if (path === "components/chrome" || path.startsWith("components/chrome/")) return true;
+  return false;
+}
+
+export function createPageAgentChromeDeferredWriteExecutor(
+  toolName: "write_file" | "edit_file"
+): (args: Record<string, unknown>) => Promise<ToolResult | string> {
+  return async (args: Record<string, unknown>) => {
+    const path = normalizeAgentRelativePath(args.path);
+    if (path && isPageAgentForbiddenWritePath(path)) {
+      return {
+        success: false,
+        error:
+          `Blocked: page agents must not write \`${path}\`. ` +
+          `Global Nav/Footer live in \`components/chrome/**\` and are created after all pages. ` +
+          `Write only the target page and page-local section components.`,
+      };
+    }
+    return executeSystemTool(toolName, args);
+  };
+}
+
 export async function executePageAgentReadFile(
   args: Record<string, unknown>
 ): Promise<ToolResult | string> {

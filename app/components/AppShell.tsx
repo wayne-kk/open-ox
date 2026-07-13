@@ -11,6 +11,7 @@ import {
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
+  BadgeCheck,
   ScrollText,
   Sparkles,
   BookOpen,
@@ -143,11 +144,15 @@ function SidebarBody({
   const t = useTranslations("workspace");
   const tSettings = useTranslations("settings");
   const folderParam = searchParams.get("folder");
+  const publishedParam = searchParams.get("published");
   const onDashboard = pathname === "/dashboard";
+  const onPublished =
+    onDashboard && (publishedParam === "1" || publishedParam === "true");
   const onCommunity = pathname === "/community" || pathname.startsWith("/community/");
   const onIntegrations =
     pathname === "/settings/integrations" || pathname.startsWith("/settings/integrations");
-  const onDashboardRoot = onDashboard && isRootFolderParam(folderParam);
+  const onDashboardRoot =
+    onDashboard && !onPublished && isRootFolderParam(folderParam);
 
   const handleStartBuild = () => {
     onNavigate?.();
@@ -296,6 +301,14 @@ function SidebarBody({
           </div>
         </div>
 
+        <NavItem
+          href="/dashboard?mine=1&published=1"
+          label={t("published")}
+          icon={BadgeCheck}
+          active={onPublished}
+          collapsed={collapsed}
+          onClick={onNavigate}
+        />
         <NavItem
           href="/community"
           label={t("community")}

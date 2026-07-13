@@ -5,7 +5,8 @@ export const PIPELINE_CONSTRAINTS_TEXT = `## open-ox 生成流水线（硬约束
 
 - 产出为 Next.js **web** profile；MVP 约束为**单首页**：站点只有 **一个顶层页面**，slug 必须为 \`home\`（路由 \`/\`）。
 - 布局形态（是否有顶 nav、是否有 sidebar、是否有 footer、是否使用 nested layout 等）由下游实现 Agent 根据产品形态决定，**不在需求分析阶段表态**。
-- 忠实用户已述需求：不擅自添加未提及的产品机制。`;
+- 忠实用户已述需求：不擅自添加未提及的产品机制。
+- **视觉气质**由 Studio 在早期 \`options\`/\`clarify\` 轮展示气质选择器一次选定；**不要**在 \`confirm_brief\` 后再问风格，也不要用快捷选项问外观。`;
 
 export function buildIntentAgentControlTools(): ChatCompletionTool[] {
   return [
@@ -22,18 +23,19 @@ export function buildIntentAgentControlTools(): ChatCompletionTool[] {
               type: "string",
               enum: ["capability", "clarify", "options", "confirm_brief"],
               description:
-                "capability=说明你能做什么；clarify=需要用户补充；options=用 suggested_replies 给出有限方向；confirm_brief=展示润色后的需求请用户确认",
+                "capability=说明你能做什么；clarify=需要用户补充（Studio 会挂气质选择器）；options=用 suggested_replies 给出有限的受众/产品方向（禁止视觉风格分叉）；confirm_brief=展示润色后的需求请用户确认（此时不再选气质）",
             },
             message: { type: "string", description: "面向用户的主文案（可含换行）。短；不要在正文复述快捷按钮。" },
             suggested_replies: {
               type: "array",
               items: { type: "string" },
               description:
-                "0–3 条极短建议回复（理想 2–3），UI 做成快捷按钮；方向分叉也用这个字段，不要另开 options",
+                "0–3 条极短建议回复（理想 2–3），UI 做成快捷按钮；只做受众/产品/内容分叉或确认模板，禁止「极简/科技风/像某竞品外观」等视觉选项",
             },
             brief_draft_markdown: {
               type: "string",
-              description: "kind=confirm_brief 时：整理后的需求草稿（保守、不臆造功能）。",
+              description:
+                "kind=confirm_brief 时：整理后的需求草稿（保守、不臆造功能）。视觉以用户已选气质或原话为准，勿再让用户选风格。",
             },
           },
           required: ["kind", "message"],

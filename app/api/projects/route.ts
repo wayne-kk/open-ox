@@ -6,7 +6,8 @@ import { getUserDisplayName } from "@/lib/auth/display-name";
 
 /**
  * GET /api/projects — current user's Workspace projects only.
- * Query: offset, limit, folder (`all` | `uncategorized` | folder uuid).
+ * Query: offset, limit, folder (`all` | `uncategorized` | folder uuid),
+ * published (`1` = only publish_preview, any folder; ignores folder).
  * `all` / `uncategorized` = root only (`folder_id` null).
  */
 export async function GET(req: Request) {
@@ -20,6 +21,8 @@ export async function GET(req: Request) {
     const limitParam = Number(searchParams.get("limit"));
     const offsetParam = Number(searchParams.get("offset"));
     const folderParam = (searchParams.get("folder") || "all").trim() || "all";
+    const publishedOnly =
+      searchParams.get("published") === "1" || searchParams.get("published") === "true";
     const offset = Number.isFinite(offsetParam) && offsetParam >= 0 ? Math.floor(offsetParam) : 0;
     const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.floor(limitParam) : undefined;
 
@@ -29,7 +32,7 @@ export async function GET(req: Request) {
 
     const projects = await listProjectsSummary(session.supabase, {
       userId: session.user.id,
-      folder,
+      ...(publishedOnly ? { publishedOnly: true } : { folder }),
       limit,
       offset,
     });

@@ -240,6 +240,8 @@ export async function executeGenerationRun(args: {
                 runGenerateProject(effectivePrompt, onStepForPipeline, {
                   projectId,
                   styleGuide: payload.styleGuide,
+                  confirmedDesignDirectionMarkdown: payload.confirmedDesignDirectionMarkdown,
+                  confirmedDesignDirectionKeywords: payload.confirmedDesignDirectionKeywords,
                   enableSkills: true,
                   useDatabasePrompts,
                   checkpoint,

@@ -473,8 +473,7 @@ function ProjectCard({
                 <DropdownMenuItem
                   disabled={!isClickable || deployBusy}
                   className={menuItemClass}
-                  onSelect={(e) => {
-                    e.preventDefault();
+                  onSelect={() => {
                     if (!isClickable || deployBusy) return;
                     setDeployConfirmOpen(true);
                   }}
@@ -944,6 +943,7 @@ function ProjectsPageContent() {
   const [projects, setProjects] = useState<ProjectMetadata[]>([]);
   const [folders, setFolders] = useState<ProjectFolder[]>([]);
   const [folderFilter, setFolderFilter] = useState<string>("all");
+  const [publishedOnly, setPublishedOnly] = useState(false);
   const [manageFoldersOpen, setManageFoldersOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [switchingFolder, setSwitchingFolder] = useState(false);
@@ -962,6 +962,7 @@ function ProjectsPageContent() {
 
   const applyFolderFilter = useCallback(
     (next: string) => {
+      setPublishedOnly(false);
       setFolderFilter(next);
       const path =
         next === "all"
@@ -973,12 +974,20 @@ function ProjectsPageContent() {
   );
 
   useEffect(() => {
+    const published =
+      searchParams.get("published") === "1" || searchParams.get("published") === "true";
+    setPublishedOnly((prev) => (prev === published ? prev : published));
+    if (published) {
+      setFolderFilter((prev) => (prev === "all" ? prev : "all"));
+      return;
+    }
     const f = searchParams.get("folder");
     const next = isRootFolderParam(f) ? "all" : f!;
     setFolderFilter((prev) => (prev === next ? prev : next));
   }, [searchParams]);
 
   const folderQuery = isRootFolderParam(folderFilter) ? "all" : folderFilter;
+  const listScopeKey = publishedOnly ? "published" : folderQuery;
   const authUserId = authUser?.id ?? null;
 
   type GalleryPagePayload = {
@@ -986,13 +995,22 @@ function ProjectsPageContent() {
   };
 
   const fetchProjectsPage = useCallback(
-    async (offset: number, limit: number, folder: string): Promise<GalleryPagePayload | null> => {
+    async (
+      offset: number,
+      limit: number,
+      folder: string,
+      published: boolean
+    ): Promise<GalleryPagePayload | null> => {
       try {
         const params = new URLSearchParams();
         params.set("offset", String(offset));
         params.set("limit", String(limit));
         params.set("mine", "1");
-        params.set("folder", folder);
+        if (published) {
+          params.set("published", "1");
+        } else {
+          params.set("folder", folder);
+        }
         const galleryUrl = `/api/projects/gallery?${params.toString()}`;
         const res = await fetchProjectGalleryDeduped(galleryUrl);
         if (res.status === 401) {
@@ -1016,19 +1034,19 @@ function ProjectsPageContent() {
   }, []);
 
   const loadInitialProjects = useCallback(
-    async (folder: string, opts?: { soft?: boolean }) => {
-      const requestKey = `${folder}|0|${PAGE_SIZE}`;
+    async (scope: string, published: boolean, opts?: { soft?: boolean }) => {
+      const requestKey = `${scope}|0|${PAGE_SIZE}`;
       galleryRequestKeyRef.current = requestKey;
       const soft = opts?.soft ?? loadedFolderRef.current !== null;
       if (soft) setSwitchingFolder(true);
       else setLoading(true);
 
-      const payload = await fetchProjectsPage(0, PAGE_SIZE, folder);
+      const payload = await fetchProjectsPage(0, PAGE_SIZE, scope, published);
       if (galleryRequestKeyRef.current !== requestKey) return;
       if (payload) {
         setProjects(payload.projects);
         setHasMore(payload.projects.length === PAGE_SIZE);
-        loadedFolderRef.current = folder;
+        loadedFolderRef.current = scope;
       }
       setLoading(false);
       setSwitchingFolder(false);
@@ -1039,7 +1057,12 @@ function ProjectsPageContent() {
   const loadMoreProjects = useCallback(async () => {
     if (loading || switchingFolder || loadingMore || !hasMore) return;
     setLoadingMore(true);
-    const payload = await fetchProjectsPage(projects.length, PAGE_SIZE, folderQuery);
+    const payload = await fetchProjectsPage(
+      projects.length,
+      PAGE_SIZE,
+      folderQuery,
+      publishedOnly
+    );
     if (payload) {
       setProjects((prev) => [...prev, ...payload.projects]);
       setHasMore(payload.projects.length === PAGE_SIZE);
@@ -1048,6 +1071,7 @@ function ProjectsPageContent() {
   }, [
     fetchProjectsPage,
     folderQuery,
+    publishedOnly,
     hasMore,
     loading,
     loadingMore,
@@ -1058,13 +1082,13 @@ function ProjectsPageContent() {
   const refreshLoadedProjects = useCallback(async () => {
     const loadedCount = projectsRef.current.length;
     if (loadedCount === 0) return;
-    const folder = loadedFolderRef.current ?? folderQuery;
-    const payload = await fetchProjectsPage(0, loadedCount, folder);
+    const scope = loadedFolderRef.current ?? listScopeKey;
+    const payload = await fetchProjectsPage(0, loadedCount, scope, publishedOnly);
     if (payload) {
       setProjects(payload.projects);
       setHasMore(payload.projects.length === loadedCount);
     }
-  }, [fetchProjectsPage, folderQuery]);
+  }, [fetchProjectsPage, listScopeKey, publishedOnly]);
 
   useEffect(() => {
     if (!authReady) return;
@@ -1079,8 +1103,8 @@ function ProjectsPageContent() {
 
   useEffect(() => {
     if (!authReady || !authUserId) return;
-    void loadInitialProjects(folderQuery);
-  }, [authReady, authUserId, folderQuery, loadInitialProjects]);
+    void loadInitialProjects(listScopeKey, publishedOnly);
+  }, [authReady, authUserId, listScopeKey, publishedOnly, loadInitialProjects]);
 
   const hasGenerating = projects.some((p) => p.status === "generating");
 
@@ -1178,7 +1202,7 @@ function ProjectsPageContent() {
         if (folderFilter === id) {
           applyFolderFilter("all");
         } else {
-          await loadInitialProjects(folderQuery, { soft: true });
+          await loadInitialProjects(listScopeKey, publishedOnly, { soft: true });
         }
       }
     } finally {
@@ -1197,13 +1221,19 @@ function ProjectsPageContent() {
           body: JSON.stringify({ folderId }),
         });
         if (res.ok) {
-          setProjects((prev) => prev.filter((p) => p.id !== projectId));
+          if (publishedOnly) {
+            setProjects((prev) =>
+              prev.map((p) => (p.id === projectId ? { ...p, folderId } : p))
+            );
+          } else {
+            setProjects((prev) => prev.filter((p) => p.id !== projectId));
+          }
         }
       } finally {
         setMovingId(null);
       }
     },
-    [movingId]
+    [movingId, publishedOnly]
   );
 
   const focusCreatePrompt = useCallback(() => {
@@ -1223,29 +1253,43 @@ function ProjectsPageContent() {
     [router]
   );
 
-  const handlePublishChange = useCallback((projectId: string, state: ProjectPublishState) => {
-    setProjects((prev) =>
-      prev.map((p) =>
-        p.id === projectId
-          ? {
-            ...p,
-            publishPreview: state.publishPreview,
-            allowRemix: state.allowRemix,
-            staticPreviewSyncedAt: state.staticPreviewSyncedAt,
-          }
-          : p
-      )
-    );
-  }, []);
+  const handlePublishChange = useCallback(
+    (projectId: string, state: ProjectPublishState) => {
+      setProjects((prev) => {
+        if (publishedOnly && !state.publishPreview) {
+          return prev.filter((p) => p.id !== projectId);
+        }
+        return prev.map((p) =>
+          p.id === projectId
+            ? {
+                ...p,
+                publishPreview: state.publishPreview,
+                allowRemix: state.allowRemix,
+                staticPreviewSyncedAt: state.staticPreviewSyncedAt,
+              }
+            : p
+        );
+      });
+    },
+    [publishedOnly]
+  );
 
-  const atRoot = isRootFolderParam(folderFilter);
-  const currentFolderTitle = atRoot
-    ? "我的项目"
-    : folders.find((f) => f.id === folderFilter)?.name ?? "文件夹";
-  const emptyTitle = atRoot ? "还没有项目" : "这个文件夹还是空的";
-  const emptyHint = atRoot
-    ? "描述你的想法，AI 帮你生成完整网站"
-    : "在上方创建，或从其他位置移动项目到这里";
+  const atRoot = !publishedOnly && isRootFolderParam(folderFilter);
+  const currentFolderTitle = publishedOnly
+    ? "已发布"
+    : atRoot
+      ? "我的项目"
+      : folders.find((f) => f.id === folderFilter)?.name ?? "文件夹";
+  const emptyTitle = publishedOnly
+    ? "还没有已发布的项目"
+    : atRoot
+      ? "还没有项目"
+      : "这个文件夹还是空的";
+  const emptyHint = publishedOnly
+    ? "在项目菜单里选择「发布到社区」后会出现在这里"
+    : atRoot
+      ? "描述你的想法，AI 帮你生成完整网站"
+      : "在上方创建，或从其他位置移动项目到这里";
 
   if (!authReady || !authUser) {
     return (
@@ -1352,14 +1396,24 @@ function ProjectsPageContent() {
               <h2 className="text-lg font-semibold text-foreground">{emptyTitle}</h2>
               <p className="text-sm text-foreground/65">{emptyHint}</p>
             </div>
-            <button
-              type="button"
-              onClick={focusCreatePrompt}
-              className="defi-button px-6 py-3 text-sm font-semibold uppercase tracking-[0.14em]"
-            >
-              <Plus className="h-4 w-4" />
-              创建第一个项目
-            </button>
+            {publishedOnly ? (
+              <button
+                type="button"
+                onClick={() => applyFolderFilter("all")}
+                className="defi-button px-6 py-3 text-sm font-semibold uppercase tracking-[0.14em]"
+              >
+                查看我的项目
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={focusCreatePrompt}
+                className="defi-button px-6 py-3 text-sm font-semibold uppercase tracking-[0.14em]"
+              >
+                <Plus className="h-4 w-4" />
+                创建第一个项目
+              </button>
+            )}
           </div>
         ) : (
           <>

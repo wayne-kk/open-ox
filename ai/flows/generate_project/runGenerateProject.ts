@@ -4,7 +4,7 @@ import { getSiteRoot as projectManagerGetSiteRoot } from "@/lib/projectManager";
 import { getSiteRoot, runWithSiteRoot } from "@/ai/tools/system/common";
 import { clearFileTracking } from "@/ai/tools";
 import { validateSkillFrontmatter } from "@/ai/shared/skillDiscovery";
-import { syncSiteValidationMarkers, readSiteFile, getSkillPromptsRoot } from "./shared/files";
+import { syncSiteValidationMarkers, readSiteFile, getSkillPromptsRoot, writeSiteFile } from "./shared/files";
 import {
   buildScopedTypecheckStepTrace,
   checkGeneratedTypeScriptFiles,
@@ -28,7 +28,6 @@ import {
 } from "./steps/projectIntentGuide";
 import { stepApplyProjectDesignTokens } from "./steps/applyProjectDesignTokens";
 import {
-  runArchitectScaffoldAgent,
   ARCHITECT_SCAFFOLD_AGENT_STEP,
 } from "./steps/architectScaffoldAgent";
 import {
@@ -260,9 +259,8 @@ async function autoInstallDependenciesForFiles(params: {
 }
 
 /**
- * On checkpoint resume we skip chrome scaffold/optimize but must still list chrome files
- * that already exist under `components/chrome/**` so dependency install / traces
- * see the full contract (not just `app/layout.tsx`).
+ * On checkpoint resume after chrome is done, list chrome files under
+ * `components/chrome/**` so dependency install / traces see the full contract.
  */
 function collectExistingChromeOwnedRelativePaths(): string[] {
   const siteRoot = getSiteRoot();
@@ -289,69 +287,6 @@ function collectExistingChromeOwnedRelativePaths(): string[] {
 interface BuildLifecycleResult {
   verificationStatus: GenerateProjectResult["verificationStatus"];
   verificationOutput: string;
-}
-
-/**
- * Chrome Scaffold Agent — fast provisional `app/layout.tsx` + `components/chrome/**`.
- * Page agents read this as a read-only contract until chrome optimize runs.
- */
-async function runArchitectScaffoldStep(params: {
-  blueprint: PlannedProjectBlueprint;
-  designSystem: string;
-  artifactLogger: ArtifactLogger;
-  logger: StepLogger;
-  onStep?: (step: BuildStep) => void;
-  referenceScreenshotDataUrl?: string | null;
-  screenshotGuardrailId?: string | null;
-}): Promise<{ files: string[]; summary: string; chromeForm: string }> {
-  const {
-    blueprint,
-    designSystem,
-    artifactLogger,
-    logger,
-    onStep,
-    referenceScreenshotDataUrl,
-    screenshotGuardrailId,
-  } = params;
-  const outcome = await logger.timed(
-    ARCHITECT_SCAFFOLD_AGENT_STEP,
-    () =>
-      runArchitectScaffoldAgent({
-        blueprint,
-        designSystem,
-        referenceScreenshotDataUrl: referenceScreenshotDataUrl ?? null,
-        screenshotGuardrailId: screenshotGuardrailId ?? null,
-        onStep,
-      }),
-    (r) => ({
-      detail:
-        `chrome=${r.chromeForm}` +
-        (r.fellBackToMinimal ? " (fallback)" : "") +
-        ` · files=${r.files.length}`,
-      trace: r.trace,
-    })
-  );
-
-  await persistJsonArtifact(artifactLogger, ARCHITECT_SCAFFOLD_AGENT_STEP, "output", {
-    layoutPath: outcome.layoutPath,
-    chromeForm: outcome.chromeForm,
-    fellBackToMinimal: outcome.fellBackToMinimal,
-    files: outcome.files,
-    summary: outcome.summary,
-    toolInvocations: outcome.toolCallRecords,
-  });
-  await persistSiteFileArtifact(
-    artifactLogger,
-    ARCHITECT_SCAFFOLD_AGENT_STEP,
-    outcome.layoutPath,
-    "layout"
-  );
-
-  return {
-    files: outcome.files,
-    summary: outcome.summary,
-    chromeForm: outcome.chromeForm,
-  };
 }
 
 async function runChromeOptimizeStep(params: {
@@ -669,6 +604,9 @@ export interface RunGenerateProjectOptions {
   /** Required — drives sites/<projectId>/ scoping via runWithSiteRoot. */
   projectId: string;
   styleGuide?: string;
+  /** When set, skips LLM infer_design_intent and uses this markdown instead. */
+  confirmedDesignDirectionMarkdown?: string;
+  confirmedDesignDirectionKeywords?: string[];
   enableSkills?: boolean;
   useDatabasePrompts?: boolean;
   checkpoint?: CheckpointResult;
@@ -876,12 +814,24 @@ async function runGenerateProjectInner(
 
     let rawBlueprint!: ProjectBlueprint;
     let inferredDesignIntent: DesignIntentResult | null = null;
+    const confirmedDesignMarkdown = options.confirmedDesignDirectionMarkdown?.trim() || "";
+    const confirmedDesignKeywords = (options.confirmedDesignDirectionKeywords ?? [])
+      .map((k) => k.trim().toLowerCase())
+      .filter(Boolean);
 
     if (cp?.skipAnalyze && cp.cachedBlueprint) {
       rawBlueprint = cp.cachedBlueprint;
       logger.logStep("analyze_project_requirement", "ok", "resumed from checkpoint");
 
-      if (rawBlueprint.experience?.designIntent?.keywords?.length) {
+      if (confirmedDesignMarkdown) {
+        inferredDesignIntent = {
+          text: confirmedDesignMarkdown,
+          technicalKeywords: confirmedDesignKeywords,
+        };
+        logger.logStep("infer_design_intent", "ok", "user-confirmed vibe direction");
+        await writeSiteFile("design-intent.md", confirmedDesignMarkdown);
+        await persistTextArtifact(artifactLogger, "infer_design_intent", "output", inferredDesignIntent.text, "md");
+      } else if (rawBlueprint.experience?.designIntent?.keywords?.length) {
         logger.logStep("infer_design_intent", "ok", "resumed from checkpoint");
       } else {
         inferredDesignIntent = await logger.timed(
@@ -895,6 +845,43 @@ async function runGenerateProjectInner(
         );
         await persistTextArtifact(artifactLogger, "infer_design_intent", "output", inferredDesignIntent.text, "md");
       }
+    } else if (confirmedDesignMarkdown) {
+      await withLangfuseSpan(LfSpanGen.analyzeBlueprintParallel, async () => {
+        logger.startStep("analyze_project_requirement");
+        logger.startStep("infer_design_intent");
+
+        const analyzeResult = await stepAnalyzeProjectRequirement(
+          effectiveUserInput,
+          (name, args, result) => {
+            onStep?.({
+              step: `tool_call:${name}`,
+              status: "ok",
+              detail: JSON.stringify({ tool: name, args, result: result.slice(0, 500) }),
+              timestamp: Date.now(),
+              duration: 0,
+            });
+          },
+          { referenceImageBase64: referenceScreenshot, screenshotGuardrailId }
+        );
+
+        inferredDesignIntent = {
+          text: confirmedDesignMarkdown,
+          technicalKeywords: confirmedDesignKeywords,
+        };
+
+        logger.logStep(
+          "analyze_project_requirement",
+          "ok",
+          `${analyzeResult.blueprint.brief.roles.length} roles, ${analyzeResult.blueprint.site.pages.length} pages planned`,
+          undefined,
+          analyzeResult.trace
+        );
+        logger.logStep("infer_design_intent", "ok", "user-confirmed vibe direction");
+        rawBlueprint = { ...analyzeResult.blueprint, userProvidedContent: undefined };
+        await writeSiteFile("design-intent.md", confirmedDesignMarkdown);
+        await persistJsonArtifact(artifactLogger, "analyze_project_requirement", "output", rawBlueprint);
+        await persistTextArtifact(artifactLogger, "infer_design_intent", "output", inferredDesignIntent.text, "md");
+      });
     } else {
       await withLangfuseSpan(LfSpanGen.analyzeBlueprintParallel, async () => {
         logger.startStep("analyze_project_requirement");
@@ -1130,7 +1117,7 @@ async function runGenerateProjectInner(
       appendGeneratedFiles(result, tokenFiles);
     }
 
-    // ── Chrome scaffold → pages → chrome optimize ─────────────────────────────
+    // ── Pass-through layout → pages → single chrome agent ─────────────────────
     let scaffoldSummary = "";
     let scaffoldChromeForm = "unspecified";
     const skipChromeScaffold = blockSkillsForScreenshotReplicate;
@@ -1157,34 +1144,36 @@ async function runGenerateProjectInner(
       appendGeneratedFiles(result, [layoutPath]);
       scaffoldSummary = "screenshot replicate: minimal pass-through layout";
       scaffoldChromeForm = "none";
-    } else if (!cp?.skipScaffold) {
-      const scaffoldResult = await withLangfuseSpan(
-        LfSpanGen.architectScaffoldAgent,
-        () =>
-          runArchitectScaffoldStep({
-            blueprint,
-            designSystem,
-            artifactLogger,
-            logger,
-            onStep,
-            referenceScreenshotDataUrl: referenceScreenshot,
-            screenshotGuardrailId,
-          }),
-        {
-          getOutput: (r) => ({
-            chromeForm: r.chromeForm,
-            fileCount: r.files.length,
-            summary: r.summary.slice(0, 240),
-          }),
-        }
-      );
-      appendGeneratedFiles(result, scaffoldResult.files);
-      scaffoldSummary = scaffoldResult.summary;
-      scaffoldChromeForm = scaffoldResult.chromeForm;
-    } else {
+    } else if (cp?.skipChromeOptimize) {
+      // Chrome already done — keep existing layout + chrome files.
       appendGeneratedFiles(result, collectExistingChromeOwnedRelativePaths());
-      scaffoldSummary = "resumed from checkpoint";
+      scaffoldSummary = "resumed: chrome already complete";
       scaffoldChromeForm = "resumed";
+    } else {
+      // Chrome deferred: strip any provisional chrome and use pass-through layout
+      // so page agents cannot mount / duplicate global Nav before the chrome agent.
+      const { layoutPath, removedChromeDir } = await prepareReplicaSiteLayout(blueprint);
+      logger.logStep(
+        ARCHITECT_SCAFFOLD_AGENT_STEP,
+        "ok",
+        `deferred chrome — pass-through layout${removedChromeDir ? " · stripped components/chrome" : ""}`
+      );
+      await persistJsonArtifact(artifactLogger, ARCHITECT_SCAFFOLD_AGENT_STEP, "output", {
+        layoutPath,
+        chromeForm: "deferred",
+        skipped: true,
+        removedChromeDir,
+        reason: "pages first; single chrome_optimize_agent after all pages",
+      });
+      await persistSiteFileArtifact(
+        artifactLogger,
+        ARCHITECT_SCAFFOLD_AGENT_STEP,
+        layoutPath,
+        "layout"
+      );
+      appendGeneratedFiles(result, [layoutPath]);
+      scaffoldSummary = "deferred chrome: pass-through layout until pages complete";
+      scaffoldChromeForm = "deferred";
     }
 
     const pageOutcome = await withLangfuseSpan(

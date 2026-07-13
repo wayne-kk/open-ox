@@ -1,4 +1,7 @@
+import { existsSync, readdirSync, statSync } from "fs";
+import { join, relative } from "path";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
+import { getSiteRoot } from "@/ai/tools/system/common";
 import { listSiteTree, readSiteFile } from "./files";
 import type { PlannedProjectBlueprint, StepTrace } from "../types";
 
@@ -14,6 +17,212 @@ export const CHROME_AGENT_TOOL_NAMES = [
   "install_package",
   "revert_file",
 ] as const;
+
+/** Form / widget ids that must not become Nav anchors. */
+const ANCHOR_ID_NOISE = new Set([
+  "root",
+  "content",
+  "trigger",
+  "email",
+  "password",
+  "name",
+  "remember",
+  "search",
+  "q",
+  "query",
+  "message",
+  "phone",
+  "tel",
+  "username",
+  "confirm-password",
+  "confirm_password",
+]);
+
+/** Design-mode / sub-copy ids — keep section-level anchors only. */
+const SUB_ELEMENT_ID =
+  /-(root|headline|subcopy|eyebrow|cta|button|title|desc|description|label|icon|image|img|card|item|grid|list|primary|secondary)$/i;
+
+export type ChromeLinkSurvey = {
+  routes: { route: string; pageFile: string }[];
+  sectionIds: { id: string; file: string }[];
+  chromeFiles: { path: string; content: string }[];
+};
+
+/**
+ * Map an App Router page file to its URL path.
+ * `app/page.tsx` → `/`; `app/(mkt)/pricing/page.tsx` → `/pricing`.
+ */
+export function pageFileToRoute(pageRelPath: string): string | null {
+  const normalized = pageRelPath.replace(/\\/g, "/");
+  if (!normalized.startsWith("app/") || !normalized.endsWith("/page.tsx")) {
+    if (normalized === "app/page.tsx") return "/";
+    return null;
+  }
+  const inner = normalized.slice("app/".length, -"/page.tsx".length);
+  if (!inner) return "/";
+  const segments = inner
+    .split("/")
+    .filter((seg) => seg && !seg.startsWith("(") && !seg.startsWith("@"));
+  if (segments.length === 0) return "/";
+  return `/${segments.join("/")}`;
+}
+
+function isNavWorthyAnchorId(id: string): boolean {
+  if (!id || id.length < 2) return false;
+  if (ANCHOR_ID_NOISE.has(id.toLowerCase())) return false;
+  if (/^(radix|react|aria|btn|input|field)-/i.test(id)) return false;
+  if (SUB_ELEMENT_ID.test(id)) return false;
+  if (/-(cta|button)-/i.test(id)) return false;
+  return true;
+}
+
+/**
+ * Ids suitable for in-page Nav anchors: landmark/section/div tags with a real
+ * `id=` attribute (not `data-*-id`).
+ */
+export function extractAnchorCandidateIds(source: string): string[] {
+  const ids = new Set<string>();
+  // (?<![\w-]) avoids matching the "id" suffix inside data-ox-id / aria-labelledby etc.
+  const sectionTagRe =
+    /<(?:section|main|header|footer|article|div)\b[^>]*?(?<![\w-])id\s*=\s*["']([A-Za-z][\w:-]*)["'][^>]*>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = sectionTagRe.exec(source)) !== null) {
+    const id = match[1];
+    if (isNavWorthyAnchorId(id)) ids.add(id);
+  }
+  return Array.from(ids);
+}
+
+function walkSiteRelativeFiles(
+  relativeDir: string,
+  options: { maxDepth?: number; match?: (relPath: string) => boolean } = {}
+): string[] {
+  const { maxDepth = 6, match } = options;
+  const root = getSiteRoot();
+  const base = join(root, relativeDir);
+  if (!existsSync(base)) return [];
+
+  const out: string[] = [];
+  function walk(absDir: string, depth: number): void {
+    if (depth > maxDepth) return;
+    let names: string[];
+    try {
+      names = readdirSync(absDir);
+    } catch {
+      return;
+    }
+    for (const name of names.sort((a, b) => a.localeCompare(b))) {
+      if (name === "node_modules" || name === ".next" || name.startsWith(".")) continue;
+      const abs = join(absDir, name);
+      let st;
+      try {
+        st = statSync(abs);
+      } catch {
+        continue;
+      }
+      if (st.isDirectory()) {
+        if (name === "ui") continue;
+        walk(abs, depth + 1);
+        continue;
+      }
+      const rel = relative(root, abs).replace(/\\/g, "/");
+      if (match && !match(rel)) continue;
+      out.push(rel);
+    }
+  }
+  walk(base, 0);
+  return out;
+}
+
+/**
+ * Deterministic disk survey so chrome optimize can skip exploratory tool rounds.
+ * Collects App Router routes, section-like ids, and current chrome file contents.
+ */
+export function buildChromeLinkSurveyFromDisk(): ChromeLinkSurvey {
+  const pageFiles = walkSiteRelativeFiles("app", {
+    match: (rel) => rel.endsWith("/page.tsx") || rel === "app/page.tsx",
+  });
+  const routes = pageFiles
+    .map((pageFile) => {
+      const route = pageFileToRoute(pageFile);
+      return route ? { route, pageFile } : null;
+    })
+    .filter((x): x is { route: string; pageFile: string } => Boolean(x))
+    .sort((a, b) => a.route.localeCompare(b.route));
+
+  const sectionScanFiles = [
+    ...pageFiles,
+    ...walkSiteRelativeFiles("components", {
+      match: (rel) => {
+        if (!rel.endsWith(".tsx")) return false;
+        if (rel.startsWith("components/chrome/")) return false;
+        if (rel.startsWith("components/ui/")) return false;
+        return true;
+      },
+    }),
+  ];
+
+  const sectionIds: { id: string; file: string }[] = [];
+  const seenIds = new Set<string>();
+  for (const file of sectionScanFiles) {
+    const content = readSiteFile(file);
+    if (!content) continue;
+    for (const id of extractAnchorCandidateIds(content)) {
+      if (seenIds.has(id)) continue;
+      seenIds.add(id);
+      sectionIds.push({ id, file });
+    }
+  }
+  sectionIds.sort((a, b) => a.id.localeCompare(b.id));
+
+  const chromePaths = walkSiteRelativeFiles("components/chrome", {
+    match: (rel) => rel.endsWith(".tsx") || rel.endsWith(".ts"),
+  });
+  const chromeFiles = chromePaths.map((path) => ({
+    path,
+    content: truncateChromeAgentText(readSiteFile(path) || "(empty)", 4_000),
+  }));
+
+  return { routes, sectionIds, chromeFiles };
+}
+
+export function buildChromeLinkSurveyBlock(survey: ChromeLinkSurvey): string {
+  const routesBlock =
+    survey.routes.length === 0
+      ? "- (no app/**/page.tsx found)"
+      : survey.routes.map((r) => `- \`${r.route}\` ← \`${r.pageFile}\``).join("\n");
+  const idsBlock =
+    survey.sectionIds.length === 0
+      ? "- (no section-like ids found — single-page Nav may stay minimal)"
+      : survey.sectionIds.map((s) => `- \`#${s.id}\` ← \`${s.file}\``).join("\n");
+  const chromeBlock =
+    survey.chromeFiles.length === 0
+      ? "(no components/chrome/* yet)"
+      : survey.chromeFiles
+          .map(
+            (f) => `### \`${f.path}\`
+\`\`\`tsx
+${f.content}
+\`\`\``
+          )
+          .join("\n\n");
+
+  return `## Disk survey (authoritative — do NOT re-survey with list_dir / search_code / reading page section components)
+
+### Routes
+${routesBlock}
+
+### Section anchors (for single-page \`#id\` Nav/Footer links)
+${idsBlock}
+
+### Current chrome files (may be empty — you create them)
+${chromeBlock}
+
+Hard constraint from this survey:
+- Prefer these routes / \`#id\` values when writing Nav/Footer.
+- Do **not** \`read_file\` \`components/home/**\` or other page section components.
+- Do **not** modify any \`app/**/page.tsx\` (layout excepted).`;
+}
 
 export const CHROME_AGENT_VISIBLE_TOOL_NAMES = new Set([
   "write_file",

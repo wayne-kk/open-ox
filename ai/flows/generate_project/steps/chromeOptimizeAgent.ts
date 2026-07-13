@@ -1,5 +1,6 @@
 /**
- * Chrome Optimize Agent — survey implemented pages and refine global chrome.
+ * Chrome Agent — one-shot global chrome after all pages are implemented.
+ * (Step id remains `chrome_optimize_agent` for checkpoint / studio compat.)
  */
 import {
   composePromptBlocks,
@@ -22,6 +23,8 @@ import {
   buildBlueprintPagesSummary,
   buildChromeAgentTrace,
   buildChromeCompleteTool,
+  buildChromeLinkSurveyBlock,
+  buildChromeLinkSurveyFromDisk,
   buildChromePreReadBlock,
   buildChromePreReadContext,
   buildChromeProjectHeader,
@@ -36,14 +39,14 @@ export const CHROME_OPTIMIZE_COMPLETE = "chrome_optimize_complete";
 
 const completeTool = buildChromeCompleteTool(
   CHROME_OPTIMIZE_COMPLETE,
-  "MANDATORY — call exactly once after chrome links and polish are done. " +
-    "Preconditions: you surveyed app/ routes and page.tsx files with tools, " +
-    "Navigation/Footer hrefs match real routes and section ids, layout imports resolve.",
+  "MANDATORY — call exactly once after global chrome is written. " +
+    "Preconditions: components/chrome/** exist, app/layout.tsx mounts them and renders {children}, " +
+    "Nav/Footer hrefs match the Disk survey routes and section ids.",
   {
     linksCorrected: {
       type: "array",
       items: { type: "string" },
-      description: "List of hrefs you corrected or added (e.g. '/', '/pricing', '#features').",
+      description: "List of hrefs you set (e.g. '/', '/pricing', '#features').",
     },
   }
 );
@@ -63,6 +66,7 @@ export interface ScaffoldContext {
 export interface RunChromeOptimizeAgentParams {
   blueprint: PlannedProjectBlueprint;
   designSystem: string;
+  /** Prior pass-through / deferred layout note — not provisional chrome. */
   scaffoldContext: ScaffoldContext;
   pageSummaries: PageImplementSummary[];
   referenceScreenshotDataUrl?: string | null;
@@ -106,36 +110,40 @@ export async function runChromeOptimizeAgent(
   const model = getModelForStep(CHROME_OPTIMIZE_AGENT_STEP);
   const thinking = getThinkingLevelForStep(CHROME_OPTIMIZE_AGENT_STEP);
   const preRead = buildChromePreReadContext();
+  const linkSurvey = buildChromeLinkSurveyFromDisk();
 
-  const userMessage = `## Optimize global chrome after all pages are implemented
+  const userMessage = `## Create global chrome once (pages are already implemented)
 
 ${buildChromeProjectHeader(blueprint)}
 
-## Scaffold phase (provisional chrome — you may correct links and polish)
+## Prior layout note
 - **chromeForm**: ${scaffoldContext.chromeForm}
 - **summary**: ${scaffoldContext.summary}
 
-## Page Agent summaries (hints only — you MUST verify with read_file / list_dir / search_code)
+## Page Agent summaries (context only — Disk survey is source of truth for hrefs)
 ${buildPageSummariesBlock(pageSummaries)}
 
-## Blueprint page plans (reference — disk is source of truth)
+## Blueprint page plans (reference)
 ${buildBlueprintPagesSummary(blueprint)}
+
+${buildChromeLinkSurveyBlock(linkSurvey)}
 
 ${buildChromePreReadBlock(preRead)}
 
 ## Design system (reference)
-${truncateChromeAgentText(designSystem, 10_000)}
+${truncateChromeAgentText(designSystem, 6_000)}
 
 ## Workflow
-1. **Survey**: \`list_dir app/\`, \`read_file\` each route's \`page.tsx\`, \`search_code\` for section \`id=\` on single-page sites.
-2. **Reconcile**: \`read_file\` / \`edit_file\` \`components/chrome/**\` — fix Nav/Footer hrefs to match reality; remove fabricated links.
-3. **Polish** if budget allows (sticky nav, mobile menu).
-4. Call \`${CHROME_OPTIMIZE_COMPLETE}\`.
+1. **Write** \`components/chrome/**\` (Navigation + Footer as needed) with hrefs from Disk survey.
+2. **Update** \`app/layout.tsx\` to mount chrome and keep \`{children}\`.
+3. Optional polish (sticky / mobile menu) if budget remains.
+4. Call \`${CHROME_OPTIMIZE_COMPLETE}\` promptly (target ≤8 tool rounds).
 
 Hard rules:
-- Do **not** modify \`app/**/page.tsx\` (except \`app/layout.tsx\`).
+- Do **not** re-survey page section components.
+- Do **not** modify \`app/**/page.tsx\`.
 - Do **not** modify \`app/globals.css\`.
-- Do **not** trust scaffold or blueprint links without verifying on disk.`;
+- Do **not** invent routes or \`#id\` anchors missing from the Disk survey.`;
 
   const refGr =
     referenceScreenshotDataUrl?.trim() && screenshotGuardrailId?.trim()
@@ -163,8 +171,8 @@ Hard rules:
   let chromeForm = scaffoldContext.chromeForm || "unspecified";
 
   const maxIterations = Math.max(
-    8,
-    Math.min(32, Number(process.env.CHROME_OPTIMIZE_AGENT_MAX_ITERATIONS ?? 20))
+    6,
+    Math.min(14, Number(process.env.CHROME_OPTIMIZE_AGENT_MAX_ITERATIONS ?? 10))
   );
 
   const { content, toolCalls } = await callLLMWithToolsFromMessages({
@@ -223,9 +231,9 @@ Hard rules:
       const nudge: ChatMessage = {
         role: "system",
         content:
-          `[Iteration Budget] Finish chrome optimize:\n` +
-          `1. Ensure Nav/Footer hrefs match routes and section ids you found on disk.\n` +
-          `2. Call \`${CHROME_OPTIMIZE_COMPLETE}\`.`,
+          `[Iteration Budget] Finish chrome NOW:\n` +
+          `1. Ensure layout mounts chrome and Nav/Footer hrefs match the Disk survey.\n` +
+          `2. Call \`${CHROME_OPTIMIZE_COMPLETE}\` — do not read more page components.`,
       };
       msgs.push(nudge);
       onMessage?.(nudge);

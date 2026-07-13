@@ -11,8 +11,9 @@ export interface PrepareReplicaSiteLayoutResult {
 }
 
 /**
- * Screenshot replicate: pass-through root layout only — strip any global chrome
- * left from template copy, prior scaffold runs, or checkpoint resume.
+ * Pass-through root layout for page-first / screenshot-replicate flows.
+ * Strips any global chrome so page agents (or replica pages) cannot rely on
+ * provisional Nav — chrome is created once after pages (unless replica owns it).
  */
 export async function prepareReplicaSiteLayout(
   blueprint: PlannedProjectBlueprint

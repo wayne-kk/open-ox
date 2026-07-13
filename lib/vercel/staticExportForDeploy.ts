@@ -78,7 +78,7 @@ async function runRootStaticExportBuild(projectDir: string): Promise<void> {
       const env = envForNextWebpackChild({ NODE_ENV: "production" });
       // Must not inherit preview basePath — production URL is domain root.
       delete env.OPEN_OX_STATIC_BASE_PATH;
-      const result = await execFileAsync("pnpm", ["exec", "next", "build", "--webpack"], {
+      const result = await execFileAsync("pnpm", ["exec", "next", "build"], {
         cwd: projectDir,
         env,
         maxBuffer: 12 * 1024 * 1024,

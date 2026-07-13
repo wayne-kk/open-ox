@@ -13,6 +13,10 @@ import {
 import { parseSseDataLine } from "@/lib/transport/agentStreamSse";
 import { trackEvent } from "@/lib/analytics/client";
 import { toClientHistoryPayload } from "@/ai/flows/modify_project/history/modifyHistoryTurn";
+import {
+  buildVibeSelectUserMessage,
+  type VibeDirection,
+} from "@/lib/studio/vibeDirections";
 
 function trackPreviewOpen(projectId: string) {
   trackEvent("preview_open", { projectId, path: "/studio" });
@@ -94,7 +98,18 @@ export interface BuildStudioState {
   lastRunInput: string | null;
   elapsed: number;
   flowStart: number;
-  handleRun: (messageOverride?: string) => Promise<void>;
+  handleRun: (messageOverride?: string, vibe?: VibeDirection | null) => Promise<void>;
+  /**
+   * Early vibe pick (on options/clarify). Stores direction for later generate;
+   * does not force commit.
+   */
+  handleConfirmVibe: (vibe: VibeDirection) => Promise<void>;
+  /** Skip early vibe picker; style inferred downstream. */
+  handleSkipVibe: () => Promise<void>;
+  /** True after user selected or skipped vibe — hide the early picker. */
+  vibeResolved: boolean;
+  /** Locked vibe for the next commit_generate, if any. */
+  confirmedVibe: VibeDirection | null;
   handleClear: () => Promise<void>;
   handleRetry: () => Promise<void>;
   /** Generation poll shows no SSE for a while — user can unlock as interrupted */
@@ -117,6 +132,8 @@ export interface BuildStudioState {
   projectId: string | null;
   setProjectId: (id: string | null) => void;
   projectLoading: boolean;
+  /** True when GET /api/projects/:id returned 404 (deleted / missing). */
+  projectNotFound: boolean;
   /** DB display name (synced from blueprint title after generate). */
   projectName: string | null;
   /** Remix lineage snapshots (display only). */
@@ -365,9 +382,12 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
 
   const [projectId, setProjectId] = useState<string | null>(initialProjectId ?? null);
   const [projectLoading, setProjectLoading] = useState<boolean>(!!initialProjectId);
+  const [projectNotFound, setProjectNotFound] = useState(false);
   const [projectName, setProjectName] = useState<string | null>(null);
   const [remixedFromTitle, setRemixedFromTitle] = useState<string | null>(null);
   const [remixedFromOwnerUsername, setRemixedFromOwnerUsername] = useState<string | null>(null);
+  const [confirmedVibe, setConfirmedVibe] = useState<VibeDirection | null>(null);
+  const [vibeResolved, setVibeResolved] = useState(false);
   const [rightPanel, setRightPanel] = useState<RightPanel>("topology");
 
   const [autoPreviewAfterBuild, setAutoPreviewAfterBuildState] = useState(true);
@@ -699,14 +719,20 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       setProjectName(null);
       setIntentAgent(null);
       setConversationMessages([]);
+      setConfirmedVibe(null);
+      setVibeResolved(false);
       setPreviewUrl(null);
       setPreviewState("idle");
       setPreviewError(null);
       setGenerationSeemsStuck(false);
+      setProjectNotFound(false);
       return;
     }
 
     setGenerationSeemsStuck(false);
+    setProjectNotFound(false);
+    setConfirmedVibe(null);
+    setVibeResolved(false);
 
     // Same-tick handoff from SSE onDone: keep preview state — openPreviewAfterBuild is starting the dev server.
     if (projectIdFromGenerationRef.current === projectId) {
@@ -720,7 +746,20 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     setPreviewError(null);
 
     fetch(`/api/projects/${projectId}`)
-      .then((r) => r.ok ? r.json() : null)
+      .then((r) => {
+        if (r.status === 404) {
+          setProjectNotFound(true);
+          setProjectLoading(false);
+          setLoading(false);
+          setResponse({
+            content: "",
+            error: "项目不存在或已删除",
+            projectId,
+          });
+          return null;
+        }
+        return r.ok ? r.json() : null;
+      })
       .then((project: ProjectData | null) => {
         if (!project) { setProjectLoading(false); return; }
 
@@ -767,7 +806,22 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
               // If SSE became active while polling, stop immediately
               if (sseActiveRef.current) { stopPolling(); setGenerationSeemsStuck(false); return; }
               const r2 = await fetch(`/api/projects/${projectId}`);
-              if (!r2.ok) return;
+              if (!r2.ok) {
+                // Project deleted / inaccessible — stop hammering the API
+                stopPolling();
+                setLoading(false);
+                setGenerationSeemsStuck(false);
+                setProjectLoading(false);
+                if (r2.status === 404) {
+                  setProjectNotFound(true);
+                  setResponse({
+                    content: "",
+                    error: "项目不存在或已删除",
+                    projectId,
+                  });
+                }
+                return;
+              }
               const updated: ProjectData = await r2.json();
               if (sseActiveRef.current) { stopPolling(); setGenerationSeemsStuck(false); return; }
               applyProjectData(updated);
@@ -837,11 +891,13 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
   }, []);
 
   // ── handleRun ──────────────────────────────────────────────────────────
-  async function handleRun(messageOverride?: string) {
+  async function handleRun(messageOverride?: string, vibe?: VibeDirection | null) {
     abortRef.current?.abort();
     abortRef.current = new AbortController();
     stopPolling(); // kill any leftover polling from a previous page-load
     sseActiveRef.current = true;
+
+    const effectiveVibe = vibe ?? confirmedVibe;
 
     const t0 = Date.now();
     startedAtRef.current = t0;
@@ -952,19 +1008,24 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
             setMergedBrief(cleanBrief || null);
             intentProgressLogRef.current = [];
             setIntentProgressLog([]);
+            const commitLine = effectiveVibe
+              ? `需求已确认，按「${effectiveVibe.label}」气质开始生成项目...`
+              : "需求已确认，开始生成项目...";
             appendConversationMessage({
               role: "assistant",
-              content: "需求已确认，开始生成项目...",
+              content: commitLine,
             });
             const queuedStep: BuildStep = {
               step: "generation_queued",
               status: "ok",
-              detail: "生成任务已排队，正在启动分析…",
+              detail: effectiveVibe
+                ? `生成任务已排队（气质：${effectiveVibe.label}）…`
+                : "生成任务已排队，正在启动分析…",
               timestamp: Date.now(),
               duration: 0,
             };
             setResponse((prev) => ({
-              content: "需求已确认，开始生成项目...",
+              content: commitLine,
               projectId: projectId ?? prev?.projectId ?? undefined,
               intentAgent: prev?.intentAgent,
               mergedBrief: cleanBrief || prev?.mergedBrief,
@@ -1019,6 +1080,13 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
           model: selectedModel,
           ...(projectId ? { projectId } : {}),
           ...(capturedIntentImage ? { imageBase64: capturedIntentImage } : {}),
+          ...(effectiveVibe
+            ? {
+                styleGuide: effectiveVibe.styleGuide,
+                confirmedDesignDirectionMarkdown: effectiveVibe.designIntentMarkdown,
+                confirmedDesignDirectionKeywords: effectiveVibe.technicalKeywords,
+              }
+            : {}),
         }
       );
     } catch (err) {
@@ -1033,6 +1101,18 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       // Loading is usually stopped by onDone/onError to avoid UI lag after final SSE event.
       setLoading(false);
     }
+  }
+
+  async function handleConfirmVibe(vibe: VibeDirection) {
+    setConfirmedVibe(vibe);
+    setVibeResolved(true);
+    await handleRun(buildVibeSelectUserMessage(vibe), vibe);
+  }
+
+  async function handleSkipVibe() {
+    setConfirmedVibe(null);
+    setVibeResolved(true);
+    await handleRun("跳过气质选择，视觉方向由系统根据需求推断。");
   }
 
   async function handleClear() {
@@ -1654,14 +1734,15 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
 
   return {
     input, setInput, loading, clearing, response, intentAgent, mergedBrief, conversationMessages, intentProgressLog, userInputScrollNonce, lastRunInput, elapsed, flowStart,
-    handleRun, handleClear, handleRetry,
+    handleRun, handleConfirmVibe, handleSkipVibe, handleClear, handleRetry,
+    vibeResolved, confirmedVibe,
     generationSeemsStuck,
     recoveryUnlocking,
     handleUnlockInterruptedGeneration,
     handleContinueFromCheckpoint,
     intentImage, setIntentImage,
     selectedModel, setSelectedModel, availableModels,
-    projectId, setProjectId, projectLoading,
+    projectId, setProjectId, projectLoading, projectNotFound,
     projectName,
     remixedFromTitle, remixedFromOwnerUsername,
     rightPanel, setRightPanel,

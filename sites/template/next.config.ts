@@ -27,22 +27,26 @@ const allowedDevOrigins = [...new Set([
   })(),
 ])];
 
-/**
- * Monorepo: pnpm lockfile and workspace root live above `sites/template`.
- * Aligns file tracing with the repo root so Next does not infer the wrong project root
- * (reduces "multiple lockfiles / inferred workspace root" noise during `pnpm run build`).
- */
 /** Path prefix (leading slash, no trailing slash) for Storage static export — `{NEXT_PUBLIC_SITE_URL}/site-previews/{url-encoded projectId}` so `/_next` resolves under the preview proxy; set only for that build (see `staticSitePreview.ts`). Public `public/*` URLs still use `/…` in HTML; the build post-process rewrites those to sit under this basePath. */
 const staticBasePath = process.env.OPEN_OX_STATIC_BASE_PATH?.trim();
 
+/**
+ * Keep Turbopack + file tracing rooted on this site directory — not the open-ox monorepo.
+ * If both point at the monorepo (or turbopack auto-infers it via the parent lockfile),
+ * `next build` compiles the parent app's `proxy.ts` and fails. `turbopack.root` and
+ * `outputFileTracingRoot` must match.
+ */
+const siteRoot = __dirname;
+
 const nextConfig: NextConfig = {
-  // Next 16 defaults to Turbopack. Design Mode needs the webpack() loader below, so local
-  // preview spawns `next dev --webpack`. Empty turbopack config silences hard errors on
-  // plain `next build` (static export still uses `next build --webpack`).
-  turbopack: {},
+  // Design Mode needs the webpack() loader below → local preview uses `next dev --webpack`.
+  // Production `next build` stays on Turbopack with an isolated site root.
+  turbopack: {
+    root: siteRoot,
+  },
   webpack(config, { dev }) {
-    // Compile-time only: inject data-ox-source into the module graph, never write to disk.
-    // Direct Apply is gated separately (env + local backend).
+    // Compile-time only (dev): inject data-ox-source into the module graph, never write to disk.
+    // Direct Apply is gated separately (env + local backend). Production builds ignore this.
     if (dev) {
       config.module.rules.push({
         test: /\.[jt]sx$/,
@@ -56,7 +60,7 @@ const nextConfig: NextConfig = {
   allowedDevOrigins,
   ...(staticBasePath ? { basePath: staticBasePath } : {}),
   output: "export",
-  outputFileTracingRoot: path.join(__dirname, "../.."),
+  outputFileTracingRoot: siteRoot,
   images: {
     unoptimized: true,
     remotePatterns: [

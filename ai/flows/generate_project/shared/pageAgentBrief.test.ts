@@ -9,6 +9,7 @@ import {
   createPageAgentSessionState,
   filterPageAgentToolsForPhase,
   formatPageAgentToolResultForModel,
+  isPageAgentForbiddenWritePath,
   normalizeAgentRelativePath,
   resolvePageAgentMaxIterations,
   shouldRunPageAgentCompaction,
@@ -39,7 +40,33 @@ describe("pageAgentBrief", () => {
     expect(msg).toContain("pre-loads design-system");
     expect(msg).toContain("do not re-read");
     expect(msg).toContain("Implement first");
-    expect(msg.length).toBeLessThan(4_000);
+    expect(msg).toContain("chrome deferred");
+    expect(msg).toContain("site-wide Nav/Navbar/Header/Sidebar/Footer");
+    expect(msg.length).toBeLessThan(4_500);
+  });
+
+  it("screenshot replica layout contract allows in-page chrome", () => {
+    const msg = buildPageAgentUserMessage({
+      targetPath: "app/page.tsx",
+      slug: "home",
+      pageTitle: "Home",
+      pageDescription: "Landing",
+      journeyStage: "awareness",
+      planJson: "{}",
+      projectTitle: "P",
+      projectDescription: "D",
+      language: "en",
+      designKeywords: [],
+      heroSkillOnDisk: false,
+      userProvidedFileHint: "",
+      userProvidedImagesBlock: "",
+      userImageCount: 0,
+      completeToolName: "page_implementation_complete",
+      screenshotReplicaLayout: true,
+    });
+    expect(msg).toContain("screenshot replicate");
+    expect(msg).toContain("Reproduce header/nav/footer");
+    expect(msg).not.toContain("chrome deferred");
   });
 
   it("omits hero skill path when not on disk", () => {
@@ -67,6 +94,14 @@ describe("pageAgentBrief", () => {
 describe("pageAgentToolLoop", () => {
   it("normalizeAgentRelativePath normalizes slashes", () => {
     expect(normalizeAgentRelativePath("./app/layout.tsx")).toBe("app/layout.tsx");
+  });
+
+  it("isPageAgentForbiddenWritePath blocks layout and chrome", () => {
+    expect(isPageAgentForbiddenWritePath("app/layout.tsx")).toBe(true);
+    expect(isPageAgentForbiddenWritePath("app/globals.css")).toBe(true);
+    expect(isPageAgentForbiddenWritePath("components/chrome/Navbar.tsx")).toBe(true);
+    expect(isPageAgentForbiddenWritePath("components/home/Hero.tsx")).toBe(false);
+    expect(isPageAgentForbiddenWritePath("app/page.tsx")).toBe(false);
   });
 
   it("resolvePageAgentMaxIterations defaults to 36", () => {

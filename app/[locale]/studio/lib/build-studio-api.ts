@@ -289,6 +289,10 @@ export async function runBuildSite(
     projectId?: string;
     /** Pasted screenshot (data URL) — intent-agent only */
     imageBase64?: string | null;
+    /** Confirmed vibe fork — passed through to generation payload on commit */
+    styleGuide?: string;
+    confirmedDesignDirectionMarkdown?: string;
+    confirmedDesignDirectionKeywords?: string[];
   }
 ): Promise<void> {
   const useIntentAgent = Boolean(options?.projectId && !options.retryProjectId);
@@ -307,6 +311,19 @@ export async function runBuildSite(
             message: input,
             ...(options?.model ? { model: options.model } : {}),
             ...(options?.imageBase64 ? { imageBase64: options.imageBase64 } : {}),
+            ...(options?.styleGuide ? { styleGuide: options.styleGuide } : {}),
+            ...(options?.confirmedDesignDirectionMarkdown
+              ? {
+                  confirmedDesignDirectionMarkdown:
+                    options.confirmedDesignDirectionMarkdown,
+                }
+              : {}),
+            ...(options?.confirmedDesignDirectionKeywords?.length
+              ? {
+                  confirmedDesignDirectionKeywords:
+                    options.confirmedDesignDirectionKeywords,
+                }
+              : {}),
             ...(secureSession ? { clientPublicKey: secureSession.clientPublicKeySpki } : {}),
             runGenerateOnCommit: true,
           }

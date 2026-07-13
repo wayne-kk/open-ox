@@ -115,18 +115,18 @@ function formatStepLabel(step: string): string {
   if (step.startsWith("architect_scaffold_agent_tool:")) {
     const parts = step.replace("architect_scaffold_agent_tool:", "").split(":");
     const toolName = parts[0]?.replace(/_/g, " ") ?? "tool";
-    return `chrome scaffold ${toolName}`;
+    return `layout ${toolName}`;
   }
   if (step === "architect_scaffold_agent") {
-    return "chrome scaffold";
+    return "layout pass-through";
   }
   if (step.startsWith("chrome_optimize_agent_tool:")) {
     const parts = step.replace("chrome_optimize_agent_tool:", "").split(":");
     const toolName = parts[0]?.replace(/_/g, " ") ?? "tool";
-    return `chrome optimize ${toolName}`;
+    return `chrome ${toolName}`;
   }
   if (step === "chrome_optimize_agent") {
-    return "chrome optimize";
+    return "chrome";
   }
   if (step.startsWith("architect_agent_tool:")) {
     const parts = step.replace("architect_agent_tool:", "").split(":");

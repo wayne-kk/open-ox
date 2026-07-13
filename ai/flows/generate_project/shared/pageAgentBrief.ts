@@ -66,9 +66,10 @@ export function buildPageAgentUserMessage(params: BuildPageAgentUserMessageParam
 \`${PAGE_AGENT_LAYOUT_PATH}\` is **pass-through only** (\`{children}\` — no global Nav/Footer).
 **Do not** create \`components/chrome/**\`. Reproduce header/nav/footer from the reference **inside** \`${targetPath}\` or \`components/**\` section files.
 `
-    : `## Layout contract (read-only paths)
-\`${PAGE_AGENT_LAYOUT_PATH}\` and \`components/chrome/**\` are scaffolded before this step — **do not edit**.
-Fill only the \`{children}\` region. Single-page sites: stable section \`id\` attributes (e.g. \`id="features"\`).
+    : `## Layout contract (chrome deferred)
+\`${PAGE_AGENT_LAYOUT_PATH}\` is **pass-through only** for now (\`{children}\`).
+Global Nav/Footer are created **once after all pages** by the Chrome Agent — **do not** create \`components/chrome/**\`, and **do not** implement site-wide Nav/Navbar/Header/Sidebar/Footer in \`${targetPath}\` or page section components.
+Fill page **sections** only. Single-page sites: stable section \`id\` attributes (e.g. \`id="features"\`).
 `;
 
   return `## Implement this Next.js route (App Router)

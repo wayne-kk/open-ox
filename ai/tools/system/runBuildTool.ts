@@ -2,6 +2,7 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import type { ToolResult, ToolExecutor } from "../types";
+import { ensureGeneratedSiteTurbopackRoot } from "@/lib/ensureGeneratedSiteTurbopackRoot";
 import { ensureProjectNodeModules } from "@/lib/ensureProjectNodeModules";
 import { envForNextWebpackChild } from "@/lib/nextWebpackChildEnv";
 import { withSiteBuildLock } from "@/lib/siteBuildLock";
@@ -37,14 +38,11 @@ export const executeRunBuild: ToolExecutor = async (
   const projectDir = getSiteRoot();
   try {
     await ensureProjectNodeModules(projectDir);
+    await ensureGeneratedSiteTurbopackRoot(projectDir);
     return await withSiteBuildLock(projectDir, async () => {
-      // Prefer explicit `next build --webpack`: Next 16 Turbopack + site webpack()
-      // config without turbopack:{} hard-fails (see sites/template/next.config.ts).
-      const pnpmArgs =
-        script === "build"
-          ? (["exec", "next", "build", "--webpack"] as const)
-          : (["run", script] as const);
-      const { stdout, stderr } = await execFileAsync("pnpm", [...pnpmArgs], {
+      // Turbopack production build (site-isolated root). `--webpack` is only for
+      // Design Mode `next dev` — forcing it on run_build was 3–8× slower.
+      const { stdout, stderr } = await execFileAsync("pnpm", ["run", script], {
         cwd: projectDir,
         encoding: "utf8",
         maxBuffer: 1024 * 1024,

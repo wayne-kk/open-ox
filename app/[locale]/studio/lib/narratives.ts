@@ -53,31 +53,31 @@ export function getStepNarrative(step: BuildStep): {
     }
     if (s === "architect_scaffold_agent") {
         return {
-            what: "Chrome Scaffold Agent 快速搭全局 chrome 骨架（layout + components/chrome），链接可为占位；页面 Agent 以此为只读契约填充内容。",
+            what: "Pass-through layout（chrome deferred：页面先写，全局 Nav 后置一次生成）",
             output: ok
-                ? "Chrome 搭壳完成；页面 Agent 开始并行实现各路由。"
-                : "Chrome 搭壳失败，根布局可能未就位。",
+                ? "极简 layout 已就绪；页面 Agent 开始实现（禁止自带全局 Nav）。"
+                : "Pass-through layout 准备失败。",
             note: step.detail ?? undefined,
         };
     }
     if (s.startsWith("architect_scaffold_agent_tool:")) {
         return {
-            what: "Chrome Scaffold Agent 工具调用",
+            what: "（旧）Chrome Scaffold Agent 工具调用",
             output: step.detail ?? "tool executed",
         };
     }
     if (s === "chrome_optimize_agent") {
         return {
-            what: "Chrome Optimize Agent 在全部页面落盘后，用工具勘察真实路由与 section id，精修 Nav/Footer 链接与 chrome 体验。",
+            what: "Chrome Agent 在全部页面落盘后一次生成全局 Nav/Footer（磁盘路由/锚点已就绪）。",
             output: ok
-                ? "Chrome 精修完成，导航链接已与真实页面对齐。"
-                : "Chrome 精修失败，导航链接可能仍为 scaffold 占位。",
+                ? "全局 chrome 已生成并挂到 layout。"
+                : "Chrome 生成失败，站点可能仍无全局导航。",
             note: step.detail ?? undefined,
         };
     }
     if (s.startsWith("chrome_optimize_agent_tool:")) {
         return {
-            what: "Chrome Optimize Agent 工具调用",
+            what: "Chrome Agent 工具调用",
             output: step.detail ?? "tool executed",
         };
     }

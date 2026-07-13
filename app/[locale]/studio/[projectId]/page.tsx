@@ -42,6 +42,7 @@ function StudioInner({ projectId }: { projectId: string }) {
   const studio = useBuildStudio(projectId);
   const { loading, response, elapsed, rightPanel, setRightPanel,
     previewUrl, previewState, previewError, previewVersion, startPreview, iframeRef, projectLoading,
+    projectNotFound,
     autoPreviewAfterBuild, setAutoPreviewAfterBuild,
     bumpPreviewAfterDirectPatch,
     remixedFromTitle, remixedFromOwnerUsername,
@@ -49,6 +50,11 @@ function StudioInner({ projectId }: { projectId: string }) {
   const justRemixed = searchParams.get("remixed") === "1";
   const [lineageDismissed, setLineageDismissed] = useState(false);
   const showLineageBanner = !lineageDismissed && Boolean(remixedFromTitle);
+
+  useEffect(() => {
+    if (!projectNotFound) return;
+    router.replace("/dashboard");
+  }, [projectNotFound, router]);
 
   // Sync AI processing state → dynamic favicon
   useFaviconSync({
@@ -222,6 +228,10 @@ function StudioInner({ projectId }: { projectId: string }) {
       while (Date.now() - started < COVER_CAPTURE_POLL_TIMEOUT_MS) {
         await new Promise((r) => setTimeout(r, COVER_CAPTURE_POLL_INTERVAL_MS));
         const pollRes = await fetch(`/api/projects/${projectId}`);
+        if (pollRes.status === 404) {
+          setCoverCaptureHint("项目不存在或已删除");
+          return;
+        }
         if (!pollRes.ok) continue;
         const project = (await pollRes.json().catch(() => null)) as {
           coverImageStatus?: string | null;

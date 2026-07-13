@@ -8,6 +8,13 @@ export type GenerationRunPayloadBody = {
   preCreatedProjectId?: string;
   resumeFromCheckpoint: boolean;
   styleGuide?: string;
+  /**
+   * User-confirmed vibe fork (confirm_vibe). When set, generation uses this
+   * markdown as design intent instead of (or ahead of) inferred design intent.
+   */
+  confirmedDesignDirectionMarkdown?: string;
+  /** Keywords from the confirmed vibe — merged into blueprint designIntent.keywords */
+  confirmedDesignDirectionKeywords?: string[];
   enableSkills: boolean;
   enableIntentGuide: boolean;
   langfuseSessionId?: string;

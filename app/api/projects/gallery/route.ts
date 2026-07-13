@@ -8,7 +8,8 @@ import { stripCoverStoragePaths } from "@/lib/projectCoverUrls";
 /**
  * GET /api/projects/gallery — current user's Workspace projects.
  * Covers are loaded via `/api/projects/:id/cover?v=` on the client.
- * Query: offset, limit, folder (`all` | `uncategorized` | folder uuid).
+ * Query: offset, limit, folder (`all` | `uncategorized` | folder uuid),
+ * published (`1` = only publish_preview, any folder; ignores folder).
  * `all` / `uncategorized` = root only (`folder_id` null).
  * Response: { projects }
  */
@@ -23,6 +24,8 @@ export async function GET(req: Request) {
     const limitParam = Number(searchParams.get("limit"));
     const offsetParam = Number(searchParams.get("offset"));
     const folderParam = (searchParams.get("folder") || "all").trim() || "all";
+    const publishedOnly =
+      searchParams.get("published") === "1" || searchParams.get("published") === "true";
     const offset = Number.isFinite(offsetParam) && offsetParam >= 0 ? Math.floor(offsetParam) : 0;
     const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.floor(limitParam) : undefined;
 
@@ -34,7 +37,7 @@ export async function GET(req: Request) {
 
     const projectsRaw = await listProjectsSummary(db, {
       userId: session.user.id,
-      folder,
+      ...(publishedOnly ? { publishedOnly: true } : { folder }),
       limit,
       offset,
     });

@@ -13,6 +13,7 @@ import { StudioMessageMarkdown } from "./StudioMessageMarkdown";
 import { StudioMarkdownTextarea } from "./StudioMarkdownTextarea";
 import { DiffBlock } from "./DiffPatchView";
 import { ModifyDetailsPreviewToggle } from "./ModifyDetailsPreviewToggle";
+import { VibePickerPanel } from "./VibePickerPanel";
 import { SlashMenu } from "@/app/components/ui/SlashMenu";
 import { useSlashMenu } from "@/app/hooks/useSlashMenu";
 import {
@@ -356,6 +357,10 @@ export function BuildConversation({
     elapsed,
     flowStart,
     handleRun,
+    handleConfirmVibe,
+    handleSkipVibe,
+    vibeResolved,
+    confirmedVibe,
     handleClear,
     handleRetry,
     generationSeemsStuck,
@@ -637,6 +642,38 @@ export function BuildConversation({
                                 {message.role === "assistant" && message.intentPayload?.briefDraftMarkdown ? (
                                     <div className="min-w-0 max-w-full overflow-hidden rounded-2xl border border-border bg-muted/50 px-4 py-3 text-muted-foreground">
                                         <StudioMessageMarkdown content={message.intentPayload.briefDraftMarkdown} />
+                                    </div>
+                                ) : null}
+
+                                {/* Early vibe fork — on options/clarify only, never on confirm_brief */}
+                                {message.role === "assistant" &&
+                                message.id === latestAssistantMessageId &&
+                                !vibeResolved &&
+                                (message.intentPayload?.kind === "options" ||
+                                    message.intentPayload?.kind === "clarify") ? (
+                                    <VibePickerPanel
+                                        briefMarkdown={
+                                            message.intentPayload?.briefDraftMarkdown ??
+                                            lastRunInput ??
+                                            undefined
+                                        }
+                                        disabled={loading}
+                                        mode="select"
+                                        onConfirm={(vibe) => void handleConfirmVibe(vibe)}
+                                        onSkip={() => void handleSkipVibe()}
+                                    />
+                                ) : null}
+
+                                {message.role === "assistant" &&
+                                message.id === latestAssistantMessageId &&
+                                confirmedVibe &&
+                                message.intentPayload?.kind === "confirm_brief" ? (
+                                    <div className="rounded-xl border border-border bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
+                                        已选定气质：
+                                        <span className="font-medium text-foreground">
+                                          {confirmedVibe.label}
+                                        </span>
+                                        （{confirmedVibe.tagline}）
                                     </div>
                                 ) : null}
 

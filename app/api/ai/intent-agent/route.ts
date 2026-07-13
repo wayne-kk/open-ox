@@ -94,6 +94,22 @@ export async function POST(req: Request) {
     const runGenerateOnCommit: boolean = body.runGenerateOnCommit !== false;
     const modelOverride: string | undefined = typeof body.model === "string" ? body.model : undefined;
     const enableIntentAgentWebSearch: boolean = body.enableIntentAgentWebSearch === true;
+    const styleGuide: string | undefined =
+      typeof body.styleGuide === "string" && body.styleGuide.trim()
+        ? body.styleGuide.trim()
+        : undefined;
+    const confirmedDesignDirectionMarkdown: string | undefined =
+      typeof body.confirmedDesignDirectionMarkdown === "string" &&
+      body.confirmedDesignDirectionMarkdown.trim()
+        ? body.confirmedDesignDirectionMarkdown.trim()
+        : undefined;
+    const confirmedDesignDirectionKeywords: string[] | undefined = Array.isArray(
+      body.confirmedDesignDirectionKeywords
+    )
+      ? body.confirmedDesignDirectionKeywords
+          .filter((k: unknown): k is string => typeof k === "string" && k.trim().length > 0)
+          .map((k: string) => k.trim())
+      : undefined;
 
     if (!projectId || typeof projectId !== "string" || !isSafeProjectId(projectId)) {
       return NextResponse.json({ error: "Missing or invalid projectId" }, { status: 400 });
@@ -320,6 +336,13 @@ export async function POST(req: Request) {
             resumeFromCheckpoint: false,
             enableSkills: true,
             enableIntentGuide,
+            ...(styleGuide ? { styleGuide } : {}),
+            ...(confirmedDesignDirectionMarkdown
+              ? { confirmedDesignDirectionMarkdown }
+              : {}),
+            ...(confirmedDesignDirectionKeywords?.length
+              ? { confirmedDesignDirectionKeywords }
+              : {}),
             ...(typeof body.langfuseSessionId === "string"
               ? { langfuseSessionId: body.langfuseSessionId }
               : {}),

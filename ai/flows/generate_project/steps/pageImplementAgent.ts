@@ -51,6 +51,7 @@ import {
   compactPageAgentMessages,
   createBootstrapGuardedListDirExecutor,
   createBootstrapGuardedReadExecutor,
+  createPageAgentChromeDeferredWriteExecutor,
   createPageAgentSessionState,
   executePageAgentListDir,
   executePageAgentReadFile,
@@ -232,7 +233,7 @@ export async function runPageImplementAgent(
           loadGuardrail("screenshotReplicateNoUserAssets"),
           loadGuardrail("screenshotReplicatePageOwnsChrome"),
         ]
-      : []),
+      : [loadGuardrail("chromeDeferredNoPageNav")]),
     ...resolvePageImplementAgentRuleIds({ userProvidedImageCount: userImageCount }).map(
       loadGuardrail
     ),
@@ -265,6 +266,13 @@ export async function runPageImplementAgent(
   const listDirExecutor = bootstrapEnabled
     ? createBootstrapGuardedListDirExecutor(bootstrappedPaths)
     : executePageAgentListDir;
+  const chromeDeferredWrites = !replicateLayout;
+  const writeFileExecutor = chromeDeferredWrites
+    ? createPageAgentChromeDeferredWriteExecutor("write_file")
+    : undefined;
+  const editFileExecutor = chromeDeferredWrites
+    ? createPageAgentChromeDeferredWriteExecutor("edit_file")
+    : undefined;
 
   const { executor: baseImageExecutor, pendingImages } = createImageExecutor(
     `page-${page.slug.replace(/[^a-zA-Z0-9_-]+/g, "-")}`
@@ -307,6 +315,8 @@ export async function runPageImplementAgent(
     executeToolOverrides: {
       read_file: readFileExecutor,
       list_dir: listDirExecutor,
+      ...(writeFileExecutor ? { write_file: writeFileExecutor } : {}),
+      ...(editFileExecutor ? { edit_file: editFileExecutor } : {}),
       [PAGE_IMPLEMENTATION_COMPLETE]: async (
         args: Record<string, unknown>
       ): Promise<ToolResult> => {

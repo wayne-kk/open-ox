@@ -236,6 +236,8 @@ export async function listProjectsSummary(
     filterOwnerUserId?: string | null;
     /** Community discovery: publish_preview + listed only */
     communityListed?: boolean;
+    /** Owner workspace: only projects with publish_preview on (any folder) */
+    publishedOnly?: boolean;
   }
 ): Promise<ProjectMetadata[]> {
   let query = db
@@ -251,12 +253,16 @@ export async function listProjectsSummary(
 
   if (options.userId) {
     query = query.eq("user_id", options.userId);
-    // `all` and legacy `uncategorized` both mean root (folder_id IS NULL).
-    const folder = options.folder ?? "all";
-    if (folder === "all" || folder === "uncategorized") {
-      query = query.is("folder_id", null);
+    if (options.publishedOnly) {
+      query = query.eq("publish_preview", true);
     } else {
-      query = query.eq("folder_id", folder);
+      // `all` and legacy `uncategorized` both mean root (folder_id IS NULL).
+      const folder = options.folder ?? "all";
+      if (folder === "all" || folder === "uncategorized") {
+        query = query.is("folder_id", null);
+      } else {
+        query = query.eq("folder_id", folder);
+      }
     }
   } else if (options.filterOwnerUserId) {
     query = query.eq("user_id", options.filterOwnerUserId);

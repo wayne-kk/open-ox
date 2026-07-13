@@ -12,8 +12,10 @@ describe("template source instrumentation webpack rule", () => {
     expect(config).not.toContain("test: /\\\\.[jt]sx$/");
   });
 
-  it("declares empty turbopack config so Next 16 does not hard-fail webpack()+Turbopack", () => {
+  it("pins turbopack.root and outputFileTracingRoot to the site dir", () => {
     const config = fs.readFileSync(templateNextConfig, "utf-8");
-    expect(config).toMatch(/\bturbopack:\s*\{\s*\}/);
+    expect(config).toMatch(/\bturbopack:\s*\{[\s\S]*?\broot:\s*siteRoot/);
+    expect(config).toMatch(/\boutputFileTracingRoot:\s*siteRoot/);
+    expect(config).not.toContain('path.join(__dirname, "../..")');
   });
 });
