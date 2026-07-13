@@ -104,6 +104,10 @@ jobs:
             echo "ARK_BASE_URL=${{ secrets.ARK_BASE_URL }}"
             echo "ARK_IMAGE_MODEL=${{ secrets.ARK_IMAGE_MODEL }}"
             echo "ARK_IMAGE_SIZE=${{ secrets.ARK_IMAGE_SIZE }}"
+            echo "VERCEL_CLIENT_ID=${{ secrets.VERCEL_CLIENT_ID }}"
+            echo "VERCEL_CLIENT_SECRET=${{ secrets.VERCEL_CLIENT_SECRET }}"
+            echo "VERCEL_INTEGRATION_SLUG=${{ secrets.VERCEL_INTEGRATION_SLUG }}"
+            echo "VERCEL_TOKEN_ENCRYPTION_KEY=${{ secrets.VERCEL_TOKEN_ENCRYPTION_KEY }}"
           } > .env.production
 
       - name: Setup SSH agent
