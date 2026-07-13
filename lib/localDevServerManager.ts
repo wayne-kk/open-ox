@@ -734,6 +734,27 @@ async function ensureProjectDirExists(
   await ensureProjectSourcesOnDisk(projectId, { db });
   timingLog(projectId, "ensureProjectSourcesOnDisk", tRestore);
 
+  // Intent-only scaffolds / failed restores can still lack a home route — avoid next 404.
+  const homePage = path.join(projectDir, "app", "page.tsx");
+  try {
+    await fs.access(homePage);
+  } catch {
+    await fs.mkdir(path.dirname(homePage), { recursive: true });
+    await fs.writeFile(
+      homePage,
+      `export default function HomePage() {
+  return (
+    <main className="flex min-h-[50vh] items-center justify-center p-8 text-center text-muted-foreground">
+      <p>Preparing your site…</p>
+    </main>
+  );
+}
+`,
+      "utf-8"
+    );
+    console.warn(`[local preview] Wrote stub app/page.tsx (was missing) projectId=${projectId}`);
+  }
+
   const tVerify = performance.now();
   try {
     await fs.access(pkgPath);

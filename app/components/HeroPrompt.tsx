@@ -254,10 +254,10 @@ export function HeroPrompt() {
     >
       <div
         className={cn(
-          "relative flex flex-col gap-2.5 rounded-2xl border bg-card/80 px-5 pb-3.5 pt-4 backdrop-blur-sm transition-all duration-200",
+          "relative flex flex-col gap-2.5 rounded-2xl border bg-card px-5 pb-3.5 pt-4 shadow-[var(--box-shadow-neon-sm)] transition-all duration-200",
           focused
-            ? "border-border shadow-[var(--box-shadow-neon)]"
-            : "border-border/80 hover:border-border"
+            ? "border-primary/35 shadow-[var(--box-shadow-neon)]"
+            : "border-border hover:border-border"
         )}
       >
         <PromptChips chips={chips} onRemove={removeChip} />

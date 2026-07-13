@@ -69,7 +69,7 @@ export function MemoryDebugPanel({
   if (!projectId) return null;
 
   return (
-    <div className="border-t border-white/8">
+    <div className="border-t border-border">
       <button
         type="button"
         onClick={() => { const next = !isOpen; onToggle?.(next); if (next && !data) fetchMemory(); }}
@@ -95,7 +95,7 @@ export function MemoryDebugPanel({
                 ) : (
                   <div className="space-y-2">
                     {data.layer1_db.records.map((r, i) => (
-                      <div key={i} className="rounded-lg border border-white/6 p-2.5 space-y-1">
+                      <div key={i} className="rounded-lg border border-border p-2.5 space-y-1">
                         <div className="flex items-start justify-between gap-2">
                           <p className="text-[11px] text-foreground/80 leading-5">"{r.instruction}"</p>
                           <span className="text-[9px] text-muted-foreground/30 shrink-0">{new Date(r.modifiedAt).toLocaleString()}</span>

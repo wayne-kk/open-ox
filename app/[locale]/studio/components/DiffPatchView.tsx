@@ -6,7 +6,7 @@ import type { ModifyDiff } from "@/app/[locale]/studio/hooks/useBuildStudio";
 export function DiffPatchLines({ patch }: { patch: string }) {
   const lines = patch.split("\n");
   return (
-    <div className="overflow-x-auto bg-[#080a0d]">
+    <div className="overflow-x-auto bg-muted">
       {lines.map((line, i) => {
         const isAdd = line.startsWith("+") && !line.startsWith("+++");
         const isDel = line.startsWith("-") && !line.startsWith("---");
@@ -39,11 +39,11 @@ export function DiffBlock({ diff }: { diff: ModifyDiff }) {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="rounded-lg border border-white/8 overflow-hidden text-[11px] font-mono">
+    <div className="rounded-lg border border-border overflow-hidden text-[11px] font-mono">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between bg-white/3 px-3 py-2 hover:bg-white/5 transition-colors text-left"
+        className="w-full flex items-center justify-between bg-muted/40 px-3 py-2 hover:bg-muted transition-colors text-left"
       >
         <span className="text-foreground/80 truncate max-w-[60%]">{diff.file}</span>
         <div className="flex items-center gap-3 shrink-0">

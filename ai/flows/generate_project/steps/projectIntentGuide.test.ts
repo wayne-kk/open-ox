@@ -11,7 +11,6 @@ describe("parseProjectIntentGuidePayload", () => {
       phase: "choices",
       assistantMessage: "hello",
       suggestedReplies: [],
-      choiceOptions: [],
       buildPromptAppendix: "should be ignored",
     });
     expect(r.outcome).toBe("guide_user");
@@ -25,7 +24,6 @@ describe("parseProjectIntentGuidePayload", () => {
       phase: "clarify",
       assistantMessage: "ok",
       suggestedReplies: [],
-      choiceOptions: [],
       buildPromptAppendix: "  MVP: landing  ",
     });
     expect(r.outcome).toBe("continue_build");
@@ -33,16 +31,28 @@ describe("parseProjectIntentGuidePayload", () => {
     expect(r.buildPromptAppendix).toBe("MVP: landing");
   });
 
-  it("parses choice options with hint", () => {
+  it("caps suggestedReplies at 3", () => {
     const r = parseProjectIntentGuidePayload({
       outcome: "guide_user",
       phase: "choices",
       assistantMessage: "pick one",
-      suggestedReplies: ["A"],
+      suggestedReplies: ["品牌展示官网", "可交互工具页", "内容资讯站", "多余第四条"],
+      buildPromptAppendix: null,
+    });
+    expect(r.suggestedReplies).toEqual(["品牌展示官网", "可交互工具页", "内容资讯站"]);
+  });
+
+  it("ignores legacy choiceOptions field", () => {
+    const r = parseProjectIntentGuidePayload({
+      outcome: "guide_user",
+      phase: "choices",
+      assistantMessage: "pick",
+      suggestedReplies: ["品牌展示官网"],
       choiceOptions: [{ id: "narrative", label: "Long scroll", hint: "marketing" }],
       buildPromptAppendix: null,
     });
-    expect(r.choiceOptions).toEqual([{ id: "narrative", label: "Long scroll", hint: "marketing" }]);
+    expect(r.suggestedReplies).toEqual(["品牌展示官网"]);
+    expect("choiceOptions" in r).toBe(false);
   });
 });
 

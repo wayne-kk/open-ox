@@ -11,7 +11,7 @@ function Section({ id, children }: { id: string; children: React.ReactNode }) {
 
 function H2({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="mt-12 mb-4 text-xl font-bold tracking-tight border-b border-white/8 pb-3">
+    <h2 className="mt-12 mb-4 text-xl font-bold tracking-tight border-b border-border pb-3">
       {children}
     </h2>
   );
@@ -27,7 +27,7 @@ function P({ children }: { children: React.ReactNode }) {
 
 function Code({ children }: { children: React.ReactNode }) {
   return (
-    <code className="rounded bg-white/6 border border-white/8 px-1.5 py-0.5 font-mono text-[12px] text-foreground/90">
+    <code className="rounded bg-muted border border-border px-1.5 py-0.5 font-mono text-[12px] text-foreground/90">
       {children}
     </code>
   );
@@ -35,7 +35,7 @@ function Code({ children }: { children: React.ReactNode }) {
 
 function Pre({ children }: { children: React.ReactNode }) {
   return (
-    <pre className="mt-4 mb-4 overflow-x-auto rounded-xl border border-white/8 bg-[#080a0d] px-5 py-4 font-mono text-[12px] leading-6 text-muted-foreground">
+    <pre className="mt-4 mb-4 overflow-x-auto rounded-xl border border-border bg-muted px-5 py-4 font-mono text-[12px] leading-6 text-muted-foreground">
       {children}
     </pre>
   );
@@ -111,10 +111,10 @@ export default function ArchitecturePage() {
           <P>
             自 2026-07 起，可见性与发现拆成独立产品面（ADR-0002）。默认项目对其他用户不可见。
           </P>
-          <div className="mt-4 overflow-hidden rounded-xl border border-white/8">
+          <div className="mt-4 overflow-hidden rounded-xl border border-border">
             <table className="w-full text-[13px]">
               <thead>
-                <tr className="border-b border-white/8 bg-white/[0.02]">
+                <tr className="border-b border-border bg-card">
                   <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">面</th>
                   <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">路由</th>
                   <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">谁可见</th>
@@ -127,7 +127,7 @@ export default function ArchitecturePage() {
                   ["Studio", "/studio/[id]", "仅所有者（或 Admin）；非所有者不可进他人项目"],
                   ["Admin", "/admin/…", "Admin；全量项目与强制下架"],
                 ].map(([surface, route, who]) => (
-                  <tr key={surface} className="hover:bg-white/[0.015]">
+                  <tr key={surface} className="hover:bg-muted/50">
                     <td className="px-4 py-2.5 font-mono text-[11px] text-primary/80">{surface}</td>
                     <td className="px-4 py-2.5 font-mono text-[11px] text-muted-foreground/60">{route}</td>
                     <td className="px-4 py-2.5 text-[12px] text-muted-foreground/70">{who}</td>
@@ -147,10 +147,10 @@ export default function ArchitecturePage() {
         {/* ── Stack ── */}
         <Section id="stack">
           <H2>技术栈</H2>
-          <div className="mt-4 overflow-hidden rounded-xl border border-white/8">
+          <div className="mt-4 overflow-hidden rounded-xl border border-border">
             <table className="w-full text-[13px]">
               <thead>
-                <tr className="border-b border-white/8 bg-white/[0.02]">
+                <tr className="border-b border-border bg-card">
                   <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">层次</th>
                   <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">技术</th>
                   <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">选型理由</th>
@@ -165,7 +165,7 @@ export default function ArchitecturePage() {
                   ["沙箱 / 预览", "local · Storage · E2B", "预览后端可选：本地 dev、静态导出+代理、或云端沙箱"],
                   ["LLM", "OpenAI-compatible API", "可切换 Gemini / GPT / 任意提供商"],
                 ].map(([layer, tech, why]) => (
-                  <tr key={layer} className="hover:bg-white/[0.015]">
+                  <tr key={layer} className="hover:bg-muted/50">
                     <td className="px-4 py-2.5 font-mono text-[11px] text-muted-foreground/60">{layer}</td>
                     <td className="px-4 py-2.5 text-foreground/80">{tech}</td>
                     <td className="px-4 py-2.5 text-muted-foreground/70">{why}</td>
@@ -233,7 +233,7 @@ export default function ArchitecturePage() {
               { method: "GET", path: "/api/models", desc: "获取可用 LLM 模型列表" },
               { method: "GET", path: "/api/skills", desc: "获取可用风格技能列表" },
             ].map(({ method, path, desc }) => (
-              <div key={`${method} ${path}`} className="flex items-start gap-3 rounded-lg border border-white/6 bg-white/[0.02] px-4 py-2.5">
+              <div key={`${method} ${path}`} className="flex items-start gap-3 rounded-lg border border-border bg-card px-4 py-2.5">
                 <span className={`shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-bold ${method === "GET" ? "bg-blue-500/15 text-blue-400" :
                   method === "POST" ? "bg-green-500/15 text-green-400" :
                     method === "PUT" ? "bg-amber-500/15 text-amber-400" :
@@ -259,10 +259,10 @@ export default function ArchitecturePage() {
             HeroPrompt 输入框支持多种触发器，在文本任意位置通过特殊字符激活。
             选中后以彩色 chip 形式注入，提交时各 chip 的 payload 合并到请求体。
           </P>
-          <div className="mt-4 overflow-hidden rounded-xl border border-white/8">
+          <div className="mt-4 overflow-hidden rounded-xl border border-border">
             <table className="w-full text-[13px]">
               <thead>
-                <tr className="border-b border-white/8 bg-white/[0.02]">
+                <tr className="border-b border-border bg-card">
                   <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">触发符</th>
                   <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">功能</th>
                   <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">提交字段</th>
@@ -276,7 +276,7 @@ export default function ArchitecturePage() {
                   ["URL", "粘贴 URL 自动提取为参考", "referenceUrl"],
                   ["图片", "粘贴截图作为视觉参考", "imageBase64"],
                 ].map(([trigger, desc, field]) => (
-                  <tr key={trigger} className="hover:bg-white/[0.015]">
+                  <tr key={trigger} className="hover:bg-muted/50">
                     <td className="px-4 py-2.5 font-mono text-[11px] text-primary/80">{trigger}</td>
                     <td className="px-4 py-2.5 text-muted-foreground/80">{desc}</td>
                     <td className="px-4 py-2.5 font-mono text-[11px] text-muted-foreground/60">{field}</td>
@@ -333,7 +333,7 @@ Studio  └── POST /api/projects/[id]/design-mode/patch
           <H3>工具列表</H3>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {["read_file", "search_code", "list_dir", "edit_file", "write_file", "run_build", "exec_shell", "think", "revert_file"].map((t) => (
-              <code key={t} className="rounded bg-white/6 border border-white/8 px-2 py-0.5 font-mono text-[11px] text-foreground/80">{t}</code>
+              <code key={t} className="rounded bg-muted border border-border px-2 py-0.5 font-mono text-[11px] text-foreground/80">{t}</code>
             ))}
           </div>
           <H3>4-Phase 工作流</H3>
@@ -354,10 +354,10 @@ Phase 4: VERIFY  — run_build 验证编译`}</Pre>
         <Section id="persistence">
           <H2>数据持久化</H2>
           <H3>projects 表</H3>
-          <div className="overflow-hidden rounded-xl border border-white/8">
+          <div className="overflow-hidden rounded-xl border border-border">
             <table className="w-full text-[13px]">
               <thead>
-                <tr className="border-b border-white/8 bg-white/[0.02]">
+                <tr className="border-b border-border bg-card">
                   <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">字段</th>
                   <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">类型</th>
                   <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">说明</th>
@@ -380,7 +380,7 @@ Phase 4: VERIFY  — run_build 验证编译`}</Pre>
                   ["sandbox_id", "text", "E2B 沙箱 ID（用于重连）"],
                   ["verification_status", "enum", "passed / failed（next build 结果）"],
                 ].map(([field, type, notes]) => (
-                  <tr key={field} className="hover:bg-white/[0.015]">
+                  <tr key={field} className="hover:bg-muted/50">
                     <td className="px-4 py-2.5 font-mono text-[11px] text-primary/80">{field}</td>
                     <td className="px-4 py-2.5 font-mono text-[11px] text-muted-foreground/60">{type}</td>
                     <td className="px-4 py-2.5 text-[12px] text-muted-foreground/70">{notes}</td>
@@ -425,7 +425,7 @@ Phase 4: VERIFY  — run_build 验证编译`}</Pre>
               body: "配置 Service Role 与 NEXT_PUBLIC_SITE_URL 且未指定 OPEN_OX_PREVIEW_BACKEND 时，本地默认与生产一致使用静态导出 + 代理，避免 Dev Server 与 CSP 差异。",
             },
           ].map(({ title, body }) => (
-            <div key={title} className="mt-4 rounded-xl border border-white/8 bg-white/[0.02] px-5 py-4">
+            <div key={title} className="mt-4 rounded-xl border border-border bg-card px-5 py-4">
               <p className="text-[13px] font-semibold text-foreground/90">{title}</p>
               <p className="mt-1 text-[13px] text-muted-foreground/80">{body}</p>
             </div>
@@ -433,7 +433,7 @@ Phase 4: VERIFY  — run_build 验证编译`}</Pre>
         </Section>
 
         {/* Next page */}
-        <div className="mt-14 border-t border-white/8 pt-8 flex justify-end">
+        <div className="mt-14 border-t border-border pt-8 flex justify-end">
           <Link
             href="/docs/pipeline"
             className="flex items-center gap-2 text-[13px] text-muted-foreground hover:text-primary transition-colors"

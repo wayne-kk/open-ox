@@ -14,7 +14,7 @@ function cellColor(value: number): string {
   if (value >= 20) return "bg-emerald-500/20 text-emerald-100/90";
   if (value >= 10) return "bg-primary/20 text-primary";
   if (value > 0) return "bg-white/10 text-foreground/80";
-  return "bg-white/[0.03] text-muted-foreground";
+  return "bg-muted/40 text-muted-foreground";
 }
 
 type CohortMatrixProps = {
@@ -25,9 +25,9 @@ export function CohortMatrix({ cohorts }: CohortMatrixProps) {
   const days = [1, 7, 14, 30] as const;
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-white/10">
+    <div className="overflow-x-auto rounded-xl border border-border">
       <table className="w-full min-w-[640px] text-left text-sm">
-        <thead className="bg-white/5 text-xs uppercase tracking-wide text-muted-foreground">
+        <thead className="bg-muted text-xs uppercase tracking-wide text-muted-foreground">
           <tr>
             <th className="px-3 py-2">Cohort 周</th>
             <th className="px-3 py-2">人数</th>
@@ -47,7 +47,7 @@ export function CohortMatrix({ cohorts }: CohortMatrixProps) {
             </tr>
           ) : (
             cohorts.map((cohort) => (
-              <tr key={cohort.cohortWeek} className="border-t border-white/10">
+              <tr key={cohort.cohortWeek} className="border-t border-border">
                 <td className="px-3 py-2 font-mono text-xs">{cohort.cohortWeek}</td>
                 <td className="px-3 py-2 tabular-nums">{cohort.cohortSize}</td>
                 {days.map((day) => (

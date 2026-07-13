@@ -84,7 +84,7 @@ export function UserAvatarButton({
   return (
     <span
       className={cn(
-        "flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/15 bg-white/5",
+        "flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-muted",
         className
       )}
     >
@@ -175,14 +175,14 @@ export function UserMenuDropdown({
         align={variant === "sidebar" ? "start" : "end"}
         side={variant === "sidebar" ? "top" : "bottom"}
         sideOffset={10}
-        className="w-[min(calc(100vw-1.5rem),166px)] overflow-hidden rounded-2xl border border-white/12 bg-zinc-950/98 p-0 shadow-2xl shadow-black/50 backdrop-blur-xl"
+        className="w-[min(calc(100vw-1.5rem),220px)] overflow-hidden rounded-2xl border border-border bg-popover p-0 text-popover-foreground shadow-[var(--box-shadow-neon-lg)]"
       >
-        <div className="relative border-b border-white/[0.08] bg-gradient-to-br from-primary/[0.12] via-transparent to-accent-tertiary/[0.06] px-3 py-3.5">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-20%,rgba(0,255,136,0.12),transparent)]" />
+        <div className="relative border-b border-border bg-muted/40 px-3 py-3.5">
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/[0.08] via-transparent to-accent-tertiary/[0.05]" />
           <div className="relative flex gap-2.5">
             <UserAvatarButton
               user={user}
-              className="h-10 w-10 shrink-0 ring-2 ring-primary/30 shadow-md shadow-black/20"
+              className="h-10 w-10 shrink-0 ring-2 ring-primary/30 shadow-sm"
             />
             <div className="min-w-0 flex-1 space-y-1 pt-1">
               <p className="truncate text-[14px] font-semibold leading-tight tracking-tight text-foreground">
@@ -205,7 +205,7 @@ export function UserMenuDropdown({
                   Admin
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuSeparator className="my-1 bg-white/10" />
+              <DropdownMenuSeparator className="my-1" />
             </>
           ) : null}
           <DropdownMenuItem asChild className="cursor-pointer gap-2 rounded-xl px-3 py-2.5 text-[14px] leading-snug text-foreground/90">
@@ -214,10 +214,10 @@ export function UserMenuDropdown({
               {tSettings("navAppearance")}
             </Link>
           </DropdownMenuItem>
-          <DropdownMenuSeparator className="my-1 bg-white/10" />
+          <DropdownMenuSeparator className="my-1" />
           <DropdownMenuItem
             onClick={() => void signOut()}
-            className="cursor-pointer gap-2 rounded-xl px-3 py-2.5 text-[14px] leading-snug text-foreground/90 focus:bg-red-500/[0.12] focus:text-red-300 data-[highlighted]:bg-red-500/[0.12] data-[highlighted]:text-red-200"
+            className="cursor-pointer gap-2 rounded-xl px-3 py-2.5 text-[14px] leading-snug text-foreground/90 focus:bg-destructive/10 focus:text-destructive data-[highlighted]:bg-destructive/10 data-[highlighted]:text-destructive"
           >
             <LogOut className="h-4 w-4 shrink-0 opacity-80" />
             退出登录

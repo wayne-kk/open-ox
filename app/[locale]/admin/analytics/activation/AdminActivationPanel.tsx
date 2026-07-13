@@ -74,7 +74,7 @@ export function AdminActivationPanel() {
 
       {data ? (
         <>
-          <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+          <div className="rounded-xl border border-border bg-card p-4">
             <h2 className="mb-4 text-sm font-medium">漏斗概览</h2>
             <FunnelChart steps={data.steps} />
           </div>
@@ -90,9 +90,9 @@ export function AdminActivationPanel() {
             valueSuffix="%"
           />
 
-          <div className="overflow-hidden rounded-xl border border-white/10">
+          <div className="overflow-hidden rounded-xl border border-border">
             <table className="w-full text-left text-sm">
-              <thead className="bg-white/5 text-xs uppercase tracking-wide text-muted-foreground">
+              <thead className="bg-muted text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <th className="px-3 py-2">步骤间隔</th>
                   <th className="px-3 py-2">中位耗时（小时）</th>
@@ -101,7 +101,7 @@ export function AdminActivationPanel() {
               </thead>
               <tbody>
                 {data.stepTimings.map((row) => (
-                  <tr key={`${row.fromStep}-${row.toStep}`} className="border-t border-white/10">
+                  <tr key={`${row.fromStep}-${row.toStep}`} className="border-t border-border">
                     <td className="px-3 py-2">
                       {row.fromStep} → {row.toStep}
                     </td>

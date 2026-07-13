@@ -627,10 +627,43 @@ export default function RootLayout({
 }
 `;
 
+/**
+ * Stub home route so local `next dev` does not 404 before Page Agent writes the real page.
+ * Template copy intentionally excludes `app/page.tsx` (Architect/Page Agent own it).
+ */
+const DEFAULT_HOME_PAGE_TSX = `export default function HomePage() {
+  return (
+    <main className="flex min-h-[50vh] items-center justify-center p-8 text-center text-muted-foreground">
+      <p>Preparing your site…</p>
+    </main>
+  );
+}
+`;
+
 async function writeDefaultRootLayout(projectDir: string): Promise<void> {
   const appDir = path.join(projectDir, "app");
   await fs.mkdir(appDir, { recursive: true });
   await fs.writeFile(path.join(appDir, "layout.tsx"), DEFAULT_ROOT_LAYOUT_TSX, "utf-8");
+}
+
+async function writeDefaultHomePageIfMissing(projectDir: string): Promise<void> {
+  const pagePath = path.join(projectDir, "app", "page.tsx");
+  try {
+    await fs.access(pagePath);
+  } catch {
+    await fs.mkdir(path.dirname(pagePath), { recursive: true });
+    await fs.writeFile(pagePath, DEFAULT_HOME_PAGE_TSX, "utf-8");
+  }
+}
+
+async function projectLooksInitialized(projectDir: string): Promise<boolean> {
+  try {
+    await fs.access(path.join(projectDir, "package.json"));
+    await fs.access(path.join(projectDir, "next.config.ts"));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function copyTemplateDir(src: string, dest: string, templateRoot: string): Promise<void> {
@@ -666,6 +699,20 @@ export async function initProjectDir(db: SupabaseClient, projectId: string): Pro
     throw new Error(`Template directory not found: ${templateDir}`);
   }
 
+  // Intent Agent often scaffolds first; generation worker calls init again.
+  // Never wipe an existing site on re-entry — that caused post-generate 404s
+  // (missing app/page.tsx) when ensureProjectNodeModules raced with next dev.
+  if (await projectLooksInitialized(projectDir)) {
+    await writeDefaultHomePageIfMissing(projectDir);
+    try {
+      await ensureProjectNodeModules(projectDir);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`[projectManager] initProjectDir re-entry node_modules: ${message}`);
+    }
+    return;
+  }
+
   try {
     await copyTemplateDir(templateDir, projectDir, templateDir);
 
@@ -689,6 +736,7 @@ export async function initProjectDir(db: SupabaseClient, projectId: string): Pro
     await fs.writeFile(pkgPath, JSON.stringify(projPkg, null, 2) + "\n", "utf-8");
 
     await writeDefaultRootLayout(projectDir);
+    await writeDefaultHomePageIfMissing(projectDir);
 
     const templateGlobals = path.join(templateDir, "app/globals.css");
     const projectGlobals = path.join(projectDir, "app/globals.css");
@@ -700,7 +748,11 @@ export async function initProjectDir(db: SupabaseClient, projectId: string): Pro
 
     await ensureProjectNodeModules(projectDir);
   } catch (err: unknown) {
-    await fs.rm(projectDir, { recursive: true, force: true });
+    // Only remove a half-created scaffold — never delete a site that already had package.json.
+    const hadPkg = await projectLooksInitialized(projectDir).catch(() => false);
+    if (!hadPkg) {
+      await fs.rm(projectDir, { recursive: true, force: true }).catch(() => undefined);
+    }
     const message = err instanceof Error ? err.message : String(err);
     await updateProjectStatus(db, projectId, "failed", { error: message });
     throw err;

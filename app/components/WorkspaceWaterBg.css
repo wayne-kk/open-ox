@@ -78,12 +78,20 @@
 
 .workspace-water__base {
   background:
+    radial-gradient(ellipse 90% 55% at 50% -10%, color-mix(in oklab, var(--foreground) 4%, transparent), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 85% 30%, color-mix(in oklab, var(--primary) 8%, transparent), transparent 50%),
+    radial-gradient(ellipse 50% 35% at 10% 70%, color-mix(in oklab, var(--accent-tertiary) 6%, transparent), transparent 45%),
+    linear-gradient(180deg, var(--background) 0%, var(--muted) 100%);
+  inset: 0;
+  position: absolute;
+}
+
+.dark .workspace-water__base {
+  background:
     radial-gradient(ellipse 90% 55% at 50% -10%, rgb(255 255 255 / 4%), transparent 55%),
     radial-gradient(ellipse 60% 40% at 85% 30%, rgb(176 160 234 / 5%), transparent 50%),
     radial-gradient(ellipse 50% 35% at 10% 70%, rgb(130 150 180 / 4%), transparent 45%),
     linear-gradient(180deg, #08080a 0%, #09090b 45%, #070709 100%);
-  inset: 0;
-  position: absolute;
 }
 
 .workspace-water__caustic {

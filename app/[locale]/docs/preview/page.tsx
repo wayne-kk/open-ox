@@ -2,10 +2,10 @@ import Link from "next/link";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 
 function Pre({ children }: { children: React.ReactNode }) {
-  return <pre className="mt-4 mb-4 overflow-x-auto rounded-xl border border-white/8 bg-[#080a0d] px-5 py-4 font-mono text-[12px] leading-6 text-muted-foreground">{children}</pre>;
+  return <pre className="mt-4 mb-4 overflow-x-auto rounded-xl border border-border bg-muted px-5 py-4 font-mono text-[12px] leading-6 text-muted-foreground">{children}</pre>;
 }
 function H2({ children }: { children: React.ReactNode }) {
-  return <h2 className="mt-12 mb-4 text-xl font-bold tracking-tight border-b border-white/8 pb-3">{children}</h2>;
+  return <h2 className="mt-12 mb-4 text-xl font-bold tracking-tight border-b border-border pb-3">{children}</h2>;
 }
 function H3({ children }: { children: React.ReactNode }) {
   return <h3 className="mt-6 mb-2 text-[15px] font-semibold text-foreground/90">{children}</h3>;
@@ -14,7 +14,7 @@ function P({ children }: { children: React.ReactNode }) {
   return <p className="text-[14px] leading-7 text-muted-foreground">{children}</p>;
 }
 function Code({ children }: { children: React.ReactNode }) {
-  return <code className="rounded bg-white/6 border border-white/8 px-1.5 py-0.5 font-mono text-[12px] text-foreground/90">{children}</code>;
+  return <code className="rounded bg-muted border border-border px-1.5 py-0.5 font-mono text-[12px] text-foreground/90">{children}</code>;
 }
 function Callout({ type = "info", children }: { type?: "info" | "warn"; children: React.ReactNode }) {
   return (
@@ -52,10 +52,10 @@ export default function PreviewPage() {
 
         <section id="modes" className="scroll-mt-24">
           <H2>三种预览后端</H2>
-          <div className="mt-4 overflow-hidden rounded-xl border border-white/8">
+          <div className="mt-4 overflow-hidden rounded-xl border border-border">
             <table className="w-full text-[13px]">
               <thead>
-                <tr className="border-b border-white/8 bg-white/[0.02]">
+                <tr className="border-b border-border bg-card">
                   <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">模式</th>
                   <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">典型场景</th>
                   <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">要点</th>
@@ -67,7 +67,7 @@ export default function PreviewPage() {
                   ["storage", "生产对齐 / 无 E2B", "syncStaticSitePreview：build → 上传 `out/` → 指纹跳过重复构建"],
                   ["e2b", "隔离云端 Node", "`OPEN_OX_PREVIEW_BACKEND=e2b`，sandbox_id 持久化可重连"],
                 ].map(([mode, scene, note]) => (
-                  <tr key={mode} className="hover:bg-white/[0.015]">
+                  <tr key={mode} className="hover:bg-muted/50">
                     <td className="px-4 py-2.5 font-mono text-[11px] text-primary/80">{mode}</td>
                     <td className="px-4 py-2.5 text-muted-foreground/70">{scene}</td>
                     <td className="px-4 py-2.5 text-muted-foreground/70">{note}</td>
@@ -85,10 +85,10 @@ export default function PreviewPage() {
 
         <section id="why-static" className="scroll-mt-24">
           <H2>为何静态导出（E2B / Storage 共通）</H2>
-          <div className="mt-4 overflow-hidden rounded-xl border border-white/8">
+          <div className="mt-4 overflow-hidden rounded-xl border border-border">
             <table className="w-full text-[13px]">
               <thead>
-                <tr className="border-b border-white/8 bg-white/[0.02]">
+                <tr className="border-b border-border bg-card">
                   <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">方案</th>
                   <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">启动时间</th>
                   <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">资源占用</th>
@@ -100,7 +100,7 @@ export default function PreviewPage() {
                   ["next dev", "15-30s", "高（持续运行）", "不稳定"],
                   ["next build + serve", "30-60s（首次）", "低（静态文件）", "稳定"],
                 ].map(([plan, time, resource, stability]) => (
-                  <tr key={plan} className="hover:bg-white/[0.015]">
+                  <tr key={plan} className="hover:bg-muted/50">
                     <td className="px-4 py-2.5 font-mono text-[11px] text-primary/80">{plan}</td>
                     <td className="px-4 py-2.5 text-muted-foreground/70">{time}</td>
                     <td className="px-4 py-2.5 text-muted-foreground/70">{resource}</td>
@@ -187,7 +187,7 @@ export default function PreviewPage() {
               { trigger: "修改完成后", api: "PUT /api/projects/[id]/preview", desc: "自动触发增量重建" },
               { trigger: "重新进入已有项目", api: "—", desc: "预览状态为 idle，等待用户主动点击" },
             ].map(({ trigger, api, desc }) => (
-              <div key={trigger} className="flex items-start gap-3 rounded-lg border border-white/6 bg-white/[0.02] px-4 py-3">
+              <div key={trigger} className="flex items-start gap-3 rounded-lg border border-border bg-card px-4 py-3">
                 <span className="shrink-0 text-[12px] text-foreground/80 w-40">{trigger}</span>
                 <code className="shrink-0 font-mono text-[10px] text-muted-foreground/50">{api}</code>
                 <span className="text-[12px] text-muted-foreground/60">{desc}</span>
@@ -219,7 +219,7 @@ if (sandbox.isRunning) {
           </Callout>
         </section>
 
-        <div className="mt-14 border-t border-white/8 pt-8 flex justify-between">
+        <div className="mt-14 border-t border-border pt-8 flex justify-between">
           <Link href="/docs/modify-agent" className="flex items-center gap-2 text-[13px] text-muted-foreground hover:text-primary transition-colors">
             <ArrowLeft className="h-3.5 w-3.5" /> 修改 Agent
           </Link>

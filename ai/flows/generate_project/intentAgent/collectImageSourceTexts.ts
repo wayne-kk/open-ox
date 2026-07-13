@@ -1,7 +1,7 @@
 import type { ChatMessage } from "@/ai/shared/llm/types";
 import { plainTextFromUserMessageContent } from "../shared/userVisionContent";
 
-/** Bootstrap + user turns + yield drafts — used by extract_user_provided_content for image URL scan. */
+/** Bootstrap + user turns + yield drafts — image URL source texts for callers that still collect them. */
 export function collectIntentAgentImageSourceTexts(params: {
   bootstrapUserPrompt?: string | null;
   messages: ChatMessage[];

@@ -33,7 +33,7 @@ export function DateRangeSelect({ days, onChange }: DateRangeSelectProps) {
           className={`rounded-md border px-3 py-1.5 text-xs transition-colors ${
             days === option.days
               ? "border-primary/35 bg-primary/15 text-primary"
-              : "border-white/15 bg-white/5 text-muted-foreground hover:text-foreground"
+              : "border-border bg-muted text-muted-foreground hover:text-foreground"
           }`}
         >
           {option.label}

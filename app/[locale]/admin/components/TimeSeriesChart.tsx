@@ -30,7 +30,7 @@ export function TimeSeriesChart({ title, data, series, valueSuffix = "" }: TimeS
   }));
 
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+    <div className="rounded-xl border border-border bg-card p-4">
       <h3 className="mb-4 text-sm font-medium text-foreground">{title}</h3>
       <ChartContainer config={chartConfig} className="aspect-[2.4/1] min-h-[220px] w-full">
         <LineChart data={chartData} margin={{ left: 8, right: 8, top: 8, bottom: 0 }}>

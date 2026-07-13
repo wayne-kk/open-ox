@@ -70,19 +70,19 @@ function CommunityCard({
   return (
     <div
       data-hoverable="true"
-      className="group/card ox-project-card relative flex h-full flex-col overflow-hidden rounded-xl border border-white/[0.07] bg-[#080a0e]"
+      className="group/card ox-project-card relative flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card"
     >
       <a
         href={previewHref}
         target="_blank"
         rel="noopener noreferrer"
-        className="relative block w-full shrink-0 overflow-hidden bg-[#030406]"
+        className="relative block w-full shrink-0 overflow-hidden bg-muted"
       >
         <div
           className={cn(
             "relative aspect-[16/10] w-full overflow-hidden",
             !hasCover && `bg-gradient-to-br ${colors.bg}`,
-            hasCover && "bg-[#020309]"
+            hasCover && "bg-muted"
           )}
         >
           {hasCover ? (
@@ -114,7 +114,7 @@ function CommunityCard({
           ) : null}
 
           <span
-            className="ox-card-affordance pointer-events-none absolute bottom-2.5 right-2.5 z-10 flex h-7 w-7 items-center justify-center rounded-lg border border-white/15 bg-black/55 text-white/90 backdrop-blur-md"
+            className="ox-card-affordance pointer-events-none absolute bottom-2.5 right-2.5 z-10 flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-background/85 text-foreground backdrop-blur-md"
             aria-hidden
           >
             <ArrowUpRight className="h-3.5 w-3.5" />

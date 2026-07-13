@@ -591,7 +591,7 @@ export function AppSidebar({
         <div className="fixed inset-0 z-50 md:hidden">
           <button
             type="button"
-            className="absolute inset-0 bg-black/60"
+            className="absolute inset-0 bg-foreground/40"
             aria-label="关闭菜单"
             onClick={() => onMobileOpenChange(false)}
           />

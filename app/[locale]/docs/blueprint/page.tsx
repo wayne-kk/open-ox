@@ -3,13 +3,13 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 
 function Pre({ children }: { children: React.ReactNode }) {
   return (
-    <pre className="mt-4 mb-4 overflow-x-auto rounded-xl border border-white/8 bg-[#080a0d] px-5 py-4 font-mono text-[12px] leading-6 text-muted-foreground">
+    <pre className="mt-4 mb-4 overflow-x-auto rounded-xl border border-border bg-muted px-5 py-4 font-mono text-[12px] leading-6 text-muted-foreground">
       {children}
     </pre>
   );
 }
 function H2({ children }: { children: React.ReactNode }) {
-  return <h2 className="mt-12 mb-4 text-xl font-bold tracking-tight border-b border-white/8 pb-3">{children}</h2>;
+  return <h2 className="mt-12 mb-4 text-xl font-bold tracking-tight border-b border-border pb-3">{children}</h2>;
 }
 function H3({ children }: { children: React.ReactNode }) {
   return <h3 className="mt-6 mb-2 text-[15px] font-semibold text-foreground/90">{children}</h3>;
@@ -18,7 +18,7 @@ function P({ children }: { children: React.ReactNode }) {
   return <p className="text-[14px] leading-7 text-muted-foreground">{children}</p>;
 }
 function Code({ children }: { children: React.ReactNode }) {
-  return <code className="rounded bg-white/6 border border-white/8 px-1.5 py-0.5 font-mono text-[12px] text-foreground/90">{children}</code>;
+  return <code className="rounded bg-muted border border-border px-1.5 py-0.5 font-mono text-[12px] text-foreground/90">{children}</code>;
 }
 function Callout({ children }: { children: React.ReactNode }) {
   return <div className="my-4 rounded-xl border border-primary/20 bg-primary/5 px-5 py-4 text-[13px] leading-6 text-muted-foreground">{children}</div>;
@@ -154,7 +154,7 @@ export default function BlueprintPage() {
               { format: "扁平结构", desc: "所有字段平铺在顶层（projectTitle、designIntent、pages 等）" },
               { format: "单页结构", desc: "只有 title、description、sections — 自动包装为单页项目" },
             ].map(({ format, desc }) => (
-              <div key={format} className="flex items-start gap-3 rounded-lg border border-white/6 bg-white/[0.02] px-4 py-3">
+              <div key={format} className="flex items-start gap-3 rounded-lg border border-border bg-card px-4 py-3">
                 <code className="shrink-0 font-mono text-[11px] text-primary/80 w-24">{format}</code>
                 <span className="text-[12px] text-muted-foreground/70">{desc}</span>
               </div>
@@ -167,7 +167,7 @@ export default function BlueprintPage() {
           </P>
         </section>
 
-        <div className="mt-14 border-t border-white/8 pt-8 flex justify-between">
+        <div className="mt-14 border-t border-border pt-8 flex justify-between">
           <Link href="/docs/pipeline" className="flex items-center gap-2 text-[13px] text-muted-foreground hover:text-primary transition-colors">
             <ArrowLeft className="h-3.5 w-3.5" /> AI 生成流水线
           </Link>

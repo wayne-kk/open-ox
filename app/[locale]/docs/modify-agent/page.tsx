@@ -3,14 +3,14 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 
 function Pre({ children }: { children: React.ReactNode }) {
   return (
-    <pre className="mt-4 mb-4 overflow-x-auto rounded-xl border border-white/8 bg-[#080a0d] px-5 py-4 font-mono text-[12px] leading-6 text-muted-foreground">
+    <pre className="mt-4 mb-4 overflow-x-auto rounded-xl border border-border bg-muted px-5 py-4 font-mono text-[12px] leading-6 text-muted-foreground">
       {children}
     </pre>
   );
 }
 
 function H2({ children }: { children: React.ReactNode }) {
-  return <h2 className="mt-12 mb-4 text-xl font-bold tracking-tight border-b border-white/8 pb-3">{children}</h2>;
+  return <h2 className="mt-12 mb-4 text-xl font-bold tracking-tight border-b border-border pb-3">{children}</h2>;
 }
 
 function H3({ children }: { children: React.ReactNode }) {
@@ -23,7 +23,7 @@ function P({ children }: { children: React.ReactNode }) {
 
 function Code({ children }: { children: React.ReactNode }) {
   return (
-    <code className="rounded bg-white/6 border border-white/8 px-1.5 py-0.5 font-mono text-[12px] text-foreground/90">
+    <code className="rounded bg-muted border border-border px-1.5 py-0.5 font-mono text-[12px] text-foreground/90">
       {children}
     </code>
   );
@@ -106,7 +106,7 @@ export default function ModifyAgentPage() {
               { condition: "stop hook 重试后", value: "required", reason: "已要求使用工具 — 强制执行" },
               { condition: "工具执行后", value: "auto", reason: "LLM 已有上下文，让它自主决策" },
             ].map(({ condition, value, reason }) => (
-              <div key={condition} className="flex items-start gap-3 rounded-lg border border-white/6 bg-white/[0.02] px-4 py-3">
+              <div key={condition} className="flex items-start gap-3 rounded-lg border border-border bg-card px-4 py-3">
                 <code className="shrink-0 font-mono text-[11px] text-muted-foreground/60 w-44">{condition}</code>
                 <code className={`shrink-0 font-mono text-[11px] px-2 py-0.5 rounded ${value === "required" ? "bg-primary/15 text-primary/80" : "bg-white/8 text-muted-foreground/70"}`}>{value}</code>
                 <span className="text-[12px] text-muted-foreground/60">{reason}</span>
@@ -126,7 +126,7 @@ export default function ModifyAgentPage() {
           <H2>工具集</H2>
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             {TOOLS.map(({ name, color, bg, desc }) => (
-              <div key={name} className="rounded-xl border border-white/6 bg-white/[0.02] px-4 py-3">
+              <div key={name} className="rounded-xl border border-border bg-card px-4 py-3">
                 <code className={`font-mono text-[12px] font-semibold ${color}`}>{name}</code>
                 <p className="mt-1 text-[12px] text-muted-foreground/70">{desc}</p>
               </div>
@@ -157,10 +157,10 @@ export default function ModifyAgentPage() {
   // optional: remind run_scoped_tsc before finish
   return null;
 }`}</Pre>
-          <div className="mt-4 overflow-hidden rounded-xl border border-white/8">
+          <div className="mt-4 overflow-hidden rounded-xl border border-border">
             <table className="w-full text-[13px]">
               <thead>
-                <tr className="border-b border-white/8 bg-white/[0.02]">
+                <tr className="border-b border-border bg-card">
                   <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">参数</th>
                   <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">值</th>
                   <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">用途</th>
@@ -227,7 +227,7 @@ workingMemory = projectWorkingMemory(merged)
           </Callout>
         </section>
 
-        <div className="mt-14 border-t border-white/8 pt-8 flex justify-between">
+        <div className="mt-14 border-t border-border pt-8 flex justify-between">
           <Link href="/docs/pipeline" className="flex items-center gap-2 text-[13px] text-muted-foreground hover:text-primary transition-colors">
             <ArrowLeft className="h-3.5 w-3.5" /> AI 生成流水线
           </Link>

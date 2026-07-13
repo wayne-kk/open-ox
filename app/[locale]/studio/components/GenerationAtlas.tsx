@@ -48,7 +48,7 @@ function SummaryBar({
     const total = nodes.length;
 
     return (
-        <div className="flex items-center gap-4 border-b border-white/6 px-4 py-2 font-mono text-[10px] text-muted-foreground">
+        <div className="flex items-center gap-4 border-b border-border px-4 py-2 font-mono text-[10px] text-muted-foreground">
             <span className="text-foreground/80">{total} steps</span>
             {ok > 0 && <span className="text-emerald-400/80">✓ {ok}</span>}
             {err > 0 && <span className="text-red-400/80">✗ {err}</span>}

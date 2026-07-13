@@ -2,10 +2,10 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
 function Pre({ children }: { children: React.ReactNode }) {
-  return <pre className="mt-4 mb-4 overflow-x-auto rounded-xl border border-white/8 bg-[#080a0d] px-5 py-4 font-mono text-[12px] leading-6 text-muted-foreground">{children}</pre>;
+  return <pre className="mt-4 mb-4 overflow-x-auto rounded-xl border border-border bg-muted px-5 py-4 font-mono text-[12px] leading-6 text-muted-foreground">{children}</pre>;
 }
 function H2({ children }: { children: React.ReactNode }) {
-  return <h2 className="mt-12 mb-4 text-xl font-bold tracking-tight border-b border-white/8 pb-3">{children}</h2>;
+  return <h2 className="mt-12 mb-4 text-xl font-bold tracking-tight border-b border-border pb-3">{children}</h2>;
 }
 function H3({ children }: { children: React.ReactNode }) {
   return <h3 className="mt-6 mb-2 text-[15px] font-semibold text-foreground/90">{children}</h3>;
@@ -14,7 +14,7 @@ function P({ children }: { children: React.ReactNode }) {
   return <p className="text-[14px] leading-7 text-muted-foreground">{children}</p>;
 }
 function Code({ children }: { children: React.ReactNode }) {
-  return <code className="rounded bg-white/6 border border-white/8 px-1.5 py-0.5 font-mono text-[12px] text-foreground/90">{children}</code>;
+  return <code className="rounded bg-muted border border-border px-1.5 py-0.5 font-mono text-[12px] text-foreground/90">{children}</code>;
 }
 function Callout({ children }: { children: React.ReactNode }) {
   return <div className="my-4 rounded-xl border border-primary/20 bg-primary/5 px-5 py-4 text-[13px] leading-6 text-muted-foreground">{children}</div>;
@@ -63,10 +63,10 @@ function getModelForStep(stepName: string): ModelId {
 
         <section id="builtin" className="scroll-mt-24">
           <H2>内置模型</H2>
-          <div className="mt-4 overflow-hidden rounded-xl border border-white/8">
+          <div className="mt-4 overflow-hidden rounded-xl border border-border">
             <table className="w-full text-[13px]">
               <thead>
-                <tr className="border-b border-white/8 bg-white/[0.02]">
+                <tr className="border-b border-border bg-card">
                   <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">模型 ID</th>
                   <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">显示名称</th>
                   <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">上下文窗口</th>
@@ -78,7 +78,7 @@ function getModelForStep(stepName: string): ModelId {
                   ["gemini-3.1-pro-preview", "Gemini 3.1 Pro", "128K"],
                   ["gpt-5.2", "GPT-5.2", "128K"],
                 ].map(([id, name, ctx]) => (
-                  <tr key={id} className="hover:bg-white/[0.015]">
+                  <tr key={id} className="hover:bg-muted/50">
                     <td className="px-4 py-2.5 font-mono text-[11px] text-primary/80">{id}</td>
                     <td className="px-4 py-2.5 text-foreground/80">{name}</td>
                     <td className="px-4 py-2.5 text-muted-foreground/60">{ctx}</td>
@@ -96,10 +96,10 @@ function getModelForStep(stepName: string): ModelId {
         <section id="steps" className="scroll-mt-24">
           <H2>步骤级配置</H2>
           <P>每个生成步骤都可以独立配置模型：</P>
-          <div className="mt-4 overflow-hidden rounded-xl border border-white/8">
+          <div className="mt-4 overflow-hidden rounded-xl border border-border">
             <table className="w-full text-[13px]">
               <thead>
-                <tr className="border-b border-white/8 bg-white/[0.02]">
+                <tr className="border-b border-border bg-card">
                   <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">步骤 ID</th>
                   <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">说明</th>
                 </tr>
@@ -117,7 +117,7 @@ function getModelForStep(stepName: string): ModelId {
                   ["preselect_skills", "Hero 等场景的内部 skill 选型（复用步骤 id）"],
                   ["repair_build", "构建失败修复 Agent"],
                 ].map(([id, label]) => (
-                  <tr key={id} className="hover:bg-white/[0.015]">
+                  <tr key={id} className="hover:bg-muted/50">
                     <td className="px-4 py-2.5 font-mono text-[11px] text-primary/80">{id}</td>
                     <td className="px-4 py-2.5 text-muted-foreground/70">{label}</td>
                   </tr>
@@ -138,7 +138,7 @@ function getModelForStep(stepName: string): ModelId {
               { steps: "page_implement_agent（多页并行）", model: "快模型或均衡模型", reason: "调用次数与迭代深度最大，需在质量与延迟间权衡" },
               { steps: "repair_build", model: "强模型", reason: "需读懂编译日志并精确改文件" },
             ].map(({ steps, model, reason }) => (
-              <div key={steps} className="rounded-lg border border-white/6 bg-white/[0.02] px-4 py-3">
+              <div key={steps} className="rounded-lg border border-border bg-card px-4 py-3">
                 <div className="flex items-center gap-3">
                   <code className="font-mono text-[11px] text-foreground/80">{steps}</code>
                   <span className={`rounded px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${model === "强模型" ? "bg-primary/15 text-primary/80" : "bg-green-500/15 text-green-400/80"}`}>{model}</span>
@@ -176,7 +176,7 @@ function getModelForStep(stepName: string): ModelId {
           </P>
         </section>
 
-        <div className="mt-14 border-t border-white/8 pt-8 flex justify-start">
+        <div className="mt-14 border-t border-border pt-8 flex justify-start">
           <Link href="/docs/preview" className="flex items-center gap-2 text-[13px] text-muted-foreground hover:text-primary transition-colors">
             <ArrowLeft className="h-3.5 w-3.5" /> 预览沙箱
           </Link>

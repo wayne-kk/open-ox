@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 
 function H2({ children }: { children: React.ReactNode }) {
-  return <h2 className="mt-12 mb-4 text-xl font-bold tracking-tight border-b border-white/8 pb-3">{children}</h2>;
+  return <h2 className="mt-12 mb-4 text-xl font-bold tracking-tight border-b border-border pb-3">{children}</h2>;
 }
 
 function P({ children }: { children: React.ReactNode }) {
@@ -11,7 +11,7 @@ function P({ children }: { children: React.ReactNode }) {
 
 function Code({ children }: { children: React.ReactNode }) {
   return (
-    <code className="rounded bg-white/6 border border-white/8 px-1.5 py-0.5 font-mono text-[12px] text-foreground/90">
+    <code className="rounded bg-muted border border-border px-1.5 py-0.5 font-mono text-[12px] text-foreground/90">
       {children}
     </code>
   );
@@ -84,10 +84,10 @@ export default function GenerateProjectTracePage() {
 
         <section id="phases" className="scroll-mt-24">
           <H2>1. 总览：与提示词相关的阶段</H2>
-          <div className="mt-4 overflow-x-auto rounded-xl border border-white/8">
+          <div className="mt-4 overflow-x-auto rounded-xl border border-border">
             <table className="w-full min-w-[520px] text-left text-[12px]">
               <thead>
-                <tr className="border-b border-white/8 bg-white/[0.02]">
+                <tr className="border-b border-border bg-card">
                   <th className="px-3 py-2.5 font-semibold text-foreground/85 w-[28%]">阶段</th>
                   <th className="px-3 py-2.5 font-semibold text-foreground/85">System 主要来源</th>
                   <th className="px-3 py-2.5 font-semibold text-foreground/85">User 主要来源</th>
@@ -95,7 +95,7 @@ export default function GenerateProjectTracePage() {
               </thead>
               <tbody className="text-muted-foreground">
                 {PHASE_ROWS.map(([phase, sys, user]) => (
-                  <tr key={phase} className="border-b border-white/6 last:border-0">
+                  <tr key={phase} className="border-b border-border last:border-0">
                     <td className="px-3 py-2 align-top font-mono text-[11px] text-foreground/75">{phase}</td>
                     <td className="px-3 py-2 align-top">{sys}</td>
                     <td className="px-3 py-2 align-top">{user}</td>
@@ -185,17 +185,17 @@ export default function GenerateProjectTracePage() {
         <section id="cheat" className="scroll-mt-24">
           <H2>7. 新提示放哪（速查）</H2>
           <P>下表中的 <Code>prompts/</Code> 均指 <Code>ai/flows/generate_project/prompts/</Code>。</P>
-          <div className="mt-4 overflow-x-auto rounded-xl border border-white/8">
+          <div className="mt-4 overflow-x-auto rounded-xl border border-border">
             <table className="w-full min-w-[480px] text-left text-[12px]">
               <thead>
-                <tr className="border-b border-white/8 bg-white/[0.02]">
+                <tr className="border-b border-border bg-card">
                   <th className="px-3 py-2.5 font-semibold text-foreground/85 w-[32%]">目的</th>
                   <th className="px-3 py-2.5 font-semibold text-foreground/85">位置</th>
                 </tr>
               </thead>
               <tbody className="text-muted-foreground">
                 {PROMPT_PLACEMENT_ROWS.map(([goal, loc]) => (
-                  <tr key={goal} className="border-b border-white/6 last:border-0">
+                  <tr key={goal} className="border-b border-border last:border-0">
                     <td className="px-3 py-2 align-top">{goal}</td>
                     <td className="px-3 py-2 align-top font-mono text-[11px] text-foreground/70">{loc}</td>
                   </tr>
@@ -205,7 +205,7 @@ export default function GenerateProjectTracePage() {
           </div>
         </section>
 
-        <div className="mt-14 border-t border-white/8 pt-8 flex justify-between">
+        <div className="mt-14 border-t border-border pt-8 flex justify-between">
           <Link href="/docs/pipeline" className="flex items-center gap-2 text-[13px] text-muted-foreground hover:text-primary transition-colors">
             <ArrowLeft className="h-3.5 w-3.5" /> AI 生成流水线
           </Link>

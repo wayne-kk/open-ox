@@ -23,7 +23,7 @@ function TokenBar({ input, output }: { input: number; output: number }) {
         <span>tokens</span>
         <span>{total.toLocaleString()} total</span>
       </div>
-      <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-white/5">
+      <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-muted">
         <div className="h-full bg-blue-400/60 transition-all duration-500" style={{ width: `${inPct}%` }} />
         <div className="h-full bg-emerald-400/60 transition-all duration-500" style={{ width: `${outPct}%` }} />
       </div>
@@ -59,7 +59,7 @@ function LlmSection({ llmCall }: { llmCall: StepLlmCall }) {
       {hasTokens && <TokenBar input={llmCall.inputTokens!} output={llmCall.outputTokens!} />}
       {tabs.length > 0 && (
         <>
-          <div className="flex gap-0 border-b border-white/6">
+          <div className="flex gap-0 border-b border-border">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
@@ -86,7 +86,7 @@ function LlmSection({ llmCall }: { llmCall: StepLlmCall }) {
               </pre>
             )}
             {active === "response" && llmCall.rawResponse && (
-              <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-[1.6] text-[#c7d0dc]/80">
+              <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-[1.6] text-muted-foreground/80">
                 {llmCall.rawResponse}
               </pre>
             )}
@@ -171,7 +171,7 @@ function GeneratedImagesSection({ images }: { images: Array<{ filename: string; 
 
 function IoSection({ value }: { value: Record<string, unknown> }) {
   return (
-    <pre className="max-h-[280px] overflow-y-auto whitespace-pre-wrap break-all rounded-lg bg-black/30 p-3 font-mono text-[11px] leading-[1.6] text-[#c7d0dc]/70 scrollbar-unified">
+    <pre className="max-h-[280px] overflow-y-auto whitespace-pre-wrap break-all rounded-lg bg-muted p-3 font-mono text-[11px] leading-[1.6] text-muted-foreground scrollbar-unified">
       {JSON.stringify(value, null, 2)}
     </pre>
   );
@@ -200,8 +200,8 @@ function TraceSection({ trace }: { trace: StepTrace }) {
   return (
     <div className="space-y-3">
       <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Trace</div>
-      <div className="rounded-xl border border-white/8 bg-black/20">
-        <div className="flex gap-0 border-b border-white/6 px-1 pt-1">
+      <div className="rounded-xl border border-border bg-muted/50">
+        <div className="flex gap-0 border-b border-border px-1 pt-1">
           {tabs.map((tab) => (
             <button
               key={tab.id}
@@ -267,15 +267,15 @@ export function DetailDrawer({
   return (
     <>
       {/* Backdrop — scoped to the parent container, not the full viewport */}
-      <div className="absolute inset-0 z-40 bg-black/30" onClick={onClose} aria-hidden="true" />
+      <div className="absolute inset-0 z-40 bg-muted/20" onClick={onClose} aria-hidden="true" />
 
       <div
-        className="absolute right-0 top-0 z-50 flex h-full w-full max-w-[420px] flex-col border-l border-white/10 bg-[#0a0c10]/98 shadow-[-12px_0_40px_rgba(0,0,0,0.6)]"
+        className="absolute right-0 top-0 z-50 flex h-full w-full max-w-[420px] flex-col border-l border-border bg-background/98 shadow-[-12px_0_40px_rgba(0,0,0,0.15)] dark:shadow-[-12px_0_40px_rgba(0,0,0,0.6)]"
         role="dialog"
         aria-label="Step detail"
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <div className="min-w-0 flex-1">
             <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
               Step Detail
@@ -319,7 +319,7 @@ export function DetailDrawer({
           {node.detail && (
             <div>
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Output</div>
-              <div className="mt-1.5 max-h-[min(60vh,480px)] overflow-y-auto rounded-lg bg-black/30 px-3 py-2.5 font-mono text-[12px] leading-6 text-foreground whitespace-pre-wrap break-words scrollbar-unified">
+              <div className="mt-1.5 max-h-[min(60vh,480px)] overflow-y-auto rounded-lg bg-muted px-3 py-2.5 font-mono text-[12px] leading-6 text-foreground whitespace-pre-wrap break-words scrollbar-unified">
                 {node.detail}
               </div>
             </div>
@@ -346,7 +346,7 @@ export function DetailDrawer({
           {/* Raw step ID */}
           <div>
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Step ID</div>
-            <div className="mt-1.5 break-all rounded-lg bg-black/30 px-3 py-2 font-mono text-[11px] text-muted-foreground">
+            <div className="mt-1.5 break-all rounded-lg bg-muted px-3 py-2 font-mono text-[11px] text-muted-foreground">
               {node.step}
             </div>
           </div>

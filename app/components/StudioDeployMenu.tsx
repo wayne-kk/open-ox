@@ -269,7 +269,7 @@ export function StudioDeployMenu({ projectId }: { projectId: string }) {
               ? "border-emerald-400/35 bg-emerald-500/12 text-emerald-200 hover:bg-emerald-500/18"
               : inProgress
                 ? "border-amber-400/30 bg-amber-500/10 text-amber-100 hover:bg-amber-500/16"
-                : "border-white/8 bg-white/3 text-muted-foreground hover:border-white/15 hover:text-foreground"
+                : "border-border bg-muted/40 text-muted-foreground hover:border-border hover:bg-muted hover:text-foreground"
           )}
         >
           {inProgress ? (
@@ -282,7 +282,7 @@ export function StudioDeployMenu({ projectId }: { projectId: string }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="w-[300px] border-white/10 bg-[#0c0f16] p-3 shadow-xl"
+        className="w-[300px] border-border bg-popover p-3 text-popover-foreground shadow-[var(--box-shadow-neon-lg)]"
       >
         <div className="mb-2 space-y-0.5">
           <p className="text-[11px] font-medium text-foreground">部署到 Vercel</p>
@@ -352,7 +352,7 @@ export function StudioDeployMenu({ projectId }: { projectId: string }) {
               className={cn(
                 "inline-flex w-full items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-[11px] font-medium transition-colors",
                 busy || inProgress
-                  ? "cursor-not-allowed border-white/8 bg-white/3 text-muted-foreground"
+                  ? "cursor-not-allowed border-border bg-muted text-muted-foreground"
                   : "border-primary/35 bg-primary/15 text-primary hover:bg-primary/22"
               )}
             >

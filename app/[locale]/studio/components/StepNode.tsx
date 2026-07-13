@@ -16,7 +16,7 @@ function getAccentColor(node: GraphNode): string {
   if (node.stage === "verify") return "border-blue-400/40 bg-blue-400/5";
   if (node.stage === "generate") return "border-accent-tertiary/35 bg-accent-tertiary/5";
   if (node.stage === "design") return "border-purple-400/35 bg-purple-400/5";
-  return "border-white/12 bg-white/[0.02]";
+  return "border-border bg-card";
 }
 
 function getStatusIcon(node: GraphNode, isActive: boolean) {
@@ -47,7 +47,7 @@ function getStatusIcon(node: GraphNode, isActive: boolean) {
     );
   }
   return (
-    <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/5 ring-1 ring-white/10">
+    <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted ring-1 ring-white/10">
       <span className="h-1.5 w-1.5 rounded-full bg-white/25" />
     </div>
   );
@@ -112,7 +112,7 @@ export function StepNode({
 
       {/* Footer row: timing + skill */}
       {(node.duration > 0 || node.skillHint) && (
-        <div className="flex items-center justify-between gap-2 border-t border-white/6 px-3 py-1.5">
+        <div className="flex items-center justify-between gap-2 border-t border-border px-3 py-1.5">
           {node.duration > 0 ? (
             <div className="flex items-center gap-1 text-muted-foreground/70">
               <Clock className="h-2.5 w-2.5" />

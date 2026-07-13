@@ -9,7 +9,7 @@ export function ChatBubble({
 }) {
   const variant =
     role === "user"
-      ? "max-w-[86%] border-white/8 bg-white/[0.05] shadow-[0_12px_30px_rgba(0,0,0,0.18)]"
+      ? "max-w-[86%] border-border bg-muted/60 shadow-[0_12px_30px_rgba(0,0,0,0.18)]"
       : "relative w-full overflow-hidden border-primary/20 bg-card/80 shadow-[0_12px_30px_rgba(0,0,0,0.2)]";
   const align = role === "user" ? "justify-end" : "justify-start";
 

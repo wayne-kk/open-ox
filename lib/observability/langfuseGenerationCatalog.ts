@@ -53,7 +53,6 @@ export function lfPageImplementPhaseSlug(pageSlug: string): string {
 
 export const LfToolPhase = {
   analyzeRequirement: "analyze_requirement",
-  extractUserProvidedContent: "extract_user_provided_content",
   intentAgent: "intent_agent",
   architect: "architect_layout_and_chrome",
   architectScaffold: "architect_scaffold_chrome",

@@ -23,10 +23,10 @@ const STATUS_LABEL: Record<UserActivityStatus, string> = {
 };
 
 const STATUS_CLASS: Record<UserActivityStatus, string> = {
-  active: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
-  silent: "bg-amber-500/15 text-amber-200 border-amber-500/30",
-  churned: "bg-rose-500/15 text-rose-300 border-rose-500/30",
-  never: "bg-white/5 text-muted-foreground border-white/10",
+  active: "bg-emerald-500/15 text-emerald-700 border-emerald-500/30 dark:text-emerald-300",
+  silent: "bg-amber-500/15 text-amber-800 border-amber-500/30 dark:text-amber-200",
+  churned: "bg-rose-500/15 text-rose-700 border-rose-500/30 dark:text-rose-300",
+  never: "bg-muted text-muted-foreground border-border",
 };
 
 function formatDate(iso: string | null): string {
@@ -44,7 +44,7 @@ function formatDateTime(iso: string | null): string {
 }
 
 function selectClassName() {
-  return "h-9 rounded-md border border-white/15 bg-black/20 px-2 text-xs outline-none focus:border-primary/50";
+  return "h-9 rounded-md border border-border bg-input px-2 text-xs outline-none focus:border-primary/50";
 }
 
 export function AdminUsersPanel() {
@@ -143,10 +143,10 @@ export function AdminUsersPanel() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-3">
+      <div className="rounded-xl border border-border bg-card p-4 space-y-3">
         <form className="flex flex-wrap gap-2" onSubmit={onSearchSubmit}>
           <input
-            className="h-9 min-w-[220px] flex-1 rounded-md border border-white/15 bg-black/20 px-3 text-sm outline-none focus:border-primary/50"
+            className="h-9 min-w-[220px] flex-1 rounded-md border border-border bg-input px-3 text-sm outline-none focus:border-primary/50"
             placeholder="搜索邮箱 / 名字 / userId"
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
@@ -154,7 +154,7 @@ export function AdminUsersPanel() {
           />
           <button
             type="submit"
-            className="h-9 rounded-md border border-white/20 bg-white/5 px-4 text-sm disabled:opacity-50"
+            className="h-9 rounded-md border border-border bg-muted px-4 text-sm disabled:opacity-50"
             disabled={loading}
           >
             搜索
@@ -199,9 +199,9 @@ export function AdminUsersPanel() {
           </select>
         </form>
 
-        <div className="overflow-x-auto rounded-md border border-white/10">
+        <div className="overflow-x-auto rounded-md border border-border">
           <table className="w-full min-w-[960px] text-left text-sm">
-            <thead className="bg-white/5 text-xs uppercase tracking-wide text-muted-foreground">
+            <thead className="bg-muted text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-3 py-2">用户</th>
                 <th className="px-3 py-2">注册</th>
@@ -231,19 +231,19 @@ export function AdminUsersPanel() {
                 users.map((user) => {
                   const isSelfAdmin = user.userId === me && user.isAdmin;
                   return (
-                    <tr key={user.userId} className="border-t border-white/10 align-top">
+                    <tr key={user.userId} className="border-t border-border align-top">
                       <td className="px-3 py-2.5">
                         <div className="font-medium">{user.name}</div>
                         <div className="text-xs text-muted-foreground">{user.email ?? "—"}</div>
                         <div className="mt-0.5 flex flex-wrap gap-1">
                           {user.isInternal ? (
-                            <span className="rounded border border-white/15 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                            <span className="rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
                               内部
                             </span>
                           ) : null}
                           <button
                             type="button"
-                            className="rounded border border-white/10 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground hover:text-foreground"
+                            className="rounded border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground hover:text-foreground"
                             title="复制 userId"
                             onClick={() => void navigator.clipboard.writeText(user.userId)}
                           >
@@ -292,7 +292,7 @@ export function AdminUsersPanel() {
                           className={`rounded-md border px-2.5 py-1 text-xs disabled:opacity-40 ${
                             user.isAdmin
                               ? "border-primary/35 bg-primary/15 text-primary"
-                              : "border-white/20 bg-white/5 text-muted-foreground"
+                              : "border-border bg-muted text-muted-foreground"
                           }`}
                           disabled={submitting || isSelfAdmin}
                           onClick={() => void toggleAdmin(user.userId, !user.isAdmin)}
@@ -325,7 +325,7 @@ export function AdminUsersPanel() {
             <div className="flex gap-2">
               <button
                 type="button"
-                className="rounded border border-white/15 px-3 py-1.5 disabled:opacity-40"
+                className="rounded border border-border px-3 py-1.5 disabled:opacity-40"
                 disabled={loading || page <= 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
               >
@@ -333,7 +333,7 @@ export function AdminUsersPanel() {
               </button>
               <button
                 type="button"
-                className="rounded border border-white/15 px-3 py-1.5 disabled:opacity-40"
+                className="rounded border border-border px-3 py-1.5 disabled:opacity-40"
                 disabled={loading || page >= pagination.totalPages}
                 onClick={() => setPage((p) => p + 1)}
               >

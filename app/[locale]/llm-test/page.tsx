@@ -169,7 +169,7 @@ function ModelManagement() {
                 <h3 className="font-mono text-[10px] uppercase tracking-[0.3em] text-primary mb-4">可用模型</h3>
                 <div className="space-y-2">
                     {models.map((m) => (
-                        <div key={m.id} className="flex items-center justify-between rounded-xl border border-white/8 bg-white/[0.02] px-4 py-3">
+                        <div key={m.id} className="flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3">
                             <div className="flex items-center gap-2 flex-wrap">
                                 <span className="font-mono text-[12px] font-semibold text-white">{m.displayName}</span>
                                 <span className="font-mono text-[10px] text-muted-foreground/70">{m.id}</span>
@@ -190,20 +190,20 @@ function ModelManagement() {
                 </div>
 
                 {/* Add model form */}
-                <div className="mt-4 rounded-xl border border-dashed border-white/10 p-4">
+                <div className="mt-4 rounded-xl border border-dashed border-border p-4">
                     <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70 mb-3">添加自定义模型</div>
                     <div className="grid grid-cols-3 gap-3">
                         <input
                             value={newId}
                             onChange={(e) => setNewId(e.target.value)}
                             placeholder="model-id (如 claude-4)"
-                            className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 font-mono text-[11px] text-foreground placeholder:text-muted-foreground/30 focus:border-primary/50 outline-none"
+                            className="rounded-lg border border-border bg-muted px-3 py-2 font-mono text-[11px] text-foreground placeholder:text-muted-foreground/30 focus:border-primary/50 outline-none"
                         />
                         <input
                             value={newName}
                             onChange={(e) => setNewName(e.target.value)}
                             placeholder="显示名称"
-                            className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 font-mono text-[11px] text-foreground placeholder:text-muted-foreground/30 focus:border-primary/50 outline-none"
+                            className="rounded-lg border border-border bg-muted px-3 py-2 font-mono text-[11px] text-foreground placeholder:text-muted-foreground/30 focus:border-primary/50 outline-none"
                         />
                         <div className="flex gap-2">
                             <input
@@ -211,11 +211,11 @@ function ModelManagement() {
                                 value={newCtx}
                                 onChange={(e) => setNewCtx(parseInt(e.target.value) || 128000)}
                                 placeholder="Context"
-                                className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 font-mono text-[11px] text-foreground focus:border-primary/50 outline-none"
+                                className="flex-1 rounded-lg border border-border bg-muted px-3 py-2 font-mono text-[11px] text-foreground focus:border-primary/50 outline-none"
                             />
                             <button
                                 onClick={() => setNewThinking((v) => !v)}
-                                className={`shrink-0 rounded-lg border px-3 py-2 font-mono text-[10px] transition-colors ${newThinking ? "border-purple-400/40 bg-purple-400/10 text-purple-400" : "border-white/10 text-muted-foreground/50 hover:text-foreground"}`}
+                                className={`shrink-0 rounded-lg border px-3 py-2 font-mono text-[10px] transition-colors ${newThinking ? "border-purple-400/40 bg-purple-400/10 text-purple-400" : "border-border text-muted-foreground/50 hover:text-foreground"}`}
                                 title="支持 Thinking 模式"
                             >
                                 {newThinking ? "🧠 Thinking" : "🧠"}
@@ -247,7 +247,7 @@ function ModelManagement() {
                             const showThinkingLevel =
                                 !!selectedModelId && isGeminiModelId(selectedModelId);
                             return (
-                        <div key={step.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/8 bg-white/[0.02] px-4 py-3">
+                        <div key={step.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3">
                             <div className="flex items-center gap-3">
                                 <Zap className="h-3.5 w-3.5 text-primary/40" />
                                 <div>
@@ -259,7 +259,7 @@ function ModelManagement() {
                                 <select
                                     value={stepModels[step.id] ?? ""}
                                     onChange={(e) => handleStepModelChange(step.id, e.target.value)}
-                                    className="appearance-none rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 pr-8 font-mono text-[10px] text-muted-foreground outline-none cursor-pointer hover:border-primary/30 transition-colors"
+                                    className="appearance-none rounded-lg border border-border bg-muted px-3 py-1.5 pr-8 font-mono text-[10px] text-muted-foreground outline-none cursor-pointer hover:border-primary/30 transition-colors"
                                 >
                                     <option value="">默认</option>
                                     {models.map((m) => (
@@ -272,7 +272,7 @@ function ModelManagement() {
                                         onChange={(e) => handleStepThinkingChange(step.id, e.target.value)}
                                         disabled={!selectedModelId}
                                         title={!selectedModelId ? "请先为该步骤选择 Gemini 模型" : "thinking_level"}
-                                        className="appearance-none rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 pr-8 font-mono text-[10px] text-muted-foreground outline-none cursor-pointer hover:border-primary/30 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                                        className="appearance-none rounded-lg border border-border bg-muted px-3 py-1.5 pr-8 font-mono text-[10px] text-muted-foreground outline-none cursor-pointer hover:border-primary/30 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
                                     >
                                         <option value="">thinking 默认</option>
                                         <option value="minimal">minimal</option>
@@ -335,14 +335,14 @@ function LLMTestPanel() {
 
     return (
       <div className="space-y-6">
-          <div className="rounded-xl border border-white/8 bg-white/[0.02] p-5 space-y-4">
+          <div className="rounded-xl border border-border bg-card p-5 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                   <div>
                       <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground block mb-1.5">模型</label>
                       <select
                           value={model}
                           onChange={(e) => setModel(e.target.value)}
-                          className="w-full appearance-none rounded-lg border border-white/10 bg-white/5 px-3 py-2 font-mono text-[11px] text-foreground focus:border-primary/50 outline-none cursor-pointer"
+                          className="w-full appearance-none rounded-lg border border-border bg-muted px-3 py-2 font-mono text-[11px] text-foreground focus:border-primary/50 outline-none cursor-pointer"
                       >
                           <option value="">默认</option>
                           {models.map((m) => (
@@ -356,7 +356,7 @@ function LLMTestPanel() {
                           type="number"
                           value={maxTokens}
                           onChange={(e) => setMaxTokens(parseInt(e.target.value) || 0)}
-                          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 font-mono text-[11px] text-foreground focus:border-primary/50 outline-none"
+                          className="w-full rounded-lg border border-border bg-muted px-3 py-2 font-mono text-[11px] text-foreground focus:border-primary/50 outline-none"
                       />
                   </div>
                   <div>
@@ -366,7 +366,7 @@ function LLMTestPanel() {
                           onChange={(e) =>
                               setThinkingLevel(e.target.value as "" | "minimal" | "low" | "medium" | "high")
                           }
-                          className="w-full appearance-none rounded-lg border border-white/10 bg-white/5 px-3 py-2 font-mono text-[11px] text-foreground focus:border-primary/50 outline-none cursor-pointer"
+                          className="w-full appearance-none rounded-lg border border-border bg-muted px-3 py-2 font-mono text-[11px] text-foreground focus:border-primary/50 outline-none cursor-pointer"
                       >
                           <option value="">默认（不指定）</option>
                           <option value="minimal">minimal</option>
@@ -383,7 +383,7 @@ function LLMTestPanel() {
                       value={prompt}
                       onChange={(e) => setPrompt(e.target.value)}
                       rows={3}
-                      className="w-full resize-none rounded-lg border border-white/10 bg-white/5 px-3 py-2 font-mono text-[11px] text-foreground placeholder:text-muted-foreground/30 focus:border-primary/50 outline-none"
+                      className="w-full resize-none rounded-lg border border-border bg-muted px-3 py-2 font-mono text-[11px] text-foreground placeholder:text-muted-foreground/30 focus:border-primary/50 outline-none"
                   />
               </div>
 
@@ -398,7 +398,7 @@ function LLMTestPanel() {
                   </button>
                   <button
                       onClick={() => setUseSDK((v) => !v)}
-                        className={`rounded-lg border px-3 py-2 font-mono text-[10px] uppercase tracking-widest transition-colors ${useSDK ? "border-primary/40 bg-primary/10 text-primary" : "border-white/10 text-muted-foreground/70 hover:text-foreground"}`}
+                        className={`rounded-lg border px-3 py-2 font-mono text-[10px] uppercase tracking-widest transition-colors ${useSDK ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground/70 hover:text-foreground"}`}
                   >
                       {useSDK ? "✓ OpenAI SDK" : "Native fetch"}
                   </button>
@@ -407,7 +407,7 @@ function LLMTestPanel() {
                       <button
                           key={p.label}
                           onClick={() => { setPrompt(p.prompt); setMaxTokens(p.maxTokens); }}
-                          className="rounded-lg border border-white/8 px-3 py-1.5 font-mono text-[10px] text-muted-foreground/70 hover:text-foreground hover:border-white/20 transition-colors"
+                          className="rounded-lg border border-border px-3 py-1.5 font-mono text-[10px] text-muted-foreground/70 hover:text-foreground hover:border-white/20 transition-colors"
                       >
                           {p.label}
                       </button>
@@ -477,7 +477,7 @@ export default function LLMTestPage() {
                     </div>
 
                     {/* Tab switcher */}
-                    <div className="flex items-center rounded-xl border border-white/8 overflow-hidden">
+                    <div className="flex items-center rounded-xl border border-border overflow-hidden">
                         <button
                             onClick={() => setTab("test")}
                             className={`flex items-center gap-1.5 px-4 py-2 font-mono text-[10px] uppercase tracking-widest transition-colors ${tab === "test" ? "bg-primary/10 text-primary" : "text-muted-foreground/70 hover:text-foreground"}`}

@@ -397,7 +397,7 @@ function ProjectCard({
 
         {isClickable ? (
           <span
-            className="ox-card-affordance pointer-events-none absolute bottom-2.5 right-2.5 z-20 flex h-7 w-7 items-center justify-center rounded-lg border border-white/15 bg-black/55 text-white/90 backdrop-blur-md"
+            className="ox-card-affordance pointer-events-none absolute bottom-2.5 right-2.5 z-20 flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-background/85 text-foreground backdrop-blur-md"
             aria-hidden
           >
             <ArrowUpRight className="h-3.5 w-3.5" />
@@ -1299,21 +1299,14 @@ function ProjectsPageContent() {
       <div className="relative z-[1]  mx-auto min-h-screen px-8 py-8 sm:px-6 md:py-10 lg:px-8">
         <section
           id={WORKSPACE_PROMPT_ID}
-          className="relative mb-12 scroll-mt-4 overflow-hidden rounded-[32px] border border-border/80 px-4 py-12 sm:px-8 sm:py-16 md:py-20"
+          className="relative mb-12 scroll-mt-4 overflow-hidden rounded-[32px] border border-border bg-muted/30 px-4 py-12 sm:px-8 sm:py-16 md:py-20 dark:bg-transparent"
         >
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0 -z-10"
-            style={{
-              background:
-                "radial-gradient(ellipse 80% 60% at 50% 100%, rgba(0,255,136,0.14), transparent 55%), radial-gradient(ellipse 70% 50% at 20% 80%, rgba(255,0,170,0.12), transparent 50%), radial-gradient(ellipse 60% 45% at 85% 70%, rgba(0,200,255,0.12), transparent 50%), linear-gradient(180deg, rgba(8,10,14,0.2) 0%, rgba(3,4,6,0.85) 100%)",
-            }}
-          />
+          <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 ox-prompt-hero-glow" />
           <div className="mx-auto mb-8 max-w-3xl text-center sm:mb-10">
             <h1 className="font-heading text-[28px] font-semibold tracking-tight text-foreground sm:text-[36px] md:text-[42px]">
               今天想构建什么，{greetName}？
             </h1>
-            <p className="mt-3 text-[14px] text-foreground/55 sm:text-[15px]">
+            <p className="mt-3 text-[14px] text-muted-foreground sm:text-[15px]">
               描述你的想法，生成可运行的 website 站点
             </p>
           </div>

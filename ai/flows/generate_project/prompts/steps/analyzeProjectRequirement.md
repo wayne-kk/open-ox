@@ -99,7 +99,7 @@
 
 ### 4) `userProvidedContent`
 
-**不要在本步骤输出 `userProvidedContent`。** 下游 **extract_user_provided_content** 与 Analyze / infer_design_intent **并行**整理用户 query；图片保留 Google URL，由 Page Agent 直接使用。
+**不要在本步骤输出 `userProvidedContent`。** 用户原文里的地址、图片 URL、菜单等由 Page Agent 直接从需求上下文使用；本步骤只输出产品结构与 brief。
 - 未指定站点语言时，`language` 对齐 **userMessage** 语言（BCP-47）。
 - `productType` 必须为英文；其他面向用户的字符串跟随 `language`。
 

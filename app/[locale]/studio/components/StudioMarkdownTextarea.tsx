@@ -57,7 +57,7 @@ export function StudioMarkdownTextarea({
       {previewVisible ? (
         <div
           className={cn(
-            "max-h-[min(28vh,240px)] overflow-y-auto rounded-xl border border-white/8 bg-black/20 px-3 py-2.5 scrollbar-unified",
+            "max-h-[min(28vh,240px)] overflow-y-auto rounded-xl border border-border bg-muted/50 px-3 py-2.5 scrollbar-unified",
             previewClassName
           )}
         >

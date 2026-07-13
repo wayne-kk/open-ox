@@ -5,7 +5,6 @@ import {
   shouldBlockSkillsForScreenshotReplicate,
   shouldScanPromptForUserImageUrls,
   shouldSkipChromeScaffoldForScreenshotReplicate,
-  shouldSkipExtractUserProvidedContent,
   shouldUseScreenshotReplicaPipeline,
 } from "./screenshotReplicaPipeline";
 
@@ -77,10 +76,8 @@ describe("screenshotReplicaPipeline", () => {
     expect(isScreenshotReplicateIntent("extract_inspiration", true)).toBe(false);
   });
 
-  it("skips extract and prompt image scan for replicate_layout + screenshot", () => {
-    expect(shouldSkipExtractUserProvidedContent("replicate_layout", true)).toBe(true);
+  it("skips prompt image scan for replicate_layout + screenshot", () => {
     expect(shouldScanPromptForUserImageUrls("replicate_layout", true)).toBe(false);
-    expect(shouldSkipExtractUserProvidedContent("extract_inspiration", true)).toBe(false);
     expect(shouldScanPromptForUserImageUrls("extract_inspiration", true)).toBe(true);
   });
 

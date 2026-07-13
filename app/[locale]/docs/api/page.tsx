@@ -103,7 +103,7 @@ export default function DocsApiPage() {
       <h1 className="text-3xl font-bold tracking-tight">API 参考</h1>
       <p className="mt-3 text-[15px] leading-7 text-muted-foreground">
         Open-OX Studio 的 HTTP 接口均为 Next.js Route Handlers，与前端同域。生成与修改类接口多为{" "}
-        <code className="rounded border border-white/10 bg-white/[0.04] px-1.5 py-0.5 font-mono text-[12px]">
+        <code className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[12px]">
           text/event-stream
         </code>{" "}
         （SSE）。Workspace 默认私有；社区发现走独立 Community 路由。
@@ -119,7 +119,7 @@ export default function DocsApiPage() {
               {section.rows.map((row) => (
                 <div
                   key={row.path + row.method}
-                  className="flex flex-wrap items-start gap-3 rounded-lg border border-white/6 bg-white/[0.02] px-4 py-2.5 sm:flex-nowrap"
+                  className="flex flex-wrap items-start gap-3 rounded-lg border border-border bg-card px-4 py-2.5 sm:flex-nowrap"
                 >
                   <MethodBadge m={row.method} />
                   <code className="min-w-0 shrink-0 break-all text-[12px] font-mono text-foreground/85">{row.path}</code>
@@ -143,7 +143,7 @@ export default function DocsApiPage() {
         。
       </div>
 
-      <div className="mt-10 flex flex-wrap gap-6 border-t border-white/8 pt-8">
+      <div className="mt-10 flex flex-wrap gap-6 border-t border-border pt-8">
         <Link
           href="/changelog"
           className="flex items-center gap-2 text-[13px] text-muted-foreground hover:text-primary transition-colors"

@@ -144,7 +144,7 @@ export default function DocsPage() {
 
       <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {METRICS.map((m) => (
-          <div key={m.label} className="rounded-xl border border-white/8 bg-white/[0.02] px-4 py-3">
+          <div key={m.label} className="rounded-xl border border-border bg-card px-4 py-3">
             <div className="font-mono text-xl font-bold text-primary">{m.value}</div>
             <div className="mt-0.5 text-[11px] text-muted-foreground/70">{m.label}</div>
           </div>
@@ -173,9 +173,9 @@ export default function DocsPage() {
       <div className="mt-6 grid gap-3 sm:grid-cols-2">
         <Link
           href="/changelog"
-          className="group flex gap-4 rounded-xl border border-white/10 bg-white/[0.02] p-4 transition-all hover:border-primary/30 hover:bg-primary/[0.04]"
+          className="group flex gap-4 rounded-xl border border-border bg-card p-4 transition-all hover:border-primary/30 hover:bg-primary/[0.04]"
         >
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.03]">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/40">
             <History className="h-4 w-4 text-primary" />
           </div>
           <div className="min-w-0">
@@ -185,9 +185,9 @@ export default function DocsPage() {
         </Link>
         <Link
           href="/docs/api"
-          className="group flex gap-4 rounded-xl border border-white/10 bg-white/[0.02] p-4 transition-all hover:border-accent-tertiary/35 hover:bg-accent-tertiary/[0.04]"
+          className="group flex gap-4 rounded-xl border border-border bg-card p-4 transition-all hover:border-accent-tertiary/35 hover:bg-accent-tertiary/[0.04]"
         >
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.03]">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/40">
             <Plug className="h-4 w-4 text-accent-tertiary" />
           </div>
           <div className="min-w-0">
@@ -206,7 +206,7 @@ export default function DocsPage() {
               ? "border-primary/15 bg-primary/[0.03] hover:border-primary/35 hover:bg-primary/6"
               : accent === "tertiary"
                 ? "border-accent-tertiary/15 bg-accent-tertiary/[0.02] hover:border-accent-tertiary/35"
-                : "border-white/8 bg-white/[0.02] hover:border-white/18"
+                : "border-border bg-card hover:border-border"
               }`}
           >
             <div className="flex items-start justify-between">
@@ -222,11 +222,11 @@ export default function DocsPage() {
         ))}
       </div>
 
-      <div className="mt-10 border-t border-white/8 pt-8">
+      <div className="mt-10 border-t border-border pt-8">
         <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground/40 mb-4">// 技术栈</p>
         <div className="flex flex-wrap gap-2">
           {["Next.js 16", "React 19", "TypeScript", "Tailwind CSS v4", "Supabase", "Preview: Storage / local / E2B", "OpenAI-compatible API", "飞书 / Google OAuth"].map((t) => (
-            <span key={t} className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 font-mono text-[11px] text-muted-foreground/70">
+            <span key={t} className="rounded-full border border-border bg-muted/40 px-3 py-1 font-mono text-[11px] text-muted-foreground/70">
               {t}
             </span>
           ))}

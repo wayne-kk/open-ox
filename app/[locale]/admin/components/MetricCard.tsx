@@ -11,7 +11,7 @@ type MetricCardProps = {
 
 export function MetricCard({ title, value, hint, delta, className }: MetricCardProps) {
   return (
-    <Card className={cn("border-white/10 bg-white/[0.02] ring-white/10", className)}>
+    <Card className={cn("border-border bg-card", className)}>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
       </CardHeader>

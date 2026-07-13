@@ -119,10 +119,10 @@ export function AdminProjectsPanel() {
         </p>
       </div>
 
-      <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-        <div className="overflow-hidden rounded-md border border-white/10">
+      <div className="rounded-xl border border-border bg-card p-4">
+        <div className="overflow-hidden rounded-md border border-border">
           <table className="w-full text-left text-sm">
-            <thead className="bg-white/5 text-xs uppercase tracking-wide text-muted-foreground">
+            <thead className="bg-muted text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-3 py-2">项目</th>
                 <th className="px-3 py-2">作者</th>
@@ -149,7 +149,7 @@ export function AdminProjectsPanel() {
                   const owner = project.ownerUsername?.trim() || "—";
                   const previewHref = `/site-previews/${encodeURIComponent(project.id)}`;
                   return (
-                    <tr key={project.id} className="border-t border-white/10">
+                    <tr key={project.id} className="border-t border-border">
                       <td className="px-3 py-2">
                         <div className="min-w-0">
                           <p className="truncate font-medium">{project.name || "未命名"}</p>
@@ -167,7 +167,7 @@ export function AdminProjectsPanel() {
                               已发布
                             </span>
                           ) : (
-                            <span className="rounded-md border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] text-muted-foreground">
+                            <span className="rounded-md border border-border bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
                               私有
                             </span>
                           )}
@@ -230,7 +230,7 @@ export function AdminProjectsPanel() {
               type="button"
               onClick={() => void loadMore()}
               disabled={loadingMore}
-              className="h-9 rounded-md border border-white/20 bg-white/5 px-4 text-sm disabled:opacity-50"
+              className="h-9 rounded-md border border-border bg-muted px-4 text-sm disabled:opacity-50"
             >
               {loadingMore ? "加载中…" : "加载更多"}
             </button>

@@ -15,7 +15,7 @@ export function ActivityHeatmap({ title, cells }: ActivityHeatmapProps) {
   }
 
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+    <div className="rounded-xl border border-border bg-card p-4">
       <h3 className="mb-4 text-sm font-medium text-foreground">{title}</h3>
       <div className="overflow-x-auto">
         <div className="min-w-[720px]">
@@ -37,7 +37,7 @@ export function ActivityHeatmap({ title, cells }: ActivityHeatmapProps) {
                   <div
                     key={`${day}-${hour}`}
                     title={`周${DAY_LABELS[day]} ${hour}:00 · ${users} 用户`}
-                    className="aspect-square rounded-sm border border-white/5"
+                    className="aspect-square rounded-sm border border-border"
                     style={{ backgroundColor: `rgba(247, 147, 26, ${intensity})` }}
                   />
                 );

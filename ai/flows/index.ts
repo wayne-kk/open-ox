@@ -10,7 +10,6 @@ export type {
   DesignIntent,
   GuardrailId,
   GenerateProjectResult,
-  ProjectIntentChoiceOption,
   ProjectIntentGuideOutcome,
   ProjectIntentGuidePhase,
   ProjectIntentGuideResult,

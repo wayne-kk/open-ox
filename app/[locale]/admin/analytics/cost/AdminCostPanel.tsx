@@ -99,9 +99,9 @@ export function AdminCostPanel() {
             }))}
           />
 
-          <div className="overflow-hidden rounded-xl border border-white/10">
+          <div className="overflow-hidden rounded-xl border border-border">
             <table className="w-full text-left text-sm">
-              <thead className="bg-white/5 text-xs uppercase tracking-wide text-muted-foreground">
+              <thead className="bg-muted text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <th className="px-3 py-2">Model</th>
                   <th className="px-3 py-2">Cost (USD)</th>
@@ -111,7 +111,7 @@ export function AdminCostPanel() {
               </thead>
               <tbody>
                 {data.byModel.map((row) => (
-                  <tr key={row.model} className="border-t border-white/10">
+                  <tr key={row.model} className="border-t border-border">
                     <td className="px-3 py-2 font-mono text-xs">{row.model}</td>
                     <td className="px-3 py-2 tabular-nums">${row.totalCost}</td>
                     <td className="px-3 py-2 tabular-nums">{row.totalTokens.toLocaleString()}</td>

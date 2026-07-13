@@ -49,18 +49,7 @@ export function parseProjectIntentGuidePayload(parsed: unknown): Omit<ProjectInt
       ? root.assistantMessage.trim()
       : "请用一句话描述你想做的网站或页面（目标用户、核心内容、是否需要强交互）。";
 
-  const suggestedReplies = asStringArray(root.suggestedReplies, 6);
-  const choiceOptionsRaw = Array.isArray(root.choiceOptions) ? root.choiceOptions : [];
-
-  const choiceOptions: ProjectIntentGuideResult["choiceOptions"] = [];
-  for (const item of choiceOptionsRaw.slice(0, 4)) {
-    if (!isRecord(item)) continue;
-    const id = typeof item.id === "string" ? item.id.trim() : "";
-    const label = typeof item.label === "string" ? item.label.trim() : "";
-    if (!id || !label) continue;
-    const hint = typeof item.hint === "string" && item.hint.trim() ? item.hint.trim() : undefined;
-    choiceOptions.push({ id, label, ...(hint ? { hint } : {}) });
-  }
+  const suggestedReplies = asStringArray(root.suggestedReplies, 3);
 
   let buildPromptAppendix: string | null = null;
   if (outcome === "continue_build" && typeof root.buildPromptAppendix === "string") {
@@ -73,7 +62,6 @@ export function parseProjectIntentGuidePayload(parsed: unknown): Omit<ProjectInt
     phase,
     assistantMessage,
     suggestedReplies,
-    choiceOptions,
     buildPromptAppendix,
   };
 }

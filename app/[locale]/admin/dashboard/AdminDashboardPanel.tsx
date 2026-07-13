@@ -77,7 +77,7 @@ export function AdminDashboardPanel() {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <DateRangeSelect days={days} onChange={setDays} />
-          <label className="flex items-center gap-2 rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-xs">
+          <label className="flex items-center gap-2 rounded-md border border-border bg-muted px-3 py-1.5 text-xs">
             <input
               type="checkbox"
               checked={excludeInternal}

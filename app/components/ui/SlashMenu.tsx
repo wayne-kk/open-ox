@@ -22,7 +22,7 @@ export function SlashMenu({ matches, activeIndex, onSelect, onHover }: SlashMenu
   return (
     <div
       ref={listRef}
-      className="max-h-[280px] overflow-y-auto rounded-lg border border-white/8 bg-[#0a0c10]/98 backdrop-blur-xl shadow-2xl scrollbar-hidden"
+      className="max-h-[280px] overflow-y-auto rounded-lg border border-border bg-popover text-popover-foreground shadow-[var(--box-shadow-neon-lg)] backdrop-blur-xl scrollbar-hidden"
     >
       {matches.map((cmd, i) => (
         <button
@@ -31,7 +31,7 @@ export function SlashMenu({ matches, activeIndex, onSelect, onHover }: SlashMenu
           type="button"
           onMouseDown={(e) => { e.preventDefault(); onSelect(cmd); }}
           onMouseEnter={() => onHover(i)}
-          className={`w-full flex items-baseline gap-2.5 px-3 py-1.5 text-left transition-colors ${i === activeIndex ? "bg-white/[0.07]" : "hover:bg-white/[0.03]"
+          className={`w-full flex items-baseline gap-2.5 px-3 py-1.5 text-left transition-colors ${i === activeIndex ? "bg-muted" : "hover:bg-muted/60"
           }`}
         >
           <span className="font-mono text-[12px] text-primary shrink-0">/{cmd.id}</span>

@@ -1,6 +1,7 @@
 @layer utilities {
   .scrollbar-unified {
-    scrollbar-color: rgb(255 255 255 / 18%) rgb(17 17 19 / 90%);
+    scrollbar-color: color-mix(in oklab, var(--foreground) 22%, transparent)
+      color-mix(in oklab, var(--muted) 90%, transparent);
     scrollbar-width: thin;
   }
 
@@ -10,12 +11,12 @@
   }
 
   .scrollbar-unified::-webkit-scrollbar-track {
-    background: rgb(17 17 19 / 90%);
+    background: color-mix(in oklab, var(--muted) 90%, transparent);
   }
 
   .scrollbar-unified::-webkit-scrollbar-thumb {
-    background: rgb(255 255 255 / 14%);
-    border: 1px solid rgb(9 9 11 / 80%);
+    background: color-mix(in oklab, var(--foreground) 18%, transparent);
+    border: 1px solid color-mix(in oklab, var(--background) 80%, transparent);
     border-radius: 999px;
   }
 
@@ -73,7 +74,7 @@
   }
 
   .defi-panel {
-    background: linear-gradient(180deg, rgb(17 17 19 / 98%), rgb(9 9 11 / 96%));
+    background: color-mix(in oklab, var(--card) 96%, transparent);
     border: 1px solid var(--border);
     border-radius: 1rem;
     box-shadow: var(--shadow-orange-soft);
@@ -82,7 +83,7 @@
   }
 
   .defi-panel:hover {
-    border-color: rgb(255 255 255 / 18%);
+    border-color: color-mix(in oklab, var(--foreground) 18%, transparent);
     box-shadow: var(--box-shadow-neon);
     transform: translateY(-1px);
   }
@@ -94,6 +95,39 @@
     border-radius: 0.875rem;
     box-shadow: var(--box-shadow-neon-sm);
     position: relative;
+  }
+
+  /* Dashboard / workspace prompt hero atmosphere — theme-aware */
+  .ox-prompt-hero-glow {
+    background:
+      radial-gradient(
+        ellipse 80% 60% at 50% 100%,
+        color-mix(in oklab, var(--primary) 16%, transparent),
+        transparent 55%
+      ),
+      radial-gradient(
+        ellipse 70% 50% at 15% 85%,
+        color-mix(in oklab, var(--primary) 8%, transparent),
+        transparent 50%
+      ),
+      radial-gradient(
+        ellipse 55% 40% at 90% 75%,
+        color-mix(in oklab, var(--accent-tertiary) 10%, transparent),
+        transparent 50%
+      ),
+      linear-gradient(
+        180deg,
+        color-mix(in oklab, var(--card) 70%, transparent) 0%,
+        color-mix(in oklab, var(--muted) 55%, transparent) 100%
+      );
+  }
+
+  .dark .ox-prompt-hero-glow {
+    background:
+      radial-gradient(ellipse 80% 60% at 50% 100%, rgba(0, 255, 136, 0.14), transparent 55%),
+      radial-gradient(ellipse 70% 50% at 20% 80%, rgba(255, 0, 170, 0.12), transparent 50%),
+      radial-gradient(ellipse 60% 45% at 85% 70%, rgba(0, 200, 255, 0.12), transparent 50%),
+      linear-gradient(180deg, rgba(8, 10, 14, 0.2) 0%, rgba(3, 4, 6, 0.85) 100%);
   }
 
   /* Brand purple pill CTA */

@@ -12,17 +12,17 @@ describe("parseYieldArgs", () => {
     expect(r.options).toEqual([]);
   });
 
-  it("parses options and brief draft", () => {
+  it("parses suggested replies and brief draft; ignores legacy options", () => {
     const r = parseYieldArgs({
       kind: "confirm_brief",
       message: "OK?",
-      suggested_replies: ["  yes  "],
+      suggested_replies: ["  yes  ", "a", "b", "c", "d"],
       options: [{ id: "a", label: "A", hint: "h" }],
       brief_draft_markdown: " ## x ",
     });
     expect(r.kind).toBe("confirm_brief");
-    expect(r.suggestedReplies).toEqual(["yes"]);
-    expect(r.options[0]).toEqual({ id: "a", label: "A", hint: "h" });
+    expect(r.suggestedReplies).toEqual(["yes", "a", "b"]);
+    expect(r.options).toEqual([]);
     expect(r.briefDraftMarkdown).toBe("## x");
   });
 });

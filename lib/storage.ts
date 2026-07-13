@@ -518,6 +518,15 @@ async function projectPackageJsonExists(projectId: string): Promise<boolean> {
   }
 }
 
+async function localHomePageMissing(projectId: string): Promise<boolean> {
+  try {
+    await fs.access(path.join(getSiteRoot(projectId), "app", "page.tsx"));
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 /**
  * True when local `sites/{id}` is out of date vs the last upload recorded in `projects.files_hash`.
  * Canonical generated sources live in Storage after `uploadFullProject`; preview/build must match that tree.
@@ -541,24 +550,32 @@ async function isLocalProjectOutOfSyncWithStorage(
  * Ensure `sites/{projectId}` matches what we can build.
  *
  * - No `package.json` → restore full tree from Storage (or template base).
+ * - Missing `app/page.tsx` while Storage has a snapshot → restore (local wipe / failed re-init).
  * - With `db`: if disk fingerprint ≠ `projects.files_hash` → restore (API disk stale vs worker upload).
  *   Callers that write locally (e.g. modify agent) must invoke `syncLocalProjectFingerprint` first so
  *   newer on-disk edits are not mistaken for stale API copies.
  *
- * Without `db`, only the missing-package case runs (legacy callers).
+ * Without `db`, only the missing-package / missing-home-page cases run (legacy callers).
  */
 export async function ensureProjectSourcesOnDisk(
   projectId: string,
   options?: { db?: SupabaseClient }
 ): Promise<void> {
   const pkgExists = await projectPackageJsonExists(projectId);
+  const homeMissing = pkgExists && (await localHomePageMissing(projectId));
   const outOfSync =
     pkgExists && options?.db
       ? await isLocalProjectOutOfSyncWithStorage(options.db, projectId)
       : false;
 
-  if (pkgExists && !outOfSync) {
+  if (pkgExists && !outOfSync && !homeMissing) {
     return;
+  }
+
+  if (homeMissing) {
+    console.warn(
+      `[storage] local app/page.tsx missing — restoring from Storage projectId=${projectId}`
+    );
   }
 
   await restoreProjectFiles(projectId);

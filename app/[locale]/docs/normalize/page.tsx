@@ -3,13 +3,13 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 
 function Pre({ children }: { children: React.ReactNode }) {
   return (
-    <pre className="mt-4 mb-4 overflow-x-auto rounded-xl border border-white/8 bg-[#080a0d] px-5 py-4 font-mono text-[12px] leading-6 text-muted-foreground">
+    <pre className="mt-4 mb-4 overflow-x-auto rounded-xl border border-border bg-muted px-5 py-4 font-mono text-[12px] leading-6 text-muted-foreground">
       {children}
     </pre>
   );
 }
 function H2({ children }: { children: React.ReactNode }) {
-  return <h2 className="mt-12 mb-4 text-xl font-bold tracking-tight border-b border-white/8 pb-3">{children}</h2>;
+  return <h2 className="mt-12 mb-4 text-xl font-bold tracking-tight border-b border-border pb-3">{children}</h2>;
 }
 function H3({ children }: { children: React.ReactNode }) {
   return <h3 className="mt-6 mb-2 text-[15px] font-semibold text-foreground/90">{children}</h3>;
@@ -19,7 +19,7 @@ function P({ children }: { children: React.ReactNode }) {
 }
 function Code({ children }: { children: React.ReactNode }) {
   return (
-    <code className="rounded bg-white/6 border border-white/8 px-1.5 py-0.5 font-mono text-[12px] text-foreground/90">
+    <code className="rounded bg-muted border border-border px-1.5 py-0.5 font-mono text-[12px] text-foreground/90">
       {children}
     </code>
   );
@@ -71,7 +71,7 @@ export default function NormalizePage() {
               { pattern: "单页简化", example: "只输出 title + sections，没有多页结构" },
               { pattern: "JSON 截断", example: "上下文窗口不足时输出不完整的 JSON" },
             ].map(({ pattern, example }) => (
-              <div key={pattern} className="flex items-start gap-3 rounded-lg border border-white/6 bg-white/[0.02] px-4 py-3">
+              <div key={pattern} className="flex items-start gap-3 rounded-lg border border-border bg-card px-4 py-3">
                 <code className="shrink-0 font-mono text-[11px] text-accent-tertiary/80 w-24">{pattern}</code>
                 <span className="text-[12px] text-muted-foreground/70">{example}</span>
               </div>
@@ -207,10 +207,10 @@ If so, use the web_search tool to look them up first."
         <section id="fallbacks" className="scroll-mt-24">
           <H2>Fallback 策略</H2>
           <P>各层级的 fallback 设计原则：宁可生成一个合理的默认值，也不要抛出错误。</P>
-          <div className="mt-4 overflow-hidden rounded-xl border border-white/8">
+          <div className="mt-4 overflow-hidden rounded-xl border border-border">
             <table className="w-full text-[13px]">
               <thead>
-                <tr className="border-b border-white/8 bg-white/[0.02]">
+                <tr className="border-b border-border bg-card">
                   <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">字段</th>
                   <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">缺失时的 Fallback</th>
                 </tr>
@@ -227,7 +227,7 @@ If so, use the web_search tool to look them up first."
                   ["priority (role)", '"primary"'],
                   ["priority (capability)", '"must-have"'],
                 ].map(([field, fallback]) => (
-                  <tr key={field} className="hover:bg-white/[0.015]">
+                  <tr key={field} className="hover:bg-muted/50">
                     <td className="px-4 py-2.5 font-mono text-[11px] text-primary/80">{field}</td>
                     <td className="px-4 py-2.5 text-[12px] text-muted-foreground/70">{fallback}</td>
                   </tr>
@@ -242,7 +242,7 @@ If so, use the web_search tool to look them up first."
           </Callout>
         </section>
 
-        <div className="mt-14 border-t border-white/8 pt-8 flex justify-between">
+        <div className="mt-14 border-t border-border pt-8 flex justify-between">
           <Link href="/docs/blueprint" className="flex items-center gap-2 text-[13px] text-muted-foreground hover:text-primary transition-colors">
             <ArrowLeft className="h-3.5 w-3.5" /> 项目蓝图
           </Link>

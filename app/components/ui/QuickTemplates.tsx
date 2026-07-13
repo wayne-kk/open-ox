@@ -53,7 +53,7 @@ export function QuickTemplates({ onSelect, visible, layout = "wrap" }: QuickTemp
           key={t.label}
           type="button"
           onClick={() => onSelect(t.prompt)}
-          className={`rounded-full border border-white/8 bg-white/[0.03] font-mono text-[11px] text-muted-foreground/60 transition-all hover:border-primary/30 hover:bg-primary/5 hover:text-primary ${row ? "shrink-0 px-2.5 py-1 sm:px-3" : "px-3 py-1"}`}
+          className={`rounded-full border border-border bg-muted/40 font-mono text-[11px] text-muted-foreground transition-all hover:border-primary/30 hover:bg-primary/5 hover:text-primary ${row ? "shrink-0 px-2.5 py-1 sm:px-3" : "px-3 py-1"}`}
         >
           {t.label}
         </button>

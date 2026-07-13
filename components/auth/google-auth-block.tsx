@@ -90,7 +90,7 @@ export function GoogleAuthBlock() {
           </p>
 
           {googleEnabled === null ? (
-            <div className="flex w-full justify-center rounded-xl border border-white/8 bg-white/[0.03] py-3 text-xs text-muted-foreground">
+            <div className="flex w-full justify-center rounded-xl border border-border bg-muted/40 py-3 text-xs text-muted-foreground">
               检查登录方式…
             </div>
           ) : (

@@ -44,7 +44,7 @@ export function StepRow({ step, flowStart }: { step: BuildStep; flowStart: numbe
   })();
 
   return (
-    <div className={`rounded-xl hover:bg-white/3 ${isToolCall ? "border border-blue-400/10 bg-blue-400/3" : isAgentTool ? "border border-emerald-400/10 bg-emerald-400/3" : ""}`}>
+    <div className={`rounded-xl hover:bg-muted/40 ${isToolCall ? "border border-blue-400/10 bg-blue-400/3" : isAgentTool ? "border border-emerald-400/10 bg-emerald-400/3" : ""}`}>
       <div
         className="flex cursor-pointer items-start gap-2 px-2 py-2"
         onClick={() => setOpen((v) => !v)}
@@ -84,7 +84,7 @@ export function StepRow({ step, flowStart }: { step: BuildStep; flowStart: numbe
       </div>
 
       {open && (
-        <div className="mx-2 mb-2 rounded-lg border border-white/6 bg-white/[0.03] px-3 py-2.5 text-[11px] leading-5">
+        <div className="mx-2 mb-2 rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-[11px] leading-5">
           {isToolCall && toolDetail ? (
             <div className="space-y-2">
               <div className="font-mono text-[10px] text-blue-400/70 uppercase tracking-widest">Tool: {toolDetail.tool}</div>

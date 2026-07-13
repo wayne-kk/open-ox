@@ -56,7 +56,7 @@ export function AdminUserDetailPanel({ userId }: { userId: string }) {
             </span>
           ) : null}
           {data ? (
-            <span className="rounded border border-white/15 px-2 py-0.5 text-[11px] text-muted-foreground">
+            <span className="rounded border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
               {STATUS_LABEL[data.activityStatus]}
             </span>
           ) : null}
@@ -94,7 +94,7 @@ export function AdminUserDetailPanel({ userId }: { userId: string }) {
             />
           </div>
 
-          <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+          <div className="rounded-xl border border-border bg-card p-4">
             <h2 className="mb-3 text-sm font-medium">项目（最多 30）</h2>
             {data.projects.length === 0 ? (
               <p className="text-sm text-muted-foreground">暂无项目</p>
@@ -111,7 +111,7 @@ export function AdminUserDetailPanel({ userId }: { userId: string }) {
                   </thead>
                   <tbody>
                     {data.projects.map((project) => (
-                      <tr key={project.id} className="border-t border-white/5">
+                      <tr key={project.id} className="border-t border-border">
                         <td className="py-2 pr-3">{project.name}</td>
                         <td className="py-2 pr-3 text-xs text-muted-foreground">{project.status}</td>
                         <td className="py-2 pr-3 text-xs text-muted-foreground">
@@ -140,7 +140,7 @@ export function AdminUserDetailPanel({ userId }: { userId: string }) {
             valueSuffix=" min"
           />
 
-          <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+          <div className="rounded-xl border border-border bg-card p-4">
             <h2 className="mb-3 text-sm font-medium">行为时间线</h2>
             <div className="space-y-2">
               {data.timeline.length === 0 ? (
@@ -149,12 +149,12 @@ export function AdminUserDetailPanel({ userId }: { userId: string }) {
                 data.timeline.map((event, index) => (
                   <div
                     key={`${event.at}-${index}`}
-                    className="flex gap-3 border-t border-white/5 pt-2 first:border-0 first:pt-0"
+                    className="flex gap-3 border-t border-border pt-2 first:border-0 first:pt-0"
                   >
                     <span className="w-36 shrink-0 text-xs text-muted-foreground">
                       {new Date(event.at).toLocaleString()}
                     </span>
-                    <span className="rounded bg-white/5 px-2 py-0.5 text-[10px] uppercase text-primary">
+                    <span className="rounded bg-muted px-2 py-0.5 text-[10px] uppercase text-primary">
                       {event.kind}
                     </span>
                     <div className="min-w-0 flex-1 text-sm">

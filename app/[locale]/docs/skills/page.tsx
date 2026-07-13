@@ -2,10 +2,10 @@ import Link from "next/link";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 
 function Pre({ children }: { children: React.ReactNode }) {
-  return <pre className="mt-4 mb-4 overflow-x-auto rounded-xl border border-white/8 bg-[#080a0d] px-5 py-4 font-mono text-[12px] leading-6 text-muted-foreground">{children}</pre>;
+  return <pre className="mt-4 mb-4 overflow-x-auto rounded-xl border border-border bg-muted px-5 py-4 font-mono text-[12px] leading-6 text-muted-foreground">{children}</pre>;
 }
 function H2({ children }: { children: React.ReactNode }) {
-  return <h2 className="mt-12 mb-4 text-xl font-bold tracking-tight border-b border-white/8 pb-3">{children}</h2>;
+  return <h2 className="mt-12 mb-4 text-xl font-bold tracking-tight border-b border-border pb-3">{children}</h2>;
 }
 function H3({ children }: { children: React.ReactNode }) {
   return <h3 className="mt-6 mb-2 text-[15px] font-semibold text-foreground/90">{children}</h3>;
@@ -14,7 +14,7 @@ function P({ children }: { children: React.ReactNode }) {
   return <p className="text-[14px] leading-7 text-muted-foreground">{children}</p>;
 }
 function Code({ children }: { children: React.ReactNode }) {
-  return <code className="rounded bg-white/6 border border-white/8 px-1.5 py-0.5 font-mono text-[12px] text-foreground/90">{children}</code>;
+  return <code className="rounded bg-muted border border-border px-1.5 py-0.5 font-mono text-[12px] text-foreground/90">{children}</code>;
 }
 function Callout({ type = "info", children }: { type?: "info" | "warn"; children: React.ReactNode }) {
   return (
@@ -73,7 +73,7 @@ export default function SkillsPage() {
           <H2>可用技能</H2>
           <div className="mt-4 space-y-3">
             {SKILLS.map(({ id, name, desc, accent }) => (
-              <div key={id} className="rounded-xl border border-white/8 bg-white/[0.02] px-5 py-4">
+              <div key={id} className="rounded-xl border border-border bg-card px-5 py-4">
                 <div className="flex items-center gap-3">
                   <code className={`font-mono text-[13px] font-semibold ${accent}`}>/{id}</code>
                   <span className="text-[13px] font-semibold text-foreground/90">{name}</span>
@@ -121,7 +121,7 @@ export default function SkillsPage() {
                 body: "仅在 page_implement_agent 启动前、且策略命中时为该页 discoverAndSelectSkill；正文进入该页 Agent 的 user 消息，用于 Hero 特效级指引。",
               },
             ].map(({ title, body }) => (
-              <div key={title} className="rounded-xl border border-white/8 bg-white/[0.02] px-5 py-4">
+              <div key={title} className="rounded-xl border border-border bg-card px-5 py-4">
                 <p className="text-[13px] font-semibold text-foreground/90">{title}</p>
                 <p className="mt-1 text-[12px] leading-5 text-muted-foreground/75">{body}</p>
               </div>
@@ -152,7 +152,7 @@ export default function SkillsPage() {
 描述整体调性...`}</Pre>
         </section>
 
-        <div className="mt-14 border-t border-white/8 pt-8 flex justify-between">
+        <div className="mt-14 border-t border-border pt-8 flex justify-between">
           <Link href="/docs/section-generation" className="flex items-center gap-2 text-[13px] text-muted-foreground hover:text-primary transition-colors">
             <ArrowLeft className="h-3.5 w-3.5" /> Section 生成
           </Link>

@@ -80,9 +80,9 @@ export function AdminGenerationPanel() {
             series={[{ key: "avgRepairRounds", label: "轮次", color: "#f7931a" }]}
           />
 
-          <div className="overflow-hidden rounded-xl border border-white/10">
+          <div className="overflow-hidden rounded-xl border border-border">
             <table className="w-full text-left text-sm">
-              <thead className="bg-white/5 text-xs uppercase tracking-wide text-muted-foreground">
+              <thead className="bg-muted text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <th className="px-3 py-2">Model</th>
                   <th className="px-3 py-2">Runs</th>
@@ -92,7 +92,7 @@ export function AdminGenerationPanel() {
               </thead>
               <tbody>
                 {data.byModel.map((row) => (
-                  <tr key={row.modelId} className="border-t border-white/10">
+                  <tr key={row.modelId} className="border-t border-border">
                     <td className="px-3 py-2 font-mono text-xs">{row.modelId}</td>
                     <td className="px-3 py-2 tabular-nums">{row.runs}</td>
                     <td className="px-3 py-2 tabular-nums">{row.successRate}%</td>

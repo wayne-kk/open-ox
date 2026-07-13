@@ -5,7 +5,7 @@ import type { AdminAlert } from "@/lib/admin/analytics/alerts";
 const SEVERITY_STYLES: Record<AdminAlert["severity"], string> = {
   critical: "border-red-500/30 bg-red-500/10 text-red-200",
   warning: "border-amber-500/30 bg-amber-500/10 text-amber-100",
-  info: "border-white/10 bg-white/[0.03] text-foreground/90",
+  info: "border-border bg-muted/40 text-foreground/90",
 };
 
 type AlertListProps = {

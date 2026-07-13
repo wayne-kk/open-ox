@@ -58,9 +58,9 @@ const components: Components = {
       {children}
     </blockquote>
   ),
-  hr: () => <hr className="my-4 border-white/10" />,
+  hr: () => <hr className="my-4 border-border" />,
   pre: ({ children }) => (
-    <pre className="mb-3 max-w-full overflow-x-auto whitespace-pre-wrap break-all rounded-xl border border-white/10 bg-black/35 p-3 font-mono text-[11px] leading-5 text-muted-foreground last:mb-0">
+    <pre className="mb-3 max-w-full overflow-x-auto whitespace-pre-wrap break-all rounded-xl border border-border bg-muted p-3 font-mono text-[11px] leading-5 text-muted-foreground last:mb-0">
       {children}
     </pre>
   ),
@@ -86,17 +86,17 @@ const components: Components = {
   },
   table: ({ children }) => (
     <div className="mb-3 overflow-x-auto last:mb-0">
-      <table className="w-full min-w-[16rem] border-collapse border border-white/10 text-left text-[12px]">
+      <table className="w-full min-w-[16rem] border-collapse border border-border text-left text-[12px]">
         {children}
       </table>
     </div>
   ),
-  thead: ({ children }) => <thead className="bg-white/[0.06]">{children}</thead>,
+  thead: ({ children }) => <thead className="bg-muted/50">{children}</thead>,
   th: ({ children }) => (
-    <th className="border border-white/10 px-2.5 py-1.5 font-medium text-foreground">{children}</th>
+    <th className="border border-border px-2.5 py-1.5 font-medium text-foreground">{children}</th>
   ),
   td: ({ children }) => (
-    <td className="break-words border border-white/10 px-2.5 py-1.5 text-foreground/90 [overflow-wrap:anywhere]">
+    <td className="break-words border border-border px-2.5 py-1.5 text-foreground/90 [overflow-wrap:anywhere]">
       {children}
     </td>
   ),

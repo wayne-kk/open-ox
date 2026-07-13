@@ -25,7 +25,7 @@ export function FunnelChart({ steps }: FunnelChartProps) {
                 <span className="ml-2 text-xs text-primary">{step.conversionFromFirst}% 总转化</span>
               </span>
             </div>
-            <div className="h-3 rounded-full bg-white/5">
+            <div className="h-3 rounded-full bg-muted">
               <div
                 className="h-3 rounded-full bg-primary/70 transition-all"
                 style={{ width: `${width}%` }}

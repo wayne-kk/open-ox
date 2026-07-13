@@ -36,10 +36,6 @@ import {
   CHROME_OPTIMIZE_AGENT_STEP,
   type PageImplementSummary,
 } from "./steps/chromeOptimizeAgent";
-import { stepExtractUserProvidedContent, resolveExtractUserContentMaxIterations } from "./steps/extractUserProvidedContent";
-import { hasUserProvidedContent } from "./schema/normalizeUserProvidedContent";
-import { USER_PROVIDED_CONTENT_PATH } from "@/lib/content/userProvidedContentText";
-import { prepareUserProvidedContentForPageAgent } from "./shared/userProvidedContentContext";
 import { stepGenerateProjectDesignSystem } from "./steps/generateProjectDesignSystem";
 import { stepInstallDependencies } from "./steps/installDependencies";
 import { stepInferDesignIntent, type DesignIntentResult } from "./steps/inferDesignIntent";
@@ -53,6 +49,9 @@ import {
 import { stepRepairBuild } from "./steps/repairBuild";
 import { stepRunBuild } from "./steps/runBuild";
 import { normalizeBlueprint } from "./normalization/blueprintNormalizer";
+import { hasUserProvidedContent } from "./schema/normalizeUserProvidedContent";
+import { USER_PROVIDED_CONTENT_PATH } from "@/lib/content/userProvidedContentText";
+import { prepareUserProvidedContentForPageAgent } from "./shared/userProvidedContentContext";
 import {
   appendDependencyInstallFailures,
   appendGeneratedFiles,
@@ -79,7 +78,6 @@ import { prepareReplicaSiteLayout } from "./shared/applyMinimalReplicaRootLayout
 import {
   isScreenshotReplicaPipelineEnabled,
   shouldBlockSkillsForScreenshotReplicate,
-  shouldSkipExtractUserProvidedContent,
   shouldUseScreenshotReplicaPipeline,
 } from "./shared/screenshotReplicaPipeline";
 import {
@@ -697,8 +695,8 @@ export interface RunGenerateProjectOptions {
   /** When set, passed into `project_intent_guide` vision (direct /api/ai or worker). */
   userReferenceImageBase64?: string | null;
   /**
-   * Extra texts for `extract_user_provided_content` image URL scan (bootstrap userPrompt,
-   * intent-agent session). `userInput` may be a summarized merged_brief without verbatim URLs.
+   * @deprecated Unused after removing `extract_user_provided_content` from the generate pipeline.
+   * Kept optional for older callers / payloads.
    */
   userImageSourceTexts?: string[];
 }
@@ -843,7 +841,6 @@ async function runGenerateProjectInner(
         phase: intentResult.phase,
         assistantMessage: intentResult.assistantMessage,
         suggestedReplies: intentResult.suggestedReplies,
-        choiceOptions: intentResult.choiceOptions,
         buildPromptAppendix: intentResult.buildPromptAppendix,
       });
 
@@ -900,40 +897,10 @@ async function runGenerateProjectInner(
       }
     } else {
       await withLangfuseSpan(LfSpanGen.analyzeBlueprintParallel, async () => {
-        const skipExtractUserContent = shouldSkipExtractUserProvidedContent(
-          screenshotIntentMode,
-          Boolean(referenceScreenshot),
-          effectiveUserInput
-        );
-
         logger.startStep("analyze_project_requirement");
         logger.startStep("infer_design_intent");
-        if (!skipExtractUserContent) {
-          logger.startStep("extract_user_provided_content");
-        }
 
-        const extractPromise = skipExtractUserContent
-          ? Promise.resolve({
-              content: undefined as undefined,
-              trace: {
-                output: {
-                  skipped: true,
-                  reason: "screenshot replicate_layout — reference image is for layout only",
-                },
-              },
-            })
-          : stepExtractUserProvidedContent({
-              userInput: effectiveUserInput,
-              imageSourceTexts: options.userImageSourceTexts,
-              referenceImageBase64: referenceScreenshot,
-              maxIterations: resolveExtractUserContentMaxIterations({
-                userInput: effectiveUserInput,
-                imageSourceTexts: options.userImageSourceTexts,
-                referenceImageBase64: referenceScreenshot,
-              }),
-            });
-
-        const [analyzeResult, inferResult, extractResult] = await Promise.all([
+        const [analyzeResult, inferResult] = await Promise.all([
           stepAnalyzeProjectRequirement(
             effectiveUserInput,
             (name, args, result) => {
@@ -951,7 +918,6 @@ async function runGenerateProjectInner(
             referenceImageBase64: referenceScreenshot,
             screenshotGuardrailId,
           }),
-          extractPromise,
         ]);
         logger.logStep(
           "analyze_project_requirement",
@@ -967,30 +933,7 @@ async function runGenerateProjectInner(
           undefined,
           inferResult.trace
         );
-        logger.logStep(
-          "extract_user_provided_content",
-          "ok",
-          skipExtractUserContent
-            ? "skipped — screenshot replicate (layout reference only)"
-            : extractResult.content
-              ? `${extractResult.content.images?.length ?? 0} images (scan=${(extractResult.trace.output as { imagesFromPromptScan?: number })?.imagesFromPromptScan ?? 0}), address=${Boolean(extractResult.content.business?.address)}`
-              : "none",
-          undefined,
-          extractResult.trace
-        );
         rawBlueprint = { ...analyzeResult.blueprint, userProvidedContent: undefined };
-        if (extractResult.content && hasUserProvidedContent(extractResult.content)) {
-          rawBlueprint = {
-            ...rawBlueprint,
-            userProvidedContent: extractResult.content,
-          };
-          await persistJsonArtifact(
-            artifactLogger,
-            "extract_user_provided_content",
-            "output",
-            extractResult.content
-          );
-        }
         inferredDesignIntent = inferResult;
         await persistJsonArtifact(artifactLogger, "analyze_project_requirement", "output", rawBlueprint);
         await persistTextArtifact(artifactLogger, "infer_design_intent", "output", inferredDesignIntent.text, "md");

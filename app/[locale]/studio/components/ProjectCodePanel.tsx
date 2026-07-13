@@ -102,7 +102,7 @@ function FileTree({
               type="button"
               onClick={() => toggle(fullPrefix)}
               style={{ paddingLeft: 8 + depth * 12 }}
-              className="flex w-full items-center gap-0.5 py-1 text-left font-mono text-[11px] text-muted-foreground/85 hover:bg-white/5 hover:text-foreground"
+              className="flex w-full items-center gap-0.5 py-1 text-left font-mono text-[11px] text-muted-foreground/85 hover:bg-muted hover:text-foreground"
             >
               {isOpen ? (
                 <ChevronDown className="h-3 w-3 shrink-0 opacity-70" />
@@ -138,7 +138,7 @@ function FileTree({
               "flex w-full items-center gap-1.5 py-1 text-left font-mono text-[11px] transition-colors",
               active
                 ? "bg-primary/15 text-primary"
-                : "text-muted-foreground/90 hover:bg-white/5 hover:text-foreground",
+                : "text-muted-foreground/90 hover:bg-muted hover:text-foreground",
             )}
           >
             <FileIcon className="h-3 w-3 shrink-0 opacity-60" />
@@ -449,12 +449,12 @@ export function ProjectCodePanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[linear-gradient(180deg,rgba(255,255,255,0.02),rgba(0,0,0,0.18))]">
-      <div className="flex h-9 shrink-0 items-center justify-between border-b border-white/8 px-3">
+      <div className="flex h-9 shrink-0 items-center justify-between border-b border-border px-3">
         <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/80">
           <FileCode2 className="h-3.5 w-3.5 text-primary/70" />
           <span>Workspace</span>
           {paths.length > 0 && (
-            <span className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] text-muted-foreground/60">
+            <span className="rounded border border-border px-1.5 py-0.5 text-[9px] text-muted-foreground/60">
               {paths.length} files
             </span>
           )}
@@ -464,7 +464,7 @@ export function ProjectCodePanel({
             type="button"
             onClick={() => void downloadWorkspaceZip()}
             disabled={exportingZip}
-            className="rounded border border-white/10 px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/80 transition-colors hover:border-white/20 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded border border-border px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/80 transition-colors hover:border-border hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
             title="Pack local workspace (fast). First download or stale files: Refresh explorer or use Export API ?sync=1 to merge Storage before zipping."
           >
             <Download className={cn("mr-1 inline h-3 w-3", exportingZip && "animate-pulse")} />
@@ -474,7 +474,7 @@ export function ProjectCodePanel({
             type="button"
             onClick={() => runEditorAction("actions.find")}
             disabled={!activePath || fileLoading}
-            className="rounded border border-white/10 px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/80 transition-colors hover:border-white/20 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded border border-border px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/80 transition-colors hover:border-border hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Search className="mr-1 inline h-3 w-3" />
             Find
@@ -483,7 +483,7 @@ export function ProjectCodePanel({
             type="button"
             onClick={() => runEditorAction("editor.action.formatDocument")}
             disabled={!activePath || fileLoading}
-            className="rounded border border-white/10 px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/80 transition-colors hover:border-white/20 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded border border-border px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/80 transition-colors hover:border-border hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
             title="Format document"
           >
             <AlignLeft className="mr-1 inline h-3 w-3" />
@@ -493,7 +493,7 @@ export function ProjectCodePanel({
             type="button"
             onClick={() => void refreshFromWorkspace()}
             disabled={listLoading}
-            className="rounded border border-white/10 px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/80 transition-colors hover:border-white/20 hover:text-foreground disabled:opacity-40"
+            className="rounded border border-border px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/80 transition-colors hover:border-border hover:text-foreground disabled:opacity-40"
           >
             <RefreshCw className={cn("mr-1 inline h-3 w-3", listLoading && "animate-spin")} />
             Refresh
@@ -502,7 +502,7 @@ export function ProjectCodePanel({
             type="button"
             onClick={() => void saveAll()}
             disabled={dirtyCount === 0 || saving}
-            className="rounded border border-white/10 px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/80 transition-colors hover:border-white/20 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded border border-border px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/80 transition-colors hover:border-border hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
             title="Save all dirty tabs (⌘⇧S)"
           >
             <Save className="mr-1 inline h-3 w-3" />
@@ -528,8 +528,8 @@ export function ProjectCodePanel({
       )}
 
       <div className="flex min-h-0 flex-1">
-        <aside className="flex w-[min(280px,38%)] shrink-0 flex-col border-r border-white/8 bg-black/20">
-          <div className="shrink-0 space-y-1.5 border-b border-white/6 px-2 py-1.5">
+        <aside className="flex w-[min(280px,38%)] shrink-0 flex-col border-r border-border bg-muted/50">
+          <div className="shrink-0 space-y-1.5 border-b border-border px-2 py-1.5">
             <div className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground/50">
               Explorer
             </div>
@@ -540,7 +540,7 @@ export function ProjectCodePanel({
                 value={pathFilter}
                 onChange={(e) => setPathFilter(e.target.value)}
                 placeholder="Filter files…"
-                className="w-full rounded border border-white/10 bg-black/30 py-1 pl-7 pr-2 font-mono text-[11px] text-foreground placeholder:text-muted-foreground/40 outline-none focus:border-primary/40"
+                className="w-full rounded border border-border bg-muted py-1 pl-7 pr-2 font-mono text-[11px] text-foreground placeholder:text-muted-foreground/40 outline-none focus:border-primary/40"
               />
             </div>
           </div>
@@ -572,7 +572,7 @@ export function ProjectCodePanel({
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex h-8 shrink-0 items-stretch gap-0.5 overflow-x-auto border-b border-white/8 scrollbar-unified">
+          <div className="flex h-8 shrink-0 items-stretch gap-0.5 overflow-x-auto border-b border-border scrollbar-unified">
             {tabs.length === 0 ? (
               <div className="flex items-center px-3 font-mono text-[10px] text-muted-foreground/70">
                 Select a file
@@ -585,7 +585,7 @@ export function ProjectCodePanel({
                   <div
                     key={t.path}
                     className={cn(
-                      "group flex max-w-[180px] shrink-0 items-center gap-1 border-r border-white/6 px-2 font-mono text-[10px]",
+                      "group flex max-w-[180px] shrink-0 items-center gap-1 border-r border-border px-2 font-mono text-[10px]",
                       active
                         ? "bg-white/8 text-foreground"
                         : "text-muted-foreground/70 hover:bg-white/4 hover:text-foreground",

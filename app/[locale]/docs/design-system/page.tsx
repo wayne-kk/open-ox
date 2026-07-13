@@ -3,13 +3,13 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 
 function Pre({ children }: { children: React.ReactNode }) {
   return (
-    <pre className="mt-4 mb-4 overflow-x-auto rounded-xl border border-white/8 bg-[#080a0d] px-5 py-4 font-mono text-[12px] leading-6 text-muted-foreground">
+    <pre className="mt-4 mb-4 overflow-x-auto rounded-xl border border-border bg-muted px-5 py-4 font-mono text-[12px] leading-6 text-muted-foreground">
       {children}
     </pre>
   );
 }
 function H2({ children }: { children: React.ReactNode }) {
-  return <h2 className="mt-12 mb-4 text-xl font-bold tracking-tight border-b border-white/8 pb-3">{children}</h2>;
+  return <h2 className="mt-12 mb-4 text-xl font-bold tracking-tight border-b border-border pb-3">{children}</h2>;
 }
 function H3({ children }: { children: React.ReactNode }) {
   return <h3 className="mt-6 mb-2 text-[15px] font-semibold text-foreground/90">{children}</h3>;
@@ -19,7 +19,7 @@ function P({ children }: { children: React.ReactNode }) {
 }
 function Code({ children }: { children: React.ReactNode }) {
   return (
-    <code className="rounded bg-white/6 border border-white/8 px-1.5 py-0.5 font-mono text-[12px] text-foreground/90">
+    <code className="rounded bg-muted border border-border px-1.5 py-0.5 font-mono text-[12px] text-foreground/90">
       {children}
     </code>
   );
@@ -98,7 +98,7 @@ architect_scaffold_agent → page_implement_agent ×M → chrome_optimize_agent`
               { section: "Components", desc: "6–12 个具名组件规格（Nav Button、Card、Input 等），含 hover/focus 状态" },
               { section: "Do's and Don'ts + Quick Start", desc: "可验证规则 + 可直接写入 globals.css 的 :root / @theme 块" },
             ].map(({ section, desc }) => (
-              <div key={section} className="flex items-start gap-3 rounded-lg border border-white/6 bg-white/[0.02] px-4 py-3">
+              <div key={section} className="flex items-start gap-3 rounded-lg border border-border bg-card px-4 py-3">
                 <code className="shrink-0 font-mono text-[11px] text-primary/80 w-36">{section}</code>
                 <span className="text-[12px] text-muted-foreground/70">{desc}</span>
               </div>
@@ -180,7 +180,7 @@ const systemPrompt = [
               { skill: "/glassmorphism", effect: "半透明 --color-surface，backdrop-blur 相关变量，柔和阴影" },
               { skill: "/brutalist", effect: "强边框，--radius-* 为 0，黑白高对比，等宽字体主导" },
             ].map(({ skill, effect }) => (
-              <div key={skill} className="flex items-start gap-3 rounded-lg border border-white/6 bg-white/[0.02] px-4 py-3">
+              <div key={skill} className="flex items-start gap-3 rounded-lg border border-border bg-card px-4 py-3">
                 <code className="shrink-0 font-mono text-[12px] text-primary/80 w-28">{skill}</code>
                 <span className="text-[12px] text-muted-foreground/70">{effect}</span>
               </div>
@@ -188,7 +188,7 @@ const systemPrompt = [
           </div>
         </section>
 
-        <div className="mt-14 border-t border-white/8 pt-8 flex justify-between">
+        <div className="mt-14 border-t border-border pt-8 flex justify-between">
           <Link href="/docs/blueprint" className="flex items-center gap-2 text-[13px] text-muted-foreground hover:text-primary transition-colors">
             <ArrowLeft className="h-3.5 w-3.5" /> 项目蓝图
           </Link>

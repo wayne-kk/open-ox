@@ -84,7 +84,6 @@ export async function processInput(
           phase: result.intentGuide.phase,
           assistantMessage: result.intentGuide.assistantMessage,
           suggestedReplies: result.intentGuide.suggestedReplies,
-          choiceOptions: result.intentGuide.choiceOptions,
           buildPromptAppendix: result.intentGuide.buildPromptAppendix,
         }
       : undefined,
@@ -102,7 +101,6 @@ export type {
   DesignIntent,
   GuardrailId,
   GenerateProjectResult,
-  ProjectIntentChoiceOption,
   ProjectIntentGuideOutcome,
   ProjectIntentGuidePhase,
   ProjectIntentGuideResult,

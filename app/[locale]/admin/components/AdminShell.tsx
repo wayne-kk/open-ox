@@ -53,7 +53,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                     "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
                     active
                       ? "bg-primary/15 text-primary"
-                      : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   )}
                 >
                   <Icon className="h-4 w-4 shrink-0 opacity-80" />
@@ -66,7 +66,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             href="https://cloud.langfuse.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
+            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             <Activity className="h-4 w-4 shrink-0 opacity-80" />
             Langfuse

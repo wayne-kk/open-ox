@@ -22,27 +22,14 @@ export function buildIntentAgentControlTools(): ChatCompletionTool[] {
               type: "string",
               enum: ["capability", "clarify", "options", "confirm_brief"],
               description:
-                "capability=说明你能做什么；clarify=需要用户补充；options=给用户有限选项；confirm_brief=展示润色后的需求请用户确认",
+                "capability=说明你能做什么；clarify=需要用户补充；options=用 suggested_replies 给出有限方向；confirm_brief=展示润色后的需求请用户确认",
             },
-            message: { type: "string", description: "面向用户的主文案（可含换行）。" },
+            message: { type: "string", description: "面向用户的主文案（可含换行）。短；不要在正文复述快捷按钮。" },
             suggested_replies: {
               type: "array",
               items: { type: "string" },
-              description: "0–6 条极短建议回复，便于 UI 做快捷按钮",
-            },
-            options: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  id: { type: "string", description: "snake_case id" },
-                  label: { type: "string" },
-                  hint: { type: "string", description: "可选" },
-                },
-                required: ["id", "label"],
-                additionalProperties: false,
-              },
-              description: "kind=options 时使用，最多 6 项",
+              description:
+                "0–3 条极短建议回复（理想 2–3），UI 做成快捷按钮；方向分叉也用这个字段，不要另开 options",
             },
             brief_draft_markdown: {
               type: "string",

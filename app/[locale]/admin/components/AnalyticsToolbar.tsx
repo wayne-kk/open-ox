@@ -36,7 +36,7 @@ export function AnalyticsToolbar({
   return (
     <div className="flex flex-wrap items-center gap-3">
       <DateRangeSelect days={days} onChange={onDaysChange} />
-      <label className="flex items-center gap-2 rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-xs">
+      <label className="flex items-center gap-2 rounded-md border border-border bg-muted px-3 py-1.5 text-xs">
         <input
           type="checkbox"
           checked={excludeInternal}
@@ -51,7 +51,7 @@ export function AnalyticsToolbar({
           onChange={(e) =>
             onAnchorChange(e.target.value === "firstReady" ? "firstReady" : "registration")
           }
-          className="rounded-md border border-white/15 bg-black/20 px-3 py-1.5 text-xs outline-none"
+          className="rounded-md border border-border bg-input px-3 py-1.5 text-xs outline-none"
         >
           <option value="registration">Cohort：注册周</option>
           <option value="firstReady">Cohort：首次 Ready 周</option>

@@ -10,7 +10,6 @@ import { resolveCommitMergedBrief } from "./commitMergeBrief";
 import { LfToolPhase } from "@/lib/observability/langfuseGenerationCatalog";
 import type { ToolResult } from "@/ai/tools/types";
 import type {
-  IntentAgentOption,
   IntentAgentTurnResult,
   IntentAgentToolExtensions,
   IntentAgentYieldKind,
@@ -64,25 +63,14 @@ export function parseYieldArgs(args: Record<string, unknown>): IntentAgentYieldP
         .filter((x): x is string => typeof x === "string")
         .map((s) => s.trim())
         .filter(Boolean)
-        .slice(0, 6)
+        .slice(0, 3)
     : [];
-  const options: IntentAgentOption[] = [];
-  if (Array.isArray(args.options)) {
-    for (const o of args.options.slice(0, 6)) {
-      if (!o || typeof o !== "object") continue;
-      const r = o as Record<string, unknown>;
-      const id = typeof r.id === "string" ? r.id.trim() : "";
-      const label = typeof r.label === "string" ? r.label.trim() : "";
-      if (!id || !label) continue;
-      const hint = typeof r.hint === "string" && r.hint.trim() ? r.hint.trim() : undefined;
-      options.push({ id, label, ...(hint ? { hint } : {}) });
-    }
-  }
+  // Legacy `options` ignored — UI only shows suggestedReplies (max 3).
   const briefDraftMarkdown =
     typeof args.brief_draft_markdown === "string" && args.brief_draft_markdown.trim()
       ? args.brief_draft_markdown.trim()
       : undefined;
-  return { kind, message, suggestedReplies, options, briefDraftMarkdown };
+  return { kind, message, suggestedReplies, options: [], briefDraftMarkdown };
 }
 
 const DEFAULT_FORCE_YIELD_MESSAGE =

@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 export function TermLine({
   prefix,
   children,
-  color = "text-[#c7d0dc]",
+  color = "text-muted-foreground",
   dim = false,
 }: {
   prefix?: string;

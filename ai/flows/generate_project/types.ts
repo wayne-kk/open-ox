@@ -267,18 +267,11 @@ export type ProjectIntentGuidePhase =
   | "choices"
   | "build_ready";
 
-export interface ProjectIntentChoiceOption {
-  id: string;
-  label: string;
-  hint?: string;
-}
-
 export interface ProjectIntentGuideResult {
   outcome: ProjectIntentGuideOutcome;
   phase: ProjectIntentGuidePhase;
   assistantMessage: string;
   suggestedReplies: string[];
-  choiceOptions: ProjectIntentChoiceOption[];
   buildPromptAppendix: string | null;
   trace: StepTrace;
 }

@@ -109,7 +109,7 @@ function ToggleRow({
     <label
       className={cn(
         "flex cursor-pointer items-start justify-between gap-3 rounded-lg px-2 py-2 transition-colors",
-        disabled ? "cursor-not-allowed opacity-45" : "hover:bg-white/[0.04]"
+        disabled ? "cursor-not-allowed opacity-45" : "hover:bg-muted"
       )}
     >
       <div className="min-w-0 space-y-0.5">
@@ -128,14 +128,14 @@ function ToggleRow({
           "relative mt-0.5 h-[18px] w-8 shrink-0 rounded-full border transition-colors",
           checked
             ? "border-primary/50 bg-primary/80"
-            : "border-white/15 bg-white/10",
+            : "border-border bg-muted",
           (disabled || busy) && "pointer-events-none"
         )}
       >
         <span
           className={cn(
-            "absolute top-[1px] left-[1px] h-[14px] w-[14px] rounded-full bg-white transition-transform",
-            checked && "translate-x-[14px]"
+            "absolute top-[1px] left-[1px] h-[14px] w-[14px] rounded-full bg-background shadow-sm transition-transform",
+            checked && "translate-x-[14px] bg-primary-foreground"
           )}
         />
       </button>
@@ -271,7 +271,7 @@ export function StudioPublishMenu({
             "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 font-mono text-[10px] transition-colors",
             published
               ? "border-primary/35 bg-primary/12 text-primary hover:bg-primary/18"
-              : "border-white/8 bg-white/3 text-muted-foreground hover:border-white/15 hover:text-foreground"
+              : "border-border bg-muted/40 text-muted-foreground hover:border-border hover:bg-muted hover:text-foreground"
           )}
         >
           <Globe2 className="h-3 w-3" />
@@ -280,7 +280,7 @@ export function StudioPublishMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="w-[280px] border-white/10 bg-[#0c0f16] p-2 shadow-xl"
+        className="w-[280px] border-border bg-popover p-2 text-popover-foreground shadow-[var(--box-shadow-neon-lg)]"
       >
         <div className="mb-1 px-2 pb-1.5 pt-0.5">
           <p className="text-[11px] font-medium text-foreground">发布到社区</p>

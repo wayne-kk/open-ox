@@ -31,7 +31,7 @@ export function EventStream({
       {visible.map((node) => (
         <div
           key={node.id}
-          className="flex items-baseline gap-3 rounded px-2 py-1 hover:bg-white/5"
+          className="flex items-baseline gap-3 rounded px-2 py-1 hover:bg-muted"
         >
           <span className="w-14 shrink-0 text-[10px] text-muted-foreground">
             [{formatTimestamp(node.timestamp, flowStart)}]

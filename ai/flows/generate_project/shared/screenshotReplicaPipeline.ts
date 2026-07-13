@@ -42,17 +42,6 @@ export function shouldBlockSkillsForScreenshotReplicate(
 }
 
 /**
- * Screenshot replicate is layout-fidelity only — do not run user-provided content / image URL extraction.
- */
-export function shouldSkipExtractUserProvidedContent(
-  mode: ScreenshotIntentMode,
-  hasReferenceScreenshot: boolean,
-  userInput?: string
-): boolean {
-  return shouldBlockSkillsForScreenshotReplicate(mode, hasReferenceScreenshot, userInput);
-}
-
-/**
  * Screenshot replicate does not run Chrome Scaffold / Optimize — page sections own full layout.
  */
 export function shouldSkipChromeScaffoldForScreenshotReplicate(

@@ -10,7 +10,7 @@ export function HorizontalBarChart({ title, items, maxValue }: HorizontalBarChar
   const max = maxValue ?? Math.max(...items.map((item) => item.value), 1);
 
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+    <div className="rounded-xl border border-border bg-card p-4">
       <h3 className="mb-4 text-sm font-medium text-foreground">{title}</h3>
       <div className="space-y-3">
         {items.length === 0 ? (
@@ -25,7 +25,7 @@ export function HorizontalBarChart({ title, items, maxValue }: HorizontalBarChar
                   {item.suffix ?? ""}
                 </span>
               </div>
-              <div className="h-2 rounded-full bg-white/5">
+              <div className="h-2 rounded-full bg-muted">
                 <div
                   className="h-2 rounded-full bg-primary/70"
                   style={{ width: `${Math.max(4, Math.round((item.value / max) * 100))}%` }}

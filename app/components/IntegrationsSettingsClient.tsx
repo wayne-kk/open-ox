@@ -234,7 +234,7 @@ function GuideStepsList({
     <ol className="space-y-6">
       {steps.map((step, i) => (
         <li key={step.n} className="flex gap-3">
-          <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-white/12 font-mono text-[11px] text-muted-foreground">
+          <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-border font-mono text-[11px] text-muted-foreground">
             {step.n}
           </span>
           <div className="min-w-0 flex-1">
@@ -326,7 +326,7 @@ function SetupHelp({
   }
 
   return (
-    <section className="border-t border-white/8 pt-6">
+    <section className="border-t border-border pt-6">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -445,7 +445,7 @@ function DeployRowCard({
               href={row.productionUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded-md px-2.5 py-1.5 text-[12px] text-foreground/85 transition-colors hover:bg-white/5"
+              className="rounded-md px-2.5 py-1.5 text-[12px] text-foreground/85 transition-colors hover:bg-muted"
             >
               打开
             </a>
@@ -473,7 +473,7 @@ function DeployRowCard({
               <button
                 type="button"
                 aria-label="更多操作"
-                className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
+                className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
                 <MoreHorizontal className="h-4 w-4" />
               </button>
@@ -713,7 +713,7 @@ export function IntegrationsSettingsClient() {
           </p>
 
           {state.connected && !loading ? (
-            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-b border-white/8 pb-4">
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
               <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
                 <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400/90" />
                 <span className="text-foreground/90">Vercel</span>
@@ -788,7 +788,7 @@ export function IntegrationsSettingsClient() {
           </p>
         ) : !state.connected ? (
           <div className="space-y-10">
-            <section className="rounded-xl border border-white/10 bg-white/2 px-5 py-6">
+            <section className="rounded-xl border border-border bg-card px-5 py-6">
               <h2 className="text-[15px] font-medium text-foreground">连接你的 Vercel</h2>
               <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
                 授权后，Studio Deploy 会推到你自己的账号；与社区 Publish Preview 互不影响。
@@ -823,7 +823,7 @@ export function IntegrationsSettingsClient() {
               </div>
 
               {deployments.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-white/10 px-5 py-12 text-center">
+                <div className="rounded-xl border border-dashed border-border px-5 py-12 text-center">
                   <p className="text-[13px] text-muted-foreground">
                     还没有部署。打开项目 Studio → Deploy。
                   </p>
@@ -836,7 +836,7 @@ export function IntegrationsSettingsClient() {
                   </Link>
                 </div>
               ) : (
-                <ul className="divide-y divide-white/8 overflow-hidden rounded-xl border border-white/10">
+                <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border">
                   {deployments.map((row) => (
                     <DeployRowCard
                       key={row.projectId}

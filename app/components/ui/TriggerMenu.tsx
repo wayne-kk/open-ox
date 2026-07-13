@@ -29,7 +29,7 @@ export function TriggerMenu({ matches, activeIndex, activeTriggerType, onSelect,
   const style = activeTriggerType ? TRIGGER_LABELS[activeTriggerType] : TRIGGER_LABELS.slash;
 
   return (
-    <div className="max-h-[280px] overflow-y-auto rounded-lg border border-white/8 bg-[#0a0c10]/98 backdrop-blur-xl shadow-2xl scrollbar-hidden">
+    <div className="max-h-[280px] overflow-y-auto rounded-lg border border-border bg-popover text-popover-foreground shadow-[var(--box-shadow-neon-lg)] backdrop-blur-xl scrollbar-hidden">
       {matches.map((item, i) => (
         <button
           key={`${item.type}-${item.id}`}
@@ -38,7 +38,7 @@ export function TriggerMenu({ matches, activeIndex, activeTriggerType, onSelect,
           onMouseDown={(e) => { e.preventDefault(); onSelect(item); }}
           onMouseEnter={() => onHover(i)}
           className={`w-full flex items-baseline gap-2.5 px-3 py-1.5 text-left transition-colors ${
-            i === activeIndex ? "bg-white/[0.07]" : "hover:bg-white/[0.03]"
+            i === activeIndex ? "bg-muted" : "hover:bg-muted/60"
           }`}
         >
           <span className={`font-mono text-[12px] shrink-0 ${style.color}`}>

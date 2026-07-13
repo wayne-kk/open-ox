@@ -114,12 +114,12 @@ function GeneratedFilesList({ files }: { files: string[] }) {
     }
 
     return (
-        <div className="rounded-xl border border-white/8 bg-black/20 overflow-hidden">
+        <div className="rounded-xl border border-border bg-muted/50 overflow-hidden">
             <div className="max-h-[min(40vh,280px)] overflow-y-auto scrollbar-unified divide-y divide-white/[0.06]">
                 {files.map((file) => (
                     <div
                         key={file}
-                        className="flex items-center gap-2 px-3 py-2 text-[11px] hover:bg-white/[0.03]"
+                        className="flex items-center gap-2 px-3 py-2 text-[11px] hover:bg-muted/40"
                     >
                         <span className="shrink-0 text-primary/45 font-mono text-[10px]">›</span>
                         <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground/90" title={file}>
@@ -128,14 +128,14 @@ function GeneratedFilesList({ files }: { files: string[] }) {
                         <button
                             type="button"
                             onClick={() => void copyPath(file)}
-                            className="shrink-0 rounded-md border border-white/10 px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/80 transition-colors hover:border-white/18 hover:text-foreground"
+                            className="shrink-0 rounded-md border border-border px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/80 transition-colors hover:border-border hover:text-foreground"
                         >
                             {copiedPath === file ? "已复制" : "路径"}
                         </button>
                     </div>
                 ))}
             </div>
-            <p className="border-t border-white/8 bg-black/15 px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground/85">
+            <p className="border-t border-border bg-black/15 px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground/85">
                 已生成 <span className="text-foreground/90">{files.length}</span> 个文件。
                 不在此处展开源码；请在右侧边栏打开「代码」面板浏览与编辑。
             </p>
@@ -158,13 +158,13 @@ function filterThinkingDedupe(thinking: string[], primary: string): string[] {
 function CollapsedThinkingBlock({ thinking }: { thinking: string[] }) {
     if (thinking.length === 0) return null;
     return (
-        <details className="group rounded-xl border border-white/8 bg-black/25 overflow-hidden">
-            <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 font-mono text-[10px] text-muted-foreground/90 select-none hover:bg-white/[0.04] [&::-webkit-details-marker]:hidden">
+        <details className="group rounded-xl border border-border bg-muted/80 overflow-hidden">
+            <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 font-mono text-[10px] text-muted-foreground/90 select-none hover:bg-muted/50 [&::-webkit-details-marker]:hidden">
                 <span className="inline-block text-primary/50 transition-transform duration-200 group-open:rotate-90">▶</span>
                 <span className="uppercase tracking-wider">思考过程</span>
                 <span className="text-muted-foreground/45">({thinking.length})</span>
             </summary>
-            <div className="max-h-[min(50vh,360px)] space-y-2 overflow-y-auto border-t border-white/6 px-3 py-2">
+            <div className="max-h-[min(50vh,360px)] space-y-2 overflow-y-auto border-t border-border px-3 py-2">
                 {thinking.map((t, i) => (
                     <div
                         key={`think-${i}`}
@@ -187,7 +187,7 @@ function ModifyBubble({ record }: { record: ModifyRecord }) {
                     <img
                         src={record.image}
                         alt="attached"
-                        className="max-h-64 rounded-lg border border-white/10 object-cover"
+                        className="max-h-64 rounded-lg border border-border object-cover"
                     />
                 )}
                 <StudioMessageMarkdown content={record.instruction} />
@@ -539,8 +539,8 @@ export function BuildConversation({
                                     className={cn(
                                         "group rounded-xl px-3.5 py-3 transition-colors",
                                         focused
-                                            ? "bg-white/[0.07] ring-1 ring-inset ring-white/14"
-                                            : "bg-white/3 ring-1 ring-inset ring-white/6 hover:bg-white/5"
+                                            ? "bg-muted ring-1 ring-inset ring-border"
+                                            : "bg-muted/40 ring-1 ring-inset ring-white/6 hover:bg-muted"
                                     )}
                                 >
                                     <p className="text-[13px] font-medium leading-snug tracking-tight text-foreground/95">
@@ -622,7 +622,7 @@ export function BuildConversation({
                                                     <img
                                                         src={message.imageDataUrl}
                                                         alt="用户参考截图"
-                                                        className="max-h-48 max-w-full rounded-xl border border-white/10 object-contain"
+                                                        className="max-h-48 max-w-full rounded-xl border border-border object-contain"
                                                     />
                                                 </div>
                                             ) : null}
@@ -635,7 +635,7 @@ export function BuildConversation({
 
                                 {/* Brief draft — always visible so the confirmed structure stays in the conversation */}
                                 {message.role === "assistant" && message.intentPayload?.briefDraftMarkdown ? (
-                                    <div className="min-w-0 max-w-full overflow-hidden rounded-2xl border border-white/8 bg-black/20 px-4 py-3 text-muted-foreground">
+                                    <div className="min-w-0 max-w-full overflow-hidden rounded-2xl border border-border bg-muted/50 px-4 py-3 text-muted-foreground">
                                         <StudioMessageMarkdown content={message.intentPayload.briefDraftMarkdown} />
                                     </div>
                                 ) : null}
@@ -664,7 +664,7 @@ export function BuildConversation({
                                                         type="button"
                                                         onClick={() => void handleRun(reply)}
                                                         disabled={loading}
-                                                        className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[12px] text-muted-foreground transition-colors hover:border-white/20 hover:text-foreground disabled:opacity-50"
+                                                        className="rounded-full border border-border bg-muted px-3 py-1.5 text-[12px] text-muted-foreground transition-colors hover:border-border hover:text-foreground disabled:opacity-50"
                                                     >
                                                         {reply}
                                                     </button>
@@ -898,7 +898,7 @@ export function BuildConversation({
                                     <img
                                         src={pendingModifyImage}
                                         alt="attached"
-                                        className="max-h-64 rounded-lg border border-white/10 object-cover"
+                                        className="max-h-64 rounded-lg border border-border object-cover"
                                     />
                                 )}
                                 <StudioMessageMarkdown content={pendingModifyInstruction} />
@@ -1014,10 +1014,10 @@ export function BuildConversation({
             {projectId && <MemoryDebugPanel projectId={projectId} sessionHistory={modifyHistory} externalOpen={memoryOpen} onToggle={setMemoryOpen} />}
 
             {/* Input area — keep within viewport; long Design Mode drafts scroll inside textarea */}
-            <div className="shrink-0 border-t border-white/8 px-4 py-4">
+            <div className="shrink-0 border-t border-border px-4 py-4">
                 {projectId && !loading && hasGeneratedProject && response && !response.error ? (
                     /* Modify mode — project ready */
-                    <div className="rounded-[24px] border border-white/10 bg-black/25 p-3">
+                    <div className="rounded-[24px] border border-border bg-muted/80 p-3">
                         <div className="mb-2 flex items-center justify-between gap-2">
                             <div className="flex min-w-0 flex-wrap items-center gap-2">
                                 <Wand2 className="h-3 w-3 shrink-0 text-primary/60" />
@@ -1047,7 +1047,7 @@ export function BuildConversation({
                             <div className="mb-2 flex items-center gap-2">
                                 <div className="relative">
                                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                                    <img src={modifyImage} alt="attached" className="h-16 w-24 rounded-lg object-cover border border-white/10" />
+                                    <img src={modifyImage} alt="attached" className="h-16 w-24 rounded-lg object-cover border border-border" />
                                     <button
                                         type="button"
                                         onClick={() => setModifyImage(null)}
@@ -1160,12 +1160,12 @@ export function BuildConversation({
                     </div>
                 ) : (
                     /* Intent / generate mode */
-                    <div className="rounded-[20px] border border-white/10 bg-black/25 p-4">
+                    <div className="rounded-[20px] border border-border bg-muted/80 p-4">
                         {intentImage && (
                             <div className="mb-2 flex items-center gap-2">
                                 <div className="relative">
                                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                                    <img src={intentImage} alt="intent reference" className="h-16 w-24 rounded-lg object-cover border border-white/10" />
+                                    <img src={intentImage} alt="intent reference" className="h-16 w-24 rounded-lg object-cover border border-border" />
                                     <button
                                         type="button"
                                         onClick={() => setIntentImage(null)}

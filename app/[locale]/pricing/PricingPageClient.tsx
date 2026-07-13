@@ -181,17 +181,17 @@ export function PricingPageClient() {
         </div>
 
         {checkout === "success" ? (
-          <p className="mx-auto mt-8 max-w-xl rounded-2xl border border-white/12 bg-white/4 px-4 py-3 text-center text-[13px] text-foreground/80">
+          <p className="mx-auto mt-8 max-w-xl rounded-2xl border border-border bg-muted/50 px-4 py-3 text-center text-[13px] text-foreground/80">
             {t("checkoutSuccess")}
           </p>
         ) : null}
         {checkout === "cancel" ? (
-          <p className="mx-auto mt-8 max-w-xl rounded-2xl border border-white/8 bg-white/2 px-4 py-3 text-center text-[13px] text-muted-foreground">
+          <p className="mx-auto mt-8 max-w-xl rounded-2xl border border-border bg-muted/30 px-4 py-3 text-center text-[13px] text-muted-foreground">
             {t("checkoutCancel")}
           </p>
         ) : null}
         {error ? (
-          <p className="mx-auto mt-8 max-w-xl rounded-lg border border-red-500/25 bg-red-500/10 px-4 py-3 text-center text-[13px] text-red-200">
+          <p className="mx-auto mt-8 max-w-xl rounded-lg border border-destructive/25 bg-destructive/10 px-4 py-3 text-center text-[13px] text-destructive">
             {error}
           </p>
         ) : null}
@@ -244,7 +244,7 @@ export function PricingPageClient() {
                 <select
                   value={selectedTier?.id ?? ""}
                   onChange={(e) => setSelectedTierId(e.target.value)}
-                  className="h-10 w-full appearance-none rounded-xl border border-white/12 bg-[#161618] px-3 pr-9 text-[13px] text-foreground outline-none focus:border-white/25"
+                  className="h-10 w-full appearance-none rounded-xl border border-border bg-input px-3 pr-9 text-[13px] text-foreground outline-none focus:border-ring"
                 >
                   {(catalog?.pro ?? []).map((tier) => (
                     <option key={tier.id} value={tier.id} disabled={!tier.available}>

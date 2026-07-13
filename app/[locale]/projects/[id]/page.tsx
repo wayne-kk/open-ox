@@ -207,25 +207,25 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       {/* Confirm delete modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0d0f14] p-6 shadow-2xl">
+          <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-2xl">
             <div className="flex items-center gap-3 mb-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/10 border border-red-500/20">
-                <AlertTriangle className="h-5 w-5 text-red-400" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-destructive/10 border border-destructive/20">
+                <AlertTriangle className="h-5 w-5 text-destructive" />
               </div>
-              <h3 className="text-[15px] font-semibold text-white">确认删除</h3>
+              <h3 className="text-[15px] font-semibold text-foreground">确认删除</h3>
             </div>
-            <p className="text-[13px] text-white/60 leading-relaxed mb-1">确定要删除这个项目吗？</p>
-            <p className="text-[12px] text-red-400/60 mb-6">此操作不可撤销，项目所有数据将被永久删除。</p>
+            <p className="text-[13px] text-muted-foreground leading-relaxed mb-1">确定要删除这个项目吗？</p>
+            <p className="text-[12px] text-destructive/80 mb-6">此操作不可撤销，项目所有数据将被永久删除。</p>
             <div className="flex items-center justify-end gap-3">
               <button
                 onClick={() => setShowDeleteConfirm(false)}
-                className="rounded-xl px-4 py-2 text-[12px] font-medium text-white/60 border border-white/10 hover:bg-white/5 transition-colors"
+                className="rounded-xl px-4 py-2 text-[12px] font-medium text-muted-foreground border border-border hover:bg-muted transition-colors"
               >
                 取消
               </button>
               <button
                 onClick={handleDelete}
-                className="rounded-xl px-4 py-2 text-[12px] font-medium text-white bg-red-500/80 hover:bg-red-500 border border-red-500/40 transition-colors"
+                className="rounded-xl px-4 py-2 text-[12px] font-medium text-white bg-destructive hover:bg-destructive/90 border border-destructive/40 transition-colors"
               >
                 确认删除
               </button>
@@ -247,7 +247,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(247,147,26,0.14),transparent_28%)]" />
 
-      <header className="relative z-10 border-b border-white/8 bg-background/75 backdrop-blur-xl shrink-0">
+      <header className="relative z-10 border-b border-border bg-background/75 backdrop-blur-xl shrink-0">
         <div className="mx-auto flex items-center justify-between gap-4 px-6 py-2 lg:px-8">
           <div className="flex items-center gap-4">
             <Link href="/dashboard" className="defi-button-outline px-4 py-2 text-[11px] font-medium flex items-center gap-1.5">
@@ -289,7 +289,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       </header>
 
       <div className="relative z-1 flex flex-1 min-h-0 overflow-hidden">
-        <div className="flex-1 min-w-0 flex flex-col border-r border-white/8">
+        <div className="flex-1 min-w-0 flex flex-col border-r border-border">
           {previewState === "starting" && (
             <div className="flex flex-1 flex-col items-center justify-center gap-3">
               <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -319,7 +319,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         </div>
 
         <div className="w-96 shrink-0 flex flex-col bg-background/80 backdrop-blur-xl">
-          <div className="border-b border-white/8 px-5 py-3 flex items-center justify-between">
+          <div className="border-b border-border px-5 py-3 flex items-center justify-between">
             <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">Modify</div>
             {modifying && (
               <div className="flex items-center gap-2">
@@ -388,7 +388,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
               {/* Diffs */}
               {modifyDiffs.map((diff) => (
-                <div key={diff.file} className="rounded-xl border border-white/6 overflow-hidden">
+                <div key={diff.file} className="rounded-xl border border-border overflow-hidden">
                   <div className="bg-white/3 px-4 py-2.5 flex items-center justify-between">
                     <span className="font-mono text-[10px] text-foreground/60 truncate">{diff.file}</span>
                     <div className="flex items-center gap-2 shrink-0 font-mono text-[9px]">
@@ -397,7 +397,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                     </div>
                   </div>
                   {diff.reasoning && (
-                    <div className="px-4 py-2 border-b border-white/4">
+                    <div className="px-4 py-2 border-b border-border">
                       <p className="text-[9px] text-primary/50 leading-relaxed">{diff.reasoning}</p>
                     </div>
                   )}
@@ -429,14 +429,14 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             </div>
           </div>
 
-          <div className="border-t border-white/8 p-4">
+          <div className="border-t border-border p-4">
             <textarea
               value={instruction}
               onChange={(e) => setInstruction(e.target.value)}
               placeholder="Describe what to change…"
               disabled={modifying}
               rows={3}
-              className="w-full resize-none rounded-xl border border-white/8 bg-white/3 px-3 py-2.5 font-mono text-[11px] text-foreground placeholder:text-muted-foreground/30 focus:border-primary/40 focus:outline-none disabled:opacity-50 transition-colors"
+              className="w-full resize-none rounded-xl border border-border bg-muted/40 px-3 py-2.5 font-mono text-[11px] text-foreground placeholder:text-muted-foreground/30 focus:border-primary/40 focus:outline-none disabled:opacity-50 transition-colors"
               onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleModify(); }}
             />
             <button

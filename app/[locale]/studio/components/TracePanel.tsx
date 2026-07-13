@@ -28,7 +28,7 @@ function TabButton({
 
 function JsonBlock({ value }: { value: unknown }) {
     return (
-        <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-black/30 p-3 font-mono text-[11px] leading-5 text-[#c7d0dc]">
+        <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-muted p-3 font-mono text-[11px] leading-5 text-muted-foreground">
             {JSON.stringify(value, null, 2)}
         </pre>
     );
@@ -75,7 +75,7 @@ function LlmCallTab({ llmCall }: { llmCall: NonNullable<StepTrace["llmCall"]> })
             )}
 
             {/* Section tabs */}
-            <div className="flex gap-1 border-b border-white/6">
+            <div className="flex gap-1 border-b border-border">
                 {llmCall.userMessage && (
                     <TabButton active={activeSection === "user"} onClick={() => setActiveSection("user")}>
                         User
@@ -105,7 +105,7 @@ function LlmCallTab({ llmCall }: { llmCall: NonNullable<StepTrace["llmCall"]> })
                     </pre>
                 )}
                 {activeSection === "response" && llmCall.rawResponse && (
-                    <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-5 text-[#c7d0dc]">
+                    <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-5 text-muted-foreground">
                         {llmCall.rawResponse}
                     </pre>
                 )}
@@ -129,9 +129,9 @@ export function TracePanel({ trace }: { trace: StepTrace }) {
     if (tabs.length === 0) return null;
 
     return (
-        <div className="mt-2 rounded-xl border border-white/8 bg-black/25">
+        <div className="mt-2 rounded-xl border border-border bg-muted/80">
             {/* Tab bar */}
-            <div className="flex gap-1 border-b border-white/6 px-2">
+            <div className="flex gap-1 border-b border-border px-2">
                 {tabs.map((tab) => (
                     <TabButton
                         key={tab.id}

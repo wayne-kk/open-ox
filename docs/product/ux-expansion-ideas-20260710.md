@@ -4,7 +4,8 @@
 **日期**：2026-07-10  
 **状态**：想法池（未立项；供排期与 PRD 拆解）  
 **目标**：提高用户体验，制造「眼前一亮」的跃迁，而非功能堆砌  
-**关联**：[`docs/product-iteration-outline.md`](../product-iteration-outline.md)、Studio Design Mode / Community Publish Remix 产品文档
+**关联**：[`docs/product-iteration-outline.md`](../product-iteration-outline.md)、Studio Design Mode / Community Publish Remix 产品文档  
+**姊妹文档（拉新/传播轴）**：[`attraction-ideas-20260713.md`](./attraction-ideas-20260713.md)（获客钩子与传播叙事；与本文闭环短板互补，勿混立同一目标不清的里程碑）
 
 ---
 
@@ -249,3 +250,4 @@ Remix 进来不是冷启动空白项目，而是：「原作结构是这样 → 
 | 日期 | 修订说明 |
 |------|----------|
 | 2026-07-10 | 初版：落盘体验向拓展想法池（15 项 + 优先押注） |
+| 2026-07-13 | 增加姊妹文档链接：[`attraction-ideas-20260713.md`](./attraction-ideas-20260713.md) |

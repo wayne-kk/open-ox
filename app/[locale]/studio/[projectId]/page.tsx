@@ -284,13 +284,13 @@ function StudioInner({ projectId }: { projectId: string }) {
           )}
         >
           <div className="min-h-0 overflow-hidden">
-            <header className="border-b border-white/8 bg-background/80 backdrop-blur-xl">
+            <header className="border-b border-border bg-background/80 backdrop-blur-xl">
               <div className="flex items-center justify-between gap-3 px-4 py-0 h-12">
                 {/* Left: back + brand */}
                 <div className="flex items-center gap-3 min-w-0">
                   <AppBackButton
                     fallback="/dashboard"
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-white/10 bg-white/4 text-muted-foreground transition-colors hover:border-white/20 hover:text-foreground"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-muted/50 text-muted-foreground transition-colors hover:border-border hover:text-foreground"
                   />
 
                   <div className="flex items-center gap-2 min-w-0">
@@ -338,7 +338,7 @@ function StudioInner({ projectId }: { projectId: string }) {
                       </span>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-1.5 rounded-full border border-white/10 px-3 py-1">
+                    <div className="flex items-center gap-1.5 rounded-full border border-border px-3 py-1">
                       <span className="h-1.5 w-1.5 rounded-full bg-white/20" />
                       <span className="font-mono text-[10px] text-muted-foreground/50 tracking-[0.15em]">IDLE</span>
                     </div>
@@ -358,7 +358,7 @@ function StudioInner({ projectId }: { projectId: string }) {
                         "relative flex h-7 w-7 items-center justify-center rounded-md border transition-colors",
                         leftPaneView === "changes"
                           ? "border-primary/35 bg-primary/10 text-primary"
-                          : "border-white/10 bg-white/3 text-muted-foreground/70 hover:border-white/18 hover:text-foreground"
+                          : "border-border bg-muted/40 text-muted-foreground/70 hover:border-border hover:text-foreground"
                       )}
                       title={leftPaneView === "changes" ? "返回对话" : "查看变更历史"}
                       aria-label={leftPaneView === "changes" ? "返回对话" : "查看变更历史"}
@@ -375,7 +375,7 @@ function StudioInner({ projectId }: { projectId: string }) {
                   {projectId ? <StudioPublishMenu projectId={projectId} /> : null}
                   <Link
                     href="/dashboard"
-                    className="hidden sm:flex items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-3 py-1.5 font-mono text-[10px] text-muted-foreground transition-colors hover:border-white/15 hover:text-foreground"
+                    className="hidden sm:flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-3 py-1.5 font-mono text-[10px] text-muted-foreground transition-colors hover:border-border hover:text-foreground"
                   >
                     Projects
                   </Link>
@@ -428,11 +428,11 @@ function StudioInner({ projectId }: { projectId: string }) {
 
           <section className="defi-glass flex min-h-0 flex-1 flex-col overflow-hidden">
             {/* Right panel toolbar */}
-            <div className="flex shrink-0 flex-col border-b border-white/8">
+            <div className="flex shrink-0 flex-col border-b border-border">
               <div className="flex h-11 items-center px-3 gap-2">
                 <button
                   onClick={() => setConversationCollapsed((v) => !v)}
-                  className="flex items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-2.5 h-7 font-mono text-[10px] text-muted-foreground/70 transition-all hover:border-white/15 hover:text-foreground"
+                  className="flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 h-7 font-mono text-[10px] text-muted-foreground/70 transition-all hover:border-border hover:text-foreground"
                   title={conversationCollapsed ? "展开对话流" : "收起对话流"}
                 >
                   {conversationCollapsed ? (
@@ -449,7 +449,7 @@ function StudioInner({ projectId }: { projectId: string }) {
                 </button>
 
                 {/* Tab switcher — left */}
-                <div className="flex items-center rounded-lg border border-white/8 bg-white/3 overflow-hidden">
+                <div className="flex items-center rounded-lg border border-border bg-muted/40 overflow-hidden">
                   <button
                     onClick={() => setRightPanel("topology")}
                     className={`flex items-center gap-1.5 px-3 h-7 font-mono text-[10px] uppercase tracking-widest transition-all ${rightPanel === "topology"
@@ -490,7 +490,7 @@ function StudioInner({ projectId }: { projectId: string }) {
                 </div>
 
                 <div className="hidden sm:flex flex-wrap items-center gap-2">
-                  <div className="flex items-center gap-2 rounded-lg border border-white/8 bg-white/3 px-2.5 h-7">
+                  <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-2.5 h-7">
                     <Checkbox
                       id="auto-preview-after-build"
                       checked={autoPreviewAfterBuild}
@@ -519,7 +519,7 @@ function StudioInner({ projectId }: { projectId: string }) {
                           "flex items-center gap-1.5 rounded-md border px-2.5 h-7 font-mono text-[10px] transition-all",
                           designMode.active
                             ? "border-primary/40 bg-primary/10 text-primary"
-                            : "border-white/8 bg-white/3 text-muted-foreground/70 hover:border-white/15 hover:text-foreground"
+                            : "border-border bg-muted/40 text-muted-foreground/70 hover:border-border hover:text-foreground"
                         )}
                         title={
                           designMode.directEditCapable
@@ -535,7 +535,7 @@ function StudioInner({ projectId }: { projectId: string }) {
                       type="button"
                       onClick={requestCoverCapture}
                       disabled={coverCaptureBusy}
-                      className="flex items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-2.5 h-7 font-mono text-[10px] text-muted-foreground/70 transition-all hover:border-white/15 hover:text-foreground disabled:opacity-40"
+                      className="flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 h-7 font-mono text-[10px] text-muted-foreground/70 transition-all hover:border-border hover:text-foreground disabled:opacity-40"
                       title="用当前预览首页重新生成项目列表封面图"
                     >
                       {coverCaptureBusy ? (
@@ -547,7 +547,7 @@ function StudioInner({ projectId }: { projectId: string }) {
                     </button>
                     <button
                       onClick={studio.rebuildPreview}
-                      className="flex items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-2.5 h-7 font-mono text-[10px] text-muted-foreground/70 transition-all hover:border-white/15 hover:text-foreground"
+                      className="flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 h-7 font-mono text-[10px] text-muted-foreground/70 transition-all hover:border-border hover:text-foreground"
                       title="Rebuild preview"
                     >
                       <RefreshCw className="h-3 w-3" />
@@ -557,7 +557,7 @@ function StudioInner({ projectId }: { projectId: string }) {
                       href={previewIframeSrc ?? previewUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-2.5 h-7 font-mono text-[10px] text-muted-foreground/70 transition-all hover:border-white/15 hover:text-foreground"
+                      className="flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 h-7 font-mono text-[10px] text-muted-foreground/70 transition-all hover:border-border hover:text-foreground"
                       title="Open in new tab"
                     >
                       <ExternalLink className="h-3 w-3" />
@@ -567,7 +567,7 @@ function StudioInner({ projectId }: { projectId: string }) {
                 )}
               </div>
               {rightPanel === "preview" && coverCaptureHint ? (
-                <div className="border-t border-white/6 px-3 py-1.5 font-mono text-[10px] leading-snug text-primary/80">
+                <div className="border-t border-border px-3 py-1.5 font-mono text-[10px] leading-snug text-primary/80">
                   {coverCaptureHint}
                 </div>
               ) : null}

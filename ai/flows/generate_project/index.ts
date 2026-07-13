@@ -48,7 +48,6 @@ export type {
   ProjectBlueprint,
   ProjectBrief,
   ProjectExperience,
-  ProjectIntentChoiceOption,
   ProjectIntentGuideOutcome,
   ProjectIntentGuidePhase,
   ProjectIntentGuideResult,

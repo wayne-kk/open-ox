@@ -23,7 +23,7 @@ const PROPERTY_META: Record<DesignModeProperty, { label: string; unit: string }>
 };
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <span className="text-[11px] font-medium text-zinc-400">{children}</span>;
+  return <span className="text-[11px] font-medium text-muted-foreground">{children}</span>;
 }
 
 function MappedChip({ utility }: { utility: string }) {
@@ -140,31 +140,31 @@ export function DesignModePreviewOverlay({
   return (
     <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden">
       {!bridgeReady && !bridgeError ? (
-        <div className="pointer-events-auto absolute left-3 top-3 max-w-[min(360px,calc(100%-24px))] rounded-xl border border-white/10 bg-zinc-950/90 px-3 py-2 text-[11px] text-zinc-400 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+        <div className="pointer-events-auto absolute left-3 top-3 max-w-[min(360px,calc(100%-24px))] rounded-xl border border-border bg-popover/95 px-3 py-2 text-[11px] text-muted-foreground shadow-[var(--box-shadow-neon-lg)] backdrop-blur-xl">
           Connecting preview bridge…
         </div>
       ) : null}
 
       {bridgeError ? (
-        <div className="pointer-events-auto absolute left-3 top-3 max-w-[min(420px,calc(100%-24px))] rounded-xl border border-red-500/30 bg-zinc-950/95 px-3 py-2 text-[11px] text-red-300 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+        <div className="pointer-events-auto absolute left-3 top-3 max-w-[min(420px,calc(100%-24px))] rounded-xl border border-destructive/30 bg-popover/95 px-3 py-2 text-[11px] text-destructive shadow-[var(--box-shadow-neon-lg)] backdrop-blur-xl">
           {bridgeError}
         </div>
       ) : null}
 
       {active && bridgeReady && !selected ? (
-        <div className="pointer-events-none absolute left-3 top-3 rounded-xl border border-primary/30 bg-zinc-950/85 px-3 py-2 text-[11px] text-primary shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+        <div className="pointer-events-none absolute left-3 top-3 rounded-xl border border-primary/30 bg-popover/95 px-3 py-2 text-[11px] text-primary shadow-[var(--box-shadow-neon-lg)] backdrop-blur-xl">
           Click an element in the preview
         </div>
       ) : null}
 
       {showSelectionPill ? (
-        <div className="pointer-events-auto absolute bottom-3 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/12 bg-zinc-950/90 px-3 py-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+        <div className="pointer-events-auto absolute bottom-3 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-popover/95 px-3 py-1.5 shadow-[var(--box-shadow-neon-lg)] backdrop-blur-xl">
           <span className="inline-flex h-2 w-2 rounded-full bg-sky-400" aria-hidden />
-          <span className="text-[11px] font-medium text-zinc-100">1 selection</span>
+          <span className="text-[11px] font-medium text-foreground">1 selection</span>
           <button
             type="button"
             onClick={clearSelection}
-            className="rounded-full px-2 py-0.5 text-[11px] font-medium text-zinc-400 transition hover:bg-white/8 hover:text-zinc-100 active:scale-[0.98]"
+            className="rounded-full px-2 py-0.5 text-[11px] font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground active:scale-[0.98]"
           >
             Clear
           </button>
@@ -176,20 +176,20 @@ export function DesignModePreviewOverlay({
           ref={popupRef}
           className={cn(
             "pointer-events-auto absolute w-[min(360px,calc(100%-24px))]",
-            "overflow-hidden rounded-2xl border border-white/10",
-            "bg-zinc-950/92 shadow-[0_20px_60px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.06)]",
+            "overflow-hidden rounded-2xl border border-border",
+            "bg-popover/95 shadow-[var(--box-shadow-neon-lg)]",
             "backdrop-blur-xl"
           )}
           style={{ top: position.top, left: position.left }}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex items-start justify-between gap-3 border-b border-white/6 px-3.5 py-3">
+          <div className="flex items-start justify-between gap-3 border-b border-border px-3.5 py-3">
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <span className="inline-flex h-5 items-center rounded-md bg-primary/15 px-1.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
                   Edit
                 </span>
-                <p className="truncate font-mono text-[11px] text-zinc-300" title={selected.selectorHint}>
+                <p className="truncate font-mono text-[11px] text-muted-foreground" title={selected.selectorHint}>
                   {selected.tagName.toLowerCase()}
                 </p>
               </div>
@@ -205,7 +205,7 @@ export function DesignModePreviewOverlay({
             <button
               type="button"
               onClick={clearSelection}
-              className="shrink-0 rounded-lg border border-white/10 p-1.5 text-zinc-500 transition hover:border-white/20 hover:bg-white/5 hover:text-zinc-200 active:scale-[0.98]"
+              className="shrink-0 rounded-lg border border-border p-1.5 text-muted-foreground transition hover:border-border hover:bg-muted hover:text-foreground/90 active:scale-[0.98]"
               aria-label="Close editor"
             >
               <X className="h-3.5 w-3.5" />
@@ -220,7 +220,7 @@ export function DesignModePreviewOverlay({
                   rows={2}
                   value={textContent}
                   onChange={(e) => updateText(e.target.value)}
-                  className="w-full resize-y rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-[13px] leading-relaxed text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-primary/45 focus:ring-1 focus:ring-primary/25"
+                  className="w-full resize-y rounded-xl border border-border bg-muted px-3 py-2 text-[13px] leading-relaxed text-foreground outline-none transition placeholder:text-muted-foreground/60 focus:border-primary/45 focus:ring-1 focus:ring-primary/25"
                   placeholder="Visible text"
                 />
               </div>
@@ -229,17 +229,17 @@ export function DesignModePreviewOverlay({
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between gap-2">
                 <FieldLabel>Tailwind classes</FieldLabel>
-                <Code2 className="h-3.5 w-3.5 text-zinc-600" aria-hidden />
+                <Code2 className="h-3.5 w-3.5 text-muted-foreground/60" aria-hidden />
               </div>
               <textarea
                 rows={3}
                 value={className}
                 onChange={(e) => updateClassName(e.target.value)}
                 spellCheck={false}
-                className="w-full resize-y rounded-xl border border-white/10 bg-black/40 px-3 py-2 font-mono text-[11px] leading-relaxed text-zinc-200 outline-none transition placeholder:text-zinc-600 focus:border-primary/45 focus:ring-1 focus:ring-primary/25"
+                className="w-full resize-y rounded-xl border border-border bg-muted px-3 py-2 font-mono text-[11px] leading-relaxed text-foreground/90 outline-none transition placeholder:text-muted-foreground/60 focus:border-primary/45 focus:ring-1 focus:ring-primary/25"
                 placeholder="text-lg font-medium text-white"
               />
-              <p className="text-[10px] leading-snug text-zinc-500">
+              <p className="text-[10px] leading-snug text-muted-foreground">
                 Edit utilities directly. Style controls below map into this class string.
               </p>
             </div>
@@ -266,13 +266,13 @@ export function DesignModePreviewOverlay({
                     type="color"
                     value={colorHex}
                     onChange={(e) => updateStyle("color" satisfies DesignModeProperty, e.target.value)}
-                    className="h-9 w-11 shrink-0 cursor-pointer rounded-lg border border-white/10 bg-transparent p-0.5"
+                    className="h-9 w-11 shrink-0 cursor-pointer rounded-lg border border-border bg-transparent p-0.5"
                   />
                   <input
                     type="text"
                     value={colorHex}
                     onChange={(e) => updateStyle("color", e.target.value)}
-                    className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/35 px-2 py-1.5 font-mono text-[11px] text-zinc-200 outline-none focus:border-primary/40"
+                    className="min-w-0 flex-1 rounded-lg border border-border bg-muted px-2 py-1.5 font-mono text-[11px] text-foreground/90 outline-none focus:border-primary/40"
                   />
                 </div>
               </div>
@@ -329,7 +329,7 @@ export function DesignModePreviewOverlay({
             </div>
           </div>
 
-          <div className="space-y-2 border-t border-white/6 px-3.5 py-3">
+          <div className="space-y-2 border-t border-border px-3.5 py-3">
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"

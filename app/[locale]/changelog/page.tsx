@@ -460,7 +460,7 @@ export default async function ChangelogPage({ params }: Props) {
           ))}
         </div>
 
-        <div className="border-t border-white/8 pt-8 mt-4">
+        <div className="border-t border-border pt-8 mt-4">
           <Link
             href="/docs"
             className="flex items-center gap-2 text-[13px] text-muted-foreground hover:text-primary transition-colors"

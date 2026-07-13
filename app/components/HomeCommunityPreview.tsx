@@ -184,7 +184,7 @@ export function HomeCommunityPreview() {
               ) : null}
 
               <span
-                className="ox-card-affordance pointer-events-none absolute bottom-2.5 right-2.5 z-10 flex h-7 w-7 items-center justify-center rounded-lg border border-white/15 bg-black/55 text-white/90 backdrop-blur-md"
+                className="ox-card-affordance pointer-events-none absolute bottom-2.5 right-2.5 z-10 flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-background/85 text-foreground backdrop-blur-md"
                 aria-hidden
               >
                 <ArrowUpRight className="h-3.5 w-3.5" />

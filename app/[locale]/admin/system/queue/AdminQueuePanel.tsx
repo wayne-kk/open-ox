@@ -55,7 +55,7 @@ export function AdminQueuePanel() {
             <MetricCard title="24h 失败" value={data.counts.failed24h} />
           </div>
 
-          <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+          <div className="rounded-xl border border-border bg-card p-4">
             <p className="text-sm text-muted-foreground">
               平均排队等待：{" "}
               <span className="font-medium text-foreground">
@@ -65,9 +65,9 @@ export function AdminQueuePanel() {
             </p>
           </div>
 
-          <div className="overflow-hidden rounded-xl border border-white/10">
+          <div className="overflow-hidden rounded-xl border border-border">
             <table className="w-full text-left text-sm">
-              <thead className="bg-white/5 text-xs uppercase tracking-wide text-muted-foreground">
+              <thead className="bg-muted text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <th className="px-3 py-2">Run</th>
                   <th className="px-3 py-2">Project</th>
@@ -86,7 +86,7 @@ export function AdminQueuePanel() {
                   </tr>
                 ) : (
                   data.recentRuns.map((run) => (
-                    <tr key={run.id} className="border-t border-white/10">
+                    <tr key={run.id} className="border-t border-border">
                       <td className="px-3 py-2 font-mono text-xs">{run.id.slice(0, 8)}</td>
                       <td className="px-3 py-2 font-mono text-xs">{run.projectId.slice(0, 12)}</td>
                       <td className="px-3 py-2">{run.status}</td>
