@@ -106,25 +106,36 @@ export async function createAgentStreamClientSession(): Promise<AgentStreamClien
   );
   const clientPublicKeySpki = await exportSpki(keyPair.publicKey);
   let aesKey: CryptoKey | null = null;
+  // Serialize wire handling so enc from the same SSE chunk cannot race ahead of
+  // async ECDH/HKDF in crypto_init (see useBuildStudio fire-and-forget decode).
+  let wireQueue: Promise<unknown> = Promise.resolve();
 
   return {
     clientPublicKeySpki,
-    async handleWireEvent(event: unknown): Promise<Record<string, unknown> | null> {
-      if (isAgentStreamCryptoInitEvent(event)) {
-        aesKey = await deriveAesKey(keyPair.privateKey, event.serverPublicKey);
-        return null;
-      }
-      if (isAgentStreamEncEvent(event)) {
-        if (!aesKey) {
-          throw new Error("Encrypted SSE event received before crypto_init");
+    handleWireEvent(event: unknown): Promise<Record<string, unknown> | null> {
+      const run = async (): Promise<Record<string, unknown> | null> => {
+        if (isAgentStreamCryptoInitEvent(event)) {
+          aesKey = await deriveAesKey(keyPair.privateKey, event.serverPublicKey);
+          return null;
         }
-        const json = await decryptEncEvent(event, aesKey);
-        return JSON.parse(json) as Record<string, unknown>;
-      }
-      if (typeof event === "object" && event !== null) {
-        return event as Record<string, unknown>;
-      }
-      return null;
+        if (isAgentStreamEncEvent(event)) {
+          if (!aesKey) {
+            throw new Error("Encrypted SSE event received before crypto_init");
+          }
+          const json = await decryptEncEvent(event, aesKey);
+          return JSON.parse(json) as Record<string, unknown>;
+        }
+        if (typeof event === "object" && event !== null) {
+          return event as Record<string, unknown>;
+        }
+        return null;
+      };
+      const result = wireQueue.then(run, run);
+      wireQueue = result.then(
+        () => undefined,
+        () => undefined
+      );
+      return result;
     },
   };
 }

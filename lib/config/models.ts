@@ -112,6 +112,7 @@ export const GENERATION_STEPS = [
     { id: "modify_plan", label: "修改·广域变更规划" },
     { id: "modify_summary", label: "修改·完成总结" },
     { id: "commit_merged_brief_classifier", label: "确认生成·需求文本实质性（LLM）" },
+    { id: "generate_vibe_directions", label: "气质方向三选一（LLM）" },
     { id: "analyze_project_requirement", label: "需求分析" },
     { id: "infer_design_intent", label: "设计意图推断" },
     { id: "plan_project", label: "项目规划" },

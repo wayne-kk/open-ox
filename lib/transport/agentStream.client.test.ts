@@ -33,4 +33,21 @@ describe("agentStream browser client codec", () => {
       /before crypto_init/
     );
   });
+
+  it("decodes enc launched concurrently with crypto_init (same SSE chunk race)", async () => {
+    const clientSession = await createAgentStreamClientSession();
+    const server = createAgentStreamServerSession(clientSession.clientPublicKeySpki);
+    const init = server.cryptoInitEvent();
+    const payload = { type: "step", name: "plan", status: "running" };
+    const enc = server.encode(payload);
+
+    // Mimic fire-and-forget per-line decode (useBuildStudio processModifySSE).
+    const [initResult, encResult] = await Promise.all([
+      clientSession.handleWireEvent(init),
+      clientSession.handleWireEvent(enc),
+    ]);
+
+    expect(initResult).toBeNull();
+    expect(encResult).toEqual(payload);
+  });
 });

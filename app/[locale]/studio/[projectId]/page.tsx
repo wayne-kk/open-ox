@@ -30,6 +30,10 @@ import {
   evaluateCoverCapturePoll,
 } from "@/lib/coverCaptureOrchestration";
 import { resolveStudioHeaderTitle } from "@/app/[locale]/studio/lib/studioHeaderTitle";
+import {
+  afterNextPaint,
+  previewDocumentLooksPainted,
+} from "@/app/[locale]/studio/lib/previewIframePainted";
 
 function formatMs(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
@@ -78,11 +82,41 @@ function StudioInner({ projectId }: { projectId: string }) {
     (response?.generatedFiles?.length ?? 0) > 0 ||
     (response?.blueprint && (response?.buildSteps?.length ?? 0) > 0)
   );
+  const [coverCaptureBusy, setCoverCaptureBusy] = useState(false);
+  const previewContainerRef = useRef<HTMLDivElement | null>(null);
+  const [coverCaptureHint, setCoverCaptureHint] = useState<string | null>(null);
+  const [leftPaneView, setLeftPaneView] = useState<"conversation" | "changes">("conversation");
+  const [previewSlot, setPreviewSlot] = useState<ModifyPreviewSlot>({
+    mode: "live",
+    fromIndex: null,
+  });
+  const [changesFocusIndex, setChangesFocusIndex] = useState<number | null>(null);
+  const [codePanelMounted, setCodePanelMounted] = useState(false);
+  /** Keep the live preview iframe mounted across Topology/Code tab switches (avoid reload black flash). */
+  const [previewFrameMounted, setPreviewFrameMounted] = useState(false);
+  /** Src key that last looked painted — compared to current src so URL/version bumps never race a late reset. */
+  const [loadedPreviewSrcKey, setLoadedPreviewSrcKey] = useState<string | null>(null);
+
+  const previewIframeSrc =
+    previewUrl
+      ? `${previewUrl}${previewUrl.includes("?") ? "&" : "?"}v=${previewVersion}`
+      : null;
+  const previewSrcKey = previewIframeSrc ?? (previewUrl ? `${previewUrl}_${previewVersion}` : null);
+  const previewDocumentReady =
+    Boolean(previewSrcKey) && loadedPreviewSrcKey === previewSrcKey;
+  const previewPainted =
+    previewState === "ready" && Boolean(previewUrl) && previewDocumentReady;
+
+  const markPreviewSrcPainted = useCallback((srcKey: string | null) => {
+    if (!srcKey) return;
+    setLoadedPreviewSrcKey((prev) => (prev === srcKey ? prev : srcKey));
+  }, []);
+
   const designMode = useDesignMode({
     projectId,
     iframeRef,
     previewUrl,
-    previewReady: previewState === "ready" && Boolean(previewUrl),
+    previewReady: previewPainted,
     directEditCapable: studio.directEditCapable,
     onPreviewRefresh: bumpPreviewAfterDirectPatch,
     onHandoffToModify: (draft) => {
@@ -102,19 +136,6 @@ function StudioInner({ projectId }: { projectId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- setters are stable; rebind when selection helpers change
   }, [designMode.clearSelection, designMode.consumeSelectionForModify, studio.setOnAfterModifySend, studio.setOnBeforeModifySend]);
 
-  const [coverCaptureBusy, setCoverCaptureBusy] = useState(false);
-  const previewContainerRef = useRef<HTMLDivElement | null>(null);
-  const [coverCaptureHint, setCoverCaptureHint] = useState<string | null>(null);
-  const [leftPaneView, setLeftPaneView] = useState<"conversation" | "changes">("conversation");
-  const [previewSlot, setPreviewSlot] = useState<ModifyPreviewSlot>({
-    mode: "live",
-    fromIndex: null,
-  });
-  const [changesFocusIndex, setChangesFocusIndex] = useState<number | null>(null);
-  const [codePanelMounted, setCodePanelMounted] = useState(false);
-  /** Keep the live preview iframe mounted across Topology/Code tab switches (avoid reload black flash). */
-  const [previewFrameMounted, setPreviewFrameMounted] = useState(false);
-
   useEffect(() => {
     if (rightPanel === "code") setCodePanelMounted(true);
   }, [rightPanel]);
@@ -130,6 +151,120 @@ function StudioInner({ projectId }: { projectId: string }) {
       setPreviewFrameMounted(false);
     }
   }, [previewUrl]);
+
+  /**
+   * Dismiss loading when the preview DOM is interactive (first paint), not when
+   * every subresource finishes — iframe `load` alone leaves the spinner up too long.
+   */
+  useEffect(() => {
+    if (previewState !== "ready" || !previewSrcKey || !previewFrameMounted) return;
+    if (loadedPreviewSrcKey === previewSrcKey) return;
+
+    const frame = iframeRef.current;
+    if (!frame) return;
+
+    let cancelled = false;
+    let finishing = false;
+    let cancelPaintWait: (() => void) | null = null;
+    let pollTimer = 0;
+    let attachedDoc: Document | null = null;
+
+    const finish = () => {
+      if (cancelled || finishing) return;
+      finishing = true;
+      window.clearTimeout(pollTimer);
+      cancelPaintWait?.();
+      cancelPaintWait = afterNextPaint(() => {
+        if (!cancelled) markPreviewSrcPainted(previewSrcKey);
+      });
+    };
+
+    const tryMarkFromDoc = (): boolean => {
+      try {
+        if (!previewDocumentLooksPainted(frame.contentDocument)) return false;
+        finish();
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    const onDocEvent = () => {
+      tryMarkFromDoc();
+    };
+
+    const attachDocListeners = () => {
+      try {
+        const doc = frame.contentDocument;
+        if (!doc || doc === attachedDoc) return;
+        attachedDoc?.removeEventListener("DOMContentLoaded", onDocEvent);
+        attachedDoc?.removeEventListener("readystatechange", onDocEvent);
+        attachedDoc = doc;
+        doc.addEventListener("DOMContentLoaded", onDocEvent);
+        doc.addEventListener("readystatechange", onDocEvent);
+      } catch {
+        /* cross-origin — rely on iframe load */
+      }
+    };
+
+    const onFrameLoad = () => {
+      attachDocListeners();
+      if (tryMarkFromDoc()) return;
+      try {
+        // Same-origin but not yet usable (e.g. about:blank) — keep polling.
+        if (frame.contentDocument) return;
+      } catch {
+        // Cross-origin: cannot inspect DOM; iframe load is the best signal.
+        finish();
+      }
+    };
+
+    frame.addEventListener("load", onFrameLoad);
+    attachDocListeners();
+    if (tryMarkFromDoc()) {
+      return () => {
+        cancelled = true;
+        cancelPaintWait?.();
+        frame.removeEventListener("load", onFrameLoad);
+        attachedDoc?.removeEventListener("DOMContentLoaded", onDocEvent);
+        attachedDoc?.removeEventListener("readystatechange", onDocEvent);
+      };
+    }
+
+    const startedAt = Date.now();
+    const poll = () => {
+      if (cancelled) return;
+      attachDocListeners();
+      if (tryMarkFromDoc()) return;
+      if (Date.now() - startedAt > 12_000) {
+        // Safety: don't leave the spinner forever if the page is clearly up.
+        try {
+          if (frame.contentDocument?.body) finish();
+        } catch {
+          finish();
+        }
+        return;
+      }
+      pollTimer = window.setTimeout(poll, 50);
+    };
+    pollTimer = window.setTimeout(poll, 50);
+
+    return () => {
+      cancelled = true;
+      cancelPaintWait?.();
+      window.clearTimeout(pollTimer);
+      frame.removeEventListener("load", onFrameLoad);
+      attachedDoc?.removeEventListener("DOMContentLoaded", onDocEvent);
+      attachedDoc?.removeEventListener("readystatechange", onDocEvent);
+    };
+  }, [
+    iframeRef,
+    loadedPreviewSrcKey,
+    markPreviewSrcPainted,
+    previewFrameMounted,
+    previewSrcKey,
+    previewState,
+  ]);
 
   useEffect(() => {
     if (!studio.modifying) return;
@@ -265,10 +400,6 @@ function StudioInner({ projectId }: { projectId: string }) {
       setCoverCaptureBusy(false);
     }
   }, [projectId, coverCaptureBusy]);
-  const previewIframeSrc =
-    previewUrl
-      ? `${previewUrl}${previewUrl.includes("?") ? "&" : "?"}v=${previewVersion}`
-      : null;
 
   if (projectLoading) {
     return (
@@ -519,7 +650,7 @@ function StudioInner({ projectId }: { projectId: string }) {
                 <div className="flex-1" />
 
                 {/* Action buttons — right */}
-                {rightPanel === "preview" && previewSlot.mode === "live" && previewState === "ready" && previewUrl && (
+                {rightPanel === "preview" && previewSlot.mode === "live" && previewPainted && previewUrl && (
                   <>
                     {hasGeneratedProject ? (
                       <button
@@ -614,7 +745,8 @@ function StudioInner({ projectId }: { projectId: string }) {
                 </div>
               ) : null}
 
-              {/* Keep iframe alive across Topology/Code switches — remounting reloads and flashes black. */}
+              {/* Keep iframe alive across Topology/Code switches — remounting reloads and flashes black.
+                  Mount under the loading overlay as soon as the URL is ready so load can finish. */}
               {previewFrameMounted && previewUrl ? (
                 <div
                   className={cn(
@@ -627,12 +759,12 @@ function StudioInner({ projectId }: { projectId: string }) {
                   aria-hidden={
                     rightPanel !== "preview" ||
                     previewSlot.mode !== "live" ||
-                    previewState !== "ready"
+                    !previewPainted
                   }
                   inert={
                     rightPanel !== "preview" ||
                     previewSlot.mode !== "live" ||
-                    previewState !== "ready"
+                    !previewPainted
                       ? true
                       : undefined
                   }
@@ -642,8 +774,21 @@ function StudioInner({ projectId }: { projectId: string }) {
                       key={previewIframeSrc ?? `${previewUrl}_${previewVersion}`}
                       ref={iframeRef}
                       src={previewIframeSrc ?? previewUrl}
-                      className="w-full flex-1 border-0 bg-[#0a0a0a]"
+                      className="w-full flex-1 border-0 bg-background"
                       title="Project Preview"
+                      onLoad={() => {
+                        try {
+                          if (previewDocumentLooksPainted(iframeRef.current?.contentDocument)) {
+                            markPreviewSrcPainted(previewSrcKey);
+                            return;
+                          }
+                          // Same-origin about:blank / still parsing — effect poll will finish.
+                          if (iframeRef.current?.contentDocument) return;
+                        } catch {
+                          /* cross-origin */
+                        }
+                        markPreviewSrcPainted(previewSrcKey);
+                      }}
                     />
                     <DesignModePreviewOverlay
                       designMode={designMode}
@@ -681,13 +826,20 @@ function StudioInner({ projectId }: { projectId: string }) {
 
               {rightPanel === "preview" &&
               previewSlot.mode === "live" &&
-              previewState !== "ready" ? (
-                <div className="absolute inset-0 z-10 flex flex-col bg-background/95">
-                  {previewState === "starting" && (
+              !previewPainted ? (
+                <div className="absolute inset-0 z-10 flex flex-col bg-background">
+                  {(previewState === "starting" ||
+                    (previewState === "ready" && !previewDocumentReady)) && (
                     <div className="flex flex-1 flex-col items-center justify-center gap-3">
                       <HamsterLoader size="sm" />
-                      <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Starting preview…</p>
-                      <p className="font-mono text-[10px] text-muted-foreground/70">Usually a few seconds when cache is warm</p>
+                      <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+                        {previewState === "ready" ? "Rendering preview…" : "Starting preview…"}
+                      </p>
+                      <p className="font-mono text-[10px] text-muted-foreground/70">
+                        {previewState === "ready"
+                          ? "Waiting for the first paint"
+                          : "Usually a few seconds when cache is warm"}
+                      </p>
                     </div>
                   )}
                   {previewState === "error" && (

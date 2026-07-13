@@ -98,17 +98,34 @@ export interface PendingImage {
   success: boolean;
 }
 
-export function createImageExecutor(componentName: string): {
+/**
+ * @param scopeLabel — log / collision disambiguation only. **Not** prefixed onto
+ * the public path: models nearly always write `<img src>` from the `filename`
+ * argument they passed, so a `page-home-…` prefix caused systematic broken images.
+ */
+export function createImageExecutor(scopeLabel: string): {
   executor: ToolExecutor;
   pendingImages: PendingImage[];
 } {
   const pendingImages: PendingImage[] = [];
+  const usedFilenames = new Set<string>();
 
   const executor: ToolExecutor = async (
     args: Record<string, unknown>
   ): Promise<ToolResult> => {
     const rawName = String(args.filename ?? "image");
-    const filename = sanitizeFilename(`${componentName}-${rawName}`);
+    let filename = sanitizeFilename(rawName);
+    if (usedFilenames.has(filename)) {
+      // Rare same-scope collision — keep the caller's basename readable, append a short suffix.
+      const suffix = sanitizeFilename(scopeLabel).slice(0, 24) || "img";
+      filename = sanitizeFilename(`${filename}-${suffix}`);
+      let n = 2;
+      while (usedFilenames.has(filename)) {
+        filename = sanitizeFilename(`${sanitizeFilename(rawName)}-${suffix}-${n}`);
+        n += 1;
+      }
+    }
+    usedFilenames.add(filename);
     const prompt = sanitizePrompt(String(args.prompt ?? ""));
     const size = "1k";
     const publicPath = projectImagePath(filename, "png");

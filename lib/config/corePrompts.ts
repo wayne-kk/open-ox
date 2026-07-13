@@ -33,6 +33,13 @@ const CORE_STEP_PROMPTS: CorePromptDefinition[] = [
     promptId: "projectIntentAgent",
     label: "建站意向 Task Agent",
   },
+  {
+    profile: "web",
+    stepId: "generate_vibe_directions",
+    kind: "step",
+    promptId: "generateVibeDirections",
+    label: "气质方向三选一",
+  },
   { profile: "web", stepId: "infer_design_intent", kind: "step", promptId: "inferDesignIntent", label: "设计意图推断" },
   { profile: "web", stepId: "plan_project", kind: "step", promptId: "planProject.agent", label: "项目规划" },
   {

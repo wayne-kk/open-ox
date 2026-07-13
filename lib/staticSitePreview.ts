@@ -461,11 +461,18 @@ export async function getExistingStoragePreviewUrl(
   projectId: string
 ): Promise<{ url: string; port: number } | null> {
   const row = await loadStaticPreviewRow(db, projectId);
+  let diskFp: string | null = null;
+  try {
+    diskFp = await computeProjectFingerprint(projectId);
+  } catch {
+    diskFp = null;
+  }
   if (
     !canUseInstantStaticPreview({
       filesHash: row?.files_hash ?? null,
       staticPreviewSyncedAt: row?.static_preview_synced_at ?? null,
       currentOriginFingerprint: storagePreviewOriginFingerprint(),
+      currentFilesFingerprint: diskFp,
     })
   ) {
     return null;
@@ -480,12 +487,19 @@ async function tryInstantStaticPreviewReturn(
   force: boolean
 ): Promise<{ url: string; port: number; skipped: true } | null> {
   const row = await loadStaticPreviewRow(db, projectId);
+  let diskFp: string | null = null;
+  try {
+    diskFp = await computeProjectFingerprint(projectId);
+  } catch {
+    diskFp = null;
+  }
   if (
     !canUseInstantStaticPreview({
       force,
       filesHash: row?.files_hash ?? null,
       staticPreviewSyncedAt: row?.static_preview_synced_at ?? null,
       currentOriginFingerprint: storagePreviewOriginFingerprint(),
+      currentFilesFingerprint: diskFp,
     })
   ) {
     return null;

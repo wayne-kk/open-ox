@@ -1,6 +1,7 @@
 /**
- * Pre-generation vibe forks — three archetypal directions for confirm_vibe.
- * Tokens drive the mini-sample UI; markdown drives design-system generation.
+ * Fallback vibe forks when LLM generation fails.
+ * Live Studio picker prefers brief-sensitive directions from
+ * {@link generateVibeDirections} (`/api/projects/[id]/vibe-directions`).
  */
 
 export type VibeTokenPreview = {

@@ -612,6 +612,26 @@ export function BuildConversation({
                     ) : null}
 
                     {conversationMessages.map((message) => {
+                        const intentKind = message.intentPayload?.kind;
+                        const isEarlyClarify =
+                            intentKind === "options" || intentKind === "clarify";
+                        const showVibePicker =
+                            message.role === "assistant" &&
+                            message.id === latestAssistantMessageId &&
+                            !vibeResolved &&
+                            isEarlyClarify;
+                        // Vibe cards and agent options must not stack on the same turn.
+                        // Also hide orphaned options on this bubble while vibe confirm is in flight.
+                        const showQuickReplies =
+                            message.role === "assistant" &&
+                            Boolean(message.intentPayload) &&
+                            message.id === latestAssistantMessageId &&
+                            !showVibePicker &&
+                            !(isEarlyClarify && vibeResolved && loading);
+                        const hasQuickReplies =
+                            ((message.intentPayload?.options ?? []).length > 0 ||
+                                (message.intentPayload?.suggestedReplies ?? []).length > 0);
+
                         const bubble = (
                             <ChatBubble role={message.role}>
                             {message.role === "assistant" ? (
@@ -645,13 +665,9 @@ export function BuildConversation({
                                     </div>
                                 ) : null}
 
-                                {/* Early vibe fork — on options/clarify only, never on confirm_brief */}
-                                {message.role === "assistant" &&
-                                message.id === latestAssistantMessageId &&
-                                !vibeResolved &&
-                                (message.intentPayload?.kind === "options" ||
-                                    message.intentPayload?.kind === "clarify") ? (
+                                {showVibePicker ? (
                                     <VibePickerPanel
+                                        projectId={projectId}
                                         briefMarkdown={
                                             message.intentPayload?.briefDraftMarkdown ??
                                             lastRunInput ??
@@ -677,38 +693,33 @@ export function BuildConversation({
                                     </div>
                                 ) : null}
 
-                                {/* Interactive options — only on the latest assistant message (clicking old buttons is meaningless) */}
-                                {message.role === "assistant" && message.intentPayload && message.id === latestAssistantMessageId ? (
-                                    <>
-                                        {((message.intentPayload.options ?? []).length > 0 || (message.intentPayload.suggestedReplies ?? []).length > 0) ? (
-                                            <div className="flex flex-wrap gap-2 pt-1">
-                                                {(message.intentPayload.options ?? []).map((option) => (
-                                                    <button
-                                                        key={option.id}
-                                                        type="button"
-                                                        onClick={() => void handleRun(`${option.label}${option.hint ? `：${option.hint}` : ""}`)}
-                                                        disabled={loading}
-                                                        className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-left text-[12px] text-foreground transition-colors hover:border-primary/45 disabled:opacity-50"
-                                                        title={option.hint}
-                                                    >
-                                                        <span className="block font-medium">{option.label}</span>
-                                                        {option.hint ? <span className="mt-0.5 block text-[11px] text-muted-foreground">{option.hint}</span> : null}
-                                                    </button>
-                                                ))}
-                                                {(message.intentPayload.suggestedReplies ?? []).map((reply) => (
-                                                    <button
-                                                        key={reply}
-                                                        type="button"
-                                                        onClick={() => void handleRun(reply)}
-                                                        disabled={loading}
-                                                        className="rounded-full border border-border bg-muted px-3 py-1.5 text-[12px] text-muted-foreground transition-colors hover:border-border hover:text-foreground disabled:opacity-50"
-                                                    >
-                                                        {reply}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        ) : null}
-                                    </>
+                                {showQuickReplies && hasQuickReplies ? (
+                                    <div className="flex flex-wrap gap-2 pt-1">
+                                        {(message.intentPayload?.options ?? []).map((option) => (
+                                            <button
+                                                key={option.id}
+                                                type="button"
+                                                onClick={() => void handleRun(`${option.label}${option.hint ? `：${option.hint}` : ""}`)}
+                                                disabled={loading}
+                                                className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-left text-[12px] text-foreground transition-colors hover:border-primary/45 disabled:opacity-50"
+                                                title={option.hint}
+                                            >
+                                                <span className="block font-medium">{option.label}</span>
+                                                {option.hint ? <span className="mt-0.5 block text-[11px] text-muted-foreground">{option.hint}</span> : null}
+                                            </button>
+                                        ))}
+                                        {(message.intentPayload?.suggestedReplies ?? []).map((reply) => (
+                                            <button
+                                                key={reply}
+                                                type="button"
+                                                onClick={() => void handleRun(reply)}
+                                                disabled={loading}
+                                                className="rounded-full border border-border bg-muted px-3 py-1.5 text-[12px] text-muted-foreground transition-colors hover:border-border hover:text-foreground disabled:opacity-50"
+                                            >
+                                                {reply}
+                                            </button>
+                                        ))}
+                                    </div>
                                 ) : null}
                             </div>
                         </ChatBubble>

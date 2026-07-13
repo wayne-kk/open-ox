@@ -36,13 +36,25 @@ describe("canUseInstantStaticPreview", () => {
     ).toBe(false);
   });
 
-  it("returns false when origin fingerprint changed", () => {
+  it("returns false when disk fingerprint drifted from published files_hash", () => {
     expect(
       canUseInstantStaticPreview({
         filesHash: `deadbeefcafebabe:${origin}`,
         staticPreviewSyncedAt: "2026-05-28T08:00:00.000Z",
-        currentOriginFingerprint: "otherorigin00000",
+        currentOriginFingerprint: origin,
+        currentFilesFingerprint: "aaaaaaaaaaaaaaaa",
       })
     ).toBe(false);
+  });
+
+  it("returns true when disk fingerprint matches published files half", () => {
+    expect(
+      canUseInstantStaticPreview({
+        filesHash: `deadbeefcafebabe:${origin}`,
+        staticPreviewSyncedAt: "2026-05-28T08:00:00.000Z",
+        currentOriginFingerprint: origin,
+        currentFilesFingerprint: "deadbeefcafebabe",
+      })
+    ).toBe(true);
   });
 });

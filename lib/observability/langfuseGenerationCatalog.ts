@@ -18,6 +18,7 @@ export const LfPlain = {
   modifyPlan: "modify_plan_target_files",
   modifyCompletionSummary: "modify_completion_summary",
   commitMergedBriefSubstance: "commit_merged_brief_substance_classify",
+  generateVibeDirections: "generate_vibe_directions_json",
   inferDesignIntent: "infer_design_intent_and_keywords",
   analyzeRequirement: "analyze_requirement_blueprint_json",
   planProject: "expand_site_blueprint_and_sections",

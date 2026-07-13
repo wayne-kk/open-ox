@@ -1546,12 +1546,21 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     // Track whether the done event was received (for history saving)
     let receivedDone = false;
 
-    function processModifySSE(raw: string, secureSession: AgentStreamClientSession | null) {
+    async function processModifySSE(
+      raw: string,
+      secureSession: AgentStreamClientSession | null
+    ) {
       const line = parseSseDataLine(raw);
       if (!line) return;
-      void decodeAgentSseJsonLine(secureSession, line).then((event) => {
-        if (!event) return;
-        try {
+      let event: Record<string, unknown> | null;
+      try {
+        event = await decodeAgentSseJsonLine(secureSession, line);
+      } catch (e) {
+        console.warn("[modify] SSE decode error:", e);
+        return;
+      }
+      if (!event) return;
+      try {
         const e = event as {
           type: string;
           label?: string;
@@ -1617,7 +1626,6 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
           }]);
         }
       } catch (e) { console.warn("[modify] SSE parse error:", e); }
-      }).catch((e) => console.warn("[modify] SSE decode error:", e));
     }
 
     try {
@@ -1664,12 +1672,12 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         const lines = buffer.split("\n\n");
         buffer = lines.pop() ?? "";
         for (const line of lines) {
-          processModifySSE(line, secureSession);
+          await processModifySSE(line, secureSession);
         }
       }
       // Flush remaining buffer (same fix as generate flow)
       if (buffer.trim()) {
-        processModifySSE(buffer, secureSession);
+        await processModifySSE(buffer, secureSession);
       }
 
       // ── Stream ended — trigger preview rebuild if there were changes ──

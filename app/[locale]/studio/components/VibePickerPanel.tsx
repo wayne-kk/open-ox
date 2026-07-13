@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   VIBE_DIRECTIONS,
   type VibeDirection,
@@ -9,6 +9,7 @@ import {
 import { cn } from "@/lib/utils";
 
 type VibePickerPanelProps = {
+  projectId?: string | null;
   briefMarkdown?: string;
   disabled?: boolean;
   /** Early clarify/options: select only. confirm_brief must not use this panel. */
@@ -89,66 +90,124 @@ function VibeMiniSample({
   );
 }
 
+function VibeCardSkeleton() {
+  return (
+    <div className="min-w-46 flex-1 animate-pulse md:min-w-0">
+      <div className="h-40 rounded-xl border border-border bg-muted/40" />
+      <div className="mt-2 space-y-2 px-0.5">
+        <div className="h-3 w-20 rounded bg-muted/60" />
+        <div className="h-3 w-28 rounded bg-muted/40" />
+      </div>
+    </div>
+  );
+}
+
 export function VibePickerPanel({
+  projectId,
   briefMarkdown,
   disabled = false,
   mode = "select",
   onConfirm,
   onSkip,
 }: VibePickerPanelProps) {
+  const [directions, setDirections] = useState<VibeDirection[]>(VIBE_DIRECTIONS);
+  const [loadingDirections, setLoadingDirections] = useState(Boolean(projectId));
   const [selectedId, setSelectedId] = useState<string>(VIBE_DIRECTIONS[0]?.id ?? "cold-tech");
   const title = extractBriefTitle(briefMarkdown);
-  const selected = VIBE_DIRECTIONS.find((v) => v.id === selectedId) ?? VIBE_DIRECTIONS[0];
+  const selected = directions.find((v) => v.id === selectedId) ?? directions[0];
+
+  useEffect(() => {
+    if (!projectId) {
+      setDirections(VIBE_DIRECTIONS);
+      setSelectedId(VIBE_DIRECTIONS[0]?.id ?? "cold-tech");
+      setLoadingDirections(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setLoadingDirections(true);
+
+    void (async () => {
+      try {
+        const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/vibe-directions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ briefMarkdown: briefMarkdown ?? "" }),
+          signal: controller.signal,
+        });
+        if (!res.ok) throw new Error(`vibe-directions ${res.status}`);
+        const json = (await res.json()) as {
+          data?: { directions?: VibeDirection[] };
+        };
+        const next = json.data?.directions;
+        if (!Array.isArray(next) || next.length < 3) throw new Error("invalid directions");
+        if (controller.signal.aborted) return;
+        setDirections(next);
+        setSelectedId(next[0]!.id);
+      } catch {
+        if (controller.signal.aborted) return;
+        setDirections(VIBE_DIRECTIONS);
+        setSelectedId(VIBE_DIRECTIONS[0]?.id ?? "cold-tech");
+      } finally {
+        if (!controller.signal.aborted) setLoadingDirections(false);
+      }
+    })();
+
+    return () => controller.abort();
+  }, [projectId, briefMarkdown]);
 
   return (
     <div className="space-y-3 rounded-2xl border border-border bg-card/40 p-3">
       <div className="space-y-1">
         <div className="text-[12px] font-medium text-foreground">选一个气质方向</div>
         <p className="text-[11px] leading-relaxed text-muted-foreground">
-          这是视觉方向样张，不是成品预览。先选定气质，再继续把需求说清楚。
+          这是视觉方向样张，不是成品预览。先选定气质；受众 / 产品方向会在下一步再选，不用和这三张一起选。
+          {loadingDirections ? " 正在按你的需求生成三套方向…" : null}
         </p>
       </div>
 
       <div className="flex gap-2 overflow-x-auto pb-1 md:grid md:grid-cols-3 md:overflow-visible">
-        {VIBE_DIRECTIONS.map((vibe) => {
-          const isSelected = vibe.id === selectedId;
-          return (
-            <button
-              key={vibe.id}
-              type="button"
-              disabled={disabled}
-              onClick={() => setSelectedId(vibe.id)}
-              className={cn(
-                "min-w-46 flex-1 text-left transition-opacity disabled:opacity-50 md:min-w-0",
-                !isSelected && "opacity-80 hover:opacity-100"
-              )}
-            >
-              <VibeMiniSample vibe={vibe} title={title} selected={isSelected} />
-              <div className="mt-2 space-y-1 px-0.5">
-                <div className="text-[12px] font-medium text-foreground">
-                  {vibe.label}
-                  {isSelected ? " · 已选" : ""}
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {vibe.moods.map((mood) => (
-                    <span
-                      key={mood}
-                      className="rounded-full border border-border bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground"
-                    >
-                      {mood}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </button>
-          );
-        })}
+        {loadingDirections
+          ? [0, 1, 2].map((key) => <VibeCardSkeleton key={key} />)
+          : directions.map((vibe) => {
+              const isSelected = vibe.id === selectedId;
+              return (
+                <button
+                  key={vibe.id}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => setSelectedId(vibe.id)}
+                  className={cn(
+                    "min-w-46 flex-1 text-left transition-opacity disabled:opacity-50 md:min-w-0",
+                    !isSelected && "opacity-80 hover:opacity-100"
+                  )}
+                >
+                  <VibeMiniSample vibe={vibe} title={title} selected={isSelected} />
+                  <div className="mt-2 space-y-1 px-0.5">
+                    <div className="text-[12px] font-medium text-foreground">
+                      {vibe.label}
+                      {isSelected ? " · 已选" : ""}
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {vibe.moods.map((mood) => (
+                        <span
+                          key={mood}
+                          className="rounded-full border border-border bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                        >
+                          {mood}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
       </div>
 
       <div className="flex flex-wrap items-center gap-2 pt-1">
         <button
           type="button"
-          disabled={disabled || !selected}
+          disabled={disabled || loadingDirections || !selected}
           onClick={() => selected && onConfirm(selected)}
           className="rounded-xl bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
         >
@@ -157,7 +216,7 @@ export function VibePickerPanel({
         {onSkip ? (
           <button
             type="button"
-            disabled={disabled}
+            disabled={disabled || loadingDirections}
             onClick={onSkip}
             className="rounded-xl border border-border bg-muted/40 px-3 py-2 text-[12px] text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
           >
