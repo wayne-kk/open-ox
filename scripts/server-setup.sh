@@ -22,8 +22,21 @@ else
 fi
 
 # 2. Docker Compose plugin
+# Tencent/Aliyun Ubuntu mirrors often lack `docker-compose-plugin` (Docker Inc. package name).
 if ! docker compose version &> /dev/null; then
-  apt-get update && apt-get install -y docker-compose-plugin
+  echo "==> Installing Docker Compose..."
+  if ! apt-get install -y docker-compose-plugin 2>/dev/null \
+    && ! apt-get install -y docker-compose-v2 2>/dev/null; then
+    ARCH="$(uname -m)"
+    case "$ARCH" in
+      x86_64|amd64) ARCH=x86_64 ;;
+      aarch64|arm64) ARCH=aarch64 ;;
+    esac
+    mkdir -p /usr/local/lib/docker/cli-plugins
+    curl -fsSL "https://github.com/docker/compose/releases/download/v2.32.4/docker-compose-linux-${ARCH}" \
+      -o /usr/local/lib/docker/cli-plugins/docker-compose
+    chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+  fi
 fi
 
 # Allow non-root deploy user to run docker (optional: set OPEN_OX_DEPLOY_USER).
