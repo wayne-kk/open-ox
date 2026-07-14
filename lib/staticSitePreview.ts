@@ -270,7 +270,8 @@ async function uploadOutDir(
      * Raw Buffer uploads rely on the request `content-type` header; that path can still misbehave behind
      * some proxies. Building FormData with an explicit `contentType` field matches the server contract.
      */
-    const fileBytes = new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength);
+    // Copy into a fresh Uint8Array so BlobPart gets a real ArrayBuffer (not SharedArrayBuffer).
+    const fileBytes = new Uint8Array(raw);
 
     const buildUploadForm = (): FormData => {
       const f = new FormData();
