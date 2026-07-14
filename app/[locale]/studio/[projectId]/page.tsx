@@ -9,6 +9,7 @@ import { AppBackButton } from "@/app/components/AppBackButton";
 import { BrandMark } from "@/app/components/BrandMark";
 import { StudioPublishMenu } from "@/app/components/ProjectPublishPanel";
 import { StudioDeployMenu } from "@/app/components/StudioDeployMenu";
+import { StudioFeishuActiveButton } from "@/app/components/StudioFeishuActiveButton";
 import { cn } from "@/lib/utils";
 import { HamsterLoader } from "@/components/ui/hamster-loader";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -123,6 +124,12 @@ function StudioInner({ projectId }: { projectId: string }) {
       studio.setModifyInstruction(draft);
       setConversationCollapsed(false);
     },
+    boardRunBlocking:
+      studio.proposedBoardRun != null &&
+      (studio.proposedBoardRun.status === "proposed" ||
+        studio.proposedBoardRun.status === "running" ||
+        studio.proposedBoardRun.status === "paused" ||
+        studio.proposedBoardRun.status === "failed"),
   });
 
   useEffect(() => {
@@ -511,6 +518,11 @@ function StudioInner({ projectId }: { projectId: string }) {
                         </span>
                       ) : null}
                     </button>
+                  ) : null}
+                  {projectId ? (
+                    <Suspense fallback={null}>
+                      <StudioFeishuActiveButton projectId={projectId} />
+                    </Suspense>
                   ) : null}
                   {projectId ? <StudioDeployMenu projectId={projectId} /> : null}
                   {projectId ? <StudioPublishMenu projectId={projectId} /> : null}

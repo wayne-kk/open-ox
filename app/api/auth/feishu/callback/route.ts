@@ -134,6 +134,17 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // Index open_id for Feishu Bot identity (best-effort; login still succeeds if this fails)
+  try {
+    const { linkFeishuOpenId } = await import("@/lib/feishu/activeProject");
+    const { data: signedIn } = await supabase.auth.getUser();
+    if (signedIn.user?.id) {
+      await linkFeishuOpenId(admin, signedIn.user.id, feishuUser.open_id);
+    }
+  } catch (e) {
+    console.warn("[feishu] open_id link skipped:", e);
+  }
+
   response.cookies.delete("feishu_oauth_state");
   response.cookies.delete("feishu_oauth_next");
   return response;

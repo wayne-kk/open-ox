@@ -38,6 +38,8 @@ export interface UseDesignModeOptions {
   onPreviewRefresh?: (url: string | null) => void;
   /** Prefill Modify chat with a draft (user must confirm send). */
   onHandoffToModify?: (draft: string) => void;
+  /** When true, Direct Apply is blocked (active BoardRun). */
+  boardRunBlocking?: boolean;
 }
 
 export interface UseDesignModeResult {
@@ -133,6 +135,7 @@ export function useDesignMode({
   directEditCapable,
   onPreviewRefresh,
   onHandoffToModify,
+  boardRunBlocking = false,
 }: UseDesignModeOptions): UseDesignModeResult {
   const pickEnabled = true;
   const [active, setActiveState] = useState(false);
@@ -448,6 +451,10 @@ export function useDesignMode({
 
   const applyDirectPatch = useCallback(async () => {
     if (!projectId) return;
+    if (boardRunBlocking) {
+      setApplyHint("任务板进行中：请先完成、继续或取消剩余任务，再使用 Direct Apply。");
+      return;
+    }
     if (!directEditCapable) {
       setApplyHint("Direct Apply needs local preview + NEXT_PUBLIC_STUDIO_DESIGN_MODE=1. Use Modify with the selection.");
       return;
@@ -505,6 +512,7 @@ export function useDesignMode({
       setPatching(false);
     }
   }, [
+    boardRunBlocking,
     buildEditsFromSelection,
     canDirectPatch,
     className,

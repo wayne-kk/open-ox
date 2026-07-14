@@ -24,7 +24,11 @@ _See also_: `docs/product/studio-design-mode-source-writeback-architecture.md`, 
 One completed modify exchange: user instruction, assistant text, touched files, intent category, and whether the assistant is awaiting a follow-up. Shared semantic unit across Studio, the modify request, continuation routing, and prompt memory — not the DB persistence row and not the Studio UI record.
 _Avoid_: summary string with embedded `Files:`, session memory blob, modify transcript
 
-_See also_: `ai/flows/modify_project/history/modifyHistoryTurn.ts`
+**BoardRun**:
+Project-scoped task-slice board for a wide Modify: ordered cards (max 6), each card executes as one Modify History Turn. Serial dispatch only; next-card scheduling requires an online/continue signal (no unattended drain). Pause controls the queue, not hard-abort of an in-flight Modify.
+_Avoid_: parallel workers, staging worktree merge, treating the board as a second transcript
+
+_See also_: `ai/flows/modify_project/history/modifyHistoryTurn.ts`, `lib/modify/boardRun/`, `.scratch/modify-board-run-v0.1/PRD.md`
 
 ## Workspace & Community
 

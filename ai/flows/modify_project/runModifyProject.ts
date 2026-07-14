@@ -38,6 +38,11 @@ import {
 import { createImageExecutor, awaitPendingImages, type PendingImage } from "@/ai/tools/system/generateImageTool";
 import type { ToolExecutor } from "@/ai/tools/types";
 import type { ModifyPlan } from "./engine/planPhase";
+import { advanceBoardRun } from "@/lib/modify/boardRun/advanceBoardRun";
+import { getBoardRunStore } from "@/lib/modify/boardRun/fileBoardRunStore";
+import { stepPlanModifyBoard } from "@/lib/modify/boardRun/planModifyBoard";
+import { shouldSuggestModifyBoard } from "@/lib/modify/boardRun/shouldSuggestModifyBoard";
+import type { BoardRun } from "@/lib/modify/boardRun/boardRunTypes";
 
 const MODIFY_INTENT_CONVERSATION_FALLBACK =
   "我是项目助手：可以回答关于当前站点的问题、帮你制定修改计划，或直接改代码。需要改页面时，请说明要改哪里、改成什么样。";
@@ -84,8 +89,18 @@ export type ModifySSEEvent =
   | { type: "tool_call"; tool: string; args: Record<string, unknown>; result: string }
   | { type: "thinking"; content: string }
   | { type: "credits"; charged: number; usd: number }
+  /** Board propose path — no agent loop / no site writes. */
+  | { type: "board_proposed"; boardRun: BoardRun }
   | { type: "done" }
   | { type: "error"; message: string };
+
+export type RunModifyProjectBoardOptions = {
+  forceBoard?: boolean;
+  forceSingleModify?: boolean;
+  preferBoardSuggest?: boolean;
+  /** Injected BoardRun summary for card execution (Working Memory + short board context). */
+  boardSummaryBlock?: string;
+};
 
 export async function runModifyProject(
   db: SupabaseClient,
@@ -95,7 +110,10 @@ export async function runModifyProject(
   conversationHistory?: ModifyHistoryTurn[],
   clearContext = false,
   imageBase64?: string,
-  modelOverride?: string
+  modelOverride?: string,
+  /** When true, never treat this turn as a continuation of awaitingReply. */
+  forceFreshInstruction = false,
+  boardOptions?: RunModifyProjectBoardOptions
 ): Promise<void> {
   const artifactLogger = createArtifactLogger("modify_project");
   await artifactLogger.writeJson("run", "input", { projectId, userInstruction });
@@ -114,6 +132,8 @@ export async function runModifyProject(
     clearContext,
     imageBase64,
     modelOverride,
+    forceFreshInstruction,
+    boardOptions,
     artifactLogger,
   ));
 }
@@ -130,6 +150,8 @@ async function runModifyProjectInner(
   clearContext: boolean,
   imageBase64: string | undefined,
   modelOverride: string | undefined,
+  forceFreshInstruction: boolean,
+  boardOptions: RunModifyProjectBoardOptions | undefined,
   artifactLogger: ModifyArtifactLogger,
 ): Promise<void> {
   const projectDir = pmGetSiteRoot(projectId);
@@ -148,7 +170,8 @@ async function runModifyProjectInner(
   const mergedHistory = mergeModifyHistoryTurns(dbHistory, sessionHistory);
   const workingMemory = buildModifyWorkingMemoryContext(dbHistory, sessionHistory);
 
-  const isContinuation = detectContinuationReply(userInstruction, mergedHistory);
+  const isContinuation =
+    !forceFreshInstruction && detectContinuationReply(userInstruction, mergedHistory);
   const effectiveInstruction = isContinuation
     ? mergeContinuationInstruction(userInstruction, mergedHistory)
     : userInstruction;
@@ -187,6 +210,52 @@ async function runModifyProjectInner(
     status: "done",
     message: `${routed.category} scope=${routed.scope}${isContinuation ? " continuation" : ""}`,
   });
+
+  if (
+    shouldSuggestModifyBoard(routed, {
+      forceBoard: boardOptions?.forceBoard,
+      forceSingleModify: boardOptions?.forceSingleModify,
+      preferBoardSuggest: boardOptions?.preferBoardSuggest,
+    })
+  ) {
+    onEvent({ type: "step", name: "board_planner", status: "running" });
+    const plan = await withLangfuseSpan(
+      LfSpanModify.intentRouter,
+      () => stepPlanModifyBoard(effectiveInstruction, { fileTree }),
+      { metadata: { projectId, phase: "board_planner" } }
+    );
+    const { run: proposed } = advanceBoardRun(
+      null,
+      {
+        type: "propose",
+        projectId,
+        goal: effectiveInstruction,
+        tasks: plan.tasks,
+      },
+      { online: false }
+    );
+    await getBoardRunStore().save(proposed);
+    onEvent({
+      type: "step",
+      name: "board_planner",
+      status: "done",
+      message: `${proposed.tasks.length} tasks proposed`,
+    });
+    onEvent({ type: "board_proposed", boardRun: proposed });
+    await artifactLogger.writeJson("run", "result", {
+      projectId,
+      instruction: userInstruction,
+      intent: "board_proposed",
+      boardRunId: proposed.id,
+      taskCount: proposed.tasks.length,
+      touchedFiles: [],
+      buildPassed: false,
+      iterations: 0,
+    });
+    clearRevertSnapshots();
+    clearFileTracking();
+    return;
+  }
 
   if (routed.category === "conversation") {
     const reply = routed.assistantMessage.trim() || MODIFY_INTENT_CONVERSATION_FALLBACK;
@@ -334,7 +403,12 @@ async function runModifyProjectInner(
       onEvent(event);
     };
 
-    const historyContext = workingMemory.agentPromptBlock;
+    const historyContext = [
+      workingMemory.agentPromptBlock,
+      boardOptions?.boardSummaryBlock?.trim() ?? "",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
     const messages = buildInitialMessages({
       modifyCategory: routed.category,
       userInstruction: effectiveInstruction,

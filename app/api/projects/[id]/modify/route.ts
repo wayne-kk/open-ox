@@ -32,6 +32,12 @@ import { canAfford } from "@/lib/billing/account";
 import { isCreditsEnabled, MIN_MODIFY_CREDITS } from "@/lib/billing/credits";
 import { runWithUsageAccounting } from "@/lib/billing/usageContext";
 import { chargeUsageForRun } from "@/lib/billing/chargeRun";
+import {
+  releaseModifyInFlight,
+  tryAcquireModifyInFlight,
+} from "@/lib/modify/modifyInFlight";
+import { getBoardRunStore } from "@/lib/modify/boardRun/fileBoardRunStore";
+import { isBoardRunBlocking } from "@/lib/modify/boardRun/isBoardRunBlocking";
 
 export const runtime = "nodejs";
 
@@ -59,10 +65,16 @@ export async function POST(
   let imageBase64: string | undefined;
   let langfuseSessionIdBody: string | undefined;
   let clientPublicKey: string | undefined;
+  let forceBoard = false;
+  let forceSingleModify = false;
+  let preferBoardSuggest = false;
   try {
     const body = await req.json();
     userInstruction = body.userInstruction;
     modelOverride = body.model;
+    forceBoard = body.forceBoard === true;
+    forceSingleModify = body.forceSingleModify === true;
+    preferBoardSuggest = body.preferBoardSuggest === true;
     if (Array.isArray(body.conversationHistory)) {
       const parsed: ModifyHistoryTurn[] = [];
       for (const item of body.conversationHistory as unknown[]) {
@@ -95,9 +107,35 @@ export async function POST(
     );
   }
 
+  const activeBoard = await getBoardRunStore().loadActive(id);
+  if (isBoardRunBlocking(activeBoard)) {
+    const allowRepropose = forceBoard && activeBoard?.status === "proposed";
+    if (!allowRepropose) {
+      return NextResponse.json(
+        {
+          error:
+            "A task board is active for this project. Finish, pause/cancel remaining, or decline it before starting another Modify.",
+          code: "BOARD_RUN_ACTIVE",
+        },
+        { status: 409 }
+      );
+    }
+  }
+
+  if (!tryAcquireModifyInFlight(id)) {
+    return NextResponse.json(
+      {
+        error: "Modify already in progress for this project",
+        code: "MODIFY_IN_FLIGHT",
+      },
+      { status: 409 }
+    );
+  }
+
   if (isCreditsEnabled()) {
     const afford = await canAfford(db, user.id, MIN_MODIFY_CREDITS);
     if (!afford.ok) {
+      releaseModifyInFlight(id);
       return NextResponse.json(
         {
           error: "Insufficient credits",
@@ -134,6 +172,7 @@ export async function POST(
       const collectedDiffs: Array<{ file: string; reasoning: string; patch: string; stats: { additions: number; deletions: number } }> = [];
       let buildPassed = false;
       let modifySucceeded = false;
+      let boardProposedOnly = false;
 
       try {
         const langfuseSessionKey = resolveLangfuseSessionId({
@@ -165,6 +204,9 @@ export async function POST(
                 userInstruction,
                 (event) => {
                   send(event);
+                  if (event.type === "board_proposed") {
+                    boardProposedOnly = true;
+                  }
                   if (event.type === "diff") {
                     collectedDiffs.push({
                       file: (event as { file: string }).file,
@@ -173,13 +215,20 @@ export async function POST(
                       stats: (event as { stats: { additions: number; deletions: number } }).stats,
                     });
                   } else if (event.type === "step" && event.name === "agent_loop") {
+                    boardProposedOnly = false;
                     if (event.message?.includes("build=passed")) buildPassed = true;
                   }
                 },
                 conversationHistory,
                 clearContext,
                 imageBase64,
-                modelOverride
+                modelOverride,
+                false,
+                {
+                  forceBoard,
+                  forceSingleModify,
+                  preferBoardSuggest,
+                }
               )
           )
         );
@@ -189,7 +238,8 @@ export async function POST(
           usage,
           kind: "spend_modify",
           projectId: id,
-          reason: "modify turn",
+          // Board propose: router + planner tokens only (no agent loop / site writes).
+          reason: boardProposedOnly ? "modify board propose" : "modify turn",
         });
 
         if (usage.totalCredits > 0) {
@@ -219,6 +269,7 @@ export async function POST(
         const message = err instanceof Error ? err.message : "Internal error";
         send({ type: "error", message });
       } finally {
+        releaseModifyInFlight(id);
         trackServerAnalyticsEventFireAndForget({
           userId: user.id,
           eventName: "modify_complete",

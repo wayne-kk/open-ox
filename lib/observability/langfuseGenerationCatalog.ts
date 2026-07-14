@@ -15,6 +15,7 @@ export const LfPlain = {
   applyDesignTokens: "apply_design_tokens_to_globals_css",
   projectIntentGuide: "project_intent_guide_dialogue",
   modifyIntentRouter: "modify_intent_router_classify",
+  modifyBoardPlanner: "modify_board_planner_tasks",
   modifyPlan: "modify_plan_target_files",
   modifyCompletionSummary: "modify_completion_summary",
   commitMergedBriefSubstance: "commit_merged_brief_substance_classify",

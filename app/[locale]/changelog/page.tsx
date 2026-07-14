@@ -14,6 +14,18 @@ interface ChangeEntry {
 
 const CHANGELOG: ChangeEntry[] = [
   {
+    version: "v1.15",
+    date: "2026-07-14",
+    tag: "minor",
+    title: "飞书私聊 Modify · 改站不离开 IM",
+    body: "飞书登录用户可在 Studio 设「飞书当前项目」，私聊 Bot 发文本即可改站：受理回执 → Modify（与网页同 Credits / History）→ 结果文案 + Studio 深链 + 首页预览截图。支持 /help /status /use /clear；群聊与图片暂不支持。",
+    items: [
+      "Studio 顶栏「飞书」绑定当前项目；迁移 030 user_feishu_settings",
+      "POST /api/feishu/events；无头 Modify + 项目级 in-flight 锁（与 Studio 互斥）",
+      "配置需 FEISHU_VERIFICATION_TOKEN；事件订阅 URL 指向 /api/feishu/events",
+    ],
+  },
+  {
     version: "v1.14",
     date: "2026-07-14",
     tag: "minor",
@@ -25,6 +37,7 @@ const CHANGELOG: ChangeEntry[] = [
       "docs/product/credits-v0.3-welcome.md",
     ],
   },
+
   {
     version: "v1.13",
     date: "2026-07-11",

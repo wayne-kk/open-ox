@@ -31,6 +31,9 @@ import {
   type ModifyPreviewSlot,
 } from "../lib/modifyHistoryView";
 import { cn } from "@/lib/utils";
+import { BoardProposeCard } from "./BoardProposeCard";
+import { BoardProgressPin } from "./BoardProgressPin";
+import { isBoardRunBlocking } from "@/lib/modify/boardRun/isBoardRunBlocking";
 
 function formatMs(ms: number): string {
     if (ms < 1000) return `${ms}ms`;
@@ -386,6 +389,18 @@ export function BuildConversation({
     modifyIntentLabel,
     pendingModifyInstruction,
     pendingModifyImage,
+    proposedBoardRun,
+    boardRunBusy,
+    boardDraining,
+    reviseProposedBoard,
+    confirmProposedBoard,
+    declineProposedBoard,
+    forceSplitIntoTasks,
+    pauseBoardQueue,
+    continueBoardQueue,
+    cancelBoardRemaining,
+    retryBoardTask,
+    skipBoardTask,
     intentImage,
     setIntentImage,
     designSelectionLabel = null,
@@ -936,6 +951,40 @@ export function BuildConversation({
                         </div>
                     ))}
 
+                    {proposedBoardRun?.status === "proposed" ? (
+                        <ChatBubble role="assistant">
+                            <div className="text-[11px] font-medium text-foreground">任务板</div>
+                            <div className="mt-3">
+                                <BoardProposeCard
+                                    boardRun={proposedBoardRun}
+                                    busy={boardRunBusy || modifying || boardDraining}
+                                    onRevise={reviseProposedBoard}
+                                    onConfirm={confirmProposedBoard}
+                                    onDecline={declineProposedBoard}
+                                />
+                            </div>
+                        </ChatBubble>
+                    ) : null}
+
+                    {proposedBoardRun && proposedBoardRun.status !== "proposed" ? (
+                        <ChatBubble role="assistant">
+                            <div className="text-[11px] font-medium text-foreground">任务板进度</div>
+                            <ul className="mt-2 space-y-1 text-[11px] text-muted-foreground">
+                                {proposedBoardRun.tasks.map((t) => (
+                                    <li key={t.id}>
+                                        <span className="font-mono text-[10px] text-foreground/80">[{t.status}]</span>{" "}
+                                        {t.title}
+                                    </li>
+                                ))}
+                            </ul>
+                            {proposedBoardRun.status === "completed" ? (
+                                <p className="mt-2 text-[11px] text-emerald-400/90">
+                                    任务板已完成。改动已写入源码，预览即为最新结果。
+                                </p>
+                            ) : null}
+                        </ChatBubble>
+                    ) : null}
+
                     {/* In-progress modify — show user's input bubble first */}
                     {modifying && pendingModifyInstruction && (
                         <div ref={pendingModifyUserRef}>
@@ -1184,13 +1233,55 @@ export function BuildConversation({
                         {slashHint && (
                             <pre className="px-2 py-1.5 text-[10px] leading-5 text-muted-foreground/70 font-mono whitespace-pre-wrap">{slashHint}</pre>
                         )}
+                        {proposedBoardRun && proposedBoardRun.status !== "proposed" ? (
+                            <BoardProgressPin
+                                boardRun={proposedBoardRun}
+                                draining={boardDraining}
+                                busy={boardRunBusy || boardDraining}
+                                onPause={() => void pauseBoardQueue()}
+                                onContinue={() => void continueBoardQueue()}
+                                onCancelRemaining={() => void cancelBoardRemaining()}
+                                onRetry={(taskId) => void retryBoardTask(taskId)}
+                                onSkip={(taskId) => void skipBoardTask(taskId)}
+                            />
+                        ) : null}
                         <div className="mt-3 flex items-center justify-between gap-3">
-                            <div className="hidden text-xs text-muted-foreground sm:block">Enter 发送 · ⌘/Ctrl+Enter 换行</div>
+                            <div className="flex items-center gap-2">
+                                <div className="hidden text-xs text-muted-foreground sm:block">Enter 发送 · ⌘/Ctrl+Enter 换行</div>
+                                <button
+                                    type="button"
+                                    onClick={() => void forceSplitIntoTasks()}
+                                    disabled={
+                                        modifying ||
+                                        boardRunBusy ||
+                                        boardDraining ||
+                                        !modifyInstruction.trim() ||
+                                        (proposedBoardRun != null &&
+                                            proposedBoardRun.status !== "proposed" &&
+                                            proposedBoardRun.status !== "completed" &&
+                                            proposedBoardRun.status !== "cancelled")
+                                    }
+                                    className="defi-button-outline px-3 py-2 text-[11px] font-medium disabled:cursor-not-allowed disabled:opacity-50"
+                                    title="强制拆成任务板"
+                                >
+                                    拆成任务
+                                </button>
+                            </div>
                             <button
                                 type="button"
-                                onClick={handleModify}
-                                disabled={modifying || !modifyInstruction.trim()}
+                                onClick={() => void handleModify()}
+                                disabled={
+                                    modifying ||
+                                    boardDraining ||
+                                    !modifyInstruction.trim() ||
+                                    isBoardRunBlocking(proposedBoardRun)
+                                }
                                 className="defi-button flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                                title={
+                                    isBoardRunBlocking(proposedBoardRun)
+                                        ? "请先处理任务板"
+                                        : undefined
+                                }
                             >
                                 {modifying ? (
                                     <>

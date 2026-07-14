@@ -13,6 +13,8 @@ import {
 import { parseSseDataLine } from "@/lib/transport/agentStreamSse";
 import { trackEvent } from "@/lib/analytics/client";
 import { toClientHistoryPayload } from "@/ai/flows/modify_project/history/modifyHistoryTurn";
+import type { BoardRun, BoardTaskInput } from "@/lib/modify/boardRun/boardRunTypes";
+import { isBoardRunBlocking } from "@/lib/modify/boardRun/isBoardRunBlocking";
 import {
   buildVibeSelectUserMessage,
   type VibeDirection,
@@ -174,13 +176,26 @@ export interface BuildStudioState {
   modifyThinking: string[];
   modifyError: string | null;
   modifyIntentLabel: string;
-  handleModify: () => Promise<void>;
+  handleModify: (instructionOverride?: string) => Promise<void>;
   setOnBeforeModifySend: (fn: (() => string | null) | null) => void;
   setOnAfterModifySend: (fn: (() => void) | null) => void;
   clearModifyHistory: () => void;
   modifyHistory: ModifyRecord[];
   pendingModifyInstruction: string | null;
   pendingModifyImage: string | null;
+  /** Active proposed/confirmed BoardRun for task-slice Modify (v0.1). */
+  proposedBoardRun: BoardRun | null;
+  boardRunBusy: boolean;
+  boardDraining: boolean;
+  reviseProposedBoard: (tasks: BoardTaskInput[]) => Promise<void>;
+  confirmProposedBoard: (tasks: BoardTaskInput[]) => Promise<void>;
+  declineProposedBoard: () => Promise<void>;
+  forceSplitIntoTasks: () => Promise<void>;
+  pauseBoardQueue: () => Promise<void>;
+  continueBoardQueue: () => Promise<void>;
+  cancelBoardRemaining: () => Promise<void>;
+  retryBoardTask: (taskId: string) => Promise<void>;
+  skipBoardTask: (taskId: string) => Promise<void>;
   iframeRef: React.RefObject<HTMLIFrameElement | null>;
   /** Bumped when modify writes workspace files — CODE panel refreshes clean tabs. */
   codeWorkspaceEpoch: number;
@@ -429,6 +444,12 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
   const [modifyIntentLabel, setModifyIntentLabel] = useState("修改");
   const [modifyError, setModifyError] = useState<string | null>(null);
   const [modifyHistory, setModifyHistory] = useState<ModifyRecord[]>([]);
+  const [proposedBoardRun, setProposedBoardRun] = useState<BoardRun | null>(null);
+  const [boardRunBusy, setBoardRunBusy] = useState(false);
+  const [boardDraining, setBoardDraining] = useState(false);
+  const modifyForceBoardRef = useRef(false);
+  const modifyForceSingleRef = useRef(false);
+  const boardDrainAbortRef = useRef(false);
   const [contextCleared, setContextCleared] = useState(false);
   const [pendingModifyInstruction, setPendingModifyInstruction] = useState<string | null>(null);
   const [pendingModifyImage, setPendingModifyImage] = useState<string | null>(null);
@@ -1517,13 +1538,25 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
   }, [rightPanel, projectId, previewState, previewUrl, startPreview, ensurePreviewAlive]);
 
   // ── Modify ───────────────────────────────────────────────────────────
-  const handleModify = useCallback(async () => {
-    if (!modifyInstruction.trim() || modifying || !projectId) return;
+  const handleModify = useCallback(async (instructionOverride?: string) => {
+    const baseInstruction = (instructionOverride ?? modifyInstruction).trim();
+    if (!baseInstruction || modifying || !projectId) return;
+
+    const forceBoard = modifyForceBoardRef.current;
+    const forceSingleModify = modifyForceSingleRef.current;
+    if (
+      isBoardRunBlocking(proposedBoardRun) &&
+      !(forceBoard && proposedBoardRun?.status === "proposed") &&
+      !forceSingleModify
+    ) {
+      setModifyError("任务板进行中：请先确认/继续/取消剩余，或完成后的任务板，再发送普通 Modify。");
+      return;
+    }
 
     const selectionPrefix = onBeforeModifySendRef.current?.() ?? null;
     const instructionToSend = selectionPrefix
-      ? `${selectionPrefix}\n\nUser request:\n${modifyInstruction.trim()}`
-      : modifyInstruction;
+      ? `${selectionPrefix}\n\nUser request:\n${baseInstruction}`
+      : baseInstruction;
     onAfterModifySendRef.current?.();
 
     const capturedImage = modifyImage;
@@ -1548,6 +1581,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
 
     // Track whether the done event was received (for history saving)
     let receivedDone = false;
+    let receivedBoardProposed = false;
 
     async function processModifySSE(
       raw: string,
@@ -1579,6 +1613,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
           args?: Record<string, unknown>;
           result?: string;
           content?: string;
+          boardRun?: BoardRun;
         };
         if (e.type === "intent") {
           const label = typeof e.label === "string" ? e.label : "修改";
@@ -1609,24 +1644,47 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         } else if (e.type === "thinking" && typeof e.content === "string") {
           setModifyThinking((prev) => [...prev, e.content!]);
           modifyThinkingRef.current = [...modifyThinkingRef.current, e.content!];
+        } else if (e.type === "board_proposed" && e.boardRun) {
+          receivedBoardProposed = true;
+          setProposedBoardRun(e.boardRun);
+          setModifyIntentLabel("任务板");
+          modifyIntentLabelRef.current = "任务板";
         } else if (e.type === "error") {
           setModifyError(typeof e.message === "string" ? e.message : "Unknown error");
         } else if (e.type === "done") {
           receivedDone = true;
           setModifyInstruction("");
           setModifyImage(null);
-          setModifyHistory((prev) => [...prev, {
-            instruction: instructionToSend,
-            image: capturedImage ?? null,
-            plan: modifyPlanRef.current,
-            steps: modifyStepsRef.current,
-            diffs: modifyDiffsRef.current,
-            toolCalls: modifyToolCallsRef.current,
-            thinking: modifyThinkingRef.current,
-            intentLabel: modifyIntentLabelRef.current,
-            error: null,
-            completedAt: new Date().toISOString(),
-          }]);
+          if (!receivedBoardProposed) {
+            setModifyHistory((prev) => [...prev, {
+              instruction: instructionToSend,
+              image: capturedImage ?? null,
+              plan: modifyPlanRef.current,
+              steps: modifyStepsRef.current,
+              diffs: modifyDiffsRef.current,
+              toolCalls: modifyToolCallsRef.current,
+              thinking: modifyThinkingRef.current,
+              intentLabel: modifyIntentLabelRef.current,
+              error: null,
+              completedAt: new Date().toISOString(),
+            }]);
+          } else {
+            setModifyHistory((prev) => [...prev, {
+              instruction: instructionToSend,
+              image: capturedImage ?? null,
+              plan: {
+                analysis: "已建议拆成任务板（未改代码）。请确认任务或改回单条 Modify。",
+                changes: [],
+              },
+              steps: modifyStepsRef.current,
+              diffs: [],
+              toolCalls: [],
+              thinking: modifyThinkingRef.current,
+              intentLabel: "任务板",
+              error: null,
+              completedAt: new Date().toISOString(),
+            }]);
+          }
         }
       } catch (e) { console.warn("[modify] SSE parse error:", e); }
     }
@@ -1636,12 +1694,18 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         ? await createAgentStreamClientSession()
         : null;
 
+      modifyForceBoardRef.current = false;
+      modifyForceSingleRef.current = false;
+
       const res = await fetch(`/api/projects/${projectId}/modify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userInstruction: instructionToSend,
           clearContext: contextCleared,
+          preferBoardSuggest: true,
+          ...(forceBoard ? { forceBoard: true } : {}),
+          ...(forceSingleModify ? { forceSingleModify: true } : {}),
           ...(secureSession ? { clientPublicKey: secureSession.clientPublicKeySpki } : {}),
           ...(capturedImage ? { imageBase64: capturedImage } : {}),
           conversationHistory: contextCleared
@@ -1675,6 +1739,10 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
             window.location.href = pricingPath;
           }
           setModifyError("积分不足，请充值或升级后继续");
+          return;
+        }
+        if (body.code === "BOARD_RUN_ACTIVE") {
+          setModifyError(body.error ?? "任务板进行中，请先处理任务板");
           return;
         }
         setModifyError(body.error ?? "Failed to start modification");
@@ -1754,7 +1822,317 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       setPendingModifyInstruction(null);
       setPendingModifyImage(null);
     }
-  }, [modifyInstruction, modifyImage, modifying, projectId, selectedModel, modifyHistory, openPreviewAfterBuild, contextCleared]);
+  }, [modifyInstruction, modifyImage, modifying, projectId, selectedModel, modifyHistory, openPreviewAfterBuild, contextCleared, proposedBoardRun]);
+
+  const appendBoardCardHistory = useCallback(
+    (instruction: string, modify: {
+      ok: boolean;
+      assistantText?: string;
+      touchedFiles?: string[];
+      message?: string;
+    }) => {
+      setModifyHistory((prev) => [
+        ...prev,
+        {
+          instruction,
+          plan: {
+            analysis: modify.ok
+              ? (modify.assistantText ?? "任务卡已完成")
+              : (modify.message ?? "任务卡失败"),
+            changes: [],
+          },
+          steps: [],
+          diffs: (modify.touchedFiles ?? []).map((file) => ({
+            file,
+            reasoning: "board card",
+            patch: "",
+            stats: { additions: 0, deletions: 0 },
+          })),
+          toolCalls: [],
+          thinking: [],
+          intentLabel: "任务板",
+          error: modify.ok ? null : (modify.message ?? "任务卡失败"),
+          completedAt: new Date().toISOString(),
+        },
+      ]);
+      if (modify.ok && (modify.touchedFiles?.length ?? 0) > 0) {
+        setCodeWorkspaceEpoch((n) => n + 1);
+        if (projectId && autoPreviewAfterBuildRef.current) {
+          void openPreviewAfterBuild(projectId, false);
+        }
+      }
+    },
+    [projectId, openPreviewAfterBuild]
+  );
+
+  const drainBoardQueue = useCallback(async () => {
+    if (!projectId) return;
+    boardDrainAbortRef.current = false;
+    setBoardDraining(true);
+    setModifyError(null);
+    try {
+      while (!boardDrainAbortRef.current) {
+        // Phase 1: mark card in_flight so UI shows progress immediately.
+        const prepRes = await fetch(`/api/projects/${projectId}/board-run`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "prepare_next" }),
+        });
+        const prep = (await prepRes.json().catch(() => ({}))) as {
+          boardRun?: BoardRun;
+          dispatch?: { taskId: string; instruction: string } | null;
+          error?: string;
+          code?: string;
+        };
+        if (!prepRes.ok) {
+          setModifyError(prep.error ?? "任务板调度失败");
+          break;
+        }
+        if (prep.boardRun) setProposedBoardRun(prep.boardRun);
+        if (!prep.dispatch) {
+          break;
+        }
+
+        if (boardDrainAbortRef.current) break;
+
+        // Phase 2: run Modify for the in_flight card (may take a while).
+        const execRes = await fetch(`/api/projects/${projectId}/board-run`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "execute_current" }),
+        });
+        const body = (await execRes.json().catch(() => ({}))) as {
+          boardRun?: BoardRun;
+          dispatch?: { taskId: string; instruction: string } | null;
+          modify?: {
+            ok: boolean;
+            assistantText?: string;
+            touchedFiles?: string[];
+            message?: string;
+          } | null;
+          error?: string;
+        };
+        if (!execRes.ok) {
+          setModifyError(body.error ?? "任务卡执行失败");
+          // Refresh board state if server returned it
+          if (body.boardRun) setProposedBoardRun(body.boardRun);
+          break;
+        }
+        if (body.boardRun) setProposedBoardRun(body.boardRun);
+        if (body.dispatch && body.modify) {
+          appendBoardCardHistory(body.dispatch.instruction, body.modify);
+          if (!body.modify.ok) {
+            setModifyError(body.modify.message ?? "任务卡失败，队列已停止");
+          }
+        }
+        const status = body.boardRun?.status;
+        if (
+          !body.boardRun ||
+          status === "failed" ||
+          status === "paused" ||
+          status === "completed" ||
+          status === "cancelled" ||
+          !body.modify?.ok
+        ) {
+          break;
+        }
+      }
+    } finally {
+      setBoardDraining(false);
+    }
+  }, [projectId, appendBoardCardHistory]);
+
+  const reviseProposedBoard = useCallback(async (tasks: BoardTaskInput[]) => {
+    if (!projectId) return;
+    setBoardRunBusy(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/board-run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "revise", tasks }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        boardRun?: BoardRun;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(body.error ?? "Failed to revise board");
+      if (body.boardRun) setProposedBoardRun(body.boardRun);
+    } finally {
+      setBoardRunBusy(false);
+    }
+  }, [projectId]);
+
+  const confirmProposedBoard = useCallback(async (tasks: BoardTaskInput[]) => {
+    if (!projectId) return;
+    setBoardRunBusy(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/board-run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "confirm", tasks }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        boardRun?: BoardRun;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(body.error ?? "Failed to confirm board");
+      if (body.boardRun) setProposedBoardRun(body.boardRun);
+    } finally {
+      setBoardRunBusy(false);
+    }
+    await drainBoardQueue();
+  }, [projectId, drainBoardQueue]);
+
+  const declineProposedBoard = useCallback(async () => {
+    if (!projectId || !proposedBoardRun) return;
+    const goal = proposedBoardRun.goal;
+    setBoardRunBusy(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/board-run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "decline" }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? "Failed to decline board");
+      }
+      setProposedBoardRun(null);
+      modifyForceSingleRef.current = true;
+      await handleModify(goal);
+    } finally {
+      setBoardRunBusy(false);
+    }
+  }, [projectId, proposedBoardRun, handleModify]);
+
+  const forceSplitIntoTasks = useCallback(async () => {
+    if (!modifyInstruction.trim() || modifying || !projectId) return;
+    if (isBoardRunBlocking(proposedBoardRun) && proposedBoardRun?.status !== "proposed") {
+      setModifyError("已有进行中的任务板，请先处理完再拆板。");
+      return;
+    }
+    modifyForceBoardRef.current = true;
+    await handleModify();
+  }, [modifyInstruction, modifying, projectId, handleModify, proposedBoardRun]);
+
+  const pauseBoardQueue = useCallback(async () => {
+    if (!projectId) return;
+    boardDrainAbortRef.current = true;
+    setBoardRunBusy(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/board-run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "pause" }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { boardRun?: BoardRun; error?: string };
+      if (!res.ok) throw new Error(body.error ?? "暂停失败");
+      if (body.boardRun) setProposedBoardRun(body.boardRun);
+    } finally {
+      setBoardRunBusy(false);
+    }
+  }, [projectId]);
+
+  const continueBoardQueue = useCallback(async () => {
+    await drainBoardQueue();
+  }, [drainBoardQueue]);
+
+  const cancelBoardRemaining = useCallback(async () => {
+    if (!projectId) return;
+    boardDrainAbortRef.current = true;
+    setBoardRunBusy(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/board-run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cancel_remaining" }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { boardRun?: BoardRun; error?: string };
+      if (!res.ok) throw new Error(body.error ?? "取消失败");
+      if (body.boardRun) setProposedBoardRun(body.boardRun);
+    } finally {
+      setBoardRunBusy(false);
+    }
+  }, [projectId]);
+
+  const retryBoardTask = useCallback(async (taskId: string) => {
+    if (!projectId) return;
+    setBoardRunBusy(true);
+    boardDrainAbortRef.current = false;
+    try {
+      const prepRes = await fetch(`/api/projects/${projectId}/board-run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "prepare_retry", taskId }),
+      });
+      const prep = (await prepRes.json().catch(() => ({}))) as {
+        boardRun?: BoardRun;
+        error?: string;
+      };
+      if (!prepRes.ok) throw new Error(prep.error ?? "重试调度失败");
+      if (prep.boardRun) setProposedBoardRun(prep.boardRun);
+    } finally {
+      setBoardRunBusy(false);
+    }
+    await drainBoardQueue();
+  }, [projectId, drainBoardQueue]);
+
+  const skipBoardTask = useCallback(async (taskId: string) => {
+    if (!projectId) return;
+    setBoardRunBusy(true);
+    boardDrainAbortRef.current = false;
+    try {
+      const prepRes = await fetch(`/api/projects/${projectId}/board-run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "prepare_skip", taskId }),
+      });
+      const prep = (await prepRes.json().catch(() => ({}))) as {
+        boardRun?: BoardRun;
+        dispatch?: { instruction: string } | null;
+        error?: string;
+      };
+      if (!prepRes.ok) throw new Error(prep.error ?? "跳过调度失败");
+      if (prep.boardRun) setProposedBoardRun(prep.boardRun);
+      // Skip may immediately dispatch the next card; execute via drain.
+    } finally {
+      setBoardRunBusy(false);
+    }
+    await drainBoardQueue();
+  }, [projectId, drainBoardQueue]);
+
+  // Hydrate BoardRun after project load; abort drain on unmount.
+  // If a board was left mid-run (refresh / stuck client), offer resume via continue — do not auto-drain on hydrate
+  // (online-only contract). User clicks「继续」.
+  useEffect(() => {
+    if (!projectId) {
+      setProposedBoardRun(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/projects/${projectId}/board-run`);
+        if (!res.ok || cancelled) return;
+        const body = (await res.json()) as { boardRun?: BoardRun | null };
+        if (cancelled || !body.boardRun) return;
+        if (
+          body.boardRun.status === "proposed" ||
+          body.boardRun.status === "running" ||
+          body.boardRun.status === "paused" ||
+          body.boardRun.status === "failed"
+        ) {
+          setProposedBoardRun(body.boardRun);
+        }
+      } catch {
+        /* ignore hydrate errors */
+      }
+    })();
+    return () => {
+      cancelled = true;
+      boardDrainAbortRef.current = true;
+    };
+  }, [projectId]);
 
   // ── Computed ─────────────────────────────────────────────────────────
   const flowStart =
@@ -1795,6 +2173,18 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     modifyHistory,
     pendingModifyInstruction,
     pendingModifyImage,
+    proposedBoardRun,
+    boardRunBusy,
+    boardDraining,
+    reviseProposedBoard,
+    confirmProposedBoard,
+    declineProposedBoard,
+    forceSplitIntoTasks,
+    pauseBoardQueue,
+    continueBoardQueue,
+    cancelBoardRemaining,
+    retryBoardTask,
+    skipBoardTask,
     iframeRef,
     codeWorkspaceEpoch,
   };

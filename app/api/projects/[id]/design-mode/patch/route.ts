@@ -12,6 +12,8 @@ import { getSessionUser } from "@/lib/auth/session";
 import { requireOwnedProject } from "@/lib/auth/projectAccess";
 import { getSiteRoot } from "@/lib/projectManager";
 import { ensureProjectSourcesOnDisk } from "@/lib/storage";
+import { getBoardRunStore } from "@/lib/modify/boardRun/fileBoardRunStore";
+import { isBoardRunBlocking } from "@/lib/modify/boardRun/isBoardRunBlocking";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -64,6 +66,18 @@ export async function POST(req: NextRequest, { params }: Params) {
     typeof (body as { classNameHint?: unknown }).classNameHint === "string"
       ? (body as { classNameHint: string }).classNameHint
       : undefined;
+
+  const activeBoard = await getBoardRunStore().loadActive(id);
+  if (isBoardRunBlocking(activeBoard)) {
+    return NextResponse.json(
+      {
+        error:
+          "A task board is active. Finish or cancel the board before Direct Apply.",
+        code: "BOARD_RUN_ACTIVE",
+      },
+      { status: 409 }
+    );
+  }
 
   await ensureProjectSourcesOnDisk(id, { db });
 

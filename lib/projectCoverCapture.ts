@@ -150,6 +150,28 @@ async function jpegWithCoverPolish(raw: Buffer): Promise<Buffer> {
   }
 }
 
+/**
+ * One-shot homepage viewport JPEG for Feishu (and similar). Fail-open → null.
+ * Does not write cover Storage / DB state.
+ */
+export async function captureProjectHomepageJpeg(
+  db: SupabaseClient,
+  projectId: string
+): Promise<Buffer | null> {
+  if (coverCaptureDisabledEnv()) return null;
+  try {
+    const { url, extraHeaders } = await resolveCoverCapturePreviewUrl(db, projectId);
+    const raw = await screenshotHomeViewport(url, extraHeaders);
+    return jpegWithCoverPolish(raw);
+  } catch (err) {
+    console.warn(
+      `[projectCoverCapture] homepage jpeg for ${projectId} failed:`,
+      err instanceof Error ? err.message : err
+    );
+    return null;
+  }
+}
+
 async function readCoverBaseline(
   db: SupabaseClient,
   projectId: string
