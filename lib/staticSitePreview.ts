@@ -38,6 +38,8 @@ import {
 import { canUseInstantStaticPreview } from "@/lib/staticSitePreviewFastPath";
 import {
   canReuseStaticExportOut,
+  clearStaticPreviewBuildStamp,
+  isStaticPreviewOutAssetMissingError,
   writeStaticPreviewBuildStamp,
 } from "@/lib/staticPreviewBuildStamp";
 import {
@@ -246,7 +248,16 @@ async function uploadOutDir(
 
   const uploadOne = async (rel: string): Promise<void> => {
     const localPath = path.join(uploadRoot, ...rel.split("/"));
-    const raw = await fs.readFile(localPath);
+    let raw: Buffer;
+    try {
+      raw = await fs.readFile(localPath);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "ENOENT") {
+        throw new Error(`STATIC_PREVIEW_OUT_MISSING:${rel}`);
+      }
+      throw err;
+    }
     const storagePath = `p/${projectId}/${rel}`;
     const contentType = contentTypeForRelPath(rel);
     let lastMessage = "";
@@ -292,6 +303,8 @@ async function uploadOutDir(
 async function removeLocalOutDir(projectDir: string): Promise<void> {
   const outDir = path.join(projectDir, "out");
   await fs.rm(outDir, { recursive: true, force: true });
+  // Stamp without out/ would let the next sync "reuse" a ghost export.
+  await clearStaticPreviewBuildStamp(projectDir);
 }
 
 /**
@@ -377,37 +390,40 @@ export async function prepareProjectDirForStaticExport(projectDir: string): Prom
   await ensureTurbopackBuildScript(projectDir);
 }
 
-async function runStaticExportBuild(projectId: string, projectDir: string): Promise<void> {
+async function runStaticExportBuildUnlocked(
+  projectId: string,
+  projectDir: string
+): Promise<void> {
   const basePath = getStoragePreviewBasePath(projectId);
+  let stdout = "";
+  let stderr = "";
+  try {
+    // Turbopack (`next build`) with site-isolated turbopack.root — see
+    // ensureGeneratedSiteTurbopackRoot. Design Mode still uses `next dev --webpack`.
+    const result = await execFileAsync("pnpm", ["exec", "next", "build"], {
+      cwd: projectDir,
+      env: envForNextWebpackChild({
+        NODE_ENV: "production",
+        OPEN_OX_STATIC_BASE_PATH: basePath,
+      }),
+      maxBuffer: 12 * 1024 * 1024,
+    });
+    stdout = result.stdout?.toString() ?? "";
+    stderr = result.stderr?.toString() ?? "";
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const ex = err as { stdout?: string; stderr?: string };
+    const tail = [ex.stderr, ex.stdout, msg].filter(Boolean).join("\n").slice(-4000);
+    throw new Error(`next build (static preview) failed: ${tail}`);
+  }
+  if (stderr && /error|failed/i.test(stderr) && !/compiled successfully/i.test(stdout)) {
+    console.warn("[staticPreview] build stderr:", stderr.slice(-2000));
+  }
+}
+
+async function runStaticExportBuild(projectId: string, projectDir: string): Promise<void> {
   await withSiteBuildLock(projectDir, async () => {
-    let stdout = "";
-    let stderr = "";
-    try {
-      // Turbopack (`next build`) with site-isolated turbopack.root — see
-      // ensureGeneratedSiteTurbopackRoot. Design Mode still uses `next dev --webpack`.
-      const result = await execFileAsync(
-        "pnpm",
-        ["exec", "next", "build"],
-        {
-          cwd: projectDir,
-          env: envForNextWebpackChild({
-            NODE_ENV: "production",
-            OPEN_OX_STATIC_BASE_PATH: basePath,
-          }),
-          maxBuffer: 12 * 1024 * 1024,
-        }
-      );
-      stdout = result.stdout?.toString() ?? "";
-      stderr = result.stderr?.toString() ?? "";
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      const ex = err as { stdout?: string; stderr?: string };
-      const tail = [ex.stderr, ex.stdout, msg].filter(Boolean).join("\n").slice(-4000);
-      throw new Error(`next build (static preview) failed: ${tail}`);
-    }
-    if (stderr && /error|failed/i.test(stderr) && !/compiled successfully/i.test(stdout)) {
-      console.warn("[staticPreview] build stderr:", stderr.slice(-2000));
-    }
+    await runStaticExportBuildUnlocked(projectId, projectDir);
   });
 }
 
@@ -588,51 +604,73 @@ export async function syncStaticSitePreview(
     try {
       await ensureProjectNodeModules(projectDir);
 
-      // One retry if sources changed during the long `next build` (stub → real page).
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        const reuseOut = await canReuseStaticExportOut(projectDir, filesFp, basePath);
-        if (reuseOut) {
-          console.log(
-            `[staticPreview] reuse existing out/ (verification stamp) projectId=${projectId}`
-          );
-        } else {
-          await runStaticExportBuild(projectId, projectDir);
-        }
+      /**
+       * Hold the site build lock across build → upload → delete so a concurrent
+       * `next build` (other process / Vercel export) cannot wipe `out/` mid-upload
+       * (ENOENT on `_next/static/media/*.woff2`).
+       */
+      const publishOnce = async (opts: { allowReuse: boolean }): Promise<void> => {
+        await withSiteBuildLock(projectDir, async () => {
+          // One retry if sources changed during the long `next build` (stub → real page).
+          for (let attempt = 0; attempt < 2; attempt += 1) {
+            const reuseOut =
+              opts.allowReuse && (await canReuseStaticExportOut(projectDir, filesFp, basePath));
+            if (reuseOut) {
+              console.log(
+                `[staticPreview] reuse existing out/ (verification stamp) projectId=${projectId}`
+              );
+            } else {
+              await runStaticExportBuildUnlocked(projectId, projectDir);
+            }
 
-        const filesFpAfter = await computeProjectFingerprint(projectId);
-        if (!staticExportFingerprintDrifted(filesFp, filesFpAfter)) {
-          await writeStaticPreviewBuildStamp(projectDir, {
-            filesFingerprint: filesFp,
-            basePath,
-            builtAt: new Date().toISOString(),
-          });
-          break;
-        }
+            const filesFpAfter = await computeProjectFingerprint(projectId);
+            if (!staticExportFingerprintDrifted(filesFp, filesFpAfter)) {
+              await writeStaticPreviewBuildStamp(projectDir, {
+                filesFingerprint: filesFp,
+                basePath,
+                builtAt: new Date().toISOString(),
+              });
+              break;
+            }
 
+            console.warn(
+              `[staticPreview] fingerprint drifted during build (stub→real?) ` +
+                `projectId=${projectId} attempt=${attempt + 1} ` +
+                `before=${filesFp} after=${filesFpAfter}`
+            );
+            filesFp = filesFpAfter;
+            if (attempt === 1) {
+              await writeStaticPreviewBuildStamp(projectDir, {
+                filesFingerprint: filesFp,
+                basePath,
+                builtAt: new Date().toISOString(),
+              });
+            }
+          }
+
+          const aggregateKey = `${filesFp}:${originFp}`;
+          const outDir = path.join(projectDir, "out");
+          await rewriteExportedPublicPathsInOutDir(outDir, basePath);
+          await uploadOutDir(storage, projectId, outDir);
+          // Mark synced before deleting local out/ — otherwise a late failure leaves Storage
+          // populated while static_preview_synced_at stays null (health used to false-down).
+          await saveFingerprint(db, projectId, aggregateKey);
+          await persistSyncOk(db, projectId);
+          await removeLocalOutDir(projectDir);
+        });
+      };
+
+      try {
+        await publishOnce({ allowReuse: true });
+      } catch (err) {
+        if (!isStaticPreviewOutAssetMissingError(err)) throw err;
         console.warn(
-          `[staticPreview] fingerprint drifted during build (stub→real?) ` +
-            `projectId=${projectId} attempt=${attempt + 1} ` +
-            `before=${filesFp} after=${filesFpAfter}`
+          `[staticPreview] out/ asset missing during upload — rebuild once projectId=${projectId}:`,
+          err instanceof Error ? err.message : err
         );
-        filesFp = filesFpAfter;
-        if (attempt === 1) {
-          await writeStaticPreviewBuildStamp(projectDir, {
-            filesFingerprint: filesFp,
-            basePath,
-            builtAt: new Date().toISOString(),
-          });
-        }
+        await clearStaticPreviewBuildStamp(projectDir);
+        await publishOnce({ allowReuse: false });
       }
-
-      const aggregateKey = `${filesFp}:${originFp}`;
-      const outDir = path.join(projectDir, "out");
-      await rewriteExportedPublicPathsInOutDir(outDir, basePath);
-      await uploadOutDir(storage, projectId, outDir);
-      // Mark synced before deleting local out/ — otherwise a late failure leaves Storage
-      // populated while static_preview_synced_at stays null (health used to false-down).
-      await saveFingerprint(db, projectId, aggregateKey);
-      await persistSyncOk(db, projectId);
-      await removeLocalOutDir(projectDir);
 
       return { url, port: 0 };
     } catch (err) {

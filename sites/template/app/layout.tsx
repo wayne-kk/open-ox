@@ -20,7 +20,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      {/* CJK locals after next/font so cover capture / Linux hosts are not stuck on Inter Fallback (Arial) tofu */}
+      <body
+        className={inter.className}
+        style={{
+          fontFamily: `${inter.style.fontFamily}, "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif`,
+        }}
+      >
         <OpenOxPreviewBridge />
         <NavigationSection />
         {children}

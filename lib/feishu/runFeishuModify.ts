@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { schedulePostModifyPreviewPipeline } from "@/lib/postGenerationPreviewPipeline";
+import { runPostModifyPreviewPipelineBeforeCapture } from "@/lib/postGenerationPreviewPipeline";
 import { captureProjectHomepageJpeg } from "@/lib/projectCoverCapture";
 import { getProject } from "@/lib/projectManager";
 import { runHeadlessModifyTurn } from "@/lib/modify/runHeadlessModifyTurn";
@@ -87,8 +87,19 @@ export async function runFeishuModifyFromDm(params: {
     return;
   }
 
+  // Await static sync before screenshot — fire-and-forget pipeline raced capture's sync
+  // and deleted `out/` mid-upload (ENOENT on next/font woff2).
   if (result.touchedFiles.length > 0) {
-    schedulePostModifyPreviewPipeline(db, active.projectId, { buildPassed: true });
+    try {
+      await runPostModifyPreviewPipelineBeforeCapture(db, active.projectId, {
+        buildPassed: true,
+      });
+    } catch (err) {
+      console.warn(
+        "[feishu] preview pipeline before capture failed:",
+        err instanceof Error ? err.message : err
+      );
+    }
   }
 
   const summary =

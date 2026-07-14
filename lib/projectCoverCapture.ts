@@ -4,6 +4,7 @@
  */
 
 import {
+  buildCoverCaptureCjkFallbackCss,
   COVER_CAPTURE_FONT_READY_TIMEOUT_MS,
   COVER_CAPTURE_POST_FONT_SETTLE_MS,
   isAuthGatedPreviewFailureBody,
@@ -125,6 +126,9 @@ async function screenshotHomeViewport(
       );
     }
     await page.evaluate(() => window.scrollTo(0, 0));
+    // Patch next/font Inter Fallback + append CJK locals before fonts.ready so
+    // the settle wait includes the newly declared faces (tofu without this).
+    await page.addStyleTag({ content: buildCoverCaptureCjkFallbackCss() });
     await waitForFontsReadyFailOpen(page, COVER_CAPTURE_FONT_READY_TIMEOUT_MS);
     await sleep(COVER_CAPTURE_POST_FONT_SETTLE_MS);
     const buf = await page.screenshot({

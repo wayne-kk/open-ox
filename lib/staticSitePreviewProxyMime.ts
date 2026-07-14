@@ -21,7 +21,9 @@ export function mapStorageUpstreamStatus(status: number, bodyText?: string | nul
 
 export function contentTypeForRelPath(rel: string): string {
   const lower = rel.toLowerCase();
-  if (lower.endsWith(".html")) return "text/html";
+  // charset required: with X-Content-Type-Options: nosniff and no meta charset,
+  // Chromium decodes UTF-8 Chinese as Latin-1 mojibake in screenshots.
+  if (lower.endsWith(".html")) return "text/html; charset=utf-8";
   if (lower.endsWith(".css")) return "text/css; charset=utf-8";
   if (lower.endsWith(".js")) return "application/javascript; charset=utf-8";
   if (lower.endsWith(".json")) return "application/json; charset=utf-8";

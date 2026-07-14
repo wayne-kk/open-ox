@@ -23,6 +23,11 @@ export async function writeStaticPreviewBuildStamp(
   await fs.writeFile(full, `${JSON.stringify(stamp, null, 2)}\n`, "utf-8");
 }
 
+/** Drop reuse stamp when local `out/` is deleted or known incomplete. */
+export async function clearStaticPreviewBuildStamp(projectDir: string): Promise<void> {
+  await fs.unlink(stampPath(projectDir)).catch(() => undefined);
+}
+
 export async function readStaticPreviewBuildStamp(
   projectDir: string
 ): Promise<StaticPreviewBuildStamp | null> {
@@ -66,4 +71,12 @@ export async function canReuseStaticExportOut(
   } catch {
     return false;
   }
+}
+
+/** Upload hit a path that vanished — usually concurrent rebuild/rm of `out/`. */
+export function isStaticPreviewOutAssetMissingError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  if (err.message.startsWith("STATIC_PREVIEW_OUT_MISSING:")) return true;
+  const code = (err as NodeJS.ErrnoException).code;
+  return code === "ENOENT" && /[/\\]out[/\\]/i.test(err.message);
 }

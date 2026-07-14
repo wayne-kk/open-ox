@@ -1,12 +1,24 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildCoverCaptureCjkFallbackCss,
   COVER_CAPTURE_PENDING_FRESH_MS,
   evaluateCoverCapturePoll,
   isAuthGatedPreviewFailureBody,
   isFreshCoverPending,
   isNewerCoverTimestamp,
 } from "./coverCaptureOrchestration";
+
+describe("buildCoverCaptureCjkFallbackCss", () => {
+  it("redeclares Inter Fallback for CJK and lists system CJK locals", () => {
+    const css = buildCoverCaptureCjkFallbackCss();
+    expect(css).toContain('font-family: "Inter Fallback"');
+    expect(css).toContain("U+4E00-9FFF");
+    expect(css).toContain('local("Noto Sans CJK SC")');
+    expect(css).toContain('local("PingFang SC")');
+    expect(css).toContain("__ox_cjk_capture");
+  });
+});
 
 describe("isAuthGatedPreviewFailureBody", () => {
   it("detects the site-previews Forbidden body", () => {

@@ -27,6 +27,13 @@ describe("mapStorageUpstreamStatus", () => {
 });
 
 describe("resolveProxiedContentType", () => {
+  it("serves HTML as UTF-8 so CJK is not mojibake under nosniff", () => {
+    expect(contentTypeForRelPath("index.html")).toBe("text/html; charset=utf-8");
+    expect(resolveProxiedContentType("index.html", "text/html")).toBe(
+      "text/html; charset=utf-8"
+    );
+  });
+
   it("uses path map for gif", () => {
     expect(resolveProxiedContentType("_next/foo.gif", "text/plain")).toBe("image/gif");
     expect(contentTypeForRelPath("x.gif")).toBe("image/gif");

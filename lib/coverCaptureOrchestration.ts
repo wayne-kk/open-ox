@@ -19,6 +19,44 @@ export const COVER_CAPTURE_POLL_INTERVAL_MS = 2_000;
 export const COVER_CAPTURE_FONT_READY_TIMEOUT_MS = 5_000;
 export const COVER_CAPTURE_POST_FONT_SETTLE_MS = 400;
 
+/**
+ * CSS injected before cover/Feishu homepage screenshots.
+ *
+ * next/font latin Inter ends with `font-family: Inter, "Inter Fallback"` where
+ * Fallback is `local(Arial)` with no unicode-range — CJK never reaches system
+ * fonts and renders as tofu boxes when the host lacks a last-resort CJK face
+ * (typical Linux/Docker). Re-declare `Inter Fallback` for CJK ranges and append
+ * explicit CJK locals on `html`/`body`.
+ */
+export function buildCoverCaptureCjkFallbackCss(): string {
+  const cjkLocals = [
+    'local("PingFang SC")',
+    'local("Hiragino Sans GB")',
+    'local("Noto Sans CJK SC")',
+    'local("Noto Sans SC")',
+    'local("WenQuanYi Micro Hei")',
+    'local("Microsoft YaHei")',
+  ].join(", ");
+  const cjkRange =
+    "U+4E00-9FFF, U+3400-4DBF, U+F900-FAFF, U+3000-303F, U+FF00-FFEF";
+  return `
+@font-face {
+  font-family: "Inter Fallback";
+  src: ${cjkLocals};
+  unicode-range: ${cjkRange};
+}
+@font-face {
+  font-family: "__ox_cjk_capture";
+  src: ${cjkLocals};
+  unicode-range: ${cjkRange};
+}
+html, body {
+  font-family: Inter, "Inter Fallback", "__ox_cjk_capture", "PingFang SC",
+    "Noto Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+}
+`.trim();
+}
+
 export type CoverScheduleStatus = "queued" | "in_flight";
 
 export type CoverScheduleResult = {
