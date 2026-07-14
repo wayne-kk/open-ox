@@ -6,6 +6,7 @@
 **目标**：提出**既有体验想法池之外**的方案，侧重让人「想试一把 / 想转发 / 觉得只有你们能做」  
 **关联**：
 - 体验向想法池（闭环短板）：[`ux-expansion-ideas-20260710.md`](./ux-expansion-ideas-20260710.md)
+- Agent 架构启发场景：[`hermes-agent-ux-scenarios-20260714.md`](./hermes-agent-ux-scenarios-20260714.md)
 - 迭代大纲：[`docs/product-iteration-outline.md`](../product-iteration-outline.md)
 - 术语：根目录 [`CONTEXT.md`](../../CONTEXT.md)
 

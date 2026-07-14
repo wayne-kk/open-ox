@@ -6,14 +6,21 @@
 import {
   COVER_CAPTURE_FONT_READY_TIMEOUT_MS,
   COVER_CAPTURE_POST_FONT_SETTLE_MS,
+  isAuthGatedPreviewFailureBody,
   isFreshCoverPending,
   type CoverScheduleResult,
 } from "@/lib/coverCaptureOrchestration";
 import { polishCoverJpeg } from "@/lib/coverImagePolish";
-import { startDevServer, getExistingLocalPreviewUrl } from "@/lib/devServerManager";
+import {
+  getExistingLocalPreviewUrl as getExistingLocalNextPreviewUrl,
+  startLocalDevServer,
+} from "@/lib/localDevServerManager";
+import { previewCaptureExtraHeaders } from "@/lib/previewCaptureAuth";
+import { storagePreviewDepsPresent } from "@/lib/previewMode";
 import { previewUrlAllowedForScreenshot } from "@/lib/previewScreenshotUrl";
 import { launchChromium } from "@/lib/playwright/launchChromium";
 import { getProject, updateProjectCoverState } from "@/lib/projectManager";
+import { getStaticPreviewUrl, syncStaticSitePreview } from "@/lib/staticSitePreview";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { uploadCoverScreenshot } from "@/lib/storage";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
@@ -53,8 +60,43 @@ async function waitForFontsReadyFailOpen(
   }
 }
 
-async function screenshotHomeViewport(previewEntryUrl: string): Promise<Buffer> {
+/**
+ * Prefer already-published static preview via `/site-previews` + capture secret (no per-site next).
+ * Fall back to local next only when static deps/secret are unavailable.
+ */
+async function resolveCoverCapturePreviewUrl(
+  db: SupabaseClient,
+  projectId: string
+): Promise<{ url: string; extraHeaders: Record<string, string> | null }> {
+  const captureHeaders = previewCaptureExtraHeaders();
+  if (captureHeaders && storagePreviewDepsPresent()) {
+    try {
+      await syncStaticSitePreview(db, projectId);
+      return { url: getStaticPreviewUrl(projectId), extraHeaders: captureHeaders };
+    } catch (err) {
+      console.warn(
+        `[projectCoverCapture] static preview unavailable, falling back to local next ${projectId}:`,
+        err instanceof Error ? err.message : err
+      );
+    }
+  }
+
+  const reused = await getExistingLocalNextPreviewUrl(db, projectId);
+  const { url } = reused ?? (await startLocalDevServer(db, projectId));
+  return { url, extraHeaders: null };
+}
+
+async function screenshotHomeViewport(
+  previewEntryUrl: string,
+  extraHeaders: Record<string, string> | null
+): Promise<Buffer> {
   previewUrlAllowedForScreenshot(previewEntryUrl);
+
+  if (previewEntryUrl.includes("/site-previews/") && !extraHeaders) {
+    throw new Error(
+      "Cover capture refused auth-gated /site-previews URL without OPEN_OX_PREVIEW_CAPTURE_SECRET"
+    );
+  }
 
   const browser = await launchChromium();
   try {
@@ -64,6 +106,7 @@ async function screenshotHomeViewport(previewEntryUrl: string): Promise<Buffer> 
         height: COVER_VIEWPORT_HEIGHT,
       },
       deviceScaleFactor: 1,
+      ...(extraHeaders ? { extraHTTPHeaders: extraHeaders } : {}),
     });
     const home = (() => {
       try {
@@ -75,6 +118,12 @@ async function screenshotHomeViewport(previewEntryUrl: string): Promise<Buffer> 
       return previewEntryUrl.endsWith("/") ? previewEntryUrl : `${previewEntryUrl}/`;
     })();
     await page.goto(home, { waitUntil: "load", timeout: 120_000 });
+    const bodyText = await page.evaluate(() => document.body?.innerText ?? "");
+    if (isAuthGatedPreviewFailureBody(bodyText)) {
+      throw new Error(
+        "Cover capture landed on Forbidden (auth-gated preview). Set OPEN_OX_PREVIEW_CAPTURE_SECRET."
+      );
+    }
     await page.evaluate(() => window.scrollTo(0, 0));
     await waitForFontsReadyFailOpen(page, COVER_CAPTURE_FONT_READY_TIMEOUT_MS);
     await sleep(COVER_CAPTURE_POST_FONT_SETTLE_MS);
@@ -162,11 +211,10 @@ async function executeCoverCapture(
       error: null,
     });
 
-    const reused = await getExistingLocalPreviewUrl(db, projectId);
-    const { url } = reused ?? (await startDevServer(db, projectId));
+    const { url, extraHeaders } = await resolveCoverCapturePreviewUrl(db, projectId);
     previewUrlAllowedForScreenshot(url);
 
-    const rawJpeg = await screenshotHomeViewport(url);
+    const rawJpeg = await screenshotHomeViewport(url, extraHeaders);
     const jpeg = await jpegWithCoverPolish(rawJpeg);
 
     await uploadCoverScreenshot(db, projectId, jpeg);

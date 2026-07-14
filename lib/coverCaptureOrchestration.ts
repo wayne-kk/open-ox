@@ -1,5 +1,18 @@
 /** Pure cover-capture scheduling / poll rules (no Playwright, no DB I/O). */
 
+/**
+ * `/site-previews` returns a bare `Forbidden` body (HTTP 403) when Playwright has no
+ * owner session cookie. Covers must not upload that screenshot as a project card image.
+ */
+export function isAuthGatedPreviewFailureBody(bodyText: string): boolean {
+  const t = bodyText.replace(/\s+/g, " ").trim();
+  if (!t) return false;
+  // Exact body from `new NextResponse("Forbidden", { status: 403 })`.
+  if (/^forbidden$/i.test(t)) return true;
+  // Tolerate tiny wrappers / newlines already collapsed above.
+  return t.length < 40 && /^forbidden\b/i.test(t);
+}
+
 export const COVER_CAPTURE_PENDING_FRESH_MS = 3 * 60 * 1000;
 export const COVER_CAPTURE_POLL_TIMEOUT_MS = 3 * 60 * 1000;
 export const COVER_CAPTURE_POLL_INTERVAL_MS = 2_000;

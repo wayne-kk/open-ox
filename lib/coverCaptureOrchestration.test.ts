@@ -3,9 +3,21 @@ import { describe, expect, it } from "vitest";
 import {
   COVER_CAPTURE_PENDING_FRESH_MS,
   evaluateCoverCapturePoll,
+  isAuthGatedPreviewFailureBody,
   isFreshCoverPending,
   isNewerCoverTimestamp,
 } from "./coverCaptureOrchestration";
+
+describe("isAuthGatedPreviewFailureBody", () => {
+  it("detects the site-previews Forbidden body", () => {
+    expect(isAuthGatedPreviewFailureBody("Forbidden")).toBe(true);
+    expect(isAuthGatedPreviewFailureBody("  Forbidden\n")).toBe(true);
+    expect(isAuthGatedPreviewFailureBody("MCU 漫威电影宇宙史诗门户")).toBe(false);
+    expect(isAuthGatedPreviewFailureBody("Forbidden to access this resource forever")).toBe(
+      false
+    );
+  });
+});
 
 describe("isNewerCoverTimestamp", () => {
   it("treats any timestamp as newer than null baseline", () => {

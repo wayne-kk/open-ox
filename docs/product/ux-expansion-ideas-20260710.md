@@ -5,7 +5,8 @@
 **状态**：想法池（未立项；供排期与 PRD 拆解）  
 **目标**：提高用户体验，制造「眼前一亮」的跃迁，而非功能堆砌  
 **关联**：[`docs/product-iteration-outline.md`](../product-iteration-outline.md)、Studio Design Mode / Community Publish Remix 产品文档  
-**姊妹文档（拉新/传播轴）**：[`attraction-ideas-20260713.md`](./attraction-ideas-20260713.md)（获客钩子与传播叙事；与本文闭环短板互补，勿混立同一目标不清的里程碑）
+**姊妹文档（拉新/传播轴）**：[`attraction-ideas-20260713.md`](./attraction-ideas-20260713.md)（获客钩子与传播叙事；与本文闭环短板互补，勿混立同一目标不清的里程碑）  
+**姊妹文档（Agent 架构启发轴）**：[`hermes-agent-ux-scenarios-20260714.md`](./hermes-agent-ux-scenarios-20260714.md)（Hermes Agent 运行时/记忆/协作/值班 → Open-OX 体验场景；与本文可组合，立项时写清架构杠杆）
 
 ---
 

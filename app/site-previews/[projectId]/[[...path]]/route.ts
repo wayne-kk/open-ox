@@ -5,6 +5,10 @@ import { isAdminUser } from "@/lib/auth/roles";
 import { canAccessStaticPreview } from "@/lib/auth/projectAccess";
 import { getProject } from "@/lib/projectManager";
 import {
+  PREVIEW_CAPTURE_SECRET_HEADER,
+  previewCaptureSecretMatches,
+} from "@/lib/previewCaptureAuth";
+import {
   SITE_PREVIEWS_BUCKET,
   resolveProxiedContentType,
 } from "@/lib/staticSitePreview";
@@ -18,7 +22,10 @@ import {
 
 export const runtime = "nodejs";
 
-async function assertStaticPreviewAccess(projectId: string): Promise<NextResponse | null> {
+async function assertStaticPreviewAccess(
+  projectId: string,
+  request: Request
+): Promise<NextResponse | null> {
   let admin;
   try {
     admin = createSupabaseServiceRoleClient();
@@ -29,6 +36,13 @@ async function assertStaticPreviewAccess(projectId: string): Promise<NextRespons
   if (!project) {
     return new NextResponse("Not found", { status: 404 });
   }
+
+  // Server-side cover capture (Playwright) — no owner cookie; shared secret only.
+  const captureSecret = request.headers.get(PREVIEW_CAPTURE_SECRET_HEADER);
+  if (previewCaptureSecretMatches(captureSecret)) {
+    return null;
+  }
+
   const session = await getSessionUser();
   const isAdmin = session
     ? await isAdminUser({ supabase: session.supabase, userId: session.user.id })
@@ -145,13 +159,13 @@ type Ctx = { params: Promise<{ projectId: string; path?: string[] }> };
  * URL — combined with the above you get ERR_TOO_MANY_REDIRECTS. Serve `index.html` for both shapes.
  */
 
-export async function GET(_req: Request, ctx: Ctx) {
+export async function GET(req: Request, ctx: Ctx) {
   const { projectId, path } = await ctx.params;
   const id = projectId?.trim();
   if (!id) {
     return new NextResponse("Missing projectId", { status: 400 });
   }
-  const denied = await assertStaticPreviewAccess(id);
+  const denied = await assertStaticPreviewAccess(id, req);
   if (denied) return denied;
   const segments = normalizePreviewPathSegments(path);
   if (!isSafePreviewSegments(segments)) {
@@ -161,13 +175,13 @@ export async function GET(_req: Request, ctx: Ctx) {
   return proxyFromStorage(id, rel, "GET");
 }
 
-export async function HEAD(_req: Request, ctx: Ctx) {
+export async function HEAD(req: Request, ctx: Ctx) {
   const { projectId, path } = await ctx.params;
   const id = projectId?.trim();
   if (!id) {
     return new NextResponse(null, { status: 400 });
   }
-  const denied = await assertStaticPreviewAccess(id);
+  const denied = await assertStaticPreviewAccess(id, req);
   if (denied) {
     return new NextResponse(null, { status: denied.status });
   }
