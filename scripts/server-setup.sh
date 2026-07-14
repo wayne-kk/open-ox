@@ -1,30 +1,46 @@
 #!/usr/bin/env bash
-# ── Open-OX Server Setup ──────────────────────────────────────────────────────
-# Run ONCE on your 火山引擎 server (as root): bash server-setup.sh
-# After this, push to main → GitHub Actions builds the Docker image, pushes to
-# GHCR, and runs `docker compose` on this host (no PM2).
-# ───────────────────────────────────────────────────────────────────────────────
+# Run ONCE on the Tencent / 火山引擎 host (with sudo), then never from CI.
+#
+#   sudo OPEN_OX_DEPLOY_USER=ubuntu bash scripts/server-setup.sh
+#
+# Prerequisites for GitHub Actions deploy (SERVER_USER=ubuntu):
+#   - Docker Engine + Compose available
+#   - docker.service enabled and running
+#   - ubuntu ∈ docker group (re-login once after this script)
+#   - APP_DIR writable by ubuntu
 set -euo pipefail
 
-APP_DIR="/sharedata/wayne/open-ox"
+APP_DIR="${OPEN_OX_APP_DIR:-/sharedata/wayne/open-ox}"
+DEPLOY_USER="${OPEN_OX_DEPLOY_USER:-ubuntu}"
 
-echo "==> Setting up Open-OX Docker deployment environment..."
-
-# 1. Docker
-if ! command -v docker &> /dev/null; then
-  echo "==> Installing Docker..."
-  curl -fsSL https://get.docker.com | sh
-  systemctl enable docker && systemctl start docker
-else
-  echo "==> Docker: $(docker --version)"
-  systemctl enable docker 2>/dev/null || true
-  systemctl start docker 2>/dev/null || true
+if [ "$(id -u)" -ne 0 ]; then
+  echo "ERROR: run as root, e.g. sudo OPEN_OX_DEPLOY_USER=ubuntu bash $0"
+  exit 1
 fi
 
-# 2. Docker Compose plugin
-# Tencent/Aliyun Ubuntu mirrors often lack `docker-compose-plugin` (Docker Inc. package name).
-if ! docker compose version &> /dev/null; then
-  echo "==> Installing Docker Compose..."
+echo "==> App dir: $APP_DIR"
+echo "==> Deploy user: $DEPLOY_USER"
+
+# ── Docker Engine ────────────────────────────────────────────────────────────
+if ! command -v docker >/dev/null 2>&1; then
+  echo "==> Installing Docker Engine (get.docker.com)..."
+  curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+  sh /tmp/get-docker.sh
+  rm -f /tmp/get-docker.sh
+else
+  echo "==> Docker already installed: $(docker --version)"
+fi
+
+systemctl enable containerd 2>/dev/null || true
+systemctl enable docker
+systemctl start containerd 2>/dev/null || true
+systemctl start docker
+
+# ── Compose plugin ───────────────────────────────────────────────────────────
+# Tencent Ubuntu mirrors often lack the Docker Inc. package name docker-compose-plugin.
+if ! docker compose version >/dev/null 2>&1; then
+  echo "==> Installing Docker Compose plugin..."
+  apt-get update || true
   if ! apt-get install -y docker-compose-plugin 2>/dev/null \
     && ! apt-get install -y docker-compose-v2 2>/dev/null; then
     ARCH="$(uname -m)"
@@ -39,38 +55,41 @@ if ! docker compose version &> /dev/null; then
   fi
 fi
 
-# Allow non-root deploy user to run docker (optional: set OPEN_OX_DEPLOY_USER).
-if [ -n "${OPEN_OX_DEPLOY_USER:-}" ] && id "$OPEN_OX_DEPLOY_USER" &>/dev/null; then
-  usermod -aG docker "$OPEN_OX_DEPLOY_USER"
-  echo "==> Added $OPEN_OX_DEPLOY_USER to docker group (re-login required for that user)"
+docker info >/dev/null
+docker compose version
+
+# ── Deploy user can use docker without sudo ──────────────────────────────────
+if id "$DEPLOY_USER" >/dev/null 2>&1; then
+  usermod -aG docker "$DEPLOY_USER"
+  echo "==> Added $DEPLOY_USER to group 'docker' (they must start a NEW SSH session once)"
+else
+  echo "WARN: user $DEPLOY_USER not found — skip usermod"
 fi
 
-# 3. App directory (compose.prod.yaml + .env.production are synced by CI)
 mkdir -p "$APP_DIR/sites"
-# Container runs as uid 1001 (nextjs)
-chown -R 1001:1001 "$APP_DIR/sites" 2>/dev/null || true
+# Container process runs as uid 1001 (nextjs in Dockerfile)
+chown -R 1001:1001 "$APP_DIR/sites"
+# ubuntu needs to write compose/env/rsync into APP_DIR
+chown -R "$DEPLOY_USER:$DEPLOY_USER" "$APP_DIR"
+# keep sites writable by container
+chown -R 1001:1001 "$APP_DIR/sites"
 
-# 4. Stop legacy PM2 if present
 if command -v pm2 >/dev/null 2>&1; then
-  echo "==> Removing legacy PM2 apps (open-ox / open-ox-generation-worker)..."
-  pm2 delete open-ox 2>/dev/null || true
-  pm2 delete open-ox-generation-worker 2>/dev/null || true
-  pm2 save 2>/dev/null || true
+  echo "==> Removing legacy PM2 apps..."
+  # May be owned by deploy user; best-effort
+  sudo -u "$DEPLOY_USER" pm2 delete open-ox 2>/dev/null || true
+  sudo -u "$DEPLOY_USER" pm2 delete open-ox-generation-worker 2>/dev/null || true
+  sudo -u "$DEPLOY_USER" pm2 save 2>/dev/null || true
 fi
 
 echo ""
-echo "==> Setup complete! docker=$(command -v docker) compose=$(docker compose version 2>/dev/null | head -1)"
+echo "==> Server ready."
+echo "    docker:  $(command -v docker) ($(docker --version))"
+echo "    compose: $(docker compose version | head -1)"
 echo ""
-echo "Next steps — configure GitHub repo Secrets:"
-echo "  SERVER_HOST / SERVER_USER / SERVER_SSH_KEY / SERVER_PORT"
-echo "  NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY / NEXT_PUBLIC_SITE_URL"
-echo "  SUPABASE_SERVICE_ROLE_KEY, OPEN_OX_PREVIEW_*, OPENAI_*, ARK_*, FEISHU_*, VERCEL_*, ..."
-echo "  GHCR_READ_TOKEN   # PAT with read:packages (required if the GHCR package is private)"
+echo "Verify as $DEPLOY_USER in a NEW login:"
+echo "  ssh $DEPLOY_USER@<host>"
+echo "  groups          # must list 'docker'"
+echo "  docker info     # must show Server Version"
 echo ""
-echo "If SERVER_USER is not root, either:"
-echo "  OPEN_OX_DEPLOY_USER=that-user bash server-setup.sh"
-echo "  # or: usermod -aG docker that-user  (then re-login)"
-echo ""
-echo "Optional: make ghcr.io/wayne-kk/open-ox public so the server can pull without a token."
-echo ""
-echo "Then re-run the failed GitHub Actions job (or push to main)."
+echo "Then push to main — CI builds the image ON THIS HOST (no ghcr.io pull)."

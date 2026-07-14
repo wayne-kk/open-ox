@@ -6,12 +6,8 @@ on:
   pull_request:
     branches: [main]
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: wayne-kk/open-ox
-
 jobs:
-  # ── CI: Typecheck (fast). Full `next build` only on PRs — main deploy builds inside Docker. ──
+  # ── CI: Typecheck (fast). Full `next build` only on PRs. ────────────────────
   check:
     name: Typecheck
     runs-on: ubuntu-latest
@@ -32,7 +28,6 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      # Catch Next build breaks before merge; skip on main to avoid duplicating Docker's build (~2min).
       - name: Build
         if: github.event_name == 'pull_request'
         env:
@@ -40,7 +35,6 @@ jobs:
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY: placeholder
         run: pnpm build
 
-  # ── CI: Tests ───────────────────────────────────────────────────────────────
   test:
     name: Tests
     runs-on: ubuntu-latest
@@ -61,61 +55,22 @@ jobs:
       - name: Run tests
         run: npx vitest --run
 
-  # ── CD: Docker image → GHCR → compose on server (only on push to main) ─────
+  # ── CD: rsync → build image ON THE SERVER → compose up ─────────────────────
+  # Root cause of prior failures: pulling a Playwright-sized image from ghcr.io
+  # onto a Tencent Cloud host exceeds appleboy SSH command_timeout (30m).
+  # Fix: keep the Docker layer cache on the server; never pull the app image from GHCR.
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
     needs: [check, test]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    permissions:
-      contents: read
-      packages: write
     steps:
       - uses: actions/checkout@v4
 
-      - name: Image metadata
-        id: meta
-        run: |
-          echo "tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
-          echo "image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}" >> "$GITHUB_OUTPUT"
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # NEXT_PUBLIC_* must be present at `next build` inside the Dockerfile.
-      # GHA + registry cache: deps/browsers/apt layers reuse across deploys; only builder rebuilds on code change.
-      - name: Build and push image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile
-          push: true
-          tags: |
-            ${{ steps.meta.outputs.image }}:latest
-            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
-          build-args: |
-            NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-            NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY }}
-            NEXT_PUBLIC_SITE_URL=${{ secrets.NEXT_PUBLIC_SITE_URL }}
-          cache-from: |
-            type=gha
-            type=registry,ref=${{ steps.meta.outputs.image }}:buildcache
-          cache-to: |
-            type=gha,mode=max
-            type=registry,ref=${{ steps.meta.outputs.image }}:buildcache,mode=max
-
-      # Runtime env for containers. Add matching Repository secrets under Settings → Secrets → Actions.
       - name: Generate .env.production
         run: |
           {
-            echo "OPEN_OX_IMAGE_TAG=${{ steps.meta.outputs.tag }}"
+            echo "OPEN_OX_IMAGE_TAG=${GITHUB_SHA}"
             echo "NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}"
             echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY }}"
             echo "NEXT_PUBLIC_SITE_URL=${{ secrets.NEXT_PUBLIC_SITE_URL }}"
@@ -154,23 +109,18 @@ jobs:
           set -euo pipefail
           HOST="$SERVER_HOST"
           PORT="${SERVER_PORT:-22}"
-
-          echo "==> Checking TCP reachability to ${HOST}:${PORT}"
+          echo "==> Checking TCP ${HOST}:${PORT}"
           for i in 1 2 3; do
             if timeout 5 bash -c "cat < /dev/null > /dev/tcp/${HOST}/${PORT}"; then
-              echo "TCP check passed on attempt ${i}"
+              echo "TCP ok (attempt ${i})"
               break
             fi
             if [ "$i" -eq 3 ]; then
-              echo "ERROR: cannot reach ${HOST}:${PORT} from GitHub runner"
+              echo "ERROR: cannot reach ${HOST}:${PORT}"
               exit 1
             fi
-            echo "Retrying in 3s..."
             sleep 3
           done
-
-          echo "==> Capturing SSH banner (best effort)"
-          timeout 5 bash -c "exec 3<>/dev/tcp/${HOST}/${PORT}; head -c 128 <&3" || true
 
       - name: Add server to known_hosts
         env:
@@ -178,12 +128,11 @@ jobs:
           SERVER_PORT: ${{ secrets.SERVER_PORT }}
         run: |
           set -euo pipefail
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
           ssh-keyscan -p "${SERVER_PORT:-22}" -H "$SERVER_HOST" >> ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
-      - name: Sync compose + env to server
+      - name: Sync build context to server
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_PORT: ${{ secrets.SERVER_PORT }}
@@ -192,16 +141,31 @@ jobs:
           set -euo pipefail
           APP=/sharedata/wayne/open-ox
           RSYNC_SSH="ssh -p ${SERVER_PORT:-22}"
-
           ssh -p "${SERVER_PORT:-22}" "$SERVER_USER@$SERVER_HOST" "mkdir -p $APP/sites"
 
+          # Sync app + Dockerfile context. Never --delete into sites/ (generated projects live there).
+          rsync -az --delete \
+            -e "$RSYNC_SSH" \
+            --exclude '.git' \
+            --exclude 'node_modules' \
+            --exclude '.next' \
+            --exclude 'coverage' \
+            --exclude '.scratch' \
+            --exclude '.cursor' \
+            --exclude '.planning' \
+            --exclude '.kiro' \
+            --exclude 'docs' \
+            --exclude 'e2b-template' \
+            --exclude 'sites' \
+            --exclude '*.log' \
+            ./ "$SERVER_USER@$SERVER_HOST:$APP/"
+
+          # Template only — do not wipe generated sites/{projectId}.
           rsync -az \
             -e "$RSYNC_SSH" \
-            compose.prod.yaml \
-            .env.production \
-            "$SERVER_USER@$SERVER_HOST:$APP/"
+            sites/template/ "$SERVER_USER@$SERVER_HOST:$APP/sites/template/"
 
-      - name: Deploy on server (Docker Compose)
+      - name: Deploy on server
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -209,153 +173,16 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT }}
           timeout: 120s
-          command_timeout: 30m
-          envs: GHCR_TOKEN,GHCR_USER,IMAGE_TAG
+          # First server-side image build (Playwright + next) can exceed 30m; later builds use local cache.
+          command_timeout: 60m
+          envs: IMAGE_TAG
           script: |
             set -euo pipefail
-            # Non-interactive SSH often has a minimal PATH; Docker is usually here.
-            export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
-
-            APP=/sharedata/wayne/open-ox
-            mkdir -p "$APP"
-            cd "$APP"
-
-            run_root() {
-              if [ "$(id -u)" -eq 0 ]; then
-                "$@"
-              elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-                sudo "$@"
-              else
-                return 1
-              fi
-            }
-
-            # CI SSH as ubuntu: docker group often inactive. Prefer sudo whenever not root.
-            resolve_docker() {
-              if [ "$(id -u)" -eq 0 ]; then
-                DOCKER_VIA=
-              elif run_root true; then
-                DOCKER_VIA=sudo
-                echo "==> Using docker via: sudo"
-              elif docker info >/dev/null 2>&1; then
-                DOCKER_VIA=
-              else
-                echo "ERROR: need passwordless sudo (or root) to talk to Docker in CI."
-                exit 127
-              fi
-            }
-
-            dock() {
-              case "${DOCKER_VIA:-}" in
-                sudo) sudo docker "$@" ;;
-                *)    docker "$@" ;;
-              esac
-            }
-
-            start_docker_daemon() {
-              echo "==> Starting Docker daemon..."
-              run_root systemctl enable containerd 2>/dev/null || true
-              run_root systemctl enable docker 2>/dev/null || true
-              run_root systemctl start containerd 2>/dev/null || true
-              run_root systemctl start docker || true
-              for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
-                if dock info >/dev/null 2>&1; then
-                  echo "==> Docker daemon is up (attempt $i)"
-                  return 0
-                fi
-                echo "==> waiting for docker daemon... ($i/15)"
-                sleep 2
-                run_root systemctl start docker || true
-              done
-              echo "ERROR: Docker daemon not running. On the server check:"
-              echo "  sudo systemctl status docker"
-              echo "  sudo journalctl -u docker -n 50"
-              run_root systemctl status docker --no-pager || true
-              run_root journalctl -u docker -n 40 --no-pager || true
-              exit 127
-            }
-
-            ensure_docker() {
-              if ! command -v docker >/dev/null 2>&1; then
-                echo "==> Docker missing — attempting install..."
-                if ! run_root true; then
-                  echo "ERROR: need root or passwordless sudo to install Docker."
-                  exit 127
-                fi
-                curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
-                run_root sh /tmp/get-docker.sh
-                rm -f /tmp/get-docker.sh
-              fi
-
-              if ! docker compose version >/dev/null 2>&1; then
-                echo "==> Installing Compose plugin (apt package often missing on cloud mirrors)..."
-                run_root apt-get update || true
-                if ! run_root apt-get install -y docker-compose-plugin \
-                  && ! run_root apt-get install -y docker-compose-v2; then
-                  ARCH="$(uname -m)"
-                  case "$ARCH" in
-                    x86_64|amd64) ARCH=x86_64 ;;
-                    aarch64|arm64) ARCH=aarch64 ;;
-                  esac
-                  PLUGIN_DIR=/usr/local/lib/docker/cli-plugins
-                  run_root mkdir -p "$PLUGIN_DIR"
-                  curl -fsSL "https://github.com/docker/compose/releases/download/v2.32.4/docker-compose-linux-${ARCH}" \
-                    -o /tmp/docker-compose
-                  run_root mv /tmp/docker-compose "${PLUGIN_DIR}/docker-compose"
-                  run_root chmod +x "${PLUGIN_DIR}/docker-compose"
-                fi
-              fi
-
-              DEPLOY_USER="$(id -un)"
-              if [ "$(id -u)" -ne 0 ]; then
-                run_root usermod -aG docker "$DEPLOY_USER" || true
-              fi
-
-              resolve_docker
-              start_docker_daemon
-
-              if ! dock compose version >/dev/null 2>&1; then
-                echo "ERROR: docker compose still unavailable."
-                exit 127
-              fi
-            }
-
-            ensure_docker
-            echo "==> Docker: $(dock --version)"
-            dock info >/dev/null
-
-            echo "==> Ensuring sites dir is writable by container user (uid 1001)..."
-            mkdir -p "$APP/sites"
-            run_root chown -R 1001:1001 "$APP/sites" 2>/dev/null || chown -R 1001:1001 "$APP/sites" 2>/dev/null || true
-
-            if [ -n "${GHCR_TOKEN:-}" ]; then
-              echo "==> Logging in to GHCR..."
-              echo "$GHCR_TOKEN" | dock login ghcr.io -u "${GHCR_USER:-wayne-kk}" --password-stdin
-            else
-              echo "==> GHCR_READ_TOKEN not set — pulling without login (package must be public)"
-            fi
-
-            echo "==> Pulling image tag ${IMAGE_TAG}..."
             export OPEN_OX_IMAGE_TAG="${IMAGE_TAG}"
-            dock compose -f compose.prod.yaml --env-file .env.production pull
-
-            echo "==> Stopping legacy PM2 processes (if any)..."
-            if command -v pm2 >/dev/null 2>&1; then
-              pm2 delete open-ox 2>/dev/null || true
-              pm2 delete open-ox-generation-worker 2>/dev/null || true
-              pm2 save 2>/dev/null || true
-            fi
-
-            echo "==> Starting containers..."
-            dock compose -f compose.prod.yaml --env-file .env.production up -d --remove-orphans
-
-            echo "==> Status:"
-            dock compose -f compose.prod.yaml --env-file .env.production ps
-            echo "==> Deploy complete!"
+            export OPEN_OX_APP_DIR=/sharedata/wayne/open-ox
+            bash /sharedata/wayne/open-ox/scripts/deploy-on-server.sh
         env:
-          GHCR_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
-          GHCR_USER: ${{ github.repository_owner }}
-          IMAGE_TAG: ${{ steps.meta.outputs.tag }}
+          IMAGE_TAG: ${{ github.sha }}
 
       - name: Notify Feishu (success)
         if: success()
@@ -403,10 +230,7 @@ jobs:
                 ]
               }
             }')
-
-          curl -X POST "$FEISHU_WEBHOOK" \
-            -H "Content-Type: application/json" \
-            -d "$payload"
+          curl -X POST "$FEISHU_WEBHOOK" -H "Content-Type: application/json" -d "$payload"
 
       - name: Notify Feishu (failure)
         if: failure()
@@ -454,7 +278,4 @@ jobs:
                 ]
               }
             }')
-
-          curl -X POST "$FEISHU_WEBHOOK" \
-            -H "Content-Type: application/json" \
-            -d "$payload"
+          curl -X POST "$FEISHU_WEBHOOK" -H "Content-Type: application/json" -d "$payload"
