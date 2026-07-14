@@ -203,8 +203,27 @@ jobs:
           envs: GHCR_TOKEN,GHCR_USER,IMAGE_TAG
           script: |
             set -euo pipefail
+            # Non-interactive SSH often has a minimal PATH; Docker is usually here.
+            export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
+
             APP=/sharedata/wayne/open-ox
             cd "$APP"
+
+            if ! command -v docker >/dev/null 2>&1; then
+              echo "ERROR: docker not found on PATH=$PATH"
+              echo "SSH into the server as root (or with sudo) and run once:"
+              echo "  curl -fsSL https://raw.githubusercontent.com/wayne-kk/open-ox/main/scripts/server-setup.sh | bash"
+              echo "Or copy scripts/server-setup.sh to the host and: bash server-setup.sh"
+              echo "If Docker is installed, add the deploy user to the docker group and re-login:"
+              echo "  usermod -aG docker \"\$USER\" && newgrp docker"
+              exit 127
+            fi
+            if ! docker compose version >/dev/null 2>&1; then
+              echo "ERROR: docker compose plugin missing. On the server run:"
+              echo "  apt-get update && apt-get install -y docker-compose-plugin"
+              exit 127
+            fi
+            echo "==> Docker: $(docker --version)"
 
             echo "==> Ensuring sites dir is writable by container user (uid 1001)..."
             mkdir -p "$APP/sites"
