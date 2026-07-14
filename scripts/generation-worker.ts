@@ -6,9 +6,9 @@
  * Local dev: run `pnpm run generation:worker` alongside `pnpm dev`.
  * Optional: OPEN_OX_INLINE_GENERATION=1 runs jobs inside Next.js instead of this worker.
  */
+import { existsSync, readFileSync } from "node:fs";
 import { hostname } from "node:os";
-
-import { loadEnvConfig } from "@next/env";
+import { join } from "node:path";
 
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 import { createResilientFetch } from "@/lib/supabase/resilientFetch";
@@ -16,8 +16,40 @@ import { executeGenerationRun } from "@/lib/generation/executeGenerationRun";
 import { shouldRunInlineGeneration } from "@/lib/generation/inlineGeneration";
 import type { GenerationRunRow } from "@/lib/generation/types";
 
+/**
+ * Load `.env*` into `process.env` without overriding existing keys.
+ * Avoids `@next/env` so the Docker-bundled worker does not need Next's package graph.
+ * Compose/K8s already inject env; this mainly helps local `pnpm run generation:worker`.
+ */
+function loadEnvFiles(dir: string): void {
+  const files =
+    process.env.NODE_ENV === "production"
+      ? [".env.production.local", ".env.local", ".env.production", ".env"]
+      : [".env.development.local", ".env.local", ".env.development", ".env"];
+  for (const name of files) {
+    const path = join(dir, name);
+    if (!existsSync(path)) continue;
+    for (const raw of readFileSync(path, "utf8").split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line || line.startsWith("#")) continue;
+      const eq = line.indexOf("=");
+      if (eq <= 0) continue;
+      const key = line.slice(0, eq).trim();
+      if (!key || process.env[key] !== undefined) continue;
+      let val = line.slice(eq + 1).trim();
+      if (
+        (val.startsWith('"') && val.endsWith('"')) ||
+        (val.startsWith("'") && val.endsWith("'"))
+      ) {
+        val = val.slice(1, -1);
+      }
+      process.env[key] = val;
+    }
+  }
+}
+
 const projectDir = process.cwd();
-loadEnvConfig(projectDir);
+loadEnvFiles(projectDir);
 
 const WORKER_ID =
   process.env.OPEN_OX_WORKER_ID ?? `${hostname()}-${process.pid}`;
