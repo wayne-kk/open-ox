@@ -5,6 +5,8 @@
 
 import {
   buildCoverCaptureCjkFallbackCss,
+  COVER_CAPTURE_CJK_FONT_STACK,
+  COVER_CAPTURE_FONT_CSS_VARS,
   COVER_CAPTURE_FONT_READY_TIMEOUT_MS,
   COVER_CAPTURE_POST_FONT_SETTLE_MS,
   isAuthGatedPreviewFailureBody,
@@ -126,9 +128,25 @@ async function screenshotHomeViewport(
       );
     }
     await page.evaluate(() => window.scrollTo(0, 0));
-    // Patch next/font Inter Fallback + append CJK locals before fonts.ready so
+    // Patch Latin @font-face CJK ranges + theme vars before fonts.ready so
     // the settle wait includes the newly declared faces (tofu without this).
     await page.addStyleTag({ content: buildCoverCaptureCjkFallbackCss() });
+    await page.evaluate(
+      ({ cssVars, cjkStack }) => {
+        const root = document.documentElement;
+        const cs = getComputedStyle(root);
+        for (const prop of cssVars) {
+          const cur = cs.getPropertyValue(prop).trim();
+          if (!cur) continue;
+          if (/\bNoto Sans CJK SC\b/i.test(cur) || /\bPingFang SC\b/i.test(cur)) continue;
+          root.style.setProperty(prop, `${cur}, ${cjkStack}`);
+        }
+      },
+      {
+        cssVars: [...COVER_CAPTURE_FONT_CSS_VARS],
+        cjkStack: COVER_CAPTURE_CJK_FONT_STACK,
+      }
+    );
     await waitForFontsReadyFailOpen(page, COVER_CAPTURE_FONT_READY_TIMEOUT_MS);
     await sleep(COVER_CAPTURE_POST_FONT_SETTLE_MS);
     const buf = await page.screenshot({

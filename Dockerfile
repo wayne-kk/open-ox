@@ -53,8 +53,10 @@ RUN groupadd --system --gid 1001 nodejs \
 # Playwright OS deps + CJK-capable fonts for cover screenshots (tofu without these).
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
+    fonts-liberation \
     fonts-noto-core \
     fonts-noto-cjk \
+    fontconfig \
     libasound2 \
     libatk-bridge2.0-0 \
     libatk1.0-0 \
@@ -72,6 +74,7 @@ RUN apt-get update \
     libxkbcommon0 \
     libxrandr2 \
     ca-certificates \
+  && fc-cache -f \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/public ./public

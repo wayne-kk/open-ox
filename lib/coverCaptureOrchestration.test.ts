@@ -1,6 +1,5 @@
-import { describe, expect, it } from "vitest";
-
 import {
+  appendCjkToFontFamilyList,
   buildCoverCaptureCjkFallbackCss,
   COVER_CAPTURE_PENDING_FRESH_MS,
   evaluateCoverCapturePoll,
@@ -10,13 +9,32 @@ import {
 } from "./coverCaptureOrchestration";
 
 describe("buildCoverCaptureCjkFallbackCss", () => {
-  it("redeclares Inter Fallback for CJK and lists system CJK locals", () => {
+  it("redeclares common Latin faces for CJK unicode-range so fallback is not truncated", () => {
     const css = buildCoverCaptureCjkFallbackCss();
-    expect(css).toContain('font-family: "Inter Fallback"');
     expect(css).toContain("U+4E00-9FFF");
     expect(css).toContain('local("Noto Sans CJK SC")');
     expect(css).toContain('local("PingFang SC")');
+    expect(css).toContain('local("Noto Sans SC")');
+    // next/font truncation face
+    expect(css).toContain('font-family: "Inter Fallback"');
+    // generated-site Latin stacks (Lora / Playfair / mono) need the same trick
+    expect(css).toContain("font-family: Lora");
+    expect(css).toContain('font-family: "Playfair Display"');
+    expect(css).toContain('font-family: "JetBrains Mono"');
+    expect(css).toContain("font-family: Georgia");
+    expect(css).toContain("font-family: Arial");
     expect(css).toContain("__ox_cjk_capture");
+    expect(css).toContain("--ox-cjk-capture");
+  });
+});
+
+describe("appendCjkToFontFamilyList", () => {
+  it("appends CJK stack when missing and is idempotent when already present", () => {
+    const withCjk = appendCjkToFontFamilyList("Lora, Georgia, serif");
+    expect(withCjk.startsWith("Lora, Georgia, serif")).toBe(true);
+    expect(withCjk).toContain("Noto Sans CJK SC");
+    expect(withCjk).toContain("PingFang SC");
+    expect(appendCjkToFontFamilyList(withCjk)).toBe(withCjk);
   });
 });
 

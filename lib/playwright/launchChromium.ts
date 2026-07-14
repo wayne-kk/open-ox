@@ -6,11 +6,16 @@
 import { chromium, type Browser, type LaunchOptions } from "playwright";
 
 const NON_ROOT_SANDBOX_ARGS = ["--no-sandbox", "--disable-setuid-sandbox"] as const;
+/** Avoid Chromium crashes when Docker /dev/shm is small (common in k8s). */
+const DOCKER_SHM_ARG = "--disable-dev-shm-usage";
 
 /** Pure options builder — unit-tested without launching a browser. */
 export function buildChromiumLaunchOptions(overrides?: LaunchOptions): LaunchOptions {
   const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH?.trim();
   const mergedArgs = [...(overrides?.args ?? [])];
+  if (!mergedArgs.includes(DOCKER_SHM_ARG)) {
+    mergedArgs.push(DOCKER_SHM_ARG);
+  }
   const uid = typeof process.getuid === "function" ? process.getuid() : 0;
   if (uid !== 0) {
     for (const arg of NON_ROOT_SANDBOX_ARGS) {

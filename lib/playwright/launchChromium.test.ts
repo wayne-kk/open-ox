@@ -17,13 +17,24 @@ describe("buildChromiumLaunchOptions", () => {
     expect(opts.executablePath).toBe("/usr/bin/chromium");
   });
 
+  it("always adds --disable-dev-shm-usage for small Docker /dev/shm", () => {
+    const opts = buildChromiumLaunchOptions();
+    expect(opts.args).toEqual(expect.arrayContaining(["--disable-dev-shm-usage"]));
+  });
+
   it("adds sandbox args when process is non-root", () => {
     const getuid = process.getuid;
     if (typeof getuid !== "function") return;
     if (getuid() === 0) return;
 
     const opts = buildChromiumLaunchOptions();
-    expect(opts.args).toEqual(expect.arrayContaining(["--no-sandbox", "--disable-setuid-sandbox"]));
+    expect(opts.args).toEqual(
+      expect.arrayContaining([
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+      ])
+    );
   });
 
   it("merges caller args without duplicating sandbox flags", () => {

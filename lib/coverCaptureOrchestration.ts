@@ -19,42 +19,97 @@ export const COVER_CAPTURE_POLL_INTERVAL_MS = 2_000;
 export const COVER_CAPTURE_FONT_READY_TIMEOUT_MS = 5_000;
 export const COVER_CAPTURE_POST_FONT_SETTLE_MS = 400;
 
+/** System CJK faces for cover/Feishu Playwright screenshots (Docker Noto + macOS PingFang). */
+export const COVER_CAPTURE_CJK_FONT_STACK = [
+  "PingFang SC",
+  "Hiragino Sans GB",
+  "Noto Sans CJK SC",
+  "Noto Sans SC",
+  "Noto Serif CJK SC",
+  "WenQuanYi Micro Hei",
+  "Microsoft YaHei",
+].join(", ");
+
+/**
+ * Latin / next/font family names that often appear in generated sites.
+ * Without a CJK `unicode-range` face under the same name, Chromium may paint
+ * .notdef tofu instead of falling through to system CJK (esp. Linux/Docker).
+ */
+const COVER_CAPTURE_LATIN_FACES_FOR_CJK = [
+  "Inter",
+  "Inter Fallback",
+  "__Inter_Fallback",
+  "__ox_cjk_capture",
+  "Lora",
+  "Playfair Display",
+  "Georgia",
+  "Times New Roman",
+  "Times",
+  "Helvetica Neue",
+  "Helvetica",
+  "Arial",
+  "JetBrains Mono",
+  "Courier New",
+  "Courier",
+  "Cambria",
+] as const;
+
+/** Theme CSS variables that commonly hold Latin-only stacks on generated sites. */
+export const COVER_CAPTURE_FONT_CSS_VARS = [
+  "--font-body",
+  "--font-display",
+  "--font-sans",
+  "--font-serif",
+  "--font-mono",
+  "--default-font-family",
+  "--default-mono-font-family",
+] as const;
+
 /**
  * CSS injected before cover/Feishu homepage screenshots.
  *
- * next/font latin Inter ends with `font-family: Inter, "Inter Fallback"` where
- * Fallback is `local(Arial)` with no unicode-range — CJK never reaches system
- * fonts and renders as tofu boxes when the host lacks a last-resort CJK face
- * (typical Linux/Docker). Re-declare `Inter Fallback` for CJK ranges and append
- * explicit CJK locals on `html`/`body`.
+ * Re-declare common Latin faces for CJK `unicode-range` → `local(Noto/PingFang)`
+ * so stacks like `Lora, Georgia, serif` / next/font `Inter Fallback` do not tofu.
+ * Pair with `appendCoverCaptureCjkFontStacksInPage` to also extend CSS variables.
  */
 export function buildCoverCaptureCjkFallbackCss(): string {
-  const cjkLocals = [
-    'local("PingFang SC")',
-    'local("Hiragino Sans GB")',
-    'local("Noto Sans CJK SC")',
-    'local("Noto Sans SC")',
-    'local("WenQuanYi Micro Hei")',
-    'local("Microsoft YaHei")',
-  ].join(", ");
+  const cjkLocals = COVER_CAPTURE_CJK_FONT_STACK.split(", ")
+    .map((name) => `local("${name}")`)
+    .join(", ");
   const cjkRange =
     "U+4E00-9FFF, U+3400-4DBF, U+F900-FAFF, U+3000-303F, U+FF00-FFEF";
+  const faceBlocks = COVER_CAPTURE_LATIN_FACES_FOR_CJK.map((family) => {
+    const fam = /[^A-Za-z0-9_-]/.test(family) ? `"${family}"` : family;
+    return `@font-face {
+  font-family: ${fam};
+  src: ${cjkLocals};
+  unicode-range: ${cjkRange};
+}`;
+  }).join("\n");
+  const cjkStack = COVER_CAPTURE_CJK_FONT_STACK;
   return `
-@font-face {
-  font-family: "Inter Fallback";
-  src: ${cjkLocals};
-  unicode-range: ${cjkRange};
-}
-@font-face {
-  font-family: "__ox_cjk_capture";
-  src: ${cjkLocals};
-  unicode-range: ${cjkRange};
+${faceBlocks}
+:root, :host {
+  --ox-cjk-capture: ${cjkStack};
 }
 html, body {
-  font-family: Inter, "Inter Fallback", "__ox_cjk_capture", "PingFang SC",
-    "Noto Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+  font-family: Inter, "Inter Fallback", "__ox_cjk_capture", ${cjkStack}, sans-serif;
 }
 `.trim();
+}
+
+/**
+ * Extends theme font CSS variables (and optionally element stacks) with CJK locals.
+ * Pure string helper for tests; Playwright calls the in-page variant.
+ */
+export function appendCjkToFontFamilyList(
+  current: string,
+  cjkStack: string = COVER_CAPTURE_CJK_FONT_STACK
+): string {
+  const cur = current.trim();
+  if (!cur) return cjkStack;
+  if (/\bNoto Sans CJK SC\b/i.test(cur) || /\bPingFang SC\b/i.test(cur)) return cur;
+  return `${cur}, ${cjkStack}`;
 }
 
 export type CoverScheduleStatus = "queued" | "in_flight";
