@@ -47,7 +47,8 @@ RUN if [ -n "${NEXT_PUBLIC_SUPABASE_URL}" ]; then export NEXT_PUBLIC_SUPABASE_UR
 
 # Bundle the queue worker so the slim runner does not need tsx + full TypeScript sources.
 # playwright/sharp stay external — they ship with standalone tracing / native bindings.
-RUN pnpm exec esbuild scripts/generation-worker.ts \
+# esbuild is not a package.json dependency; pin via dlx for reproducible Docker builds.
+RUN pnpm dlx esbuild@0.25.5 scripts/generation-worker.ts \
   --bundle \
   --platform=node \
   --target=node20 \
