@@ -66,13 +66,16 @@ else
   echo "WARN: user $DEPLOY_USER not found — skip usermod"
 fi
 
-mkdir -p "$APP_DIR/sites"
-# Container process runs as uid 1001 (nextjs in Dockerfile)
-chown -R 1001:1001 "$APP_DIR/sites"
-# ubuntu needs to write compose/env/rsync into APP_DIR
+mkdir -p "$APP_DIR/sites/template" "$APP_DIR/logs"
+
+# Deploy user owns the app tree (rsync / edit compose).
 chown -R "$DEPLOY_USER:$DEPLOY_USER" "$APP_DIR"
-# keep sites writable by container
-chown -R 1001:1001 "$APP_DIR/sites"
+
+# sites/ is bind-mounted into the container (uid 1001). Both ubuntu (rsync template)
+# and the container must be able to write — single-tenant VPS: world-writable sites.
+chmod -R a+rwX "$APP_DIR/sites"
+chown -R "$DEPLOY_USER:$DEPLOY_USER" "$APP_DIR/sites"
+chmod -R a+rwX "$APP_DIR/sites"
 
 if command -v pm2 >/dev/null 2>&1; then
   echo "==> Removing legacy PM2 apps..."

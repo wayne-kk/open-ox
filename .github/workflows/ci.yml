@@ -141,10 +141,20 @@ jobs:
           set -euo pipefail
           APP=/sharedata/wayne/open-ox
           RSYNC_SSH="ssh -p ${SERVER_PORT:-22}"
-          ssh -p "${SERVER_PORT:-22}" "$SERVER_USER@$SERVER_HOST" "mkdir -p $APP/sites"
 
-          # Sync app + Dockerfile context. Never --delete into sites/ (generated projects live there).
-          rsync -az --delete \
+          # Ensure dest dirs exist and are writable by the deploy user (sites may be uid 1001 from containers).
+          ssh -p "${SERVER_PORT:-22}" "$SERVER_USER@$SERVER_HOST" bash -s <<EOF
+          set -euo pipefail
+          mkdir -p "$APP/sites/template" "$APP/logs"
+          if [ -d "$APP/sites" ] && [ ! -w "$APP/sites/template" ]; then
+            sudo chown -R "$SERVER_USER:$SERVER_USER" "$APP/sites/template" || true
+          fi
+          # Runtime writes from container (uid 1001) + rsync from ubuntu must both work.
+          sudo chmod -R a+rwX "$APP/sites" || chmod -R a+rwX "$APP/sites" || true
+          EOF
+
+          # Incremental sync — no --delete. Server keeps logs/, .open-ox/, sites/{projectId}/.
+          rsync -az \
             -e "$RSYNC_SSH" \
             --exclude '.git' \
             --exclude 'node_modules' \
@@ -157,10 +167,12 @@ jobs:
             --exclude 'docs' \
             --exclude 'e2b-template' \
             --exclude 'sites' \
+            --exclude 'logs' \
+            --exclude '.open-ox' \
             --exclude '*.log' \
             ./ "$SERVER_USER@$SERVER_HOST:$APP/"
 
-          # Template only — do not wipe generated sites/{projectId}.
+          # Template only — baked into image too, but host volume overlays /app/sites.
           rsync -az \
             -e "$RSYNC_SSH" \
             sites/template/ "$SERVER_USER@$SERVER_HOST:$APP/sites/template/"
