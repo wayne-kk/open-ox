@@ -1,0 +1,58 @@
+# Production stack (web + generation worker). Used by CI / server deploy.
+#
+#   docker compose -f compose.prod.yaml --env-file .env.production pull
+#   docker compose -f compose.prod.yaml --env-file .env.production up -d
+#
+# Image is built in CI and pushed to GHCR; build section is for rebuild-on-server fallback.
+
+services:
+  open-ox:
+    image: ghcr.io/wayne-kk/open-ox:${OPEN_OX_IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY:-}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-}
+    container_name: open-ox
+    restart: unless-stopped
+    ports:
+      - "${OPEN_OX_HOST_PORT:-3000}:3000"
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: production
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+    volumes:
+      # Persist generated sites on the host (survives image updates).
+      - ${OPEN_OX_SITES_DIR:-/sharedata/wayne/open-ox/sites}:/app/sites
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  open-ox-worker:
+    image: ghcr.io/wayne-kk/open-ox:${OPEN_OX_IMAGE_TAG:-latest}
+    container_name: open-ox-generation-worker
+    restart: unless-stopped
+    command: ["node", "generation-worker.cjs"]
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: production
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      OPEN_OX_WORKER_ID: ${OPEN_OX_WORKER_ID:-docker-worker-1}
+    volumes:
+      - ${OPEN_OX_SITES_DIR:-/sharedata/wayne/open-ox/sites}:/app/sites
+    depends_on:
+      open-ox:
+        condition: service_healthy

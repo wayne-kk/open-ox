@@ -29,7 +29,7 @@ const nextConfig: NextConfig = {
     "/*": [
       "node_modules/playwright/**/*",
       "node_modules/playwright-core/**/*",
-      "ai/flows/generate_project/prompts/skills/**/*",
+      "ai/**/*",
     ],
   },
   serverExternalPackages: ["playwright", "playwright-core"],

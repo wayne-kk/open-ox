@@ -10,9 +10,12 @@
 #
 # Cover capture: Playwright Chromium is installed at build time into /ms-playwright;
 # the runner installs OS libs + Noto CJK fonts so headless screenshots render Chinese.
+#
+# Same image serves Next (`node server.js`) and the generation worker
+# (`node generation-worker.cjs`) — see compose.prod.yaml.
 
 FROM node:20-bookworm-slim AS base
-RUN corepack enable
+RUN corepack enable && corepack prepare pnpm@10.5.2 --activate
 WORKDIR /app
 
 FROM base AS deps
@@ -42,6 +45,19 @@ RUN if [ -n "${NEXT_PUBLIC_SUPABASE_URL}" ]; then export NEXT_PUBLIC_SUPABASE_UR
     pnpm build && \
     pnpm exec playwright install chromium
 
+# Bundle the queue worker so the slim runner does not need tsx + full TypeScript sources.
+# playwright/sharp stay external — they ship with standalone tracing / native bindings.
+RUN pnpm exec esbuild scripts/generation-worker.ts \
+  --bundle \
+  --platform=node \
+  --target=node20 \
+  --format=cjs \
+  --outfile=dist/generation-worker.cjs \
+  --alias:@=. \
+  --external:playwright \
+  --external:playwright-core \
+  --external:sharp
+
 FROM base AS runner
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -51,6 +67,7 @@ RUN groupadd --system --gid 1001 nodejs \
   && useradd --system --uid 1001 --gid nodejs nextjs
 
 # Playwright OS deps + CJK-capable fonts for cover screenshots (tofu without these).
+# procps: local preview helpers may call pgrep; ca-certificates for outbound HTTPS.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
     fonts-liberation \
@@ -74,15 +91,19 @@ RUN apt-get update \
     libxkbcommon0 \
     libxrandr2 \
     ca-certificates \
+    procps \
   && fc-cache -f \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-# Runtime `fs` reads under ai/flows/generate_project/prompts/skills (design-system catalog); not always traced into standalone alone.
-COPY --from=builder --chown=nextjs:nodejs /app/ai/flows/generate_project/prompts/skills ./ai/flows/generate_project/prompts/skills
+# Runtime `fs` reads under ai/** (prompts, skills, rules) — not fully traced into standalone.
+COPY --from=builder --chown=nextjs:nodejs /app/ai ./ai
 COPY --from=builder --chown=nextjs:nodejs /ms-playwright /ms-playwright
+COPY --from=builder --chown=nextjs:nodejs /app/dist/generation-worker.cjs ./generation-worker.cjs
+# Seed for fresh volumes; production bind-mounts host sites over /app/sites.
+COPY --from=builder --chown=nextjs:nodejs /app/sites/template ./sites/template
 
 USER nextjs
 EXPOSE 3000

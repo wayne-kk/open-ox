@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # ── Open-OX Server Setup ──────────────────────────────────────────────────────
 # Run ONCE on your 火山引擎 server: bash server-setup.sh
+# After this, push to main → GitHub Actions builds the Docker image, pushes to
+# GHCR, and runs `docker compose` on this host (no PM2).
 # ───────────────────────────────────────────────────────────────────────────────
-set -e
+set -euo pipefail
 
 APP_DIR="/sharedata/wayne/open-ox"
 
-echo "==> Setting up Open-OX deployment environment..."
+echo "==> Setting up Open-OX Docker deployment environment..."
 
 # 1. Docker
 if ! command -v docker &> /dev/null; then
@@ -22,49 +24,28 @@ if ! docker compose version &> /dev/null; then
   apt-get update && apt-get install -y docker-compose-plugin
 fi
 
-# 3. App directory + docker-compose
-mkdir -p "$APP_DIR"
-cd "$APP_DIR"
+# 3. App directory (compose.prod.yaml + .env.production are synced by CI)
+mkdir -p "$APP_DIR/sites"
+# Container runs as uid 1001 (nextjs)
+chown -R 1001:1001 "$APP_DIR/sites" 2>/dev/null || true
 
-cat > docker-compose.yml << 'COMPOSE'
-services:
-  open-ox:
-    image: ghcr.io/wayne-kk/open-ox:latest
-    container_name: open-ox
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
-    env_file:
-      - .env.production
-    volumes:
-      - open-ox-sites:/app/sites
-      - open-ox-logs:/app/logs
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3000/ || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
-
-volumes:
-  open-ox-sites:
-  open-ox-logs:
-COMPOSE
+# 4. Stop legacy PM2 if present
+if command -v pm2 >/dev/null 2>&1; then
+  echo "==> Removing legacy PM2 apps (open-ox / open-ox-generation-worker)..."
+  pm2 delete open-ox 2>/dev/null || true
+  pm2 delete open-ox-generation-worker 2>/dev/null || true
+  pm2 save 2>/dev/null || true
+fi
 
 echo ""
 echo "==> Setup complete!"
 echo ""
 echo "Next steps — configure GitHub repo Secrets:"
-echo "  SERVER_HOST                                  # server IP"
-echo "  SERVER_USER                                  # ssh user"
-echo "  SERVER_SSH_KEY                               # ssh private key"
-echo "  SERVER_PORT                                  # ssh port"
-echo "  NEXT_PUBLIC_SUPABASE_URL                     # supabase project url"
-echo "  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY # supabase key"
-echo "  E2B_API_KEY                                  # e2b api key"
-echo "  OPENAI_API_KEY                               # llm api key"
-echo "  OPENAI_API_URL                               # llm api url"
-echo "  DIFY_API_URL                                 # (optional) dify url"
-echo "  DIFY_API_KEY                                 # (optional) dify key"
+echo "  SERVER_HOST / SERVER_USER / SERVER_SSH_KEY / SERVER_PORT"
+echo "  NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY / NEXT_PUBLIC_SITE_URL"
+echo "  SUPABASE_SERVICE_ROLE_KEY, OPEN_OX_PREVIEW_*, OPENAI_*, ARK_*, FEISHU_*, VERCEL_*, ..."
+echo "  GHCR_READ_TOKEN   # PAT with read:packages (required if the GHCR package is private)"
 echo ""
-echo "Then push to main → auto deploy."
+echo "Optional: make ghcr.io/wayne-kk/open-ox public so the server can pull without a token."
+echo ""
+echo "Then push to main → CI builds Dockerfile, pushes to GHCR, compose up on this host."
