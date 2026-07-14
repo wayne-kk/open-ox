@@ -25,10 +25,23 @@ docs
 .kiro
 .github
 
-# large / unrelated trees (keep sites/ — runtime needs sites/template and project dirs)
+# large / unrelated trees
 e2b-template
 example
 .open-ox
+.scratch
+logs
+
+# Per-project workspaces are bind-mounted at runtime — never send them as build context.
+# Image only needs sites/template as a seed for fresh volumes (see Dockerfile runner).
+# Use sites/* (not sites/) so !sites/template can re-include the seed tree.
+sites/*
+!sites/template/
+!sites/template/**
+sites/template/node_modules
+sites/template/.next
+sites/template/out
+sites/template/.git
 
 # test & misc
 coverage
