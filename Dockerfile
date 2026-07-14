@@ -3,13 +3,16 @@
 
 # Next.js standalone production image (pnpm).
 #
+# Layering (fast incremental deploys):
+#   deps      — only invalidates when package.json / lockfile / patches change
+#   browsers  — Playwright Chromium; same cache key as deps (NOT on every source change)
+#   builder   — next build + worker bundle; invalidates on source changes
+#   runner    — OS fonts/libs + copy artifacts
+#
 # Build-time NEXT_PUBLIC_* can come from either:
 #   (A) `.env.local` copied into the build context (.dockerignore allows it), or
 #   (B) `docker compose --env-file .env.local build`, or
 #   (C) `docker build --build-arg NEXT_PUBLIC_...=...` (overrides when non-empty).
-#
-# Cover capture: Playwright Chromium is installed at build time into /ms-playwright;
-# the runner installs OS libs + Noto CJK fonts so headless screenshots render Chinese.
 #
 # Same image serves Next (`node server.js`) and the generation worker
 # (`node generation-worker.cjs`) — see compose.prod.yaml.
@@ -21,10 +24,17 @@ WORKDIR /app
 FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY patches ./patches
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=open-ox-pnpm-store,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
 
-FROM base AS builder
-COPY --from=deps /app/node_modules ./node_modules
+# Chromium only depends on lockfile/playwright version — keep off the source COPY path.
+FROM deps AS browsers
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN pnpm exec playwright install chromium
+
+FROM deps AS builder
+COPY --from=browsers /ms-playwright /ms-playwright
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 COPY . .
 
 # Strip other env files so `.env.local` (if present) drives `next build`; keep `.env.local`.
@@ -38,26 +48,20 @@ ARG NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=
 ARG NEXT_PUBLIC_SITE_URL=
 
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 RUN if [ -n "${NEXT_PUBLIC_SUPABASE_URL}" ]; then export NEXT_PUBLIC_SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL}"; fi && \
     if [ -n "${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY}" ]; then export NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY="${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY}"; fi && \
     if [ -n "${NEXT_PUBLIC_SITE_URL}" ]; then export NEXT_PUBLIC_SITE_URL="${NEXT_PUBLIC_SITE_URL}"; fi && \
     pnpm build && \
-    pnpm exec playwright install chromium
-
-# Bundle the queue worker so the slim runner does not need tsx + full TypeScript sources.
-# playwright/sharp stay external — they ship with standalone tracing / native bindings.
-# esbuild is not a package.json dependency; pin via dlx for reproducible Docker builds.
-RUN pnpm dlx esbuild@0.25.5 scripts/generation-worker.ts \
-  --bundle \
-  --platform=node \
-  --target=node20 \
-  --format=cjs \
-  --outfile=dist/generation-worker.cjs \
-  --alias:@=. \
-  --external:playwright \
-  --external:playwright-core \
-  --external:sharp
+    pnpm exec esbuild scripts/generation-worker.ts \
+      --bundle \
+      --platform=node \
+      --target=node20 \
+      --format=cjs \
+      --outfile=dist/generation-worker.cjs \
+      --alias:@=. \
+      --external:playwright \
+      --external:playwright-core \
+      --external:sharp
 
 FROM base AS runner
 ENV NODE_ENV=production
@@ -68,7 +72,7 @@ RUN groupadd --system --gid 1001 nodejs \
   && useradd --system --uid 1001 --gid nodejs nextjs
 
 # Playwright OS deps + CJK-capable fonts for cover screenshots (tofu without these).
-# procps: local preview helpers may call pgrep; ca-certificates for outbound HTTPS.
+# This layer rarely changes — cache it across deploys.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
     fonts-liberation \
@@ -101,7 +105,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 # Runtime `fs` reads under ai/** (prompts, skills, rules) — not fully traced into standalone.
 COPY --from=builder --chown=nextjs:nodejs /app/ai ./ai
-COPY --from=builder --chown=nextjs:nodejs /ms-playwright /ms-playwright
+COPY --from=browsers --chown=nextjs:nodejs /ms-playwright /ms-playwright
 COPY --from=builder --chown=nextjs:nodejs /app/dist/generation-worker.cjs ./generation-worker.cjs
 # Seed for fresh volumes; production bind-mounts host sites over /app/sites.
 COPY --from=builder --chown=nextjs:nodejs /app/sites/template ./sites/template

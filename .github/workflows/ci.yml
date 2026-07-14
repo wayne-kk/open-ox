@@ -11,9 +11,9 @@ env:
   IMAGE_NAME: wayne-kk/open-ox
 
 jobs:
-  # ── CI: Type Check & Build ──────────────────────────────────────────────────
+  # ── CI: Typecheck (fast). Full `next build` only on PRs — main deploy builds inside Docker. ──
   check:
-    name: Type Check & Build
+    name: Typecheck
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,7 +29,12 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Typecheck
+        run: pnpm typecheck
+
+      # Catch Next build breaks before merge; skip on main to avoid duplicating Docker's build (~2min).
       - name: Build
+        if: github.event_name == 'pull_request'
         env:
           NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY: placeholder
@@ -85,6 +90,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # NEXT_PUBLIC_* must be present at `next build` inside the Dockerfile.
+      # GHA + registry cache: deps/browsers/apt layers reuse across deploys; only builder rebuilds on code change.
       - name: Build and push image
         uses: docker/build-push-action@v6
         with:
@@ -98,8 +104,12 @@ jobs:
             NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
             NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY }}
             NEXT_PUBLIC_SITE_URL=${{ secrets.NEXT_PUBLIC_SITE_URL }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: |
+            type=gha
+            type=registry,ref=${{ steps.meta.outputs.image }}:buildcache
+          cache-to: |
+            type=gha,mode=max
+            type=registry,ref=${{ steps.meta.outputs.image }}:buildcache,mode=max
 
       # Runtime env for containers. Add matching Repository secrets under Settings → Secrets → Actions.
       - name: Generate .env.production
@@ -199,7 +209,7 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT }}
           timeout: 120s
-          command_timeout: 20m
+          command_timeout: 30m
           envs: GHCR_TOKEN,GHCR_USER,IMAGE_TAG
           script: |
             set -euo pipefail
@@ -207,27 +217,64 @@ jobs:
             export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
 
             APP=/sharedata/wayne/open-ox
+            mkdir -p "$APP"
             cd "$APP"
 
-            if ! command -v docker >/dev/null 2>&1; then
-              echo "ERROR: docker not found on PATH=$PATH"
-              echo "SSH into the server as root (or with sudo) and run once:"
-              echo "  curl -fsSL https://raw.githubusercontent.com/wayne-kk/open-ox/main/scripts/server-setup.sh | bash"
-              echo "Or copy scripts/server-setup.sh to the host and: bash server-setup.sh"
-              echo "If Docker is installed, add the deploy user to the docker group and re-login:"
-              echo "  usermod -aG docker \"\$USER\" && newgrp docker"
-              exit 127
-            fi
-            if ! docker compose version >/dev/null 2>&1; then
-              echo "ERROR: docker compose plugin missing. On the server run:"
-              echo "  apt-get update && apt-get install -y docker-compose-plugin"
-              exit 127
-            fi
+            run_root() {
+              if [ "$(id -u)" -eq 0 ]; then
+                "$@"
+              elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+                sudo "$@"
+              else
+                return 1
+              fi
+            }
+
+            ensure_docker() {
+              if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+                return 0
+              fi
+              echo "==> Docker missing — attempting first-time install..."
+              if ! run_root true; then
+                echo "ERROR: docker not found and cannot install (need root or passwordless sudo)."
+                echo "SSH in and run as root:"
+                echo "  curl -fsSL https://get.docker.com | sh"
+                echo "  systemctl enable --now docker"
+                echo "  apt-get update && apt-get install -y docker-compose-plugin"
+                echo "If SERVER_USER is not root: usermod -aG docker \"\$SERVER_USER\" && re-login"
+                exit 127
+              fi
+              if ! command -v docker >/dev/null 2>&1; then
+                curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+                run_root sh /tmp/get-docker.sh
+                rm -f /tmp/get-docker.sh
+              fi
+              run_root systemctl enable docker || true
+              run_root systemctl start docker
+              if ! docker compose version >/dev/null 2>&1; then
+                run_root apt-get update
+                run_root apt-get install -y docker-compose-plugin
+              fi
+              # Non-root deploy user needs docker group (takes effect next SSH session;
+              # for this session use root socket via sg if possible).
+              DEPLOY_USER="$(id -un)"
+              if [ "$(id -u)" -ne 0 ]; then
+                run_root usermod -aG docker "$DEPLOY_USER" || true
+                if ! docker info >/dev/null 2>&1; then
+                  echo "ERROR: Docker installed but user '$DEPLOY_USER' cannot talk to the daemon yet."
+                  echo "Run once as root: usermod -aG docker $DEPLOY_USER"
+                  echo "Then re-run this Actions job (new SSH session picks up the group)."
+                  exit 127
+                fi
+              fi
+            }
+
+            ensure_docker
             echo "==> Docker: $(docker --version)"
 
             echo "==> Ensuring sites dir is writable by container user (uid 1001)..."
             mkdir -p "$APP/sites"
-            chown -R 1001:1001 "$APP/sites" 2>/dev/null || true
+            run_root chown -R 1001:1001 "$APP/sites" 2>/dev/null || chown -R 1001:1001 "$APP/sites" 2>/dev/null || true
 
             if [ -n "${GHCR_TOKEN:-}" ]; then
               echo "==> Logging in to GHCR..."
