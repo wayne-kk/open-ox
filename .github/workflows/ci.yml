@@ -96,6 +96,7 @@ jobs:
             echo "FEISHU_APP_ID=${{ secrets.FEISHU_APP_ID }}"
             echo "FEISHU_APP_SECRET=${{ secrets.FEISHU_APP_SECRET }}"
             echo "FEISHU_OAUTH_HMAC_SECRET=${{ secrets.FEISHU_OAUTH_HMAC_SECRET }}"
+            echo "FEISHU_VERIFICATION_TOKEN=${{ secrets.FEISHU_VERIFICATION_TOKEN }}"
             echo "E2B_API_KEY=${{ secrets.E2B_API_KEY }}"
             echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}"
             echo "OPENAI_API_URL=${{ secrets.OPENAI_API_URL }}"

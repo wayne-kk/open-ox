@@ -11,7 +11,7 @@ export type FeishuBotCommand =
   | { kind: "unknown_slash"; raw: string }
   | { kind: "modify_text"; text: string };
 
-const SLASH = /^\/([a-zA-Z_\u4e00-\u9fff]+)(?:\s+(.*))?$/s;
+const SLASH = /^\/([a-zA-Z_\u4e00-\u9fff]+)(?:\s+([\s\S]*))?$/;
 
 export function parseFeishuBotMessage(raw: string): FeishuBotCommand {
   const text = raw.trim();
