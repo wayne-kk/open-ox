@@ -63,8 +63,13 @@ export async function POST(_req: Request, { params }: Params) {
       );
     }
     console.error("[POST /api/projects/:id/cover/capture]", e);
+    const detail = msg.length > 240 ? `${msg.slice(0, 240)}…` : msg;
     return NextResponse.json(
-      { error: "Cover capture failed to start", code: "COVER_CAPTURE_ERROR" },
+      {
+        error: "Cover capture failed to start",
+        code: "COVER_CAPTURE_ERROR",
+        detail,
+      },
       { status: 500 }
     );
   }

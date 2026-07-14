@@ -63,6 +63,37 @@ RUN if [ -n "${NEXT_PUBLIC_SUPABASE_URL}" ]; then export NEXT_PUBLIC_SUPABASE_UR
       --external:playwright-core \
       --external:sharp
 
+# Next standalone + pnpm often copies `playwright` / `sharp` without resolvable siblings
+# (`playwright-core`, `detect-libc`, `@img/*`). Materialize them for the runner.
+RUN node <<'NODE'
+const fs = require("fs");
+const path = require("path");
+
+function pkgDir(name, from) {
+  return path.dirname(
+    require.resolve(`${name}/package.json`, from ? { paths: [from] } : undefined)
+  );
+}
+
+function copyTree(src, dest) {
+  fs.cpSync(src, dest, { recursive: true, dereference: true });
+  console.log(`[ox-native] ${path.basename(dest)} ← ${src}`);
+}
+
+const out = "/opt/ox-native/node_modules";
+fs.mkdirSync(out, { recursive: true });
+
+const playwrightDir = pkgDir("playwright");
+copyTree(playwrightDir, path.join(out, "playwright"));
+copyTree(pkgDir("playwright-core", playwrightDir), path.join(out, "playwright-core"));
+
+const sharpDir = pkgDir("sharp");
+const sharpNest = path.dirname(sharpDir);
+for (const ent of fs.readdirSync(sharpNest)) {
+  copyTree(path.join(sharpNest, ent), path.join(out, ent));
+}
+NODE
+
 FROM base AS runner
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -103,6 +134,25 @@ RUN apt-get update \
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+# Overlay native modules so cover capture can `require("playwright")` / `sharp` in standalone.
+# Remove incomplete traced copies first — they are often broken symlinks under pnpm.
+COPY --from=builder /opt/ox-native/node_modules /opt/ox-native/node_modules
+RUN rm -rf \
+      node_modules/playwright \
+      node_modules/playwright-core \
+      node_modules/sharp \
+      node_modules/detect-libc \
+      node_modules/@img \
+      node_modules/semver \
+    && cp -a /opt/ox-native/node_modules/. ./node_modules/ \
+    && chown -R nextjs:nodejs \
+         node_modules/playwright \
+         node_modules/playwright-core \
+         node_modules/sharp \
+         node_modules/detect-libc \
+         node_modules/@img \
+         node_modules/semver \
+    && rm -rf /opt/ox-native
 # Runtime `fs` reads under ai/** (prompts, skills, rules) — not fully traced into standalone.
 COPY --from=builder --chown=nextjs:nodejs /app/ai ./ai
 COPY --from=browsers --chown=nextjs:nodejs /ms-playwright /ms-playwright

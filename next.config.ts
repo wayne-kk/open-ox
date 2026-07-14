@@ -29,10 +29,12 @@ const nextConfig: NextConfig = {
     "/*": [
       "node_modules/playwright/**/*",
       "node_modules/playwright-core/**/*",
+      "node_modules/sharp/**/*",
+      "node_modules/detect-libc/**/*",
       "ai/**/*",
     ],
   },
-  serverExternalPackages: ["playwright", "playwright-core"],
+  serverExternalPackages: ["playwright", "playwright-core", "sharp"],
   async redirects() {
     return [{ source: "/login", destination: "/auth", permanent: true }];
   },
