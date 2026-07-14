@@ -1,7 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
-import { isCreditsEnabled } from "./credits";
-import { applyFreeDailyGrant } from "./freeGrant";
+import {
+  WELCOME_CREDITS,
+  clampSpendAmount,
+  isCreditsEnabled,
+  welcomeGrantIdempotencyKey,
+  welcomeMigrateIdempotencyKey,
+} from "./credits";
+import { grantCredits } from "./grants";
 
 /**
  * Ledger mutations always use the service-role client.
@@ -91,77 +97,137 @@ async function getOrCreateAccount(
   return inserted as AccountRow;
 }
 
-/**
- * Ensure Free daily grant for today (UTC). Daily credits do not roll over:
- * on a new day the spendable balance is replaced by today's grant (Free only).
- */
-export async function ensureDailyGrant(
+async function ledgerHasIdempotencyKey(
   db: SupabaseClient,
   userId: string,
-  now: Date = new Date()
+  idempotencyKey: string
+): Promise<boolean> {
+  const { data } = await db
+    .from("credit_ledger")
+    .select("id")
+    .eq("user_id", userId)
+    .filter("metadata->>idempotencyKey", "eq", idempotencyKey)
+    .limit(1)
+    .maybeSingle();
+  return Boolean(data);
+}
+
+/** True if user ever received paid Stripe-style grants. */
+export async function userHasPaidCreditGrants(
+  db: SupabaseClient,
+  userId: string
+): Promise<boolean> {
+  const { data } = await db
+    .from("credit_ledger")
+    .select("id")
+    .eq("user_id", userId)
+    .in("kind", ["grant_subscription", "grant_topup", "grant_monthly"])
+    .limit(1)
+    .maybeSingle();
+  return Boolean(data);
+}
+
+/**
+ * How many credits to add to reach the welcome floor (0 if none).
+ * Pure helper for tests / ensure path.
+ */
+export function welcomeTopUpAmount(input: {
+  balance: number;
+  plan: CreditPlan;
+  hasPaidGrants: boolean;
+  welcomeAlreadyApplied: boolean;
+}): number {
+  if (input.welcomeAlreadyApplied) return 0;
+  if (input.plan !== "free" || input.hasPaidGrants) return 0;
+  if (input.balance >= WELCOME_CREDITS) return 0;
+  return Math.round((WELCOME_CREDITS - input.balance) * 10) / 10;
+}
+
+/**
+ * Ensure credit account exists; apply one-time welcome / legacy top-up-to-12 when enabled.
+ * Free daily grants are not applied.
+ */
+export async function ensureCreditAccount(
+  db: SupabaseClient,
+  userId: string
 ): Promise<CreditAccountSnapshot> {
   const admin = adminDb(db);
   let row = await getOrCreateAccount(admin, userId);
 
-  if (row.plan !== "free") {
-    return rowToSnapshot(row);
-  }
-
-  const transition = applyFreeDailyGrant(
-    {
-      balance: num(row.balance),
-      lastDailyGrantDate: row.last_daily_grant_date,
-      freeMonthKey: row.free_month_key,
-      freeMonthGranted: num(row.free_month_granted),
-    },
-    now
-  );
-
-  if (!transition.changed) {
-    return rowToSnapshot(row);
-  }
-
-  const { next, granted } = transition;
-  const { data: updated, error } = await admin
-    .from("user_credit_accounts")
-    .update({
-      balance: next.balance,
-      last_daily_grant_date: next.lastDailyGrantDate,
-      free_month_key: next.freeMonthKey,
-      free_month_granted: next.freeMonthGranted,
-      updated_at: now.toISOString(),
-    })
-    .eq("user_id", userId)
-    .select(
-      "user_id, balance, plan, last_daily_grant_date, free_month_key, free_month_granted, pro_tier, stripe_subscription_status"
-    )
-    .single();
-
-  if (error) throw new Error(`daily grant failed: ${error.message}`);
-  row = updated as AccountRow;
-
-  if (granted > 0) {
-    await admin.from("credit_ledger").insert({
-      user_id: userId,
-      kind: "grant_daily",
-      amount: granted,
-      balance_after: next.balance,
-      reason: `Free daily grant ${next.lastDailyGrantDate}`,
-      metadata: {
-        monthKey: next.freeMonthKey,
-        monthGranted: next.freeMonthGranted,
-      },
+  if (isCreditsEnabled()) {
+    const welcomeKey = welcomeGrantIdempotencyKey(userId);
+    const migrateKey = welcomeMigrateIdempotencyKey(userId);
+    const welcomeAlreadyApplied =
+      (await ledgerHasIdempotencyKey(admin, userId, welcomeKey)) ||
+      (await ledgerHasIdempotencyKey(admin, userId, migrateKey));
+    const hasPaid = await userHasPaidCreditGrants(admin, userId);
+    const plan: CreditPlan = row.plan === "pro" ? "pro" : "free";
+    const balance = num(row.balance);
+    const topUp = welcomeTopUpAmount({
+      balance,
+      plan,
+      hasPaidGrants: hasPaid,
+      welcomeAlreadyApplied,
     });
+
+    if (topUp > 0) {
+      const isFreshWelcome = balance <= 0;
+      const result = await grantCredits(admin, {
+        userId,
+        amount: topUp,
+        kind: isFreshWelcome ? "grant_welcome" : "grant_adjust",
+        reason: isFreshWelcome
+          ? "Welcome credits"
+          : "Legacy Free top-up to welcome floor",
+        idempotencyKey: isFreshWelcome ? welcomeKey : migrateKey,
+      });
+      if (!result.ok) {
+        console.warn(`[credits] welcome/migrate failed user=${userId}: ${result.message}`);
+      } else if (isFreshWelcome === false && result.granted > 0) {
+        // Prevent a later empty-balance welcome from firing after migrate.
+        if (!(await ledgerHasIdempotencyKey(admin, userId, welcomeKey))) {
+          await admin.from("credit_ledger").insert({
+            user_id: userId,
+            kind: "grant_welcome",
+            amount: 0,
+            balance_after: result.balance,
+            reason: "Welcome marked after legacy migrate",
+            metadata: { idempotencyKey: welcomeKey },
+          });
+        }
+      }
+    } else if (!welcomeAlreadyApplied && (plan !== "free" || hasPaid || balance >= WELCOME_CREDITS)) {
+      // Mark ineligible / already-above-floor accounts so we never top up later after spend.
+      await admin.from("credit_ledger").insert({
+        user_id: userId,
+        kind: "grant_welcome",
+        amount: 0,
+        balance_after: balance,
+        reason: "Welcome not applicable",
+        metadata: { idempotencyKey: welcomeKey },
+      });
+    }
+
+    row = await getOrCreateAccount(admin, userId);
   }
 
   return rowToSnapshot(row);
+}
+
+/** @deprecated Use ensureCreditAccount — daily Free grants removed. */
+export async function ensureDailyGrant(
+  db: SupabaseClient,
+  userId: string,
+  _now?: Date
+): Promise<CreditAccountSnapshot> {
+  return ensureCreditAccount(db, userId);
 }
 
 export async function getCreditBalance(
   db: SupabaseClient,
   userId: string
 ): Promise<CreditAccountSnapshot> {
-  return ensureDailyGrant(db, userId);
+  return ensureCreditAccount(db, userId);
 }
 
 export async function canAfford(
@@ -179,6 +245,7 @@ export async function canAfford(
 /**
  * Debit credits. When CREDITS_ENABLED is off, returns ok without writing.
  * Amount is rounded to 1 decimal; zero/negative is a no-op success.
+ * When requested usage exceeds balance, charges only the remaining balance (no debt).
  */
 export async function spendCredits(
   db: SupabaseClient,
@@ -189,23 +256,19 @@ export async function spendCredits(
   }
 
   const admin = adminDb(db);
-  const amount = Math.round(Math.max(0, input.amount) * 10) / 10;
-  if (amount <= 0) {
+  const requested = Math.round(Math.max(0, input.amount) * 10) / 10;
+  if (requested <= 0) {
     const snap = await getCreditBalance(admin, input.userId);
     return { ok: true, balance: snap.balance, charged: 0 };
   }
 
   try {
-    await ensureDailyGrant(admin, input.userId);
+    await ensureCreditAccount(admin, input.userId);
     const row = await getOrCreateAccount(admin, input.userId);
     const balance = num(row.balance);
-    if (balance < amount) {
-      return {
-        ok: false,
-        code: "INSUFFICIENT",
-        balance,
-        message: `Need ${amount} credits, have ${balance}`,
-      };
+    const amount = clampSpendAmount(requested, balance);
+    if (amount <= 0) {
+      return { ok: true, balance, charged: 0 };
     }
     const next = Math.round((balance - amount) * 100) / 100;
     const { data: updated, error: updErr } = await admin

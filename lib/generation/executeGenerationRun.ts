@@ -22,7 +22,7 @@ import { shouldSkipNamingFromBlueprintTitle } from "@/ai/flows/generate_project/
 import { flushLangfuse, resolveLangfuseSessionId, runWithLangfuseTraceRoot, updateLangfuseActiveTrace, withLangfuseSpan } from "@/lib/observability/langfuseTracing";
 import { LfSpanIntent, LfTrace } from "@/lib/observability/langfuseTraceCatalog";
 import { runWithUsageAccounting } from "@/lib/billing/usageContext";
-import { chargeUsageForRun } from "@/lib/billing/chargeRun";
+import { chargeUsageForRun, isGenerateRunBillable } from "@/lib/billing/chargeRun";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { GenerationRunRow } from "./types";
@@ -305,17 +305,15 @@ export async function executeGenerationRun(args: {
     await persistTail;
 
     if (requestingUserId) {
-      await chargeUsageForRun(admin, {
-        userId: requestingUserId,
-        usage,
-        kind: "spend_generate",
-        projectId,
-        reason: result.success
-          ? "generate succeeded"
-          : result.intentGuideDeferred
-            ? "intent guide"
-            : "generate run",
-      });
+      if (isGenerateRunBillable(result)) {
+        await chargeUsageForRun(admin, {
+          userId: requestingUserId,
+          usage,
+          kind: "spend_generate",
+          projectId,
+          reason: "generate succeeded",
+        });
+      }
     }
 
     const projectSnapshot = await getProject(admin, projectId);

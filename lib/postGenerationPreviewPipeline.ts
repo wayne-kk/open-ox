@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { scheduleCaptureProjectCover } from "@/lib/projectCoverCapture";
+import { syncLocalProjectFingerprint } from "@/lib/previewFingerprintDb";
 import { shouldPublishStaticSitePreview } from "@/lib/previewMode";
 import { uploadFullProject } from "@/lib/storage";
 import { syncStaticSitePreview } from "@/lib/staticSitePreview";
@@ -8,6 +9,9 @@ import { syncStaticSitePreview } from "@/lib/staticSitePreview";
 /**
  * After generation/modify: publish static preview from local disk first (user-visible),
  * then upload source snapshot for cross-device restore, then cover capture.
+ *
+ * Uses force + fingerprint sync so a mid-generation preview (stub `app/page.tsx`) cannot
+ * coalesce into this publish via `inFlight` and leave Storage on the default page.
  */
 export function schedulePostGenerationPreviewPipeline(
   db: SupabaseClient,
@@ -15,8 +19,16 @@ export function schedulePostGenerationPreviewPipeline(
 ): void {
   void (async () => {
     try {
+      try {
+        await syncLocalProjectFingerprint(db, projectId);
+      } catch (fpErr) {
+        console.warn(
+          `[preview pipeline] syncLocalProjectFingerprint failed ${projectId}:`,
+          fpErr instanceof Error ? fpErr.message : fpErr
+        );
+      }
       if (shouldPublishStaticSitePreview()) {
-        await syncStaticSitePreview(db, projectId);
+        await syncStaticSitePreview(db, projectId, { force: true });
       }
       await uploadFullProject(projectId);
       scheduleCaptureProjectCover(projectId);

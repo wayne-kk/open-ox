@@ -4,6 +4,16 @@ import type { AccumulatedUsage } from "./usageContext";
 import { isCreditsEnabled } from "./credits";
 
 /**
+ * Generate is billable only when the run left a Studio-usable / previewable deliverable.
+ * Intent-guide-only or hard failures are not billable (trial-safe).
+ */
+export function isGenerateRunBillable(result: {
+  success: boolean;
+}): boolean {
+  return result.success === true;
+}
+
+/**
  * Charge credits for a completed LLM run. No-op when disabled or zero usage.
  * Never throws — logs and returns the spend result.
  */

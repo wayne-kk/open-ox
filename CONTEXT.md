@@ -33,8 +33,8 @@ The owner-only project list surface where a user manages their own projects (fol
 _Avoid_: global gallery, “全部成员” list as the default member surface
 
 **Credits**:
-User-facing unit for AI build usage (generate / modify). Metered from LLM tokens → USD → credits. Free tier: daily grant + monthly cap. Pro / top-ups via Stripe (`/pricing`). Design Mode local writeback does not spend credits.
-_See also_: `docs/product/credits-v0.1.md`, `docs/product/credits-v0.2-stripe.md`, `docs/research/ai-builder-credits-pricing-20260711.md`
+User-facing unit for AI build usage (generate / modify). Metered from LLM tokens → USD → credits. Free tier: one-time **12 welcome credits** on first credit-account ensure (no daily grant). Generate gate ≥ 8; Modify gate ≥ 0.5. Generate charges only when a previewable deliverable exists; post-run spend clamps to balance (no debt). Pro / top-ups via Stripe (`/pricing`). Design Mode local writeback, Remix copy, and Publish do not spend credits.
+_See also_: `docs/product/credits-v0.1.md`, `docs/product/credits-v0.2-stripe.md`, `docs/product/credits-v0.3-welcome.md`, `docs/research/ai-builder-credits-pricing-20260711.md`
 
 **Community**:
 The public discovery surface of projects that have Publish Preview enabled. Anyone may browse, including anonymous users.

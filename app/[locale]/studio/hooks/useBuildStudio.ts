@@ -1059,7 +1059,8 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
               projectIdFromGenerationRef.current = nextProjectId;
               setProjectId(nextProjectId);
               if (autoPreviewAfterBuildRef.current && result.verificationStatus === "passed") {
-                void openPreviewAfterBuild(nextProjectId, false);
+                // force: avoid joining a mid-gen stub static sync (default page.tsx export).
+                void openPreviewAfterBuild(nextProjectId, true);
               }
             }
           },
@@ -1168,7 +1169,8 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
               projectIdFromGenerationRef.current = nextProjectId;
               setProjectId(nextProjectId);
               if (autoPreviewAfterBuildRef.current && result.verificationStatus === "passed") {
-                void openPreviewAfterBuild(nextProjectId, false);
+                // force: avoid joining a mid-gen stub static sync (default page.tsx export).
+                void openPreviewAfterBuild(nextProjectId, true);
               }
             }
           },
@@ -1277,7 +1279,8 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
               projectIdFromGenerationRef.current = nextProjectId;
               setProjectId(nextProjectId);
               if (autoPreviewAfterBuildRef.current && result.verificationStatus === "passed") {
-                void openPreviewAfterBuild(nextProjectId, false);
+                // force: avoid joining a mid-gen stub static sync (default page.tsx export).
+                void openPreviewAfterBuild(nextProjectId, true);
               }
             }
           },
@@ -1657,7 +1660,26 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         }),
       });
 
-      if (!res.ok || !res.body) { setModifyError("Failed to start modification"); return; }
+      if (!res.ok || !res.body) {
+        const body = (await res.json().catch(() => ({}))) as {
+          code?: string;
+          error?: string;
+          pricingPath?: string;
+        };
+        if (res.status === 402 || body.code === "INSUFFICIENT_CREDITS") {
+          const pricingPath =
+            typeof body.pricingPath === "string" && body.pricingPath.startsWith("/")
+              ? body.pricingPath
+              : "/pricing";
+          if (typeof window !== "undefined") {
+            window.location.href = pricingPath;
+          }
+          setModifyError("积分不足，请充值或升级后继续");
+          return;
+        }
+        setModifyError(body.error ?? "Failed to start modification");
+        return;
+      }
       setContextCleared(false);
 
       // ── Read SSE stream ──────────────────────────────────────────────

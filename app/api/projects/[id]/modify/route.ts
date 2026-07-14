@@ -104,6 +104,7 @@ export async function POST(
           code: "INSUFFICIENT_CREDITS",
           balance: afford.balance,
           required: MIN_MODIFY_CREDITS,
+          pricingPath: "/pricing",
         },
         { status: 402 }
       );

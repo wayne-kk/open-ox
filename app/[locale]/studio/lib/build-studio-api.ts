@@ -346,6 +346,22 @@ export async function runBuildSite(
     return;
   }
 
+  if (res.status === 402) {
+    const raw = (await res.json().catch(() => ({}))) as {
+      code?: string;
+      pricingPath?: string;
+    };
+    const pricingPath =
+      typeof raw.pricingPath === "string" && raw.pricingPath.startsWith("/")
+        ? raw.pricingPath
+        : "/pricing";
+    if (typeof window !== "undefined") {
+      window.location.href = pricingPath;
+    }
+    callbacks.onError("积分不足，请充值或升级后继续");
+    return;
+  }
+
   const contentType = res.headers.get("content-type") ?? "";
 
   const handleQueuedHandshake = async (q: QueuedHandshake): Promise<boolean> => {

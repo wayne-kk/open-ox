@@ -1,12 +1,16 @@
 import { describe, expect, it, afterEach } from "vitest";
 import {
-  FREE_DAILY_CREDITS,
-  FREE_MONTHLY_GRANT_CAP,
+  MIN_GENERATE_CREDITS,
+  MIN_MODIFY_CREDITS,
+  WELCOME_CREDITS,
+  clampSpendAmount,
   freeDailyGrantAmount,
   isCreditsEnabled,
   usdToCredits,
   utcDateKey,
   utcMonthKey,
+  welcomeGrantIdempotencyKey,
+  welcomeMigrateIdempotencyKey,
 } from "./credits";
 
 describe("usdToCredits", () => {
@@ -41,12 +45,43 @@ describe("usdToCredits", () => {
   });
 });
 
-describe("freeDailyGrantAmount", () => {
-  it("grants daily amount until monthly cap", () => {
-    expect(freeDailyGrantAmount(0)).toBe(FREE_DAILY_CREDITS);
-    expect(freeDailyGrantAmount(28)).toBe(2);
-    expect(freeDailyGrantAmount(FREE_MONTHLY_GRANT_CAP)).toBe(0);
-    expect(freeDailyGrantAmount(100)).toBe(0);
+describe("welcome Free pack", () => {
+  it("grants 12 welcome credits once per user key", () => {
+    expect(WELCOME_CREDITS).toBe(12);
+    expect(welcomeGrantIdempotencyKey("abc")).toBe("welcome:abc");
+    expect(welcomeMigrateIdempotencyKey("abc")).toBe("welcome_migrate_v3:abc");
+  });
+
+  it("no longer grants daily Free credits", () => {
+    expect(freeDailyGrantAmount(0)).toBe(0);
+    expect(freeDailyGrantAmount(28)).toBe(0);
+  });
+
+  it("requires 8 credits to start Generate and 0.5 to Modify", () => {
+    expect(MIN_GENERATE_CREDITS).toBe(8);
+    expect(MIN_MODIFY_CREDITS).toBe(0.5);
+    expect(7.9 >= MIN_GENERATE_CREDITS).toBe(false);
+    expect(7.9 >= MIN_MODIFY_CREDITS).toBe(true);
+  });
+});
+
+describe("clampSpendAmount", () => {
+  it("charges full amount when usage is under balance", () => {
+    expect(clampSpendAmount(3.2, 10)).toBe(3.2);
+  });
+
+  it("charges exact balance when usage matches balance", () => {
+    expect(clampSpendAmount(4, 4)).toBe(4);
+  });
+
+  it("clamps to balance when usage exceeds balance", () => {
+    expect(clampSpendAmount(10, 4)).toBe(4);
+  });
+
+  it("returns 0 for zero/negative usage or zero balance", () => {
+    expect(clampSpendAmount(0, 5)).toBe(0);
+    expect(clampSpendAmount(-1, 5)).toBe(0);
+    expect(clampSpendAmount(3, 0)).toBe(0);
   });
 });
 

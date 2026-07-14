@@ -14,10 +14,19 @@ const STATUS_LABEL: Record<UserActivityStatus, string> = {
   never: "从未活跃",
 };
 
+const QUICK_AMOUNTS = [12, 50, 100, 200] as const;
+
 export function AdminUserDetailPanel({ userId }: { userId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<UserAnalyticsResponse | null>(null);
+
+  const [grantAmount, setGrantAmount] = useState("50");
+  const [grantReason, setGrantReason] = useState("");
+  const [granting, setGranting] = useState(false);
+  const [grantMessage, setGrantMessage] = useState<string | null>(null);
+  const [grantError, setGrantError] = useState<string | null>(null);
+  const [liveBalance, setLiveBalance] = useState<number | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -31,6 +40,7 @@ export function AdminUserDetailPanel({ userId }: { userId: string }) {
       };
       if (!res.ok || !json.success || !json.data) throw new Error(json.error ?? "Failed to load user");
       setData(json.data);
+      setLiveBalance(json.data.creditBalance);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -41,6 +51,53 @@ export function AdminUserDetailPanel({ userId }: { userId: string }) {
   useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  const submitGrant = useCallback(async () => {
+    setGranting(true);
+    setGrantError(null);
+    setGrantMessage(null);
+    try {
+      const amount = Number(grantAmount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        throw new Error("请输入大于 0 的充值数量");
+      }
+      const res = await fetch(`/api/admin/users/${userId}/credits`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount,
+          reason: grantReason.trim() || undefined,
+        }),
+      });
+      const json = (await res.json()) as {
+        success?: boolean;
+        error?: string | null;
+        data?: { granted: number; balance: number; reason: string };
+      };
+      if (!res.ok || !json.success || !json.data) {
+        throw new Error(json.error ?? "充值失败");
+      }
+      setLiveBalance(json.data.balance);
+      setGrantMessage(
+        `已充值 ${json.data.granted} 积分，当前余额 ${json.data.balance}`
+      );
+      setGrantReason("");
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              creditBalance: json.data!.balance,
+            }
+          : prev
+      );
+    } catch (err) {
+      setGrantError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setGranting(false);
+    }
+  }, [grantAmount, grantReason, userId]);
+
+  const displayBalance = liveBalance ?? data?.creditBalance ?? null;
 
   return (
     <div className="space-y-6">
@@ -83,15 +140,90 @@ export function AdminUserDetailPanel({ userId }: { userId: string }) {
             <MetricCard
               title="Credits"
               value={
-                data.creditBalance == null
+                displayBalance == null
                   ? "—"
-                  : `${data.creditBalance} (${data.creditPlan ?? "free"})`
+                  : `${displayBalance} (${data.creditPlan ?? "free"})`
               }
             />
             <MetricCard
               title="注册时间"
               value={data.registeredAt ? new Date(data.registeredAt).toLocaleDateString() : "—"}
             />
+          </div>
+
+          <div className="rounded-xl border border-border bg-card p-4">
+            <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-medium">手动充值积分</h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  向该用户账户增加积分（ledger: grant_adjust）。单次上限 10000。
+                </p>
+              </div>
+              <p className="text-sm tabular-nums text-muted-foreground">
+                当前余额{" "}
+                <span className="font-semibold text-foreground">
+                  {displayBalance == null ? "—" : displayBalance}
+                </span>
+              </p>
+            </div>
+
+            <div className="mb-3 flex flex-wrap gap-2">
+              {QUICK_AMOUNTS.map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setGrantAmount(String(n))}
+                  className={`rounded-md border px-2.5 py-1 text-xs tabular-nums transition ${
+                    grantAmount === String(n)
+                      ? "border-primary/50 bg-primary/15 text-primary"
+                      : "border-border text-muted-foreground hover:border-primary/30 hover:text-foreground"
+                  }`}
+                >
+                  +{n}
+                </button>
+              ))}
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-[140px_1fr_auto]">
+              <label className="block text-xs text-muted-foreground">
+                数量
+                <input
+                  type="number"
+                  min={0.1}
+                  step={0.1}
+                  max={10000}
+                  value={grantAmount}
+                  onChange={(e) => setGrantAmount(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-border bg-background px-2.5 py-2 text-sm tabular-nums outline-none focus:border-primary/50"
+                />
+              </label>
+              <label className="block text-xs text-muted-foreground">
+                备注（可选）
+                <input
+                  type="text"
+                  value={grantReason}
+                  onChange={(e) => setGrantReason(e.target.value)}
+                  placeholder="例如：客服补偿 / 内测额度"
+                  maxLength={240}
+                  className="mt-1 w-full rounded-md border border-border bg-background px-2.5 py-2 text-sm outline-none focus:border-primary/50"
+                />
+              </label>
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  disabled={granting}
+                  onClick={() => void submitGrant()}
+                  className="h-[38px] w-full rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-50 sm:w-auto"
+                >
+                  {granting ? "充值中…" : "确认充值"}
+                </button>
+              </div>
+            </div>
+
+            {grantMessage ? (
+              <p className="mt-3 text-sm text-emerald-400">{grantMessage}</p>
+            ) : null}
+            {grantError ? <p className="mt-3 text-sm text-red-300">{grantError}</p> : null}
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">

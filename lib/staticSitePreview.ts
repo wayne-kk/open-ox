@@ -40,6 +40,10 @@ import {
   canReuseStaticExportOut,
   writeStaticPreviewBuildStamp,
 } from "@/lib/staticPreviewBuildStamp";
+import {
+  resolveInFlightSyncPolicy,
+  staticExportFingerprintDrifted,
+} from "@/lib/staticSitePreviewInFlight";
 import { rewriteExportedPublicRootPathsInText } from "@/lib/staticExportPublicPathRewrite";
 import {
   contentTypeForRelPath,
@@ -521,8 +525,20 @@ export async function syncStaticSitePreview(
 ): Promise<{ url: string; port: number; skipped?: boolean }> {
   const force = options?.force === true;
   const existing = inFlight.get(projectId);
-  if (existing) {
+  const inFlightPolicy = resolveInFlightSyncPolicy({
+    hasInFlight: Boolean(existing),
+    force,
+  });
+  if (inFlightPolicy === "join" && existing) {
     return existing;
+  }
+  if (inFlightPolicy === "wait-then-run" && existing) {
+    // Mid-gen stub sync must not satisfy post-gen / Rebuild(force). Wait it out, then rebuild.
+    try {
+      await existing;
+    } catch {
+      /* prior sync failed — continue with force rebuild */
+    }
   }
 
   const promise = (async () => {
@@ -542,9 +558,8 @@ export async function syncStaticSitePreview(
     await ensureGlobalErrorFromTemplateForProject(projectId);
     await prepareProjectDirForStaticExport(projectDir);
 
-    const filesFp = await computeProjectFingerprint(projectId);
+    let filesFp = await computeProjectFingerprint(projectId);
     const originFp = storagePreviewOriginFingerprint();
-    const aggregateKey = `${filesFp}:${originFp}`;
     const url = getStaticPreviewUrl(projectId);
     const basePath = getStoragePreviewBasePath(projectId);
 
@@ -573,20 +588,43 @@ export async function syncStaticSitePreview(
     try {
       await ensureProjectNodeModules(projectDir);
 
-      const reuseOut = await canReuseStaticExportOut(projectDir, filesFp, basePath);
-      if (reuseOut) {
-        console.log(
-          `[staticPreview] reuse existing out/ (verification stamp) projectId=${projectId}`
+      // One retry if sources changed during the long `next build` (stub → real page).
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const reuseOut = await canReuseStaticExportOut(projectDir, filesFp, basePath);
+        if (reuseOut) {
+          console.log(
+            `[staticPreview] reuse existing out/ (verification stamp) projectId=${projectId}`
+          );
+        } else {
+          await runStaticExportBuild(projectId, projectDir);
+        }
+
+        const filesFpAfter = await computeProjectFingerprint(projectId);
+        if (!staticExportFingerprintDrifted(filesFp, filesFpAfter)) {
+          await writeStaticPreviewBuildStamp(projectDir, {
+            filesFingerprint: filesFp,
+            basePath,
+            builtAt: new Date().toISOString(),
+          });
+          break;
+        }
+
+        console.warn(
+          `[staticPreview] fingerprint drifted during build (stub→real?) ` +
+            `projectId=${projectId} attempt=${attempt + 1} ` +
+            `before=${filesFp} after=${filesFpAfter}`
         );
-      } else {
-        await runStaticExportBuild(projectId, projectDir);
-        await writeStaticPreviewBuildStamp(projectDir, {
-          filesFingerprint: filesFp,
-          basePath,
-          builtAt: new Date().toISOString(),
-        });
+        filesFp = filesFpAfter;
+        if (attempt === 1) {
+          await writeStaticPreviewBuildStamp(projectDir, {
+            filesFingerprint: filesFp,
+            basePath,
+            builtAt: new Date().toISOString(),
+          });
+        }
       }
 
+      const aggregateKey = `${filesFp}:${originFp}`;
       const outDir = path.join(projectDir, "out");
       await rewriteExportedPublicPathsInOutDir(outDir, basePath);
       await uploadOutDir(storage, projectId, outDir);
@@ -608,7 +646,10 @@ export async function syncStaticSitePreview(
   try {
     return await promise;
   } finally {
-    inFlight.delete(projectId);
+    // Only clear if we still own this slot — a force waiter may have replaced us.
+    if (inFlight.get(projectId) === promise) {
+      inFlight.delete(projectId);
+    }
   }
 }
 

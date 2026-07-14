@@ -1,6 +1,7 @@
 # Credits v0.1
 
 **状态**：已落地（核心计量 / 账本 / 门禁；默认关闭）  
+**Free 档后续变更**：日发已由 [credits-v0.3-welcome.md](./credits-v0.3-welcome.md) 替换为注册欢迎礼 12。  
 **调研**：[docs/research/ai-builder-credits-pricing-20260711.md](../research/ai-builder-credits-pricing-20260711.md)
 
 ## 目标

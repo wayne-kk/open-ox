@@ -492,7 +492,7 @@ export function AppSidebar({
         />
       ) : user ? (
         <div className={cn("flex flex-col gap-1.5", collapsed && "items-center")}>
-          {!collapsed ? <CreditsBalanceBadge className="mx-0.5 self-start" /> : null}
+          <CreditsBalanceBadge collapsed={collapsed} className={collapsed ? undefined : "mx-0.5"} />
           <UserMenuDropdown
             user={user}
             afterSignOut="home"
@@ -554,7 +554,7 @@ export function AppSidebar({
             />
           ) : user ? (
             <div className={cn("flex flex-col gap-1.5", collapsed && "items-center")}>
-              {!collapsed ? <CreditsBalanceBadge className="mx-0.5 self-start" /> : null}
+              <CreditsBalanceBadge collapsed={collapsed} className={collapsed ? undefined : "mx-0.5"} />
               <UserMenuDropdown
                 user={user}
                 afterSignOut="home"

@@ -3,7 +3,7 @@
 import { useId } from "react";
 import { cn } from "@/lib/utils";
 
-/** Quiet brand disc — dusty iris core. */
+/** Quiet brand disc — dusty iris on a light plate (reads on dark UI). */
 export function BrandMark({
   size = 28,
   className,
@@ -36,7 +36,7 @@ export function BrandMark({
       <circle cx="16" cy="16" r="13" stroke="#2a2a2e" strokeWidth="1" />
       <circle cx="16" cy="16" r="8" stroke="#2a2740" strokeWidth="1" />
       <circle cx="16" cy="16" r="4.75" fill={`url(#${core})`} />
-      <circle cx="15.1" cy="14.6" r="1.2" fill="#efeafc" opacity="0.45" />
+      <circle cx="15.1" cy="14.6" r="1.2" fill="#efeafc" opacity="0.55" />
     </svg>
   );
 }

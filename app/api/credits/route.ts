@@ -1,14 +1,10 @@
 /**
- * GET /api/credits — current user's credit balance (applies Free daily grant).
+ * GET /api/credits — current user's credit balance (applies welcome grant on first ensure).
  */
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
 import { getCreditBalance } from "@/lib/billing/account";
-import {
-  FREE_DAILY_CREDITS,
-  FREE_MONTHLY_GRANT_CAP,
-  isCreditsEnabled,
-} from "@/lib/billing/credits";
+import { WELCOME_CREDITS, isCreditsEnabled } from "@/lib/billing/credits";
 
 export const runtime = "nodejs";
 
@@ -27,10 +23,7 @@ export async function GET() {
       proTier: snap.proTier,
       stripeSubscriptionStatus: snap.stripeSubscriptionStatus,
       free: {
-        dailyGrant: FREE_DAILY_CREDITS,
-        monthlyCap: FREE_MONTHLY_GRANT_CAP,
-        monthGranted: snap.freeMonthGranted,
-        lastDailyGrantDate: snap.lastDailyGrantDate,
+        welcomeCredits: WELCOME_CREDITS,
       },
     });
   } catch (err) {

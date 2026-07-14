@@ -14,7 +14,8 @@ export type GrantKind =
   | "grant_monthly"
   | "grant_topup"
   | "grant_subscription"
-  | "grant_adjust";
+  | "grant_adjust"
+  | "grant_welcome";
 
 export type GrantCreditsInput = {
   userId: string;

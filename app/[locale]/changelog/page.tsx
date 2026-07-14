@@ -14,6 +14,18 @@ interface ChangeEntry {
 
 const CHANGELOG: ChangeEntry[] = [
   {
+    version: "v1.14",
+    date: "2026-07-14",
+    tag: "minor",
+    title: "Credits · 注册欢迎礼 12（取代 Free 日发）",
+    body: "Free 改为首次确保账户一次性送 12 积分；Generate 门禁 8；无产物不扣 Generate；跑后扣费封顶到余额。定价文案与积分不足跳转 /pricing 已对齐。",
+    items: [
+      "welcome / legacy migrate 幂等入账；停用每日 Free 发放",
+      "MIN_GENERATE=8；spend clamp；Generate 仅 success 扣费",
+      "docs/product/credits-v0.3-welcome.md",
+    ],
+  },
+  {
     version: "v1.13",
     date: "2026-07-11",
     tag: "minor",
