@@ -7,7 +7,7 @@ import {
   Trash2, Plus, FolderInput, Folder,
   AlertCircle, Loader2, Sparkles,
   AlertTriangle, MoreHorizontal, Globe2, FolderCog, Check, Pencil,
-  Repeat2, Clock, ArrowUpRight, Rocket,
+  Repeat2, Clock, ArrowUpRight, Rocket, ImagePlus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { openOxVercelReconnectHref } from "@/lib/vercel/dashboardUrl";
@@ -20,6 +20,11 @@ import {
 } from "@/app/components/ProjectPublishPanel";
 import { fetchProjectGalleryDeduped } from "@/lib/projectGalleryClient";
 import { projectCoverDisplayUrl } from "@/lib/projectCoverUrls";
+import {
+  COVER_CAPTURE_POLL_INTERVAL_MS,
+  COVER_CAPTURE_POLL_TIMEOUT_MS,
+  evaluateCoverCapturePoll,
+} from "@/lib/coverCaptureOrchestration";
 import { cn } from "@/lib/utils";
 import { WORKSPACE_PROMPT_ID } from "@/app/components/AppShell";
 import { HeroPrompt } from "@/app/components/HeroPrompt";
@@ -135,14 +140,25 @@ function ProjectCard({
   const isGenerating = project.status === "generating";
   /** Studio 在生成中会轮询进度，列表应可进入 */
   const isClickable = isReady || isFailed || isGenerating;
-  const hasCover = project.coverImageStatus === "ready";
+  const [coverBusy, setCoverBusy] = useState(false);
+  const [coverOverride, setCoverOverride] = useState<{
+    status: "pending" | "ready" | "failed" | null;
+    updatedAt: string | null;
+  } | null>(null);
+  const coverStatus = coverOverride?.status ?? project.coverImageStatus ?? null;
+  const coverUpdatedAt = coverOverride?.updatedAt ?? project.coverImageUpdatedAt ?? null;
+  const hasCover = coverStatus === "ready";
   const [coverLoaded, setCoverLoaded] = useState(false);
   const [coverFailed, setCoverFailed] = useState(false);
   const coverImgRef = useRef<HTMLImageElement | null>(null);
   const coverSrc = hasCover
-    ? projectCoverDisplayUrl(project.id, project.coverImageUpdatedAt)
+    ? projectCoverDisplayUrl(project.id, coverUpdatedAt)
     : null;
   const showCoverImage = Boolean(coverSrc) && !coverFailed;
+
+  useEffect(() => {
+    setCoverOverride(null);
+  }, [project.id]);
 
   useEffect(() => {
     setCoverLoaded(false);
@@ -264,6 +280,87 @@ function ProjectCard({
       });
     } finally {
       setDeployBusy(false);
+    }
+  };
+
+  const requestCoverCapture = async () => {
+    if (coverBusy || isGenerating || !isClickable) return;
+    setCoverBusy(true);
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(project.id)}/cover/capture`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        code?: string;
+        baselineUpdatedAt?: string | null;
+      };
+      if (res.status === 401) {
+        toast.error("请先登录后再更新封面");
+        return;
+      }
+      if (res.status === 403) {
+        toast.error("仅项目所有者可以更新封面");
+        return;
+      }
+      if (res.status === 503) {
+        toast.error("封面截图暂不可用", {
+          description: "服务端未配置 SUPABASE_SERVICE_ROLE_KEY",
+        });
+        return;
+      }
+      if (res.status !== 202 && res.status !== 409) {
+        toast.error("更新封面失败", { description: data.error ?? `HTTP ${res.status}` });
+        return;
+      }
+
+      const baselineUpdatedAt = data.baselineUpdatedAt ?? null;
+      toast.message(res.status === 409 ? "封面已在截取中…" : "正在截取封面…");
+
+      const started = Date.now();
+      while (Date.now() - started < COVER_CAPTURE_POLL_TIMEOUT_MS) {
+        await new Promise((r) => setTimeout(r, COVER_CAPTURE_POLL_INTERVAL_MS));
+        const pollRes = await fetch(`/api/projects/${encodeURIComponent(project.id)}`, {
+          credentials: "include",
+        });
+        if (!pollRes.ok) continue;
+        const body = (await pollRes.json().catch(() => null)) as {
+          coverImageStatus?: string | null;
+          coverImageUpdatedAt?: string | null;
+          coverImageError?: string | null;
+        } | null;
+        if (!body) continue;
+        const step = evaluateCoverCapturePoll({
+          baselineUpdatedAt,
+          status: body.coverImageStatus,
+          updatedAt: body.coverImageUpdatedAt,
+          error: body.coverImageError,
+          elapsedMs: Date.now() - started,
+        });
+        if (step.verdict === "success") {
+          setCoverOverride({
+            status: "ready",
+            updatedAt: body.coverImageUpdatedAt ?? new Date().toISOString(),
+          });
+          toast.success("封面已更新");
+          return;
+        }
+        if (step.verdict === "failed") {
+          toast.error("封面截取失败", {
+            description: step.errorHint ?? "请稍后重试",
+          });
+          return;
+        }
+        if (step.verdict === "timeout") break;
+      }
+      toast.message("截取仍在处理", {
+        description: "请稍后刷新页面查看新封面",
+      });
+    } catch {
+      toast.error("网络错误，请稍后重试");
+    } finally {
+      setCoverBusy(false);
     }
   };
 
@@ -422,7 +519,7 @@ function ProjectCard({
             {project.name || "未命名项目"}
           </button>
           {canDelete ? (
-            <DropdownMenu>
+            <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
@@ -430,7 +527,7 @@ function ProjectCard({
                   title="更多"
                   aria-label="项目操作"
                 >
-                  {publishBusy ? (
+                  {publishBusy || coverBusy ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   ) : (
                     <MoreHorizontal className="h-3.5 w-3.5" />
@@ -480,6 +577,21 @@ function ProjectCard({
                 >
                   <Rocket className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   部署到 Vercel
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!isClickable || isGenerating || coverBusy}
+                  className={menuItemClass}
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    void requestCoverCapture();
+                  }}
+                >
+                  {coverBusy ? (
+                    <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
+                  ) : (
+                    <ImagePlus className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  )}
+                  更新封面
                 </DropdownMenuItem>
                 <DropdownMenuSeparator className="mx-0 my-1 bg-muted" />
                 <DropdownMenuSub>
