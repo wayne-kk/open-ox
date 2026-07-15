@@ -3,8 +3,14 @@
 # Image is built ON THE SERVER (layer cache stays local). Do not pull from ghcr.io
 # in the default path — Tencent Cloud → ghcr.io is too slow and caused CI SSH timeouts.
 #
+# Runtime base (apt + Chromium) is a separate image — build once:
+#   bash scripts/build-runtime.sh
+# Then daily:
 #   docker compose -f compose.prod.yaml --env-file .env.production build
 #   docker compose -f compose.prod.yaml --env-file .env.production up -d
+#
+# Optional TCR runtime:
+#   OPEN_OX_RUNTIME_IMAGE=ccr.ccs.tencentyun.com/<ns>/open-ox-runtime:2026.07
 
 services:
   open-ox:
@@ -13,6 +19,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
+        RUNTIME_IMAGE: ${OPEN_OX_RUNTIME_IMAGE:-open-ox-runtime:local}
         NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
         NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY:-}
         NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-}

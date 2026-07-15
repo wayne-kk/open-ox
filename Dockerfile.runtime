@@ -1,0 +1,82 @@
+# Rarely-changing runtime base for open-ox (Phase B).
+# Contains: CN mirrors, pnpm, Playwright OS libs + CJK fonts, Chromium under /ms-playwright.
+#
+# Build (on Tencent CVM with Hub accelerator):
+#   bash scripts/build-runtime.sh
+#   # optional push: OPEN_OX_TCR_REPO=ccr.ccs.tencentyun.com/<ns> bash scripts/build-runtime.sh --push
+#
+# App image (Dockerfile) does: FROM ${RUNTIME_IMAGE} AS base
+# Daily deploys must NOT rebuild this file unless Playwright / fonts / apt list change.
+
+FROM node:20-bookworm-slim
+
+ARG DEBIAN_MIRROR=mirrors.cloud.tencent.com
+ARG NPM_REGISTRY=https://registry.npmmirror.com
+ARG PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
+# Keep in sync with package.json "playwright" version.
+ARG PLAYWRIGHT_VERSION=1.52.0
+
+ENV npm_config_registry=${NPM_REGISTRY}
+ENV PLAYWRIGHT_DOWNLOAD_HOST=${PLAYWRIGHT_DOWNLOAD_HOST}
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+ENV PNPM_HOME=/root/.local/share/pnpm
+ENV PATH="${PNPM_HOME}:${PATH}"
+
+RUN set -eux; \
+    if [ -f /etc/apt/sources.list ]; then \
+      sed -i \
+        -e "s|deb.debian.org|${DEBIAN_MIRROR}|g" \
+        -e "s|security.debian.org|${DEBIAN_MIRROR}|g" \
+        /etc/apt/sources.list; \
+    fi; \
+    if ls /etc/apt/sources.list.d/*.sources >/dev/null 2>&1; then \
+      sed -i \
+        -e "s|deb.debian.org|${DEBIAN_MIRROR}|g" \
+        -e "s|security.debian.org|${DEBIAN_MIRROR}|g" \
+        /etc/apt/sources.list.d/*.sources; \
+    fi; \
+    if ls /etc/apt/sources.list.d/*.list >/dev/null 2>&1; then \
+      sed -i \
+        -e "s|deb.debian.org|${DEBIAN_MIRROR}|g" \
+        -e "s|security.debian.org|${DEBIAN_MIRROR}|g" \
+        /etc/apt/sources.list.d/*.list; \
+    fi
+
+RUN --mount=type=cache,id=open-ox-runtime-apt-cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=open-ox-runtime-apt-lists,target=/var/lib/apt,sharing=locked \
+    apt-get update \
+    && apt-get install -y --no-install-recommends \
+      fonts-liberation \
+      fonts-noto-core \
+      fonts-noto-cjk \
+      fontconfig \
+      libasound2 \
+      libatk-bridge2.0-0 \
+      libatk1.0-0 \
+      libcups2 \
+      libdbus-1-3 \
+      libdrm2 \
+      libgbm1 \
+      libgtk-3-0 \
+      libnspr4 \
+      libnss3 \
+      libx11-xcb1 \
+      libxcomposite1 \
+      libxdamage1 \
+      libxfixes3 \
+      libxkbcommon0 \
+      libxrandr2 \
+      ca-certificates \
+      procps \
+    && fc-cache -f
+
+RUN corepack enable && corepack prepare pnpm@10.5.2 --activate
+
+# Install only Playwright (not the full app) so Chromium version matches package.json.
+WORKDIR /opt/playwright-install
+RUN --mount=type=cache,id=open-ox-runtime-npm,target=/root/.npm \
+    npm install --no-save "playwright@${PLAYWRIGHT_VERSION}" \
+    && ./node_modules/.bin/playwright install chromium \
+    && rm -rf /opt/playwright-install
+
+WORKDIR /app

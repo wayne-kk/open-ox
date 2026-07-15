@@ -58,6 +58,42 @@ fi
 docker info >/dev/null
 docker compose version
 
+# ── Docker Hub 内网加速（腾讯云 CVM；未配置时 FROM node 会很慢）──────────────
+DAEMON_JSON=/etc/docker/daemon.json
+MIRROR=https://mirror.ccs.tencentyun.com
+need_restart=0
+if [[ ! -f "$DAEMON_JSON" ]] || ! grep -q 'mirror.ccs.tencentyun.com' "$DAEMON_JSON" 2>/dev/null; then
+  echo "==> Configuring Docker Hub registry-mirrors → ${MIRROR}"
+  if [[ -f "$DAEMON_JSON" ]] && command -v python3 >/dev/null 2>&1; then
+    python3 - "$DAEMON_JSON" "$MIRROR" <<'PY'
+import json, sys
+path, mirror = sys.argv[1], sys.argv[2]
+try:
+    with open(path) as f:
+        data = json.load(f)
+except Exception:
+    data = {}
+mirrors = data.get("registry-mirrors") or []
+if mirror not in mirrors:
+    mirrors = [mirror] + [m for m in mirrors if m != mirror]
+data["registry-mirrors"] = mirrors
+with open(path, "w") as f:
+    json.dump(data, f, indent=2)
+    f.write("\n")
+PY
+  else
+    printf '%s\n' "{" "  \"registry-mirrors\": [\"${MIRROR}\"]" "}" >"$DAEMON_JSON"
+  fi
+  need_restart=1
+else
+  echo "==> Docker Hub mirror already configured"
+fi
+if [[ "$need_restart" -eq 1 ]]; then
+  systemctl restart docker
+  echo "==> docker restarted"
+fi
+docker info 2>/dev/null | grep -A5 'Registry Mirrors' || echo "WARN: could not print Registry Mirrors"
+
 # ── Deploy user can use docker without sudo ──────────────────────────────────
 if id "$DEPLOY_USER" >/dev/null 2>&1; then
   usermod -aG docker "$DEPLOY_USER"
@@ -91,9 +127,13 @@ echo ""
 echo "Verify as $DEPLOY_USER in a NEW login:"
 echo "  ssh $DEPLOY_USER@<host>"
 echo "  groups          # must list 'docker'"
-echo "  docker info     # must show Server Version"
+echo "  docker info     # must show Registry Mirrors: mirror.ccs.tencentyun.com"
 echo ""
-echo "Then push to main — CI builds the image ON THIS HOST (no ghcr.io pull)."
+echo "First-time / monthly runtime base (apt + Chromium):"
+echo "  cd $APP_DIR && bash scripts/build-runtime.sh"
+echo "  # optional TCR: OPEN_OX_TCR_REPO=ccr.ccs.tencentyun.com/<ns> bash scripts/build-runtime.sh --push"
+echo ""
+echo "Then push to main — CI builds the app image ON THIS HOST (runtime layer reused)."
 echo ""
 echo "Optional: prune idle local sites workspaces (mtime > 1 day; never deletes template)."
 echo "  Dry-run:  bash $APP_DIR/scripts/cleanup-idle-sites.sh"

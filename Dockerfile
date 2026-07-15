@@ -4,10 +4,10 @@
 # Next.js standalone production image (pnpm).
 #
 # Layering (fast incremental deploys):
+#   base      — FROM open-ox-runtime (apt + Chromium); rebuild only via build-runtime.sh
 #   deps      — only invalidates when package.json / lockfile / patches change
-#   browsers  — Playwright Chromium; same cache key as deps (NOT on every source change)
 #   builder   — next build + worker bundle; invalidates on source changes
-#   runner    — OS fonts/libs + copy artifacts
+#   runner    — copy artifacts onto runtime (no apt / no playwright install)
 #
 # Build-time NEXT_PUBLIC_* can come from either:
 #   (A) `.env.local` copied into the build context (.dockerignore allows it), or
@@ -16,36 +16,15 @@
 #
 # Same image serves Next (`node server.js`) and the generation worker
 # (`node generation-worker.cjs`) — see compose.prod.yaml.
+#
+# Runtime base (see Dockerfile.runtime / scripts/build-runtime.sh):
+#   docker build -f Dockerfile.runtime -t open-ox-runtime:local .
+#   # or pull: docker pull ccr.ccs.tencentyun.com/<ns>/open-ox-runtime:<tag>
 
-FROM node:20-bookworm-slim AS base
-# CN VPS (Tencent): official deb.debian.org / npmjs / playwright CDNs are often
-# multi-minute per package. Override at build time if needed:
-#   docker build --build-arg DEBIAN_MIRROR=deb.debian.org ...
-ARG DEBIAN_MIRROR=mirrors.cloud.tencent.com
-ARG NPM_REGISTRY=https://registry.npmmirror.com
-ARG PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
-ENV npm_config_registry=${NPM_REGISTRY}
-ENV PLAYWRIGHT_DOWNLOAD_HOST=${PLAYWRIGHT_DOWNLOAD_HOST}
-RUN set -eux; \
-    if [ -f /etc/apt/sources.list ]; then \
-      sed -i \
-        -e "s|deb.debian.org|${DEBIAN_MIRROR}|g" \
-        -e "s|security.debian.org|${DEBIAN_MIRROR}|g" \
-        /etc/apt/sources.list; \
-    fi; \
-    if ls /etc/apt/sources.list.d/*.sources >/dev/null 2>&1; then \
-      sed -i \
-        -e "s|deb.debian.org|${DEBIAN_MIRROR}|g" \
-        -e "s|security.debian.org|${DEBIAN_MIRROR}|g" \
-        /etc/apt/sources.list.d/*.sources; \
-    fi; \
-    if ls /etc/apt/sources.list.d/*.list >/dev/null 2>&1; then \
-      sed -i \
-        -e "s|deb.debian.org|${DEBIAN_MIRROR}|g" \
-        -e "s|security.debian.org|${DEBIAN_MIRROR}|g" \
-        /etc/apt/sources.list.d/*.list; \
-    fi
-RUN corepack enable && corepack prepare pnpm@10.5.2 --activate
+ARG RUNTIME_IMAGE=open-ox-runtime:local
+FROM ${RUNTIME_IMAGE} AS base
+# Runtime already has: CN mirrors, pnpm, apt fonts/libs, /ms-playwright Chromium.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 WORKDIR /app
 
 FROM base AS deps
@@ -54,13 +33,7 @@ COPY patches ./patches
 RUN --mount=type=cache,id=open-ox-pnpm-store,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile
 
-# Chromium only depends on lockfile/playwright version — keep off the source COPY path.
-FROM deps AS browsers
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-RUN pnpm exec playwright install chromium
-
 FROM deps AS builder
-COPY --from=browsers /ms-playwright /ms-playwright
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 COPY . .
 
@@ -137,34 +110,7 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 # corepack/pnpm caches never hit EACCES. Do not use this pattern on shared hosts.
 ENV OX_BAKED_TEMPLATE_NODE_MODULES=/opt/ox-sites-template/node_modules
 
-# Playwright OS deps + CJK-capable fonts for cover screenshots (tofu without these).
-# This layer rarely changes — cache it across deploys.
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends \
-    fonts-liberation \
-    fonts-noto-core \
-    fonts-noto-cjk \
-    fontconfig \
-    libasound2 \
-    libatk-bridge2.0-0 \
-    libatk1.0-0 \
-    libcups2 \
-    libdbus-1-3 \
-    libdrm2 \
-    libgbm1 \
-    libgtk-3-0 \
-    libnspr4 \
-    libnss3 \
-    libx11-xcb1 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxkbcommon0 \
-    libxrandr2 \
-    ca-certificates \
-    procps \
-  && fc-cache -f \
-  && rm -rf /var/lib/apt/lists/*
+# apt + Chromium already in RUNTIME_IMAGE — do not reinstall here (keeps daily deploys fast).
 
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
@@ -183,7 +129,6 @@ RUN rm -rf \
     && rm -rf /opt/ox-native
 # Runtime `fs` reads under ai/** (prompts, skills, rules) — not fully traced into standalone.
 COPY --from=builder /app/ai ./ai
-COPY --from=browsers /ms-playwright /ms-playwright
 COPY --from=builder /app/dist/generation-worker.cjs ./generation-worker.cjs
 # Seed for fresh volumes; production bind-mounts host sites over /app/sites.
 COPY --from=builder /app/sites/template ./sites/template

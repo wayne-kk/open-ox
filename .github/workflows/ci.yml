@@ -185,16 +185,23 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT }}
           timeout: 120s
-          # First server-side image build (Playwright + next) can exceed 30m; later builds use local cache.
-          command_timeout: 60m
-          envs: IMAGE_TAG
+          # Cold path (first runtime + app) can be long; warm deploys should be << 15m.
+          command_timeout: 45m
+          envs: IMAGE_TAG,OPEN_OX_RUNTIME_IMAGE,OPEN_OX_TCR_REPO,OPEN_OX_PUSH_APP_IMAGE
           script: |
             set -euo pipefail
             export OPEN_OX_IMAGE_TAG="${IMAGE_TAG}"
             export OPEN_OX_APP_DIR=/sharedata/wayne/open-ox
+            # Optional secrets — empty means use script defaults (local runtime, no push).
+            [[ -n "${OPEN_OX_RUNTIME_IMAGE:-}" ]] && export OPEN_OX_RUNTIME_IMAGE
+            [[ -n "${OPEN_OX_TCR_REPO:-}" ]] && export OPEN_OX_TCR_REPO
+            [[ -n "${OPEN_OX_PUSH_APP_IMAGE:-}" ]] && export OPEN_OX_PUSH_APP_IMAGE
             bash /sharedata/wayne/open-ox/scripts/deploy-on-server.sh
         env:
           IMAGE_TAG: ${{ github.sha }}
+          OPEN_OX_RUNTIME_IMAGE: ${{ secrets.OPEN_OX_RUNTIME_IMAGE }}
+          OPEN_OX_TCR_REPO: ${{ secrets.OPEN_OX_TCR_REPO }}
+          OPEN_OX_PUSH_APP_IMAGE: ${{ secrets.OPEN_OX_PUSH_APP_IMAGE }}
 
       - name: Notify Feishu (success)
         if: success()
