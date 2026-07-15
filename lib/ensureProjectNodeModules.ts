@@ -64,15 +64,23 @@ async function pathHasNext(nodeModulesDir: string): Promise<boolean> {
 }
 
 /**
- * Prefer (1) `sites/template/node_modules`, (2) image-baked `/opt/...`, else null.
+ * Prefer a real directory of shared deps (never a symlink path).
+ * Docker entrypoint links `sites/template/node_modules` → `/opt/ox-sites-template/node_modules`;
+ * `cp -al` / `mount --bind` on that symlink re-creates an escaping link and breaks Turbopack.
  */
 async function resolveSharedNodeModules(): Promise<string | null> {
   const candidates = [
-    path.join(WORKSPACE_ROOT, "sites", "template", "node_modules"),
     BAKED_TEMPLATE_NM,
+    path.join(WORKSPACE_ROOT, "sites", "template", "node_modules"),
   ];
   for (const candidate of candidates) {
-    if (await pathHasNext(candidate)) return candidate;
+    if (!(await pathHasNext(candidate))) continue;
+    try {
+      const real = await fs.realpath(candidate);
+      if (await pathHasNext(real)) return real;
+    } catch {
+      /* fall through */
+    }
   }
   return null;
 }
@@ -159,6 +167,16 @@ async function tryBindMount(sharedNm: string, projectNm: string): Promise<boolea
   }
 
   if (await pathHasNext(projectNm)) {
+    // Refuse symlink results — cp -a of a symlink source can recreate an escaping link.
+    try {
+      const st = await fs.lstat(projectNm);
+      if (st.isSymbolicLink()) {
+        await fs.rm(projectNm, { recursive: true, force: true });
+        return false;
+      }
+    } catch {
+      /* ignore */
+    }
     console.info(`[ensureProjectNodeModules] bind-mounted ${sharedNm} → ${projectNm}`);
     return true;
   }
@@ -176,6 +194,17 @@ async function tryBindMount(sharedNm: string, projectNm: string): Promise<boolea
   return false;
 }
 
+async function isRealNodeModulesDir(projectNm: string): Promise<boolean> {
+  if (!(await pathHasNext(projectNm))) return false;
+  try {
+    const st = await fs.lstat(projectNm);
+    // Bind mounts and copies are directories; a symlink here still escapes turbopack.root.
+    return st.isDirectory() && !st.isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Copy shared node_modules into the site (Turbopack-safe).
  * Linux: hardlink farm (`cp -al`), then full copy if cross-device.
@@ -186,23 +215,24 @@ async function tryMaterialize(sharedNm: string, projectNm: string): Promise<bool
 
   try {
     await execFileAsync("cp", ["-al", sharedNm, projectNm]);
-    if (await pathHasNext(projectNm)) {
+    if (await isRealNodeModulesDir(projectNm)) {
       console.info(
         `[ensureProjectNodeModules] materialized (hardlink farm) ${sharedNm} → ${projectNm}`
       );
       return true;
     }
   } catch {
-    try {
-      await fs.rm(projectNm, { recursive: true, force: true });
-    } catch {
-      /* ignore */
-    }
+    /* cross-device or not a plain directory */
+  }
+  try {
+    await fs.rm(projectNm, { recursive: true, force: true });
+  } catch {
+    /* ignore */
   }
 
   try {
     await fs.cp(sharedNm, projectNm, { recursive: true });
-    if (await pathHasNext(projectNm)) {
+    if (await isRealNodeModulesDir(projectNm)) {
       console.info(`[ensureProjectNodeModules] materialized (copy) ${sharedNm} → ${projectNm}`);
       return true;
     }
@@ -211,11 +241,11 @@ async function tryMaterialize(sharedNm: string, projectNm: string): Promise<bool
       `[ensureProjectNodeModules] materialize failed (${sharedNm} → ${projectNm}):`,
       err instanceof Error ? err.message : String(err)
     );
-    try {
-      await fs.rm(projectNm, { recursive: true, force: true });
-    } catch {
-      /* ignore */
-    }
+  }
+  try {
+    await fs.rm(projectNm, { recursive: true, force: true });
+  } catch {
+    /* ignore */
   }
   return false;
 }
