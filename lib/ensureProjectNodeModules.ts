@@ -21,8 +21,7 @@ const WORKSPACE_ROOT = process.cwd();
 const SITE_NEXT_CLI_REL = ["node_modules", "next", "dist", "bin", "next"] as const;
 
 /**
- * Image-baked template deps (Dockerfile `template-deps` stage). Lives outside
- * `/app/sites` so the production bind-mount cannot hide it.
+ * Optional shared deps path (legacy host bake). Prefer `sites/template/node_modules`.
  */
 const BAKED_TEMPLATE_NM =
   process.env.OX_BAKED_TEMPLATE_NODE_MODULES?.trim() ||

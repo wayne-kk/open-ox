@@ -1,12 +1,12 @@
 /**
  * Shared Playwright Chromium launch for cover capture and reference-page capture.
- * Honors PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH; relaxes sandbox when running non-root (Docker).
+ * Honors PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH; relaxes sandbox when running non-root.
  */
 
 import { chromium, type Browser, type LaunchOptions } from "playwright";
 
 const NON_ROOT_SANDBOX_ARGS = ["--no-sandbox", "--disable-setuid-sandbox"] as const;
-/** Avoid Chromium crashes when Docker /dev/shm is small (common in k8s). */
+/** Avoid Chromium crashes when /dev/shm is small. */
 const DOCKER_SHM_ARG = "--disable-dev-shm-usage";
 
 /** Pure options builder — unit-tested without launching a browser. */

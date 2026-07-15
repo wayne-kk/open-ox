@@ -41,6 +41,7 @@ sites/*
 # vercel
 .vercel
 .open-ox/
+.playwright/
 
 # typescript
 *.tsbuildinfo

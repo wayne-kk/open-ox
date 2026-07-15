@@ -3,15 +3,16 @@
 #
 #   sudo OPEN_OX_DEPLOY_USER=ubuntu bash scripts/server-setup.sh
 #
-# Prerequisites for GitHub Actions deploy (SERVER_USER=ubuntu):
-#   - Docker Engine + Compose available
-#   - docker.service enabled and running
-#   - ubuntu ∈ docker group (re-login once after this script)
-#   - APP_DIR writable by ubuntu
+# Prepares a PM2 host (no Docker required for daily deploys):
+#   - Node 20 + corepack/pnpm
+#   - pm2 (global)
+#   - Playwright OS deps + CJK fonts
+#   - APP_DIR ownership for the deploy user
 set -euo pipefail
 
 APP_DIR="${OPEN_OX_APP_DIR:-/sharedata/wayne/open-ox}"
 DEPLOY_USER="${OPEN_OX_DEPLOY_USER:-ubuntu}"
+DEBIAN_MIRROR="${DEBIAN_MIRROR:-mirrors.cloud.tencent.com}"
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "ERROR: run as root, e.g. sudo OPEN_OX_DEPLOY_USER=ubuntu bash $0"
@@ -21,119 +22,101 @@ fi
 echo "==> App dir: $APP_DIR"
 echo "==> Deploy user: $DEPLOY_USER"
 
-# ── Docker Engine ────────────────────────────────────────────────────────────
-if ! command -v docker >/dev/null 2>&1; then
-  echo "==> Installing Docker Engine (get.docker.com)..."
-  curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
-  sh /tmp/get-docker.sh
-  rm -f /tmp/get-docker.sh
-else
-  echo "==> Docker already installed: $(docker --version)"
+# ── apt mirrors (Tencent) ────────────────────────────────────────────────────
+if [[ -f /etc/apt/sources.list ]]; then
+  sed -i \
+    -e "s|deb.debian.org|${DEBIAN_MIRROR}|g" \
+    -e "s|security.debian.org|${DEBIAN_MIRROR}|g" \
+    -e "s|archive.ubuntu.com|${DEBIAN_MIRROR}|g" \
+    -e "s|security.ubuntu.com|${DEBIAN_MIRROR}|g" \
+    /etc/apt/sources.list || true
+fi
+if ls /etc/apt/sources.list.d/*.list >/dev/null 2>&1; then
+  sed -i \
+    -e "s|archive.ubuntu.com|${DEBIAN_MIRROR}|g" \
+    -e "s|security.ubuntu.com|${DEBIAN_MIRROR}|g" \
+    /etc/apt/sources.list.d/*.list || true
 fi
 
-systemctl enable containerd 2>/dev/null || true
-systemctl enable docker
-systemctl start containerd 2>/dev/null || true
-systemctl start docker
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -y
 
-# ── Compose plugin ───────────────────────────────────────────────────────────
-# Tencent Ubuntu mirrors often lack the Docker Inc. package name docker-compose-plugin.
-if ! docker compose version >/dev/null 2>&1; then
-  echo "==> Installing Docker Compose plugin..."
-  apt-get update || true
-  if ! apt-get install -y docker-compose-plugin 2>/dev/null \
-    && ! apt-get install -y docker-compose-v2 2>/dev/null; then
-    ARCH="$(uname -m)"
-    case "$ARCH" in
-      x86_64|amd64) ARCH=x86_64 ;;
-      aarch64|arm64) ARCH=aarch64 ;;
-    esac
-    mkdir -p /usr/local/lib/docker/cli-plugins
-    curl -fsSL "https://github.com/docker/compose/releases/download/v2.32.4/docker-compose-linux-${ARCH}" \
-      -o /usr/local/lib/docker/cli-plugins/docker-compose
-    chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
-  fi
+# Fonts + common Chromium runtime libs (Playwright install-deps covers the rest).
+apt-get install -y --no-install-recommends \
+  ca-certificates \
+  curl \
+  git \
+  fonts-noto-cjk \
+  fonts-noto-color-emoji \
+  fonts-liberation \
+  libnss3 \
+  libnspr4 \
+  libatk1.0-0 \
+  libatk-bridge2.0-0 \
+  libcups2 \
+  libdrm2 \
+  libxkbcommon0 \
+  libxcomposite1 \
+  libxdamage1 \
+  libxfixes3 \
+  libxrandr2 \
+  libgbm1 \
+  libasound2 \
+  libpango-1.0-0 \
+  libcairo2 \
+  xvfb \
+  build-essential \
+  python3
+
+# ── Node 20 ──────────────────────────────────────────────────────────────────
+if ! command -v node >/dev/null 2>&1 || ! node -v | grep -qE '^v20\.'; then
+  echo "==> Installing Node.js 20.x..."
+  curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+  apt-get install -y nodejs
 fi
+echo "==> Node: $(node -v)"
 
-docker info >/dev/null
-docker compose version
+# ── pnpm via corepack ────────────────────────────────────────────────────────
+corepack enable
+corepack prepare pnpm@10.5.2 --activate
+echo "==> pnpm: $(pnpm -v)"
 
-# ── Docker Hub 内网加速（腾讯云 CVM；未配置时 FROM node 会很慢）──────────────
-DAEMON_JSON=/etc/docker/daemon.json
-MIRROR=https://mirror.ccs.tencentyun.com
-need_restart=0
-if [[ ! -f "$DAEMON_JSON" ]] || ! grep -q 'mirror.ccs.tencentyun.com' "$DAEMON_JSON" 2>/dev/null; then
-  echo "==> Configuring Docker Hub registry-mirrors → ${MIRROR}"
-  if [[ -f "$DAEMON_JSON" ]] && command -v python3 >/dev/null 2>&1; then
-    python3 - "$DAEMON_JSON" "$MIRROR" <<'PY'
-import json, sys
-path, mirror = sys.argv[1], sys.argv[2]
-try:
-    with open(path) as f:
-        data = json.load(f)
-except Exception:
-    data = {}
-mirrors = data.get("registry-mirrors") or []
-if mirror not in mirrors:
-    mirrors = [mirror] + [m for m in mirrors if m != mirror]
-data["registry-mirrors"] = mirrors
-with open(path, "w") as f:
-    json.dump(data, f, indent=2)
-    f.write("\n")
-PY
-  else
-    printf '%s\n' "{" "  \"registry-mirrors\": [\"${MIRROR}\"]" "}" >"$DAEMON_JSON"
-  fi
-  need_restart=1
-else
-  echo "==> Docker Hub mirror already configured"
+# ── pm2 ──────────────────────────────────────────────────────────────────────
+if ! command -v pm2 >/dev/null 2>&1; then
+  npm install -g pm2
 fi
-if [[ "$need_restart" -eq 1 ]]; then
-  systemctl restart docker
-  echo "==> docker restarted"
-fi
-docker info 2>/dev/null | grep -A5 'Registry Mirrors' || echo "WARN: could not print Registry Mirrors"
+echo "==> pm2: $(pm2 -v | head -1)"
 
-# ── Deploy user can use docker without sudo ──────────────────────────────────
+# Start pm2 on boot for deploy user (print instructions; operator confirms once).
 if id "$DEPLOY_USER" >/dev/null 2>&1; then
-  usermod -aG docker "$DEPLOY_USER"
-  echo "==> Added $DEPLOY_USER to group 'docker' (they must start a NEW SSH session once)"
-else
-  echo "WARN: user $DEPLOY_USER not found — skip usermod"
+  echo "==> Configure pm2 startup as $DEPLOY_USER (run once after first deploy):"
+  echo "    sudo -u $DEPLOY_USER bash -lc 'cd $APP_DIR && pm2 start ecosystem.config.cjs && pm2 save && pm2 startup'"
 fi
 
-mkdir -p "$APP_DIR/sites/template" "$APP_DIR/logs"
-
-# Deploy user owns the app tree (rsync / edit compose).
-# Container runs as root, so bind-mounted sites/ is writable regardless of host uid.
+mkdir -p "$APP_DIR/sites/template" "$APP_DIR/logs" "$APP_DIR/.playwright/browsers" "$APP_DIR/.open-ox"
 chown -R "$DEPLOY_USER:$DEPLOY_USER" "$APP_DIR"
 chmod -R u+rwX,go+rX "$APP_DIR/sites"
-# Keep template refreshable by deploy user + writable by root-in-container.
 chmod -R a+rwX "$APP_DIR/sites"
 
-if command -v pm2 >/dev/null 2>&1; then
-  echo "==> Removing legacy PM2 apps..."
-  # May be owned by deploy user; best-effort
-  sudo -u "$DEPLOY_USER" pm2 delete open-ox 2>/dev/null || true
-  sudo -u "$DEPLOY_USER" pm2 delete open-ox-generation-worker 2>/dev/null || true
-  sudo -u "$DEPLOY_USER" pm2 save 2>/dev/null || true
+# Best-effort: install Playwright OS deps using the app's playwright version when tree exists.
+if [[ -f "$APP_DIR/package.json" ]]; then
+  echo "==> playwright install-deps (best-effort)..."
+  sudo -u "$DEPLOY_USER" bash -lc "cd '$APP_DIR' && (corepack enable; corepack prepare pnpm@10.5.2 --activate; pnpm install --frozen-lockfile || true) && (pnpm exec playwright install-deps chromium || true)"
 fi
 
 echo ""
-echo "==> Server ready."
-echo "    docker:  $(command -v docker) ($(docker --version))"
-echo "    compose: $(docker compose version | head -1)"
+echo "==> Server ready for PM2 deploys."
+echo "    node: $(command -v node) ($(node -v))"
+echo "    pnpm: $(command -v pnpm) ($(pnpm -v))"
+echo "    pm2:  $(command -v pm2)"
 echo ""
-echo "Verify as $DEPLOY_USER in a NEW login:"
-echo "  ssh $DEPLOY_USER@<host>"
-echo "  groups          # must list 'docker'"
-echo "  docker info     # must show Registry Mirrors: mirror.ccs.tencentyun.com"
+echo "If old Docker data still eats disk:"
+echo "  sudo bash $APP_DIR/scripts/server-cleanup-docker.sh"
 echo ""
-echo "First-time / monthly runtime base (apt + Chromium):"
-echo "  cd $APP_DIR && bash scripts/build-runtime.sh"
-echo "  # optional TCR: OPEN_OX_TCR_REPO=ccr.ccs.tencentyun.com/<ns> bash scripts/build-runtime.sh --push"
+echo "First deploy:"
+echo "  sudo -u $DEPLOY_USER bash -lc 'cd $APP_DIR && bash scripts/deploy-on-server.sh'"
 echo ""
-echo "Then push to main — CI builds the app image ON THIS HOST (runtime layer reused)."
+echo "Daily: push to main — CI rsync + deploy-on-server.sh (install skipped when lockfile unchanged)."
 echo ""
 echo "Optional: prune idle local sites workspaces (mtime > 1 day; never deletes template)."
 echo "  Dry-run:  bash $APP_DIR/scripts/cleanup-idle-sites.sh"

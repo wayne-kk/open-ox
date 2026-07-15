@@ -1,6 +1,8 @@
 # 调研：腾讯云中国区 VPS 上 Docker 部署为何慢，以及主流加速策略（2026-07-15）
 
-**状态**：完成（第一方公开材料：腾讯云官方文档、Docker / BuildKit 文档、Debian 镜像站帮助、Playwright 官方文档、npmmirror / cnpm 站点、Next.js 官方 docs；并对照本仓库 `Dockerfile`、`compose.prod.yaml`、`scripts/deploy-on-server.sh`、CI rsync 路径）  
+> **归档**：生产已切到 PM2（见 `docs/deploy/tencent-cvm-fast-path.md`）。下文仅作历史调研，仓库内 Docker 配置已移除。
+
+**状态**：完成（第一方公开材料：腾讯云官方文档、Docker / BuildKit 文档、Debian 镜像站帮助、Playwright 官方文档、npmmirror / cnpm 站点、Next.js 官方 docs）  
 **日期**：2026-07-15  
 **问题**：为何在腾讯云中国区 CVM / 轻量应用服务器上做 Docker 构建与部署会很慢？腾讯云官方与主流生态推荐哪些高效部署路径？对 open-ox（Next.js standalone + Playwright Chromium + apt 字体/库、CI rsync 后在服务器 `docker compose build`）有哪些可执行建议？
 

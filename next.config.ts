@@ -13,6 +13,13 @@ const nextConfig: NextConfig = {
   ...(allowedDevOrigins.length > 0 ? { allowedDevOrigins } : {}),
   output: "standalone",
   /**
+   * CI already runs `pnpm typecheck` before deploy. Skipping Next's in-build tsc avoids a second
+   * cold typecheck on small CVMs (often several minutes during `pnpm build`).
+   */
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  /**
    * Production: use webpack (`pnpm build` → `next build --webpack`). Turbopack production builds
    * turn `serverExternalPackages` like `playwright` into hashed import specifiers Node cannot resolve
    * (ERR_MODULE_NOT_FOUND: playwright-…).
