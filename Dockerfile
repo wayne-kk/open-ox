@@ -18,6 +18,33 @@
 # (`node generation-worker.cjs`) — see compose.prod.yaml.
 
 FROM node:20-bookworm-slim AS base
+# CN VPS (Tencent): official deb.debian.org / npmjs / playwright CDNs are often
+# multi-minute per package. Override at build time if needed:
+#   docker build --build-arg DEBIAN_MIRROR=deb.debian.org ...
+ARG DEBIAN_MIRROR=mirrors.cloud.tencent.com
+ARG NPM_REGISTRY=https://registry.npmmirror.com
+ARG PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
+ENV npm_config_registry=${NPM_REGISTRY}
+ENV PLAYWRIGHT_DOWNLOAD_HOST=${PLAYWRIGHT_DOWNLOAD_HOST}
+RUN set -eux; \
+    if [ -f /etc/apt/sources.list ]; then \
+      sed -i \
+        -e "s|deb.debian.org|${DEBIAN_MIRROR}|g" \
+        -e "s|security.debian.org|${DEBIAN_MIRROR}|g" \
+        /etc/apt/sources.list; \
+    fi; \
+    if ls /etc/apt/sources.list.d/*.sources >/dev/null 2>&1; then \
+      sed -i \
+        -e "s|deb.debian.org|${DEBIAN_MIRROR}|g" \
+        -e "s|security.debian.org|${DEBIAN_MIRROR}|g" \
+        /etc/apt/sources.list.d/*.sources; \
+    fi; \
+    if ls /etc/apt/sources.list.d/*.list >/dev/null 2>&1; then \
+      sed -i \
+        -e "s|deb.debian.org|${DEBIAN_MIRROR}|g" \
+        -e "s|security.debian.org|${DEBIAN_MIRROR}|g" \
+        /etc/apt/sources.list.d/*.list; \
+    fi
 RUN corepack enable && corepack prepare pnpm@10.5.2 --activate
 WORKDIR /app
 
