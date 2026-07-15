@@ -16,6 +16,32 @@ const TEMPLATE_LOADER = path.join(
 );
 const TEMPLATE_NEXT_CONFIG = path.join(WORKSPACE_ROOT, "sites/template/next.config.ts");
 
+/**
+ * Bind-mounted `/app/sites` is often owned by the deploy user while the container
+ * runs as uid 1001. Prefer unlink-then-copy so a root-owned stale dest does not
+ * block overwrite; surface a clear fix when the volume is not world-writable.
+ */
+async function syncFileFromTemplate(src: string, dest: string): Promise<void> {
+  await fs.mkdir(path.dirname(dest), { recursive: true });
+  try {
+    await fs.rm(dest, { force: true });
+    await fs.copyFile(src, dest);
+  } catch (err) {
+    const code =
+      err && typeof err === "object" && "code" in err
+        ? String((err as NodeJS.ErrnoException).code)
+        : "";
+    if (code === "EPERM" || code === "EACCES") {
+      throw new Error(
+        `${code}: cannot write ${dest} (container uid 1001). On the host run: ` +
+          `sudo chmod -R a+rwX /sharedata/wayne/open-ox/sites`,
+        { cause: err }
+      );
+    }
+    throw err;
+  }
+}
+
 export interface DesignModeProjectSetupResult {
   bridgeCopied: boolean;
   layoutPatched: boolean;
@@ -42,8 +68,7 @@ export async function ensureSourceInstrumentationInProject(projectDir: string): 
   }
 
   const destLoader = path.join(projectDir, "open-ox/source-instrumentation-loader.cjs");
-  await fs.mkdir(path.dirname(destLoader), { recursive: true });
-  await fs.copyFile(TEMPLATE_LOADER, destLoader);
+  await syncFileFromTemplate(TEMPLATE_LOADER, destLoader);
 
   const destConfig = path.join(projectDir, "next.config.ts");
   let existing = "";
@@ -56,7 +81,7 @@ export async function ensureSourceInstrumentationInProject(projectDir: string): 
   if (!existing.includes("source-instrumentation-loader")) {
     try {
       await fs.access(TEMPLATE_NEXT_CONFIG);
-      await fs.copyFile(TEMPLATE_NEXT_CONFIG, destConfig);
+      await syncFileFromTemplate(TEMPLATE_NEXT_CONFIG, destConfig);
       changed = true;
       console.log(
         "[designMode] Synced next.config.ts from template (source-instrumentation webpack rule). " +
@@ -88,8 +113,7 @@ export async function ensureDesignModeProjectSetup(projectDir: string): Promise<
   }
 
   const destBridge = path.join(projectDir, "components/open-ox/OpenOxPreviewBridge.tsx");
-  await fs.mkdir(path.dirname(destBridge), { recursive: true });
-  await fs.copyFile(TEMPLATE_BRIDGE, destBridge);
+  await syncFileFromTemplate(TEMPLATE_BRIDGE, destBridge);
 
   let layoutPatched = false;
   const layoutPath = path.join(projectDir, "app/layout.tsx");
