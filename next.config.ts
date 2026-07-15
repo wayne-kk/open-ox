@@ -20,10 +20,9 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   /**
-   * Turbopack is the default production bundler. Playwright / sharp run in the
-   * Screenshot Service (`scripts/screenshot-service.ts`), not in Next — cover and
-   * reference capture call `lib/screenshot/client` over HTTP. Keep tracing includes
-   * for any residual native deps / standalone copies.
+   * Production `pnpm build` uses `next build --webpack` (see package.json).
+   * Turbopack NFT panics on pnpm `@tabby_ai/hijri-converter` ("Is a directory").
+   * Playwright / sharp stay external; cover capture uses the Screenshot Service.
    */
   outputFileTracingIncludes: {
     /**
