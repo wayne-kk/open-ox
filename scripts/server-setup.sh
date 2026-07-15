@@ -39,9 +39,26 @@ if ls /etc/apt/sources.list.d/*.list >/dev/null 2>&1; then
 fi
 
 export DEBIAN_FRONTEND=noninteractive
+
+# Legacy Docker apt source often fails in CN (download.docker.com); we no longer need it for PM2.
+if ls /etc/apt/sources.list.d/docker*.list >/dev/null 2>&1; then
+  echo "==> Disabling leftover Docker apt sources"
+  mkdir -p /etc/apt/sources.list.d/disabled
+  mv /etc/apt/sources.list.d/docker*.list /etc/apt/sources.list.d/disabled/ 2>/dev/null || true
+fi
+
 apt-get update -y
 
 # Fonts + common Chromium runtime libs (Playwright install-deps covers the rest).
+# Ubuntu 24.04+ uses *t64 package names for several libraries.
+. /etc/os-release
+UBUNTU_MAJOR="${VERSION_ID%%.*}"
+if [[ "${UBUNTU_MAJOR:-0}" -ge 24 ]]; then
+  ATK_PKGS=(libatk1.0-0t64 libatk-bridge2.0-0t64 libcups2t64 libasound2t64)
+else
+  ATK_PKGS=(libatk1.0-0 libatk-bridge2.0-0 libcups2 libasound2)
+fi
+
 apt-get install -y --no-install-recommends \
   ca-certificates \
   curl \
@@ -51,9 +68,6 @@ apt-get install -y --no-install-recommends \
   fonts-liberation \
   libnss3 \
   libnspr4 \
-  libatk1.0-0 \
-  libatk-bridge2.0-0 \
-  libcups2 \
   libdrm2 \
   libxkbcommon0 \
   libxcomposite1 \
@@ -61,12 +75,12 @@ apt-get install -y --no-install-recommends \
   libxfixes3 \
   libxrandr2 \
   libgbm1 \
-  libasound2 \
   libpango-1.0-0 \
   libcairo2 \
   xvfb \
   build-essential \
-  python3
+  python3 \
+  "${ATK_PKGS[@]}"
 
 # ── Node 20 ──────────────────────────────────────────────────────────────────
 if ! command -v node >/dev/null 2>&1 || ! node -v | grep -qE '^v20\.'; then
