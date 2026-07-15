@@ -1,6 +1,8 @@
 #!/bin/sh
-# Production entrypoint (runs as root): seed template node_modules symlink from the
+# Production entrypoint (runs as root): seed template node_modules from the
 # image-baked store so bind-mounted /app/sites does not need a runtime pnpm install.
+# Per-project provision uses bind-mount / materialize (see ensureProjectNodeModules);
+# this only exposes the shared store under sites/template.
 set -eu
 
 SITES_DIR="${OPEN_OX_SITES_DIR_IN_CONTAINER:-/app/sites}"

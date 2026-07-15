@@ -3,7 +3,10 @@ import { promisify } from "util";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import type { ToolResult, ToolExecutor } from "../types";
 import { ensureGeneratedSiteTurbopackRoot } from "@/lib/ensureGeneratedSiteTurbopackRoot";
-import { ensureProjectNodeModules } from "@/lib/ensureProjectNodeModules";
+import {
+  ensureProjectNodeModules,
+  pnpmNextBuildArgv,
+} from "@/lib/ensureProjectNodeModules";
 import { envForNextWebpackChild } from "@/lib/nextWebpackChildEnv";
 import { withSiteBuildLock } from "@/lib/siteBuildLock";
 import { getSiteRoot } from "./common";
@@ -37,12 +40,21 @@ export const executeRunBuild: ToolExecutor = async (
     typeof args.openOxStaticBasePath === "string" ? args.openOxStaticBasePath.trim() : "";
   const projectDir = getSiteRoot();
   try {
-    await ensureProjectNodeModules(projectDir);
+    const nm = await ensureProjectNodeModules(projectDir);
     await ensureGeneratedSiteTurbopackRoot(projectDir);
     return await withSiteBuildLock(projectDir, async () => {
-      // Turbopack production build (site-isolated root). `--webpack` is only for
-      // Design Mode `next dev` — forcing it on run_build was 3–8× slower.
-      const { stdout, stderr } = await execFileAsync("pnpm", ["run", script], {
+      // Default: Turbopack. `--webpack` only when node_modules is an escaping symlink
+      // (bind-mount / materialize failed) — see ensureProjectNodeModules cascade.
+      const pnpmArgs =
+        script === "build"
+          ? pnpmNextBuildArgv(nm.preferWebpackBuild)
+          : (["run", script] as string[]);
+      if (nm.preferWebpackBuild && script === "build") {
+        console.warn(
+          `[run_build] using next build --webpack (nm mode=${nm.mode})`
+        );
+      }
+      const { stdout, stderr } = await execFileAsync("pnpm", pnpmArgs, {
         cwd: projectDir,
         encoding: "utf8",
         maxBuffer: 1024 * 1024,
@@ -59,4 +71,3 @@ export const executeRunBuild: ToolExecutor = async (
     return { success: false, error: msg };
   }
 };
-

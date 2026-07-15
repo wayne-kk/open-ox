@@ -8,7 +8,10 @@ import path from "path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-import { ensureProjectNodeModules } from "@/lib/ensureProjectNodeModules";
+import {
+  ensureProjectNodeModules,
+  pnpmNextBuildArgv,
+} from "@/lib/ensureProjectNodeModules";
 import { withSiteBuildLock } from "@/lib/siteBuildLock";
 import { getSiteRoot } from "@/lib/projectManager";
 import { ensureProjectSourcesOnDisk } from "@/lib/storage";
@@ -70,7 +73,10 @@ async function canReuse(projectDir: string, filesFingerprint: string): Promise<b
   }
 }
 
-async function runRootStaticExportBuild(projectDir: string): Promise<void> {
+async function runRootStaticExportBuild(
+  projectDir: string,
+  preferWebpackBuild = false
+): Promise<void> {
   await withSiteBuildLock(projectDir, async () => {
     let stdout = "";
     let stderr = "";
@@ -78,7 +84,7 @@ async function runRootStaticExportBuild(projectDir: string): Promise<void> {
       const env = envForNextWebpackChild({ NODE_ENV: "production" });
       // Must not inherit preview basePath — production URL is domain root.
       delete env.OPEN_OX_STATIC_BASE_PATH;
-      const result = await execFileAsync("pnpm", ["exec", "next", "build"], {
+      const result = await execFileAsync("pnpm", pnpmNextBuildArgv(preferWebpackBuild), {
         cwd: projectDir,
         env,
         maxBuffer: 12 * 1024 * 1024,
@@ -115,7 +121,7 @@ export async function buildStaticExportForVercelDeploy(
 
   await ensureGlobalErrorFromTemplateForProject(projectId);
   await prepareProjectDirForStaticExport(projectDir);
-  await ensureProjectNodeModules(projectDir);
+  const nm = await ensureProjectNodeModules(projectDir);
 
   const filesFp = await computeProjectFingerprint(projectId);
   const force = options?.force === true;
@@ -123,7 +129,7 @@ export async function buildStaticExportForVercelDeploy(
     return { outDir: path.join(projectDir, "out"), reused: true };
   }
 
-  await runRootStaticExportBuild(projectDir);
+  await runRootStaticExportBuild(projectDir, nm.preferWebpackBuild);
   const outDir = path.join(projectDir, "out");
   try {
     await fs.access(path.join(outDir, "index.html"));

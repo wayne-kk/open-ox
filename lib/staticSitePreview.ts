@@ -20,7 +20,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 import { ensureGeneratedSiteTurbopackRoot } from "@/lib/ensureGeneratedSiteTurbopackRoot";
-import { ensureProjectNodeModules } from "@/lib/ensureProjectNodeModules";
+import {
+  ensureProjectNodeModules,
+  pnpmNextBuildArgv,
+} from "@/lib/ensureProjectNodeModules";
 import { envForNextWebpackChild } from "@/lib/nextWebpackChildEnv";
 import { withSiteBuildLock } from "@/lib/siteBuildLock";
 import { getSiteRoot } from "@/lib/projectManager";
@@ -393,15 +396,16 @@ export async function prepareProjectDirForStaticExport(projectDir: string): Prom
 
 async function runStaticExportBuildUnlocked(
   projectId: string,
-  projectDir: string
+  projectDir: string,
+  preferWebpackBuild = false
 ): Promise<void> {
   const basePath = getStoragePreviewBasePath(projectId);
   let stdout = "";
   let stderr = "";
   try {
-    // Turbopack (`next build`) with site-isolated turbopack.root — see
-    // ensureGeneratedSiteTurbopackRoot. Design Mode still uses `next dev --webpack`.
-    const result = await execFileAsync("pnpm", ["exec", "next", "build"], {
+    // Default Turbopack with site-isolated turbopack.root. Webpack only when
+    // ensureProjectNodeModules fell back to an escaping symlink.
+    const result = await execFileAsync("pnpm", pnpmNextBuildArgv(preferWebpackBuild), {
       cwd: projectDir,
       env: envForNextWebpackChild({
         NODE_ENV: "production",
@@ -422,9 +426,13 @@ async function runStaticExportBuildUnlocked(
   }
 }
 
-async function runStaticExportBuild(projectId: string, projectDir: string): Promise<void> {
+async function runStaticExportBuild(
+  projectId: string,
+  projectDir: string,
+  preferWebpackBuild = false
+): Promise<void> {
   await withSiteBuildLock(projectDir, async () => {
-    await runStaticExportBuildUnlocked(projectId, projectDir);
+    await runStaticExportBuildUnlocked(projectId, projectDir, preferWebpackBuild);
   });
 }
 
@@ -603,7 +611,7 @@ export async function syncStaticSitePreview(
     }
 
     try {
-      await ensureProjectNodeModules(projectDir);
+      const nm = await ensureProjectNodeModules(projectDir);
 
       /**
        * Hold the site build lock across build → upload → delete so a concurrent
@@ -621,7 +629,11 @@ export async function syncStaticSitePreview(
                 `[staticPreview] reuse existing out/ (verification stamp) projectId=${projectId}`
               );
             } else {
-              await runStaticExportBuildUnlocked(projectId, projectDir);
+              await runStaticExportBuildUnlocked(
+                projectId,
+                projectDir,
+                nm.preferWebpackBuild
+              );
             }
 
             const filesFpAfter = await computeProjectFingerprint(projectId);

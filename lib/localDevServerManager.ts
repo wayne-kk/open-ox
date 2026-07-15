@@ -17,6 +17,7 @@ import { promisify } from "node:util";
 import net from "node:net";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSiteRoot, WORKSPACE_ROOT } from "./projectManager";
+import { ensureProjectNodeModules } from "./ensureProjectNodeModules";
 import { ensureProjectSourcesOnDisk } from "./storage";
 import { syncLocalProjectFingerprint } from "./previewFingerprintDb";
 import { computeProjectFingerprint, getTemplateDepMap, readProjectPackageJson, SITES_TEMPLATE_DIR, syncProjectRuntimeVersionsFromTemplate } from "./previewShared";
@@ -45,8 +46,6 @@ async function preparePreviewProjectForStudio(projectDir: string): Promise<boole
 }
 
 const execFileAsync = promisify(execFile);
-const SITES_DIR = path.join(WORKSPACE_ROOT, "sites");
-const SHARED_NODE_MODULES_CANDIDATES = [path.join(SITES_DIR, "node_modules"), path.join(SITES_TEMPLATE_DIR, "node_modules")];
 
 /** Cross-process reuse: Next may handle API routes on different workers — in-memory `localRegistry` alone misses running `next dev`. */
 const LOCAL_PREVIEW_STATE_DIR = path.join(WORKSPACE_ROOT, ".open-ox", "local-preview");
@@ -454,49 +453,12 @@ async function allocatePreviewPort(): Promise<number> {
   return fixed;
 }
 
-async function isDirWithFiles(p: string): Promise<boolean> {
-  try {
-    const st = await fs.stat(p);
-    if (!st.isDirectory()) return false;
-    const ent = await fs.readdir(p);
-    return ent.length > 0;
-  } catch {
-    return false;
-  }
-}
-
 /**
- * Use shared node_modules (prefer `sites/node_modules`, then `sites/template/node_modules`)
- * via a symlink. If no shared store exists, leave the project to use its own install.
+ * @deprecated Prefer {@link ensureProjectNodeModules} (bind-mount → materialize → symlink).
+ * Kept for callers that only need "some node_modules present" before local `next dev --webpack`.
  */
 export async function ensureSharedNodeModulesSymlink(projectDir: string): Promise<void> {
-  const nm = path.join(projectDir, "node_modules");
-  try {
-    const st = await fs.lstat(nm);
-    if (st.isSymbolicLink()) return;
-    if (st.isDirectory()) {
-      if (await isDirWithFiles(nm)) return;
-      await fs.rm(nm, { recursive: true, force: true });
-    }
-  } catch {
-    /* missing — create */
-  }
-
-  for (const shared of SHARED_NODE_MODULES_CANDIDATES) {
-    if (!(await isDirWithFiles(shared))) continue;
-    const rel = path.relative(projectDir, shared);
-    try {
-      await fs.rm(nm, { recursive: true, force: true });
-    } catch {
-      /* */
-    }
-    try {
-      await fs.symlink(rel, nm, "dir");
-    } catch (err) {
-      console.warn(`[local preview] Symlink to shared node_modules failed: ${shared}`, err);
-    }
-    return;
-  }
+  await ensureProjectNodeModules(projectDir);
 }
 
 async function getMissingDepsOnDisk(projectDir: string): Promise<string[] | null> {
@@ -767,8 +729,8 @@ async function ensureProjectDirExists(
 
 async function runInstallIfNeeded(projectDir: string, label: string, projectId: string): Promise<void> {
   const tSym = performance.now();
-  await ensureSharedNodeModulesSymlink(projectDir);
-  timingLog(projectId, `install:${label}.shareNodeModulesSymlink`, tSym);
+  await ensureProjectNodeModules(projectDir);
+  timingLog(projectId, `install:${label}.ensureProjectNodeModules`, tSym);
 
   const tScan = performance.now();
   const miss = await getMissingDepsOnDisk(projectDir);

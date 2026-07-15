@@ -4,14 +4,20 @@ import { Dirent } from "fs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { clampProjectListName } from "@/lib/projectDisplayName";
-import { ensureProjectNodeModules as ensureProjectNodeModulesImpl } from "@/lib/ensureProjectNodeModules";
+import {
+  ensureProjectNodeModules as ensureProjectNodeModulesImpl,
+  type EnsureProjectNodeModulesResult,
+} from "@/lib/ensureProjectNodeModules";
 
 export const WORKSPACE_ROOT = process.cwd();
 
 /** Re-export from leaf module so preview/storage bundles never see a half-initialized `projectManager` namespace. */
-export async function ensureProjectNodeModules(projectDir: string): Promise<void> {
+export async function ensureProjectNodeModules(
+  projectDir: string
+): Promise<EnsureProjectNodeModulesResult> {
   return ensureProjectNodeModulesImpl(projectDir);
 }
+export type { EnsureProjectNodeModulesResult };
 export type GenerationMode = "web";
 
 function coerceGenerationMode(_stored: string | null | undefined): GenerationMode {

@@ -95,7 +95,8 @@ for (const ent of fs.readdirSync(sharpNest)) {
 NODE
 
 # Template deps live OUTSIDE /app/sites so the production bind-mount cannot hide them.
-# Runtime symlinks project node_modules here instead of `pnpm install` into the mount.
+# Runtime bind-mounts (or materializes) project node_modules from here — see
+# lib/ensureProjectNodeModules.ts — instead of `pnpm install` into the sites mount.
 FROM base AS template-deps
 WORKDIR /opt/ox-sites-template
 COPY sites/template/package.json sites/template/pnpm-lock.yaml sites/template/pnpm-workspace.yaml ./
