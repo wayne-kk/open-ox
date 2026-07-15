@@ -79,12 +79,20 @@ export async function runArchitectScaffoldAgent(
   const thinking = getThinkingLevelForStep(ARCHITECT_SCAFFOLD_AGENT_STEP);
   const preRead = buildChromePreReadContext();
   const pagesSummary = buildBlueprintPagesSummary(blueprint);
+  const plannedChromeForm =
+    typeof blueprint.site.informationArchitecture.chromeForm === "string"
+      ? blueprint.site.informationArchitecture.chromeForm
+      : "unspecified";
 
-  const userMessage = `## Scaffold global chrome (fast draft — links may be provisional)
+  const userMessage = `## Scaffold global chrome (chrome-first — fast draft, links may be provisional)
 
 ${buildChromeProjectHeader(blueprint)}
 
-## Page plans (Page Agents will implement these next)
+## Planned chromeForm (from Plan — follow this)
+- **chromeForm**: \`${plannedChromeForm}\`
+- Write the matching shell (top-nav / sidebar / bottom-tabs / …). Do **not** invent a second shell family on top of this.
+
+## Page plans (Page Agents will implement content next — leave {children} for them)
 ${pagesSummary}
 
 ${buildChromePreReadBlock(preRead)}
@@ -93,14 +101,17 @@ ${buildChromePreReadBlock(preRead)}
 ${truncateChromeAgentText(designSystem, 10_000)}
 
 ## Workflow
-1. Pick chrome **form** from product type (see system prompt table).
-2. Write \`app/layout.tsx\` + \`components/chrome/**\` with **complete structure** but **provisional** nav/footer links.
-3. Call \`${ARCHITECT_SCAFFOLD_COMPLETE}\` within a few tool rounds — do not polish.
+1. Honor planned **chromeForm** (override only if productType clearly contradicts — explain in complete summary).
+2. Write \`app/layout.tsx\` + \`components/chrome/**\` with **complete structure** but **provisional** nav/footer links from blueprint routes.
+3. Call \`${ARCHITECT_SCAFFOLD_COMPLETE}\` within a few tool rounds — do not polish anchors.
 
 Hard rules:
-- Do **not** write \`app/**/page.tsx\`.
-- Do **not** perfect anchor links for single-page sites — Chrome Optimize Agent will fix after pages exist.
+- Do **not** write \`app/**/page.tsx\` content beyond what layout needs.
+- Do **not** perfect single-page \`#\` anchors — Chrome polish will fix after pages exist.
 - Do **not** call \`format_code\` on files you wrote.`;
+
+  // Seed complete tool chromeForm from plan so traces stay consistent if the model omits it.
+  let chromeForm = plannedChromeForm !== "unspecified" ? plannedChromeForm : "unspecified";
 
   const refGr =
     referenceScreenshotDataUrl?.trim() && screenshotGuardrailId?.trim()
@@ -125,7 +136,6 @@ Hard rules:
 
   let scaffoldComplete = false;
   let completeSummary = "";
-  let chromeForm = "unspecified";
 
   const maxIterations = Math.max(
     6,

@@ -1,3 +1,7 @@
+import type { ChromeForm, SharedContract } from "./shared/chromeForm";
+
+export type { ChromeForm, SharedContract };
+
 export interface SectionSpec {
   type: string;
   intent: string;
@@ -68,6 +72,13 @@ export interface InformationArchitecture {
   pageMap: PageMapEntry[];
   sharedShells: string[];
   notes: string[];
+  /**
+   * Plan-selected shell form for chrome-first scaffold.
+   * @see docs/product/chrome-first-generate-pipeline-architecture.md
+   */
+  chromeForm?: ChromeForm | string;
+  /** List/detail shared entity contracts — stubbed before parallel page agents. */
+  sharedContracts?: SharedContract[];
 }
 
 /** PlannedSectionSpec is now identical to SectionSpec — kept as alias for downstream compat. */

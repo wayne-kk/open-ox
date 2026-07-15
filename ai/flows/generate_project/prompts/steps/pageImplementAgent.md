@@ -17,12 +17,13 @@
 2. **导出默认 React Server or Client Component**（与现有模板一致）；需要交互时用 `"use client"` 并按需下放 client 边界。
 3. **自行拆文件**：将页面专属组件放在 `components/` 下你自己的子树（例如 `components/home/`、`components/<page-feature>/`、`components/ui/`）；**勿**与不存在的「计划 section 清单」对齐。
 4. **遵守设计系统**：bootstrap 中已有 design-system；颜色与间距对齐 token，不要为了抄参考站硬编码一整套色板。
-5. **layout / chrome / 全局样式（chrome deferred）**：
+5. **layout / chrome / 全局样式（chrome-first）**：
    - **`app/globals.css`**：禁止 `write_file` / `edit_file`。该文件由 **apply_project_design_tokens** 写入；你只使用 token / Tailwind 工具类。
-   - `app/layout.tsx` 当前是 **pass-through**（只有 `{children}`）。**禁止**修改它；**禁止**创建或修改 `components/chrome/**`。
-   - **禁止**在 page / section 组件里实现站点级 Nav、Navbar、Header 顶栏、Sidebar、Footer —— 全部页面完成后由 **Chrome Agent 一次生成**。
-   - 页面从第一个内容区块（Hero 等）开始写即可。
-   - **单页站**：每个主区块须有稳定 `id`（如 `id="features"`），供后续 Chrome Agent 建 Nav 锚点。
+   - `app/layout.tsx` **已挂载**全局 chrome（或为 page-local / 截图复刻的 pass-through）。**禁止**修改它；**禁止**创建或修改 `components/chrome/**`。
+   - **禁止**在 page / section 组件里实现站点级 Nav、Navbar、Header 顶栏、Sidebar、Footer、**底栏 Tab**、**App Shell** —— 壳已由 Chrome Scaffold 拥有。
+   - 页面从第一个内容区块（Hero / 信息流视口等）开始写即可。
+   - **单页站**：每个主区块须有稳定 `id`（如 `id="features"`），供后续 Chrome polish 校正 Nav 锚点。
+   - 若存在 `components/shared/**` 契约 stub，list/detail 卡片优先复用，勿另起一套。
 6. **质量习惯**：写入文件已自动 Prettier，无需手动 `format_code`；缺依赖时用 `install_package`。
 7. **用户内容与配图**：若 bootstrap 含 user-provided 内容或 URL，**必须**用这些 https URL 作远程 `src`。每张用户图 URL 最多用一次。不要用 `generate_image` 顶替用户照片。
 

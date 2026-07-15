@@ -66,10 +66,11 @@ export function buildPageAgentUserMessage(params: BuildPageAgentUserMessageParam
 \`${PAGE_AGENT_LAYOUT_PATH}\` is **pass-through only** (\`{children}\` — no global Nav/Footer).
 **Do not** create \`components/chrome/**\`. Reproduce header/nav/footer from the reference **inside** \`${targetPath}\` or \`components/**\` section files.
 `
-    : `## Layout contract (chrome deferred)
-\`${PAGE_AGENT_LAYOUT_PATH}\` is **pass-through only** for now (\`{children}\`).
-Global Nav/Footer are created **once after all pages** by the Chrome Agent — **do not** create \`components/chrome/**\`, and **do not** implement site-wide Nav/Navbar/Header/Sidebar/Footer in \`${targetPath}\` or page section components.
-Fill page **sections** only. Single-page sites: stable section \`id\` attributes (e.g. \`id="features"\`).
+    : `## Layout contract (chrome-first — shell already mounted)
+\`${PAGE_AGENT_LAYOUT_PATH}\` already mounts global chrome (or is intentionally pass-through for page-local products).
+**Do not** create \`components/chrome/**\`, and **do not** implement site-wide Nav/Navbar/Header/Sidebar/Footer, **bottom tab bars**, or **app shell** frames in \`${targetPath}\` or page section components.
+Fill page **sections** / main content only (e.g. feed viewport, hero). Single-page sites: stable section \`id\` attributes (e.g. \`id="features"\`).
+Reuse \`components/shared/**\` stubs when present for list/detail cards.
 `;
 
   return `## Implement this Next.js route (App Router)

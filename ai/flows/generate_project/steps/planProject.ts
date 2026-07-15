@@ -10,6 +10,11 @@ import type {
   StepTrace,
 } from "../types";
 import { getModelForStep } from "@/lib/config/models";
+import {
+  normalizeSharedContracts,
+  resolveChromeForm,
+  type SharedContract,
+} from "../shared/chromeForm";
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -58,7 +63,31 @@ ${blueprint.brief.projectDescription}
 - 核心结果：${blueprint.brief.productScope.coreOutcome}
 - 设计关键词：${blueprint.experience.designIntent.keywords.join(", ")}
 
-> 布局形态（顶 nav / sidebar / footer / 工具栏 / 无 chrome 等）由下游实现 Agent 根据产品形态决定。本步骤**不要**预先指定 chrome。
+> 本步骤**必须**选定站点 chrome 形态（`chromeForm`），并在有 list/detail 等多页共享实体时输出 `sharedContracts`。下游 Chrome Scaffold 会先落壳，再并行写页。
+
+请输出 JSON，结构如下：
+\`\`\`json
+{
+  "chromeForm": "top-nav+footer | top-nav | sidebar | bottom-tabs | page-local | none",
+  "sharedContracts": [
+    {
+      "entityName": "Item",
+      "fields": ["title", "href", "description"],
+      "sharedComponentPath": "components/shared/ItemCard.tsx",
+      "listSlug": "items",
+      "detailRoutePattern": "/items/[id]"
+    }
+  ],
+  "pages": [ /* pageDesignPlan per page — unchanged */ ]
+}
+\`\`\`
+
+chromeForm 选择指引：
+- marketing / landing / 官网 → \`top-nav+footer\`
+- admin / dashboard → \`sidebar\`
+- 移动信息流 / 短视频 / immersive feed → \`page-local\`（页面自带壳，不挂全局 Nav）
+- 全屏游戏 / 舞台 → \`none\`
+- 无 list/detail 共享实体时 \`sharedContracts\` 可为 \`[]\`
 
 ${pageListHeading}
 ${blueprint.site.pages
@@ -116,11 +145,35 @@ ${blueprint.site.pages
       };
     });
 
+  const chromeForm = resolveChromeForm({
+    chromeForm:
+      (isObjectRecord(parsed) && parsed.chromeForm) ??
+      (isObjectRecord(parsed) &&
+        isObjectRecord(parsed.site) &&
+        isObjectRecord(parsed.site.informationArchitecture) &&
+        parsed.site.informationArchitecture.chromeForm) ??
+      blueprint.site.informationArchitecture.chromeForm,
+    productType: blueprint.brief.productScope.productType,
+  });
+
+  const sharedContracts: SharedContract[] = normalizeSharedContracts(
+    (isObjectRecord(parsed) && parsed.sharedContracts) ??
+      (isObjectRecord(parsed) &&
+        isObjectRecord(parsed.site) &&
+        isObjectRecord(parsed.site.informationArchitecture) &&
+        parsed.site.informationArchitecture.sharedContracts) ??
+      blueprint.site.informationArchitecture.sharedContracts
+  );
+
   const mergedBlueprint: PlannedProjectBlueprint = {
     brief: blueprint.brief,
     experience: blueprint.experience,
     site: {
-      informationArchitecture: blueprint.site.informationArchitecture,
+      informationArchitecture: {
+        ...blueprint.site.informationArchitecture,
+        chromeForm,
+        sharedContracts,
+      },
       pages,
     },
     ...(blueprint.userProvidedContent ? { userProvidedContent: blueprint.userProvidedContent } : {}),

@@ -128,6 +128,8 @@ export interface BuildStudioState {
   // Model
   selectedModel: string;
   setSelectedModel: (m: string) => void;
+  selectedEffortTier: "fast" | "balanced" | "deep";
+  setSelectedEffortTier: (t: "fast" | "balanced" | "deep") => void;
   availableModels: Array<{ id: string; displayName: string }>;
 
   // Project
@@ -385,6 +387,9 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [selectedModel, setSelectedModel] = useState("gemini-3-flash-preview");
+  const [selectedEffortTier, setSelectedEffortTier] = useState<"fast" | "balanced" | "deep">(
+    "balanced"
+  );
 
   // Fetch available models
   const [availableModels, setAvailableModels] = useState<Array<{ id: string; displayName: string }>>([]);
@@ -1100,6 +1105,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         abortRef.current.signal,
         {
           model: selectedModel,
+          effortTier: selectedEffortTier,
           ...(projectId ? { projectId } : {}),
           ...(capturedIntentImage ? { imageBase64: capturedIntentImage } : {}),
           ...(effectiveVibe
@@ -1209,6 +1215,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         abortRef.current.signal,
         {
           model: selectedModel,
+          effortTier: selectedEffortTier,
           retryProjectId: retryId,
         }
       );
@@ -1320,6 +1327,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         abortRef.current.signal,
         {
           model: selectedModel,
+          effortTier: selectedEffortTier,
           retryProjectId: retryId,
           resumeFromCheckpoint: true,
         }
@@ -2149,7 +2157,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     handleUnlockInterruptedGeneration,
     handleContinueFromCheckpoint,
     intentImage, setIntentImage,
-    selectedModel, setSelectedModel, availableModels,
+    selectedModel, setSelectedModel, selectedEffortTier, setSelectedEffortTier, availableModels,
     projectId, setProjectId, projectLoading, projectNotFound,
     projectName,
     remixedFromTitle, remixedFromOwnerUsername,

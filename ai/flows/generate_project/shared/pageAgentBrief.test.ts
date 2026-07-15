@@ -40,8 +40,9 @@ describe("pageAgentBrief", () => {
     expect(msg).toContain("pre-loads design-system");
     expect(msg).toContain("do not re-read");
     expect(msg).toContain("Implement first");
-    expect(msg).toContain("chrome deferred");
+    expect(msg).toContain("chrome-first");
     expect(msg).toContain("site-wide Nav/Navbar/Header/Sidebar/Footer");
+    expect(msg).toContain("bottom tab bars");
     expect(msg.length).toBeLessThan(4_500);
   });
 

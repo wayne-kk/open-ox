@@ -1,13 +1,14 @@
-## Chrome deferred — page must NOT own global chrome
+## Chrome already mounted — page must NOT own global chrome
 
-`app/layout.tsx` is a **pass-through** shell (`{children}` only). Global Nav / Footer are created **after all pages** by the Chrome Agent.
+`app/layout.tsx` already mounts global chrome from **Chrome Scaffold** (or is intentionally pass-through for `page-local` / `none` / screenshot replicate).
 
 ### Hard rules for this page agent
 
 1. **Do not** create or edit `components/chrome/**`.
 2. **Do not** edit `app/layout.tsx` or `app/globals.css`.
-3. **Do not** implement site-wide Navigation, Navbar, Header bar, Sidebar, or Footer inside `app/**/page.tsx` or page section components (`components/home/**`, etc.).
-4. Page content starts with the first **section** (Hero, features, …). Leave room at the top for chrome that will wrap the page later.
-5. Single-page sites: every main block needs a stable `id` (e.g. `id="features"`) so the later Chrome Agent can build `#` anchors.
+3. **Do not** implement site-wide Navigation, Navbar, Header bar, Sidebar, Footer, bottom tab bars, or app-shell frames inside `app/**/page.tsx` or page section components.
+4. Page content starts with the first **section** / main viewport (Hero, feed body, features, …). The shell above/beside/below is already owned by layout.
+5. Single-page sites: every main block needs a stable `id` (e.g. `id="features"`) so Chrome polish can fix `#` anchors.
+6. Prefer importing **shared contract stubs** under `components/shared/**` when list/detail cards are needed — do not invent a parallel card for the same entity.
 
 Section-local CTAs and in-section links are fine. Global chrome is not.

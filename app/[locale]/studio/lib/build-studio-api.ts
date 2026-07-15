@@ -284,6 +284,7 @@ export async function runBuildSite(
   signal?: AbortSignal,
   options?: {
     model?: string;
+    effortTier?: string;
     retryProjectId?: string;
     resumeFromCheckpoint?: boolean;
     projectId?: string;
@@ -310,6 +311,7 @@ export async function runBuildSite(
             projectId: options?.projectId,
             message: input,
             ...(options?.model ? { model: options.model } : {}),
+            ...(options?.effortTier ? { effortTier: options.effortTier } : {}),
             ...(options?.imageBase64 ? { imageBase64: options.imageBase64 } : {}),
             ...(options?.styleGuide ? { styleGuide: options.styleGuide } : {}),
             ...(options?.confirmedDesignDirectionMarkdown
@@ -330,6 +332,7 @@ export async function runBuildSite(
         : {
             userPrompt: input,
             ...(options?.model ? { model: options.model } : {}),
+            ...(options?.effortTier ? { effortTier: options.effortTier } : {}),
             ...(options?.resumeFromCheckpoint ? { resumeFromCheckpoint: true } : {}),
             ...(options?.retryProjectId ? { retryProjectId: options.retryProjectId } : {}),
             ...(options?.projectId ? { projectId: options.projectId } : {}),

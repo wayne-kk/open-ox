@@ -15,6 +15,7 @@ import type {
 import { clampProjectListName } from "@/lib/projectDisplayName";
 import { isStringArray } from "../shared/typeGuards";
 import { normalizeUserProvidedContent } from "./normalizeUserProvidedContent";
+import { normalizeSharedContracts, resolveChromeForm } from "../shared/chromeForm";
 
 function isSectionSpecArray(value: unknown): value is SectionSpec[] {
   return Array.isArray(value);
@@ -185,7 +186,8 @@ function normalizePageMap(value: unknown): PageMapEntry[] {
 
 function normalizeInformationArchitecture(
   value: unknown,
-  pages: PageBlueprint[]
+  pages: PageBlueprint[],
+  productType?: string
 ): InformationArchitecture {
   if (!value || typeof value !== "object") {
     return {
@@ -200,10 +202,12 @@ function normalizeInformationArchitecture(
       })),
       sharedShells: ["Global navigation", "Global footer"],
       notes: [],
+      chromeForm: resolveChromeForm({ productType }),
+      sharedContracts: [],
     };
   }
 
-  const candidate = value as Partial<InformationArchitecture>;
+  const candidate = value as Partial<InformationArchitecture> & Record<string, unknown>;
   return {
     navigationModel:
       typeof candidate.navigationModel === "string"
@@ -212,6 +216,11 @@ function normalizeInformationArchitecture(
     pageMap: normalizePageMap(candidate.pageMap),
     sharedShells: normalizeStringArray(candidate.sharedShells, ["Global navigation", "Global footer"]),
     notes: normalizeStringArray(candidate.notes, []),
+    chromeForm: resolveChromeForm({
+      chromeForm: candidate.chromeForm,
+      productType,
+    }),
+    sharedContracts: normalizeSharedContracts(candidate.sharedContracts),
   };
 }
 
@@ -372,7 +381,7 @@ function normalizeExperience(value: unknown): ProjectExperience {
   };
 }
 
-function normalizeSite(value: unknown): ProjectSiteBlueprint {
+function normalizeSite(value: unknown, productType?: string): ProjectSiteBlueprint {
   if (!value || typeof value !== "object") {
     throw new Error("analyze_project_requirement: site is missing");
   }
@@ -386,7 +395,11 @@ function normalizeSite(value: unknown): ProjectSiteBlueprint {
   const mergedFromMultiple = pagesRaw.length > 1;
   const pages = enforceSingleHomePage(pagesRaw);
 
-  const baseIa = normalizeInformationArchitecture(candidate.informationArchitecture, pages);
+  const baseIa = normalizeInformationArchitecture(
+    candidate.informationArchitecture,
+    pages,
+    productType
+  );
   const pageMap: PageMapEntry[] = pages.map((page) => ({
     slug: page.slug,
     title: page.title,
@@ -421,22 +434,24 @@ export function asProjectBlueprint(value: unknown): ProjectBlueprint {
 
   const candidate = value as Partial<ProjectBlueprint>;
   if (candidate.brief && candidate.experience && candidate.site) {
+    const brief = normalizeBrief(candidate.brief);
     return attachUserProvidedContent(
       {
-        brief: normalizeBrief(candidate.brief),
+        brief,
         experience: normalizeExperience(candidate.experience),
-        site: normalizeSite(candidate.site),
+        site: normalizeSite(candidate.site, brief.productScope.productType),
       },
       value
     );
   }
 
   if (candidate.brief && candidate.site) {
+    const brief = normalizeBrief(candidate.brief);
     return attachUserProvidedContent(
       {
-        brief: normalizeBrief(candidate.brief),
+        brief,
         experience: normalizeExperience(candidate.experience),
-        site: normalizeSite(candidate.site),
+        site: normalizeSite(candidate.site, brief.productScope.productType),
       },
       value
     );
@@ -448,13 +463,14 @@ export function asProjectBlueprint(value: unknown): ProjectBlueprint {
     site?: unknown;
   };
   if (minimalNested.brief && minimalNested.designIntent && minimalNested.site) {
+    const brief = normalizeBrief(minimalNested.brief);
     return attachUserProvidedContent(
       {
-        brief: normalizeBrief(minimalNested.brief),
+        brief,
         experience: normalizeExperience({
           designIntent: minimalNested.designIntent,
         }),
-        site: normalizeSite(minimalNested.site),
+        site: normalizeSite(minimalNested.site, brief.productScope.productType),
       },
       value
     );
@@ -477,23 +493,27 @@ export function asProjectBlueprint(value: unknown): ProjectBlueprint {
     flatCandidate.designIntent &&
     Array.isArray(flatCandidate.pages)
   ) {
+    const brief = normalizeBrief({
+      projectTitle: flatCandidate.projectTitle,
+      projectDescription: flatCandidate.projectDescription,
+      productScope: flatCandidate.productScope,
+      roles: flatCandidate.roles,
+      taskLoops: flatCandidate.taskLoops,
+      capabilities: flatCandidate.capabilities,
+    });
     return attachUserProvidedContent(
       {
-        brief: normalizeBrief({
-          projectTitle: flatCandidate.projectTitle,
-          projectDescription: flatCandidate.projectDescription,
-          productScope: flatCandidate.productScope,
-          roles: flatCandidate.roles,
-          taskLoops: flatCandidate.taskLoops,
-          capabilities: flatCandidate.capabilities,
-        }),
+        brief,
         experience: normalizeExperience({
           designIntent: flatCandidate.designIntent,
         }),
-        site: normalizeSite({
-          informationArchitecture: flatCandidate.informationArchitecture,
-          pages: flatCandidate.pages,
-        }),
+        site: normalizeSite(
+          {
+            informationArchitecture: flatCandidate.informationArchitecture,
+            pages: flatCandidate.pages,
+          },
+          brief.productScope.productType
+        ),
       },
       value
     );
@@ -542,7 +562,11 @@ export function asProjectBlueprint(value: unknown): ProjectBlueprint {
           designIntent: singlePage.designIntent,
         },
         site: {
-          informationArchitecture: normalizeInformationArchitecture(undefined, normalizedPages),
+          informationArchitecture: normalizeInformationArchitecture(
+            undefined,
+            normalizedPages,
+            "marketing website"
+          ),
           pages: normalizedPages,
         },
       },

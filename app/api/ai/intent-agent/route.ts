@@ -331,6 +331,7 @@ export async function POST(req: Request) {
               ? { userImageSourceTexts: intentResult.imageSourceTexts }
               : {}),
             effectiveModel: modelOverride ?? meta.modelId ?? undefined,
+            ...(typeof body.effortTier === "string" ? { effortTier: body.effortTier } : {}),
             effectiveGenerationMode: meta.generationMode ?? "web",
             preCreatedProjectId: projectId,
             resumeFromCheckpoint: false,

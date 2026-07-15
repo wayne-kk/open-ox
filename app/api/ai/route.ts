@@ -129,6 +129,7 @@ export async function POST(req: Request) {
       requestingUserId: user.id,
       effectivePrompt,
       effectiveModel,
+      ...(typeof body.effortTier === "string" ? { effortTier: body.effortTier } : {}),
       effectiveGenerationMode,
       ...(retryProjectId ? { retryProjectId } : {}),
       ...(!retryProjectId && preCreatedProjectId ? { preCreatedProjectId } : {}),

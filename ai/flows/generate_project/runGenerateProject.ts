@@ -29,12 +29,19 @@ import {
 import { stepApplyProjectDesignTokens } from "./steps/applyProjectDesignTokens";
 import {
   ARCHITECT_SCAFFOLD_AGENT_STEP,
+  runArchitectScaffoldAgent,
 } from "./steps/architectScaffoldAgent";
 import {
   runChromeOptimizeAgent,
   CHROME_OPTIMIZE_AGENT_STEP,
   type PageImplementSummary,
 } from "./steps/chromeOptimizeAgent";
+import {
+  needsGlobalChromeScaffold,
+  resolveChromeForm,
+  shouldUsePassThroughLayout,
+} from "./shared/chromeForm";
+import { writeSharedContractStubs } from "./shared/writeSharedContractStubs";
 import { stepGenerateProjectDesignSystem } from "./steps/generateProjectDesignSystem";
 import { stepInstallDependencies } from "./steps/installDependencies";
 import { stepInferDesignIntent, type DesignIntentResult } from "./steps/inferDesignIntent";
@@ -287,6 +294,65 @@ function collectExistingChromeOwnedRelativePaths(): string[] {
 interface BuildLifecycleResult {
   verificationStatus: GenerateProjectResult["verificationStatus"];
   verificationOutput: string;
+}
+
+async function runArchitectScaffoldStep(params: {
+  blueprint: PlannedProjectBlueprint;
+  designSystem: string;
+  artifactLogger: ArtifactLogger;
+  logger: StepLogger;
+  onStep?: (step: BuildStep) => void;
+  referenceScreenshotDataUrl?: string | null;
+  screenshotGuardrailId?: string | null;
+}): Promise<{ files: string[]; summary: string; chromeForm: string }> {
+  const {
+    blueprint,
+    designSystem,
+    artifactLogger,
+    logger,
+    onStep,
+    referenceScreenshotDataUrl,
+    screenshotGuardrailId,
+  } = params;
+
+  const outcome = await logger.timed(
+    ARCHITECT_SCAFFOLD_AGENT_STEP,
+    () =>
+      runArchitectScaffoldAgent({
+        blueprint,
+        designSystem,
+        referenceScreenshotDataUrl: referenceScreenshotDataUrl ?? null,
+        screenshotGuardrailId: screenshotGuardrailId ?? null,
+        onStep,
+      }),
+    (r) => ({
+      detail: `chrome=${r.chromeForm} · files=${r.files.length}${
+        r.fellBackToMinimal ? " · minimal-fallback" : ""
+      }`,
+      trace: r.trace,
+    })
+  );
+
+  await persistJsonArtifact(artifactLogger, ARCHITECT_SCAFFOLD_AGENT_STEP, "output", {
+    layoutPath: outcome.layoutPath,
+    chromeForm: outcome.chromeForm,
+    files: outcome.files,
+    summary: outcome.summary,
+    fellBackToMinimal: outcome.fellBackToMinimal,
+    toolInvocations: outcome.toolCallRecords,
+  });
+  await persistSiteFileArtifact(
+    artifactLogger,
+    ARCHITECT_SCAFFOLD_AGENT_STEP,
+    outcome.layoutPath,
+    "layout"
+  );
+
+  return {
+    files: outcome.files,
+    summary: outcome.summary,
+    chromeForm: outcome.chromeForm,
+  };
 }
 
 async function runChromeOptimizeStep(params: {
@@ -1117,10 +1183,16 @@ async function runGenerateProjectInner(
       appendGeneratedFiles(result, tokenFiles);
     }
 
-    // ── Pass-through layout → pages → single chrome agent ─────────────────────
+    // ── Chrome-first: real shell → shared stubs → parallel pages → link polish ─
     let scaffoldSummary = "";
     let scaffoldChromeForm = "unspecified";
     const skipChromeScaffold = blockSkillsForScreenshotReplicate;
+    const plannedChromeForm = resolveChromeForm({
+      chromeForm: blueprint.site.informationArchitecture.chromeForm,
+      productType: blueprint.brief.productScope.productType,
+    });
+    // Persist resolved form onto blueprint for agents / checkpoint traces.
+    blueprint.site.informationArchitecture.chromeForm = plannedChromeForm;
 
     if (skipChromeScaffold) {
       const { layoutPath, removedChromeDir } = await prepareReplicaSiteLayout(blueprint);
@@ -1144,26 +1216,19 @@ async function runGenerateProjectInner(
       appendGeneratedFiles(result, [layoutPath]);
       scaffoldSummary = "screenshot replicate: minimal pass-through layout";
       scaffoldChromeForm = "none";
-    } else if (cp?.skipChromeOptimize) {
-      // Chrome already done — keep existing layout + chrome files.
-      appendGeneratedFiles(result, collectExistingChromeOwnedRelativePaths());
-      scaffoldSummary = "resumed: chrome already complete";
-      scaffoldChromeForm = "resumed";
-    } else {
-      // Chrome deferred: strip any provisional chrome and use pass-through layout
-      // so page agents cannot mount / duplicate global Nav before the chrome agent.
+    } else if (shouldUsePassThroughLayout(plannedChromeForm)) {
       const { layoutPath, removedChromeDir } = await prepareReplicaSiteLayout(blueprint);
       logger.logStep(
         ARCHITECT_SCAFFOLD_AGENT_STEP,
         "ok",
-        `deferred chrome — pass-through layout${removedChromeDir ? " · stripped components/chrome" : ""}`
+        `chromeForm=${plannedChromeForm} — pass-through (page-local shell)`
       );
       await persistJsonArtifact(artifactLogger, ARCHITECT_SCAFFOLD_AGENT_STEP, "output", {
         layoutPath,
-        chromeForm: "deferred",
+        chromeForm: plannedChromeForm,
         skipped: true,
         removedChromeDir,
-        reason: "pages first; single chrome_optimize_agent after all pages",
+        reason: `plan chromeForm=${plannedChromeForm}; pages own shell`,
       });
       await persistSiteFileArtifact(
         artifactLogger,
@@ -1172,8 +1237,63 @@ async function runGenerateProjectInner(
         "layout"
       );
       appendGeneratedFiles(result, [layoutPath]);
-      scaffoldSummary = "deferred chrome: pass-through layout until pages complete";
-      scaffoldChromeForm = "deferred";
+      scaffoldSummary = `plan ${plannedChromeForm}: pass-through layout`;
+      scaffoldChromeForm = plannedChromeForm;
+    } else if (cp?.skipScaffold) {
+      appendGeneratedFiles(result, collectExistingChromeOwnedRelativePaths());
+      scaffoldSummary = "resumed: chrome scaffold already complete";
+      scaffoldChromeForm = plannedChromeForm;
+    } else if (needsGlobalChromeScaffold(plannedChromeForm)) {
+      const scaffoldResult = await withLangfuseSpan(LfSpanGen.architectScaffoldAgent, () =>
+        runArchitectScaffoldStep({
+          blueprint,
+          designSystem,
+          artifactLogger,
+          logger,
+          onStep,
+          referenceScreenshotDataUrl: referenceScreenshot,
+          screenshotGuardrailId,
+        })
+      );
+      appendGeneratedFiles(result, scaffoldResult.files);
+      scaffoldSummary = scaffoldResult.summary;
+      scaffoldChromeForm = scaffoldResult.chromeForm || plannedChromeForm;
+      blueprint.site.informationArchitecture.chromeForm = scaffoldChromeForm;
+    } else {
+      // unspecified / unknown — still scaffold a real shell (chrome-first default).
+      const scaffoldResult = await withLangfuseSpan(LfSpanGen.architectScaffoldAgent, () =>
+        runArchitectScaffoldStep({
+          blueprint,
+          designSystem,
+          artifactLogger,
+          logger,
+          onStep,
+          referenceScreenshotDataUrl: referenceScreenshot,
+          screenshotGuardrailId,
+        })
+      );
+      appendGeneratedFiles(result, scaffoldResult.files);
+      scaffoldSummary = scaffoldResult.summary;
+      scaffoldChromeForm = scaffoldResult.chromeForm || plannedChromeForm;
+      blueprint.site.informationArchitecture.chromeForm = scaffoldChromeForm;
+    }
+
+    // Shared list/detail stubs before parallel page agents (ownership serial).
+    const sharedContracts = blueprint.site.informationArchitecture.sharedContracts ?? [];
+    if (sharedContracts.length > 0 && !skipChromeScaffold) {
+      const stubPaths = writeSharedContractStubs(sharedContracts);
+      if (stubPaths.length > 0) {
+        appendGeneratedFiles(result, stubPaths);
+        logger.logStep(
+          "shared_contract_stubs",
+          "ok",
+          `wrote ${stubPaths.length} shared stub(s): ${stubPaths.join(", ")}`
+        );
+        await persistJsonArtifact(artifactLogger, "shared_contract_stubs", "output", {
+          files: stubPaths,
+          contracts: sharedContracts,
+        });
+      }
     }
 
     const pageOutcome = await withLangfuseSpan(
@@ -1204,11 +1324,13 @@ async function runGenerateProjectInner(
       pageOutcome.pageSummaries.length === blueprint.site.pages.length;
 
     if (allPagesImplemented && !cp?.skipChromeOptimize) {
-      if (skipChromeScaffold) {
+      if (skipChromeScaffold || shouldUsePassThroughLayout(plannedChromeForm)) {
         logger.logStep(
           CHROME_OPTIMIZE_AGENT_STEP,
           "ok",
-          "skipped — screenshot replicate (page sections own header/footer)"
+          skipChromeScaffold
+            ? "skipped — screenshot replicate (page sections own header/footer)"
+            : `skipped — chromeForm=${plannedChromeForm} (no global chrome to polish)`
         );
       } else {
         const optimizeResult = await withLangfuseSpan(LfSpanGen.chromeOptimizeAgent, () =>

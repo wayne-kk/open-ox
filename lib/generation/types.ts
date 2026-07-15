@@ -3,6 +3,11 @@ export type GenerationRunPayloadBody = {
   requestingUserId: string;
   effectivePrompt: string;
   effectiveModel?: string;
+  /**
+   * Generation effort tier: fast | balanced | deep.
+   * Overlays step models/thinking after DB step configs (chrome-first pipeline).
+   */
+  effortTier?: "fast" | "balanced" | "deep" | string;
   effectiveGenerationMode: string;
   retryProjectId?: string;
   preCreatedProjectId?: string;

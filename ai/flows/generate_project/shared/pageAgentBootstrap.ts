@@ -80,6 +80,8 @@ export function buildPageAgentBootstrap(
 
 The pipeline loaded the references below **before your first tool turn**. They do **not** consume iteration budget.
 
+**Chrome-first:** \`app/layout.tsx\` already mounts global chrome (or is intentional pass-through). Do **not** re-create Nav/Footer/bottom tabs in the page. Start from the first content section / main viewport. Prefer \`components/shared/**\` stubs when present.
+
 **Act now:** use \`write_file\` / \`edit_file\` for the target page and page-local \`components/**\`. Only \`read_file\` paths **not** listed below (e.g. after \`read_lints\` points at a specific file).
 
 ### Tree: \`app/\`
@@ -97,7 +99,7 @@ ${fileSections.join("\n\n")}`;
   const compactSummary = [
     "[Bootstrap still valid — do NOT re-read these paths]",
     `- ${PAGE_AGENT_DESIGN_SYSTEM_PATH}`,
-    `- ${PAGE_AGENT_LAYOUT_PATH}`,
+    `- ${PAGE_AGENT_LAYOUT_PATH} (chrome already mounted — content only)`,
     `- ${PAGE_AGENT_GLOBALS_PATH}`,
     ...(params.heroSkillOnDisk ? [`- ${PAGE_AGENT_HERO_SKILL_PATH}`] : []),
     ...(params.hasUserProvidedContent ? [`- ${USER_PROVIDED_CONTENT_PATH}`] : []),

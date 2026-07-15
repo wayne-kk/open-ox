@@ -53,25 +53,32 @@ export function getStepNarrative(step: BuildStep): {
     }
     if (s === "architect_scaffold_agent") {
         return {
-            what: "Pass-through layout（chrome deferred：页面先写，全局 Nav 后置一次生成）",
+            what: "Chrome Scaffold：先落真实全局壳（layout + components/chrome），页面再填内容。",
             output: ok
-                ? "极简 layout 已就绪；页面 Agent 开始实现（禁止自带全局 Nav）。"
-                : "Pass-through layout 准备失败。",
+                ? "全局 chrome 骨架已就绪，可预览导航；页面 Agent 开始只写内容区。"
+                : "Chrome Scaffold 失败。",
             note: step.detail ?? undefined,
         };
     }
     if (s.startsWith("architect_scaffold_agent_tool:")) {
         return {
-            what: "（旧）Chrome Scaffold Agent 工具调用",
+            what: "Chrome Scaffold 工具调用",
             output: step.detail ?? "tool executed",
         };
     }
     if (s === "chrome_optimize_agent") {
         return {
-            what: "Chrome Agent 在全部页面落盘后一次生成全局 Nav/Footer（磁盘路由/锚点已就绪）。",
+            what: "Chrome polish：按真实路由/锚点校正 Nav/Footer 链接（不换壳）。",
             output: ok
-                ? "全局 chrome 已生成并挂到 layout。"
-                : "Chrome 生成失败，站点可能仍无全局导航。",
+                ? "全局 chrome 链接已校正。"
+                : "Chrome polish 失败，导航链接可能仍为占位。",
+            note: step.detail ?? undefined,
+        };
+    }
+    if (s === "shared_contract_stubs") {
+        return {
+            what: "串行写入 list/detail 共享组件 stub，避免并行页抢写同一卡片。",
+            output: ok ? "共享契约 stub 已落盘。" : "共享 stub 写入失败。",
             note: step.detail ?? undefined,
         };
     }

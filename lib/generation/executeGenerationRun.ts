@@ -13,6 +13,7 @@ import {
 import { schedulePostGenerationPreviewPipeline } from "@/lib/postGenerationPreviewPipeline";
 import { setRuntimeModelId, type ModelId } from "@/lib/config/models";
 import { loadStepModelsFromDB } from "@/lib/config/models";
+import { applyEffortTier, normalizeEffortTier } from "@/lib/config/effortTiers";
 import {
   normalizePromptProfile,
   withCorePromptRuntime,
@@ -132,6 +133,7 @@ export async function executeGenerationRun(args: {
       setRuntimeModelId(payload.effectiveModel as ModelId);
     }
     await loadStepModelsFromDB();
+    applyEffortTier(normalizeEffortTier(payload.effortTier));
     const promptProfile = normalizePromptProfile(payload.effectiveGenerationMode as "web");
 
     const useDatabasePrompts = false;
