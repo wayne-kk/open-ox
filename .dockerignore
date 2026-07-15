@@ -49,4 +49,3 @@ coverage
 .DS_Store
 tsconfig.tsbuildinfo
 vitest.config.ts
-wayne.conf

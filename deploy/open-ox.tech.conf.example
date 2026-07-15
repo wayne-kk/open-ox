@@ -8,8 +8,8 @@
 #   sudo certbot --nginx -d open-ox.tech -d www.open-ox.tech
 #   sudo nginx -t && sudo systemctl reload nginx
 #
-# If wayne.xin / wayne.beer conf is still enabled and shares the same upstream name,
-# either disable those files or rename this upstream to avoid duplicate `upstream` errors.
+# If another conf already defines `upstream open_ox_app`, omit this block
+# (or rename) to avoid duplicate upstream errors.
 
 upstream open_ox_app {
     server 127.0.0.1:3000;
