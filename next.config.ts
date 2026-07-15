@@ -20,12 +20,10 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   /**
-   * Production: use webpack (`pnpm build` → `next build --webpack`). Turbopack production builds
-   * turn `serverExternalPackages` like `playwright` into hashed import specifiers Node cannot resolve
-   * (ERR_MODULE_NOT_FOUND: playwright-…).
-   *
-   * Playwright is used for cover capture / reference URLs. Standalone tracing must include its files;
-   * without outputFileTracingIncludes, `.next/standalone/node_modules` may omit playwright.
+   * Turbopack is the default production bundler. Playwright / sharp run in the
+   * Screenshot Service (`scripts/screenshot-service.ts`), not in Next — cover and
+   * reference capture call `lib/screenshot/client` over HTTP. Keep tracing includes
+   * for any residual native deps / standalone copies.
    */
   outputFileTracingIncludes: {
     /**

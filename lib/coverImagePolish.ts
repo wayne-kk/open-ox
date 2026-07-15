@@ -3,7 +3,13 @@
  * with a light inward vignette for depth (no letterboxing).
  */
 
-import sharp from "sharp";
+import { requireFromProject } from "@/lib/requireFromProject";
+
+type SharpModule = typeof import("sharp");
+
+function loadSharp(): SharpModule {
+  return requireFromProject<SharpModule>("sharp");
+}
 
 export type PolishCoverDimensions = {
   width: number;
@@ -41,6 +47,7 @@ function cinematicOverlaySvg(w: number, h: number): Buffer {
  * callers may catch and fall back to the raw screenshot.
  */
 export async function polishCoverJpeg(rawJpeg: Buffer, dimensions: PolishCoverDimensions): Promise<Buffer> {
+  const sharp = loadSharp();
   const { width: fw, height: fh } = dimensions;
   const iw = Math.round(fw * CONTENT_SCALE);
   const ih = Math.round(fh * CONTENT_SCALE);

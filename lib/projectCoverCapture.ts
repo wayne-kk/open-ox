@@ -1,37 +1,45 @@
 /**
  * Background job: desktop first-viewport JPEG (1480×960) → cinematic polish → Storage → DB.
- * Server-only. Requires SUPABASE_SERVICE_ROLE_KEY and Chromium (Playwright).
+ * Server-only. Requires SUPABASE_SERVICE_ROLE_KEY and the Screenshot Service (Playwright).
  */
 
 import {
-  buildCoverCaptureCjkFallbackCss,
-  COVER_CAPTURE_CJK_FONT_STACK,
-  COVER_CAPTURE_FONT_CSS_VARS,
-  COVER_CAPTURE_FONT_READY_TIMEOUT_MS,
-  COVER_CAPTURE_POST_FONT_SETTLE_MS,
-  isAuthGatedPreviewFailureBody,
   isFreshCoverPending,
   type CoverScheduleResult,
 } from "@/lib/coverCaptureOrchestration";
-import { polishCoverJpeg } from "@/lib/coverImagePolish";
 import {
   getExistingLocalPreviewUrl as getExistingLocalNextPreviewUrl,
   startLocalDevServer,
 } from "@/lib/localDevServerManager";
 import { previewCaptureExtraHeaders } from "@/lib/previewCaptureAuth";
-import { storagePreviewDepsPresent } from "@/lib/previewMode";
+import { getPreviewBackend, storagePreviewDepsPresent } from "@/lib/previewMode";
 import { previewUrlAllowedForScreenshot } from "@/lib/previewScreenshotUrl";
-import { launchChromium } from "@/lib/playwright/launchChromium";
-import { getProject, updateProjectCoverState } from "@/lib/projectManager";
-import { getStaticPreviewUrl, syncStaticSitePreview } from "@/lib/staticSitePreview";
+import { captureCoverViewportJpeg } from "@/lib/screenshot/client";
+import {
+  getProject,
+  hasUsableStaticPreview,
+  updateProjectCoverState,
+} from "@/lib/projectManager";
+import {
+  getStaticPreviewUrl,
+  getStoragePreviewPublicObjectUrl,
+  syncStaticSitePreview,
+} from "@/lib/staticSitePreview";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { uploadCoverScreenshot } from "@/lib/storage";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 
-const COVER_VIEWPORT_WIDTH = 1480;
-const COVER_VIEWPORT_HEIGHT = 960;
 /** Relative key under bucket prefix `{projectId}/` */
 export const COVER_STORAGE_RELATIVE_PATH = ".open-ox-cover/cover.jpg";
+
+/** End-to-end budget so a hung restore/next start cannot hold the in-process lock forever. */
+const COVER_CAPTURE_JOB_TIMEOUT_MS = 150_000;
+
+/**
+ * Fresh DB `pending` from another live worker — refuse briefly.
+ * After this, reclaim (HMR / crashed worker leaves pending with no process lock).
+ */
+const COVER_CAPTURE_PEER_PENDING_GRACE_MS = 20_000;
 
 const inFlightCover = new Set<string>();
 
@@ -45,36 +53,80 @@ function truncateErr(msg: string, max = 1900): string {
   return `${s.slice(0, max)}…`;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+async function withJobTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`${label} timed out after ${ms}ms`)),
+          ms
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
-async function waitForFontsReadyFailOpen(
-  page: { evaluate: (fn: () => Promise<unknown>) => Promise<unknown> },
-  timeoutMs: number
-): Promise<void> {
+/** True when site-previews already has index.html (no rebuild). */
+async function probePublishedStaticPreview(projectId: string): Promise<boolean> {
   try {
-    await Promise.race([
-      page.evaluate(() => (document.fonts ? document.fonts.ready : Promise.resolve())),
-      sleep(timeoutMs),
-    ]);
+    const url = getStoragePreviewPublicObjectUrl(projectId, "index.html");
+    const res = await fetch(url, {
+      method: "GET",
+      redirect: "follow",
+      signal: AbortSignal.timeout(8_000),
+    });
+    return res.ok;
   } catch {
-    /* fail-open */
+    return false;
   }
 }
 
 /**
- * Prefer already-published static preview via `/site-previews` + capture secret (no per-site next).
- * Fall back to local next only when static deps/secret are unavailable.
+ * Resolve a reachable preview URL for cover capture.
+ * Order: running local next → already-published static → (non-local) static sync → start local next.
+ * Never runs a full static rebuild when `OPEN_OX_PREVIEW_BACKEND=local`.
  */
 async function resolveCoverCapturePreviewUrl(
   db: SupabaseClient,
   projectId: string
 ): Promise<{ url: string; extraHeaders: Record<string, string> | null }> {
   const captureHeaders = previewCaptureExtraHeaders();
+  const preferLocal = getPreviewBackend() === "local";
+  const t0 = performance.now();
+  const elapsed = () => Math.round(performance.now() - t0);
+
+  const reused = await getExistingLocalNextPreviewUrl(db, projectId);
+  if (reused) {
+    console.log(
+      `[projectCoverCapture] preview=local-reuse ${elapsed()}ms projectId=${projectId}`
+    );
+    return { url: reused.url, extraHeaders: null };
+  }
+
   if (captureHeaders && storagePreviewDepsPresent()) {
+    const project = await getProject(db, projectId);
+    const markedSynced = project ? hasUsableStaticPreview(project) : false;
+    const published =
+      markedSynced || (await probePublishedStaticPreview(projectId));
+    if (published) {
+      console.log(
+        `[projectCoverCapture] preview=static-published ${elapsed()}ms projectId=${projectId}`
+      );
+      return { url: getStaticPreviewUrl(projectId), extraHeaders: captureHeaders };
+    }
+  }
+
+  if (!preferLocal && captureHeaders && storagePreviewDepsPresent()) {
     try {
+      console.log(`[projectCoverCapture] preview=static-sync begin projectId=${projectId}`);
       await syncStaticSitePreview(db, projectId);
+      console.log(
+        `[projectCoverCapture] preview=static-sync ok ${elapsed()}ms projectId=${projectId}`
+      );
       return { url: getStaticPreviewUrl(projectId), extraHeaders: captureHeaders };
     } catch (err) {
       console.warn(
@@ -84,92 +136,29 @@ async function resolveCoverCapturePreviewUrl(
     }
   }
 
-  const reused = await getExistingLocalNextPreviewUrl(db, projectId);
-  const { url } = reused ?? (await startLocalDevServer(db, projectId));
+  console.log(`[projectCoverCapture] preview=local-start begin projectId=${projectId}`);
+  const { url } = await startLocalDevServer(db, projectId);
+  console.log(
+    `[projectCoverCapture] preview=local-start ok ${elapsed()}ms projectId=${projectId}`
+  );
   return { url, extraHeaders: null };
 }
 
-async function screenshotHomeViewport(
+async function screenshotHomeViewportViaService(
   previewEntryUrl: string,
   extraHeaders: Record<string, string> | null
 ): Promise<Buffer> {
   previewUrlAllowedForScreenshot(previewEntryUrl);
-
   if (previewEntryUrl.includes("/site-previews/") && !extraHeaders) {
     throw new Error(
       "Cover capture refused auth-gated /site-previews URL without OPEN_OX_PREVIEW_CAPTURE_SECRET"
     );
   }
-
-  const browser = await launchChromium();
-  try {
-    const page = await browser.newPage({
-      viewport: {
-        width: COVER_VIEWPORT_WIDTH,
-        height: COVER_VIEWPORT_HEIGHT,
-      },
-      deviceScaleFactor: 1,
-      ...(extraHeaders ? { extraHTTPHeaders: extraHeaders } : {}),
-    });
-    const home = (() => {
-      try {
-        const u = new URL(previewEntryUrl);
-        if (u.pathname.toLowerCase().endsWith(".html")) return previewEntryUrl;
-      } catch {
-        /* fall through */
-      }
-      return previewEntryUrl.endsWith("/") ? previewEntryUrl : `${previewEntryUrl}/`;
-    })();
-    await page.goto(home, { waitUntil: "load", timeout: 120_000 });
-    const bodyText = await page.evaluate(() => document.body?.innerText ?? "");
-    if (isAuthGatedPreviewFailureBody(bodyText)) {
-      throw new Error(
-        "Cover capture landed on Forbidden (auth-gated preview). Set OPEN_OX_PREVIEW_CAPTURE_SECRET."
-      );
-    }
-    await page.evaluate(() => window.scrollTo(0, 0));
-    // Patch Latin @font-face CJK ranges + theme vars before fonts.ready so
-    // the settle wait includes the newly declared faces (tofu without this).
-    await page.addStyleTag({ content: buildCoverCaptureCjkFallbackCss() });
-    await page.evaluate(
-      ({ cssVars, cjkStack }) => {
-        const root = document.documentElement;
-        const cs = getComputedStyle(root);
-        for (const prop of cssVars) {
-          const cur = cs.getPropertyValue(prop).trim();
-          if (!cur) continue;
-          if (/\bNoto Sans CJK SC\b/i.test(cur) || /\bPingFang SC\b/i.test(cur)) continue;
-          root.style.setProperty(prop, `${cur}, ${cjkStack}`);
-        }
-      },
-      {
-        cssVars: [...COVER_CAPTURE_FONT_CSS_VARS],
-        cjkStack: COVER_CAPTURE_CJK_FONT_STACK,
-      }
-    );
-    await waitForFontsReadyFailOpen(page, COVER_CAPTURE_FONT_READY_TIMEOUT_MS);
-    await sleep(COVER_CAPTURE_POST_FONT_SETTLE_MS);
-    const buf = await page.screenshot({
-      type: "jpeg",
-      quality: 82,
-      fullPage: false,
-    });
-    return buf as Buffer;
-  } finally {
-    await browser.close().catch(() => undefined);
-  }
-}
-
-async function jpegWithCoverPolish(raw: Buffer): Promise<Buffer> {
-  try {
-    return await polishCoverJpeg(raw, {
-      width: COVER_VIEWPORT_WIDTH,
-      height: COVER_VIEWPORT_HEIGHT,
-    });
-  } catch (e) {
-    console.warn("[projectCoverCapture] polish fallback (raw jpeg):", e);
-    return raw;
-  }
+  return captureCoverViewportJpeg({
+    url: previewEntryUrl,
+    extraHeaders,
+    polish: true,
+  });
 }
 
 /**
@@ -183,8 +172,7 @@ export async function captureProjectHomepageJpeg(
   if (coverCaptureDisabledEnv()) return null;
   try {
     const { url, extraHeaders } = await resolveCoverCapturePreviewUrl(db, projectId);
-    const raw = await screenshotHomeViewport(url, extraHeaders);
-    return jpegWithCoverPolish(raw);
+    return await screenshotHomeViewportViaService(url, extraHeaders);
   } catch (err) {
     console.warn(
       `[projectCoverCapture] homepage jpeg for ${projectId} failed:`,
@@ -210,7 +198,8 @@ type AcquireOutcome =
   | { ok: false; reason: "in_flight" | "no_service_role"; baselineUpdatedAt: string | null };
 
 /**
- * Reserve process-local slot first (sync), then refuse if DB has a fresh pending from another worker.
+ * Reserve process-local slot first (sync). DB `pending` only blocks briefly (peer grace);
+ * after that we reclaim — Next HMR / crashed workers otherwise leave cover stuck silent.
  */
 async function tryAcquireCoverCapture(projectId: string): Promise<AcquireOutcome> {
   let db: SupabaseClient;
@@ -229,14 +218,59 @@ async function tryAcquireCoverCapture(projectId: string): Promise<AcquireOutcome
   try {
     const baseline = await readCoverBaseline(db, projectId);
     if (isFreshCoverPending(baseline.status, baseline.updatedAt, Date.now())) {
-      inFlightCover.delete(projectId);
-      return { ok: false, reason: "in_flight", baselineUpdatedAt: baseline.updatedAt };
+      const updatedMs = baseline.updatedAt ? Date.parse(baseline.updatedAt) : Number.NaN;
+      const ageMs = Number.isFinite(updatedMs) ? Date.now() - updatedMs : Number.POSITIVE_INFINITY;
+      if (ageMs < COVER_CAPTURE_PEER_PENDING_GRACE_MS) {
+        inFlightCover.delete(projectId);
+        return { ok: false, reason: "in_flight", baselineUpdatedAt: baseline.updatedAt };
+      }
+      console.warn(
+        `[projectCoverCapture] reclaiming stale DB pending ageMs=${Math.round(ageMs)} projectId=${projectId}`
+      );
     }
     return { ok: true, baselineUpdatedAt: baseline.updatedAt, db };
   } catch (e) {
     inFlightCover.delete(projectId);
     throw e;
   }
+}
+
+async function executeCoverCaptureBody(
+  db: SupabaseClient,
+  projectId: string,
+  gate: { cancelled: boolean }
+): Promise<void> {
+  const assertActive = () => {
+    if (gate.cancelled) {
+      throw new Error("cover capture cancelled (job timed out)");
+    }
+  };
+
+  await updateProjectCoverState(db, projectId, {
+    status: "pending",
+    error: null,
+  });
+  assertActive();
+
+  console.log(`[projectCoverCapture] resolve preview begin projectId=${projectId}`);
+  const { url, extraHeaders } = await resolveCoverCapturePreviewUrl(db, projectId);
+  assertActive();
+  previewUrlAllowedForScreenshot(url);
+  console.log(`[projectCoverCapture] screenshot begin url=${url} projectId=${projectId}`);
+
+  const jpeg = await screenshotHomeViewportViaService(url, extraHeaders);
+  assertActive();
+  console.log(`[projectCoverCapture] upload begin bytes=${jpeg.length} projectId=${projectId}`);
+
+  await uploadCoverScreenshot(db, projectId, jpeg);
+  assertActive();
+
+  await updateProjectCoverState(db, projectId, {
+    status: "ready",
+    storageRelativePath: COVER_STORAGE_RELATIVE_PATH,
+    error: null,
+  });
+  console.log(`[projectCoverCapture] ready: ${projectId}`);
 }
 
 async function executeCoverCapture(
@@ -249,27 +283,15 @@ async function executeCoverCapture(
     return;
   }
 
+  const gate = { cancelled: false };
   try {
-    await updateProjectCoverState(db, projectId, {
-      status: "pending",
-      error: null,
-    });
-
-    const { url, extraHeaders } = await resolveCoverCapturePreviewUrl(db, projectId);
-    previewUrlAllowedForScreenshot(url);
-
-    const rawJpeg = await screenshotHomeViewport(url, extraHeaders);
-    const jpeg = await jpegWithCoverPolish(rawJpeg);
-
-    await uploadCoverScreenshot(db, projectId, jpeg);
-
-    await updateProjectCoverState(db, projectId, {
-      status: "ready",
-      storageRelativePath: COVER_STORAGE_RELATIVE_PATH,
-      error: null,
-    });
-    console.log(`[projectCoverCapture] ready: ${projectId}`);
+    await withJobTimeout(
+      executeCoverCaptureBody(db, projectId, gate),
+      COVER_CAPTURE_JOB_TIMEOUT_MS,
+      "cover capture job"
+    );
   } catch (err) {
+    gate.cancelled = true;
     const msg = truncateErr(err instanceof Error ? err.message : String(err));
     console.error(`[projectCoverCapture] failed ${projectId}:`, msg);
     try {

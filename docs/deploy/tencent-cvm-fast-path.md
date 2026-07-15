@@ -25,8 +25,13 @@ deploy-on-server.sh
     ├─ pnpm build（复用 .next/cache；类型靠 CI）
     └─ pm2 startOrReload ecosystem.config.cjs
          ├── open-ox                 (next start)
-         └── open-ox-generation-worker
+         ├── open-ox-generation-worker
+         └── open-ox-screenshot      (Playwright HTTP :3921)
 ```
+
+封面 / 参考页截图由 **Screenshot Service** 完成；Next 只发本机 HTTP（`OPEN_OX_SCREENSHOT_URL`，默认 `http://127.0.0.1:3921`）。鉴权：`OPEN_OX_SCREENSHOT_SECRET` 或回退 `OPEN_OX_PREVIEW_CAPTURE_SECRET`。
+
+本地开发另开终端：`pnpm screenshot:dev`（与 `pnpm dev` 并行）。
 
 ---
 
@@ -63,15 +68,17 @@ pnpm -v
 pm2 -v
 ```
 
-准备 `.env.production`（通常由 CI 写入）。首次部署：
+准备 `.env.production`（通常由 CI 写入；需含 `OPEN_OX_PREVIEW_CAPTURE_SECRET` 或 `OPEN_OX_SCREENSHOT_SECRET`）。首次部署：
 
 ```bash
 cd /sharedata/wayne/open-ox
 bash scripts/deploy-on-server.sh
 pm2 ls
+# 应看到 open-ox / open-ox-generation-worker / open-ox-screenshot 均为 online
 pm2 startup   # 按提示做开机自启
 pm2 save
 curl -sS http://127.0.0.1:3000/health
+curl -sS http://127.0.0.1:3921/health
 ```
 
 ---
@@ -94,7 +101,7 @@ cd /sharedata/wayne/open-ox && bash scripts/deploy-on-server.sh
 
 ## 4. 诊断
 
-1. `pm2 ls` — 两个进程 online  
-2. `pm2 logs open-ox-generation-worker --lines 80`  
+1. `pm2 ls` — **三个**进程 online（含 `open-ox-screenshot`）  
+2. `pm2 logs open-ox-screenshot --lines 80` / `pm2 logs open-ox-generation-worker --lines 80`  
 3. `df -h`  
-4. 封面失败 → 删 `.open-ox/playwright-chromium.ok` 后重跑 deploy  
+4. 封面失败 → 确认 screenshot 进程与 secret；或删 `.open-ox/playwright-chromium.ok` 后重跑 deploy  

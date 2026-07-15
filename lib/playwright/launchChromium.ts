@@ -1,9 +1,23 @@
 /**
  * Shared Playwright Chromium launch for cover capture and reference-page capture.
  * Honors PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH; relaxes sandbox when running non-root.
+ *
+ * Loaded via {@link requireFromProject} so Turbopack production builds keep the
+ * real package name (`playwright`) instead of a hashed external.
  */
 
-import { chromium, type Browser, type LaunchOptions } from "playwright";
+import type { Browser, LaunchOptions } from "playwright";
+import { requireFromProject } from "@/lib/requireFromProject";
+
+type PlaywrightModule = typeof import("playwright");
+
+let cached: PlaywrightModule | null = null;
+
+function loadPlaywright(): PlaywrightModule {
+  if (cached) return cached;
+  cached = requireFromProject<PlaywrightModule>("playwright");
+  return cached;
+}
 
 const NON_ROOT_SANDBOX_ARGS = ["--no-sandbox", "--disable-setuid-sandbox"] as const;
 /** Avoid Chromium crashes when /dev/shm is small. */
@@ -32,5 +46,6 @@ export function buildChromiumLaunchOptions(overrides?: LaunchOptions): LaunchOpt
 }
 
 export async function launchChromium(overrides?: LaunchOptions): Promise<Browser> {
+  const { chromium } = loadPlaywright();
   return chromium.launch(buildChromiumLaunchOptions(overrides));
 }

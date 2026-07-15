@@ -76,5 +76,23 @@ module.exports = {
         OPEN_OX_WORKER_ID: sharedEnv.OPEN_OX_WORKER_ID || "pm2-worker-1",
       },
     },
+    {
+      name: "open-ox-screenshot",
+      cwd: ROOT,
+      script: "scripts/screenshot-service.ts",
+      interpreter: "node_modules/tsx/dist/cli.mjs",
+      instances: 1,
+      exec_mode: "fork",
+      max_memory_restart: "1536M",
+      kill_timeout: 30_000,
+      env: {
+        ...sharedEnv,
+        // Bind localhost only (set inside service); PORT for the screenshot HTTP server.
+        PORT: sharedEnv.OPEN_OX_SCREENSHOT_PORT || "3921",
+        OPEN_OX_SCREENSHOT_PORT: sharedEnv.OPEN_OX_SCREENSHOT_PORT || "3921",
+        OPEN_OX_SCREENSHOT_URL:
+          sharedEnv.OPEN_OX_SCREENSHOT_URL || "http://127.0.0.1:3921",
+      },
+    },
   ],
 };

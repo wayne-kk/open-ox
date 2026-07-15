@@ -4,11 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build --webpack",
+    "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "check:env": "tsx scripts/check-env.ts",
     "generation:worker": "tsx scripts/generation-worker.ts",
+    "screenshot:dev": "tsx --env-file=.env.local scripts/screenshot-service.ts",
     "lint": "eslint",
     "clear:template": "bash scripts/clear-template.sh"
   },
