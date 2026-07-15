@@ -20,8 +20,39 @@ const WORKSPACE_ROOT = process.cwd();
 const SITE_NEXT_CLI_REL = ["node_modules", "next", "dist", "bin", "next"] as const;
 
 /**
+ * Image-baked template deps (Dockerfile `template-deps` stage). Lives outside
+ * `/app/sites` so the production bind-mount cannot hide it.
+ */
+const BAKED_TEMPLATE_NM =
+  process.env.OX_BAKED_TEMPLATE_NODE_MODULES?.trim() ||
+  "/opt/ox-sites-template/node_modules";
+
+async function pathHasNext(nodeModulesDir: string): Promise<boolean> {
+  try {
+    await fs.access(path.join(nodeModulesDir, ...SITE_NEXT_CLI_REL.slice(1)));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Prefer (1) `sites/template/node_modules`, (2) image-baked `/opt/...`, else null.
+ */
+async function resolveSharedNodeModules(): Promise<string | null> {
+  const candidates = [
+    path.join(WORKSPACE_ROOT, "sites", "template", "node_modules"),
+    BAKED_TEMPLATE_NM,
+  ];
+  for (const candidate of candidates) {
+    if (await pathHasNext(candidate)) return candidate;
+  }
+  return null;
+}
+
+/**
  * Ensures `sites/<project>/node_modules/next` exists before `pnpm run build`.
- * Prefer symlink to `sites/template/node_modules`; otherwise run `pnpm install` in-site.
+ * Prefer symlink to shared template node_modules; otherwise run `pnpm install` in-site.
  */
 export async function ensureProjectNodeModules(projectDir: string): Promise<void> {
   const nextCli = path.join(projectDir, ...SITE_NEXT_CLI_REL);
@@ -36,8 +67,6 @@ export async function ensureProjectNodeModules(projectDir: string): Promise<void
   if (await nextResolved()) return;
 
   const projectNm = path.join(projectDir, "node_modules");
-  const templateNm = path.join(WORKSPACE_ROOT, "sites", "template", "node_modules");
-  const templateNextCli = path.join(templateNm, ...SITE_NEXT_CLI_REL);
 
   try {
     await fs.rm(projectNm, { recursive: true, force: true });
@@ -45,24 +74,15 @@ export async function ensureProjectNodeModules(projectDir: string): Promise<void
     /* ignore */
   }
 
-  async function templateHasNext(): Promise<boolean> {
+  async function trySymlinkShared(sharedNm: string): Promise<boolean> {
     try {
-      await fs.access(templateNextCli);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  if (await templateHasNext()) {
-    try {
-      await fs.symlink(templateNm, projectNm, "dir");
-      if (await nextResolved()) return;
+      await fs.symlink(sharedNm, projectNm, "dir");
+      if (await nextResolved()) return true;
     } catch (err: unknown) {
       const code = (err as NodeJS.ErrnoException)?.code;
       if (code !== "EEXIST") {
         console.warn(
-          `[ensureProjectNodeModules] Could not symlink template node_modules into ${projectDir}:`,
+          `[ensureProjectNodeModules] Could not symlink ${sharedNm} into ${projectDir}:`,
           err instanceof Error ? err.message : String(err)
         );
       }
@@ -72,30 +92,27 @@ export async function ensureProjectNodeModules(projectDir: string): Promise<void
         /* ignore */
       }
     }
-  } else {
+    return false;
+  }
+
+  let sharedNm = await resolveSharedNodeModules();
+  if (sharedNm && (await trySymlinkShared(sharedNm))) return;
+
+  if (!sharedNm) {
+    const templateDir = path.join(WORKSPACE_ROOT, "sites", "template");
     console.warn(
-      "[ensureProjectNodeModules] sites/template/node_modules/next missing — attempting `pnpm install` in sites/template (one-time)."
+      "[ensureProjectNodeModules] shared template node_modules missing — attempting `pnpm install` in sites/template (one-time)."
     );
     try {
-      await runPnpmInstall(path.join(WORKSPACE_ROOT, "sites", "template"));
+      await runPnpmInstall(templateDir);
     } catch (err: unknown) {
       console.warn(
         "[ensureProjectNodeModules] template pnpm install failed:",
         err instanceof Error ? err.message : String(err)
       );
     }
-    if (await templateHasNext()) {
-      try {
-        await fs.symlink(templateNm, projectNm, "dir");
-        if (await nextResolved()) return;
-      } catch {
-        try {
-          await fs.rm(projectNm, { recursive: true, force: true });
-        } catch {
-          /* ignore */
-        }
-      }
-    }
+    sharedNm = await resolveSharedNodeModules();
+    if (sharedNm && (await trySymlinkShared(sharedNm))) return;
   }
 
   try {

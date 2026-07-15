@@ -69,12 +69,10 @@ fi
 mkdir -p "$APP_DIR/sites/template" "$APP_DIR/logs"
 
 # Deploy user owns the app tree (rsync / edit compose).
+# Container runs as root, so bind-mounted sites/ is writable regardless of host uid.
 chown -R "$DEPLOY_USER:$DEPLOY_USER" "$APP_DIR"
-
-# sites/ is bind-mounted into the container (uid 1001). Both ubuntu (rsync template)
-# and the container must be able to write — single-tenant VPS: world-writable sites.
-chmod -R a+rwX "$APP_DIR/sites"
-chown -R "$DEPLOY_USER:$DEPLOY_USER" "$APP_DIR/sites"
+chmod -R u+rwX,go+rX "$APP_DIR/sites"
+# Keep template refreshable by deploy user + writable by root-in-container.
 chmod -R a+rwX "$APP_DIR/sites"
 
 if command -v pm2 >/dev/null 2>&1; then

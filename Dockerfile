@@ -94,13 +94,21 @@ for (const ent of fs.readdirSync(sharpNest)) {
 }
 NODE
 
+# Template deps live OUTSIDE /app/sites so the production bind-mount cannot hide them.
+# Runtime symlinks project node_modules here instead of `pnpm install` into the mount.
+FROM base AS template-deps
+WORKDIR /opt/ox-sites-template
+COPY sites/template/package.json sites/template/pnpm-lock.yaml sites/template/pnpm-workspace.yaml ./
+RUN --mount=type=cache,id=open-ox-template-pnpm-store,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
+
 FROM base AS runner
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-
-RUN groupadd --system --gid 1001 nodejs \
-  && useradd --system --uid 1001 --gid nodejs nextjs
+# Single-tenant VPS: run as root so bind-mounted /app/sites (host-owned) and
+# corepack/pnpm caches never hit EACCES. Do not use this pattern on shared hosts.
+ENV OX_BAKED_TEMPLATE_NODE_MODULES=/opt/ox-sites-template/node_modules
 
 # Playwright OS deps + CJK-capable fonts for cover screenshots (tofu without these).
 # This layer rarely changes — cache it across deploys.
@@ -132,8 +140,8 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
 # Overlay native modules so cover capture can `require("playwright")` / `sharp` in standalone.
 # Remove incomplete traced copies first — they are often broken symlinks under pnpm.
 COPY --from=builder /opt/ox-native/node_modules /opt/ox-native/node_modules
@@ -145,24 +153,23 @@ RUN rm -rf \
       node_modules/@img \
       node_modules/semver \
     && cp -a /opt/ox-native/node_modules/. ./node_modules/ \
-    && chown -R nextjs:nodejs \
-         node_modules/playwright \
-         node_modules/playwright-core \
-         node_modules/sharp \
-         node_modules/detect-libc \
-         node_modules/@img \
-         node_modules/semver \
     && rm -rf /opt/ox-native
 # Runtime `fs` reads under ai/** (prompts, skills, rules) — not fully traced into standalone.
-COPY --from=builder --chown=nextjs:nodejs /app/ai ./ai
-COPY --from=browsers --chown=nextjs:nodejs /ms-playwright /ms-playwright
-COPY --from=builder --chown=nextjs:nodejs /app/dist/generation-worker.cjs ./generation-worker.cjs
+COPY --from=builder /app/ai ./ai
+COPY --from=browsers /ms-playwright /ms-playwright
+COPY --from=builder /app/dist/generation-worker.cjs ./generation-worker.cjs
 # Seed for fresh volumes; production bind-mounts host sites over /app/sites.
-COPY --from=builder --chown=nextjs:nodejs /app/sites/template ./sites/template
+COPY --from=builder /app/sites/template ./sites/template
+# Baked template deps — not under /app/sites, so host bind-mount cannot hide them.
+COPY --from=template-deps /opt/ox-sites-template /opt/ox-sites-template
 
-USER nextjs
+COPY scripts/docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
+USER root
 EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
+ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["node", "server.js"]
