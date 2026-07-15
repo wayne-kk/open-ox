@@ -82,24 +82,68 @@ apt-get install -y --no-install-recommends \
   python3 \
   "${ATK_PKGS[@]}"
 
-# ── Node 20 ──────────────────────────────────────────────────────────────────
+# ── Node 20（优先 npmmirror 二进制，避免 deb.nodesource.com 在 CN 超时）────────
+install_node_from_npmmirror() {
+  local ver="${OPEN_OX_NODE_VERSION:-20.20.2}"
+  local arch
+  case "$(uname -m)" in
+    x86_64|amd64) arch=x64 ;;
+    aarch64|arm64) arch=arm64 ;;
+    *)
+      echo "ERROR: unsupported arch $(uname -m) for Node tarball"
+      return 1
+      ;;
+  esac
+  local url="https://npmmirror.com/mirrors/node/v${ver}/node-v${ver}-linux-${arch}.tar.xz"
+  echo "==> Installing Node ${ver} from npmmirror (${arch})..."
+  curl -fsSL "$url" -o /tmp/node.tar.xz
+  tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1
+  rm -f /tmp/node.tar.xz
+  hash -r 2>/dev/null || true
+}
+
 if ! command -v node >/dev/null 2>&1 || ! node -v | grep -qE '^v20\.'; then
-  echo "==> Installing Node.js 20.x..."
-  curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-  apt-get install -y nodejs
+  if ! install_node_from_npmmirror; then
+    echo "==> npmmirror install failed — falling back to NodeSource apt..."
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+    apt-get install -y nodejs
+  fi
 fi
-echo "==> Node: $(node -v)"
+if ! command -v node >/dev/null 2>&1; then
+  echo "ERROR: node still missing after install attempts"
+  exit 1
+fi
+echo "==> Node: $(command -v node) ($(node -v))"
 
 # ── pnpm via corepack ────────────────────────────────────────────────────────
+# Ensure corepack/pnpm on PATH for non-login SSH (CI appleboy).
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
 corepack enable
 corepack prepare pnpm@10.5.2 --activate
-echo "==> pnpm: $(pnpm -v)"
+# Symlink into /usr/local/bin so CI non-interactive SSH finds them.
+if [[ "$(command -v pnpm)" != /usr/local/bin/pnpm ]]; then
+  ln -sfn "$(command -v pnpm)" /usr/local/bin/pnpm 2>/dev/null || true
+fi
+if [[ "$(command -v node)" != /usr/local/bin/node ]] && [[ -x /usr/local/bin/node ]]; then
+  : # already from tarball
+elif [[ "$(command -v node)" != /usr/bin/node ]] && [[ "$(command -v node)" != /usr/local/bin/node ]]; then
+  ln -sfn "$(command -v node)" /usr/local/bin/node 2>/dev/null || true
+fi
+echo "==> pnpm: $(command -v pnpm) ($(pnpm -v))"
 
 # ── pm2 ──────────────────────────────────────────────────────────────────────
 if ! command -v pm2 >/dev/null 2>&1; then
   npm install -g pm2
 fi
-echo "==> pm2: $(pm2 -v | head -1)"
+# Global npm bin is often /usr/lib/node_modules or /usr/local — ensure PATH hit for CI.
+if ! command -v pm2 >/dev/null 2>&1; then
+  echo "ERROR: pm2 install failed"
+  exit 1
+fi
+if [[ "$(command -v pm2)" != /usr/local/bin/pm2 ]] && [[ ! -x /usr/local/bin/pm2 ]]; then
+  ln -sfn "$(command -v pm2)" /usr/local/bin/pm2 2>/dev/null || true
+fi
+echo "==> pm2: $(command -v pm2) ($(pm2 -v | head -1))"
 
 # Start pm2 on boot for deploy user (print instructions; operator confirms once).
 if id "$DEPLOY_USER" >/dev/null 2>&1; then

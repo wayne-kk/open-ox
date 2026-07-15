@@ -12,7 +12,40 @@
 #   sudo OPEN_OX_DEPLOY_USER=ubuntu bash scripts/server-setup.sh
 set -euo pipefail
 
+# CI appleboy SSH is non-interactive: no .bashrc / nvm. Interactive `node -v` can
+# succeed while this script still fails — load common Node locations first.
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${HOME}/.local/share/pnpm:${PATH:-}"
+
+load_node_env() {
+  # nvm (most common on hand-provisioned CVMs)
+  if [[ -z "${NVM_DIR:-}" ]]; then
+    if [[ -s "$HOME/.nvm/nvm.sh" ]]; then
+      export NVM_DIR="$HOME/.nvm"
+    elif [[ -s /usr/local/nvm/nvm.sh ]]; then
+      export NVM_DIR=/usr/local/nvm
+    fi
+  fi
+  if [[ -n "${NVM_DIR:-}" && -s "$NVM_DIR/nvm.sh" ]]; then
+    # shellcheck disable=SC1090
+    . "$NVM_DIR/nvm.sh"
+  fi
+  # fnm
+  if command -v fnm >/dev/null 2>&1; then
+    eval "$(fnm env)"
+  elif [[ -x "$HOME/.local/share/fnm/fnm" ]]; then
+    eval "$("$HOME/.local/share/fnm/fnm" env)"
+  fi
+  # volta
+  if [[ -d "$HOME/.volta/bin" ]]; then
+    export PATH="$HOME/.volta/bin:$PATH"
+  fi
+  # n / direct installs under ~/.local
+  if [[ -d "$HOME/.local/bin" ]]; then
+    export PATH="$HOME/.local/bin:$PATH"
+  fi
+}
+
+load_node_env
 
 APP_DIR="${OPEN_OX_APP_DIR:-/sharedata/wayne/open-ox}"
 cd "$APP_DIR"
@@ -35,6 +68,27 @@ if [[ ! -f package.json ]]; then
   echo "ERROR: missing $APP_DIR/package.json — rsync the app tree first"
   exit 1
 fi
+
+need_cmd() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    echo "ERROR: missing \`$1\`."
+    echo "  whoami=$(id -un) HOME=$HOME"
+    echo "  PATH=$PATH"
+    echo "  (Interactive SSH often has nvm in .bashrc; CI SSH does not.)"
+    echo "Fix options:"
+    echo "  1) Install system Node so CI can see it:"
+    echo "       sudo OPEN_OX_DEPLOY_USER=$(id -un 2>/dev/null || echo ubuntu) bash $APP_DIR/scripts/server-setup.sh"
+    echo "  2) Or symlink nvm node into /usr/local/bin:"
+    echo "       sudo ln -sfn \"\$(dirname \$(dirname \$(which node)))/bin/node\" /usr/local/bin/node"
+    echo "       sudo ln -sfn \"\$(which pnpm)\" /usr/local/bin/pnpm 2>/dev/null || true"
+    echo "       sudo ln -sfn \"\$(which pm2)\" /usr/local/bin/pm2 2>/dev/null || true"
+    exit 1
+  fi
+}
+
+need_cmd node
+need_cmd pnpm
+need_cmd pm2
 
 # Load .env.production into this shell for `next build` (NEXT_PUBLIC_*).
 # Does not override variables already set in the environment.
@@ -59,18 +113,6 @@ done < .env.production
 
 export NODE_ENV=production
 export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-$APP_DIR/.playwright/browsers}"
-
-need_cmd() {
-  if ! command -v "$1" >/dev/null 2>&1; then
-    echo "ERROR: missing \`$1\`. On the server run once:"
-    echo "  sudo OPEN_OX_DEPLOY_USER=$(id -un) bash scripts/server-setup.sh"
-    exit 1
-  fi
-}
-
-need_cmd node
-need_cmd pnpm
-need_cmd pm2
 
 echo "==> Node: $(node -v)  pnpm: $(pnpm -v)  pm2: $(pm2 -v | head -1)"
 echo "==> deploy start $(ts)"
