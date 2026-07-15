@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  inferChromeFormFromProductType,
   needsGlobalChromeScaffold,
   normalizeChromeForm,
   normalizeSharedContracts,
@@ -9,28 +8,26 @@ import {
 } from "./chromeForm";
 
 describe("chromeForm", () => {
-  it("normalizes aliases", () => {
+  it("normalizes aliases from agent-provided strings", () => {
     expect(normalizeChromeForm("Top Nav + Footer")).toBe("top-nav+footer");
     expect(normalizeChromeForm("sidebar+topbar")).toBe("sidebar");
     expect(normalizeChromeForm("page-local")).toBe("page-local");
   });
 
-  it("infers from product type", () => {
-    expect(inferChromeFormFromProductType("SaaS dashboard")).toBe("sidebar");
-    expect(inferChromeFormFromProductType("immersive stream")).toBe("page-local");
-    expect(inferChromeFormFromProductType("marketing website")).toBe("top-nav+footer");
-  });
-
-  it("resolveChromeForm prefers explicit then inference", () => {
+  it("resolveChromeForm only normalizes explicit agent values — never invents from productType", () => {
     expect(resolveChromeForm({ chromeForm: "bottom-tabs" })).toBe("bottom-tabs");
-    expect(resolveChromeForm({ productType: "admin console" })).toBe("sidebar");
+    expect(resolveChromeForm({})).toBe("unspecified");
+    expect(resolveChromeForm({ chromeForm: undefined })).toBe("unspecified");
+    expect(resolveChromeForm({ chromeForm: "" })).toBe("unspecified");
   });
 
-  it("classifies global vs pass-through", () => {
+  it("classifies global vs pass-through from agent-chosen labels only", () => {
     expect(needsGlobalChromeScaffold("top-nav+footer")).toBe(true);
     expect(needsGlobalChromeScaffold("page-local")).toBe(false);
+    expect(needsGlobalChromeScaffold("unspecified")).toBe(false);
     expect(shouldUsePassThroughLayout("none")).toBe(true);
     expect(shouldUsePassThroughLayout("sidebar")).toBe(false);
+    expect(shouldUsePassThroughLayout("unspecified")).toBe(false);
   });
 
   it("normalizes shared contracts", () => {

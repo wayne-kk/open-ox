@@ -88,9 +88,9 @@ export async function runArchitectScaffoldAgent(
 
 ${buildChromeProjectHeader(blueprint)}
 
-## Planned chromeForm (from Plan — follow this)
+## Planned chromeForm (from Plan — agent-chosen contract)
 - **chromeForm**: \`${plannedChromeForm}\`
-- Write the matching shell (top-nav / sidebar / bottom-tabs / …). Do **not** invent a second shell family on top of this.
+- If set to a global form, implement that shell. If \`unspecified\`, decide one coherent shell from the brief. Do **not** invent a second shell family on top.
 
 ## Page plans (Page Agents will implement content next — leave {children} for them)
 ${pagesSummary}
@@ -101,14 +101,15 @@ ${buildChromePreReadBlock(preRead)}
 ${truncateChromeAgentText(designSystem, 10_000)}
 
 ## Workflow
-1. Honor planned **chromeForm** (override only if productType clearly contradicts — explain in complete summary).
+1. Honor planned **chromeForm** when set. If \`unspecified\`, choose one coherent shell from the brief/page plans and report it in complete — do **not** apply product-type recipes.
 2. Write \`app/layout.tsx\` + \`components/chrome/**\` with **complete structure** but **provisional** nav/footer links from blueprint routes.
 3. Call \`${ARCHITECT_SCAFFOLD_COMPLETE}\` within a few tool rounds — do not polish anchors.
 
 Hard rules:
 - Do **not** write \`app/**/page.tsx\` content beyond what layout needs.
 - Do **not** perfect single-page \`#\` anchors — Chrome polish will fix after pages exist.
-- Do **not** call \`format_code\` on files you wrote.`;
+- Do **not** call \`format_code\` on files you wrote.
+- Do **not** invent a second shell family on top of the chosen form.`;
 
   // Seed complete tool chromeForm from plan so traces stay consistent if the model omits it.
   let chromeForm = plannedChromeForm !== "unspecified" ? plannedChromeForm : "unspecified";

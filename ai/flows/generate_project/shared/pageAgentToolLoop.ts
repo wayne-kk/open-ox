@@ -270,7 +270,7 @@ export function createPageAgentChromeDeferredWriteExecutor(
         success: false,
         error:
           `Blocked: page agents must not write \`${path}\`. ` +
-          `Global Nav/Footer live in \`components/chrome/**\` and are created after all pages. ` +
+          `Global chrome lives in \`components/chrome/**\` (owned by Chrome Scaffold). ` +
           `Write only the target page and page-local section components.`,
       };
     }

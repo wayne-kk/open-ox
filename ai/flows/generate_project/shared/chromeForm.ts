@@ -1,5 +1,8 @@
 /**
  * Chrome form + shared contracts for chrome-first generate pipeline.
+ *
+ * Labels are **agent-chosen** vocabulary for ownership / orchestration.
+ * Do not map productType (or any scene heuristic) onto a form in code.
  */
 
 export const CHROME_FORMS = [
@@ -59,7 +62,7 @@ export function normalizeChromeForm(raw: unknown): ChromeForm {
     };
     if (aliases[compact]) return aliases[compact];
     if (aliases[trimmed]) return aliases[trimmed];
-    // Loose: "top nav + footer", "Top-Nav+Footer"
+    // Loose string normalize only — not product-scene inference.
     if (/top[\s_-]*nav/.test(trimmed) && /footer/.test(trimmed)) return "top-nav+footer";
     if (/top[\s_-]*nav/.test(trimmed)) return "top-nav";
     if (/sidebar/.test(trimmed)) return "sidebar";
@@ -70,27 +73,9 @@ export function normalizeChromeForm(raw: unknown): ChromeForm {
   return "unspecified";
 }
 
-/** Infer a default shell when Plan omitted chromeForm. */
-export function inferChromeFormFromProductType(productType: string): ChromeForm {
-  const t = productType.toLowerCase();
-  if (/dashboard|admin|internal\s*tool|backoffice|控制台|后台/.test(t)) return "sidebar";
-  if (/immersive|stream|short[\s_-]?video|feed|tiktok|douyin|短视频|信息流/.test(t)) {
-    return "page-local";
-  }
-  if (/game|fullscreen|全屏|舞台/.test(t)) return "none";
-  return "top-nav+footer";
-}
-
-export function resolveChromeForm(params: {
-  chromeForm?: unknown;
-  productType?: string;
-}): ChromeForm {
-  const explicit = normalizeChromeForm(params.chromeForm);
-  if (explicit !== "unspecified") return explicit;
-  if (params.productType?.trim()) {
-    return inferChromeFormFromProductType(params.productType);
-  }
-  return "top-nav+footer";
+/** Normalize an agent-provided chromeForm. Never invents a form from productType. */
+export function resolveChromeForm(params: { chromeForm?: unknown }): ChromeForm {
+  return normalizeChromeForm(params.chromeForm);
 }
 
 export function needsGlobalChromeScaffold(chromeForm: ChromeForm): boolean {
@@ -99,6 +84,7 @@ export function needsGlobalChromeScaffold(chromeForm: ChromeForm): boolean {
 
 /**
  * Skip writing/mounting global chrome (pass-through layout).
+ * Only when an agent explicitly chose page-local / none.
  * Screenshot replicate is handled by the caller separately.
  */
 export function shouldUsePassThroughLayout(chromeForm: ChromeForm): boolean {

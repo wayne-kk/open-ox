@@ -42,129 +42,11 @@ const ANCHOR_ID_NOISE = new Set([
 const SUB_ELEMENT_ID =
   /-(root|headline|subcopy|eyebrow|cta|button|title|desc|description|label|icon|image|img|card|item|grid|list|primary|secondary)$/i;
 
-export type InPageChromeSignal = {
-  file: string;
-  kind: "top-nav" | "bottom-tab" | "sidebar" | "chrome-filename";
-  strength: "strong" | "medium";
-  evidence: string;
-};
-
 export type ChromeLinkSurvey = {
   routes: { route: string; pageFile: string }[];
   sectionIds: { id: string; file: string }[];
   chromeFiles: { path: string; content: string }[];
-  /** Page/section files that already implement site chrome (Nav / bottom tabs / …). */
-  inPageChromeSignals: InPageChromeSignal[];
-  /**
-   * Strong aggregate signal that mounting *another* global Nav is usually wrong.
-   * Used as a **planning hint** for the Chrome Agent — not a deterministic pipeline skip.
-   */
-  shouldSkipGlobalChrome: boolean;
 };
-
-/** Filenames that strongly imply page-owned app chrome (not mere section UI). */
-const IN_PAGE_CHROME_FILENAME_RE =
-  /(^|\/)(nav|navbar|navigation|header|siteheader|appheader|topbar|top-nav|bottomnav|bottom-nav|tabbar|tab-bar|apptabs|mobiletab|sidebar|appshell)(\.|[-_])/i;
-
-/**
- * Detect site-level chrome that Page Agent wrote into page/section files.
- * Used so Chrome Agent can skip mounting a second global Nav (duplicate navigations).
- */
-export function detectInPageChromeSignals(
-  relativePath: string,
-  source: string
-): InPageChromeSignal[] {
-  const path = relativePath.replace(/\\/g, "/");
-  if (!path.endsWith(".tsx") && !path.endsWith(".jsx")) return [];
-  if (path.startsWith("components/chrome/") || path.startsWith("components/ui/")) {
-    return [];
-  }
-
-  const signals: InPageChromeSignal[] = [];
-  const base = path.split("/").pop() || path;
-
-  if (IN_PAGE_CHROME_FILENAME_RE.test(base) || IN_PAGE_CHROME_FILENAME_RE.test(path)) {
-    signals.push({
-      file: path,
-      kind: "chrome-filename",
-      strength: "strong",
-      evidence: `filename suggests site chrome (${base})`,
-    });
-  }
-
-  const hasNavTag = /<nav\b/i.test(source);
-  const stickyTop =
-    /\b(?:sticky|fixed)\b[^"'`\n]{0,80}\btop-0\b/i.test(source) ||
-    /\btop-0\b[^"'`\n]{0,80}\b(?:sticky|fixed)\b/i.test(source);
-  const fixedBottom =
-    /\bfixed\b[^"'`\n]{0,100}\bbottom-0\b/i.test(source) ||
-    /\bbottom-0\b[^"'`\n]{0,100}\bfixed\b/i.test(source);
-  const bottomTabHint =
-    /bottom[-_\s]?(?:nav|tab|bar)|tab[-_\s]?bar|mobile[-_\s]?tab/i.test(source) ||
-    /首页|探索|消息|我的|Home|Explore|Messages|Profile/u.test(source);
-  const linkCount = (source.match(/\bhref\s*=/g) || []).length;
-  const sidebarHint =
-    /\b(?:sidebar|side-nav|sidenav)\b/i.test(source) ||
-    /\bfixed\b[^"'`\n]{0,80}\b(?:left-0|inset-y-0)\b/i.test(source);
-
-  if (fixedBottom && (hasNavTag || bottomTabHint || linkCount >= 3)) {
-    signals.push({
-      file: path,
-      kind: "bottom-tab",
-      strength: "strong",
-      evidence: "fixed bottom bar with nav/tab affordances",
-    });
-  } else if (fixedBottom && bottomTabHint) {
-    signals.push({
-      file: path,
-      kind: "bottom-tab",
-      strength: "medium",
-      evidence: "fixed bottom + tab naming",
-    });
-  }
-
-  if (hasNavTag && stickyTop && linkCount >= 2) {
-    signals.push({
-      file: path,
-      kind: "top-nav",
-      strength: "strong",
-      evidence: "<nav> + sticky/fixed top + multiple hrefs",
-    });
-  } else if (hasNavTag && (stickyTop || linkCount >= 4)) {
-    signals.push({
-      file: path,
-      kind: "top-nav",
-      strength: "medium",
-      evidence: hasNavTag && stickyTop ? "<nav> + sticky/fixed top" : "<nav> with several hrefs",
-    });
-  } else if (stickyTop && linkCount >= 4 && /logo|brand|登录|login|search/i.test(source)) {
-    signals.push({
-      file: path,
-      kind: "top-nav",
-      strength: "medium",
-      evidence: "sticky/fixed top bar with brand/utility chrome",
-    });
-  }
-
-  if (sidebarHint && linkCount >= 3) {
-    signals.push({
-      file: path,
-      kind: "sidebar",
-      strength: stickyTop || /w-(?:56|64|72)\b/.test(source) ? "strong" : "medium",
-      evidence: "sidebar-like shell with multiple hrefs",
-    });
-  }
-
-  return signals;
-}
-
-export function resolveShouldSkipGlobalChrome(signals: InPageChromeSignal[]): boolean {
-  if (signals.some((s) => s.strength === "strong")) return true;
-  const kinds = new Set(signals.map((s) => s.kind));
-  // Top + bottom (or sidebar) from page content ⇒ stacking another global Nav is almost always wrong.
-  if (kinds.has("top-nav") && (kinds.has("bottom-tab") || kinds.has("sidebar"))) return true;
-  return signals.length >= 2;
-}
 
 /**
  * Map an App Router page file to its URL path.
@@ -301,20 +183,7 @@ export function buildChromeLinkSurveyFromDisk(): ChromeLinkSurvey {
     content: truncateChromeAgentText(readSiteFile(path) || "(empty)", 4_000),
   }));
 
-  const inPageChromeSignals: InPageChromeSignal[] = [];
-  for (const file of sectionScanFiles) {
-    const content = readSiteFile(file);
-    if (!content) continue;
-    inPageChromeSignals.push(...detectInPageChromeSignals(file, content));
-  }
-  inPageChromeSignals.sort((a, b) => {
-    const byFile = a.file.localeCompare(b.file);
-    if (byFile !== 0) return byFile;
-    return a.kind.localeCompare(b.kind);
-  });
-  const shouldSkipGlobalChrome = resolveShouldSkipGlobalChrome(inPageChromeSignals);
-
-  return { routes, sectionIds, chromeFiles, inPageChromeSignals, shouldSkipGlobalChrome };
+  return { routes, sectionIds, chromeFiles };
 }
 
 export function buildChromeLinkSurveyBlock(survey: ChromeLinkSurvey): string {
@@ -324,7 +193,7 @@ export function buildChromeLinkSurveyBlock(survey: ChromeLinkSurvey): string {
       : survey.routes.map((r) => `- \`${r.route}\` ← \`${r.pageFile}\``).join("\n");
   const idsBlock =
     survey.sectionIds.length === 0
-      ? "- (no section-like ids found — single-page Nav may stay minimal)"
+      ? "- (no section-like ids found)"
       : survey.sectionIds.map((s) => `- \`#${s.id}\` ← \`${s.file}\``).join("\n");
   const chromeBlock =
     survey.chromeFiles.length === 0
@@ -337,18 +206,6 @@ ${f.content}
 \`\`\``
           )
           .join("\n\n");
-  const inPageBlock =
-    survey.inPageChromeSignals.length === 0
-      ? "- (none — pages look chrome-free; creating global Nav/Footer is usually appropriate)"
-      : survey.inPageChromeSignals
-          .map(
-            (s) =>
-              `- **${s.strength}** \`${s.kind}\` in \`${s.file}\` — ${s.evidence}`
-          )
-          .join("\n");
-  const decisionHint = survey.shouldSkipGlobalChrome
-    ? `**Planning hint (not a hard ban):** strong in-page chrome signals above suggest choosing \`chromeForm: "page-local"\` or \`"none"\` — keep pass-through layout and do **not** mount a second Navigation (avoids duplicate top bars / stacked bottom tabs). You may still create global chrome if you deliberately consolidate shell ownership; if so, say so in the complete summary.`
-    : `**Planning hint:** pages appear chrome-free — prefer creating global Navigation (and Footer if needed) once. Choose one primary shell (\`top-nav\`, \`sidebar\`, \`bottom-tabs\`, …); do not invent both marketing top-nav and app bottom-tabs unless the product clearly needs both.`;
 
   return `## Disk survey (authoritative — do NOT re-survey with list_dir / search_code / reading page section components)
 
@@ -358,17 +215,15 @@ ${routesBlock}
 ### Section anchors (for single-page \`#id\` Nav/Footer links)
 ${idsBlock}
 
-### In-page chrome signals (evidence for your chromeForm decision)
-${inPageBlock}
-
 ### Current chrome files (may be empty)
 ${chromeBlock}
 
 Hard constraint from this survey:
-- Prefer these routes / \`#id\` values when writing Nav/Footer.
-${decisionHint}
+- Prefer these routes / \`#id\` values when polishing Nav/Footer hrefs.
+- Do **not** invent routes or anchors that are absent above.
 - Do **not** \`read_file\` \`components/home/**\` or other page section components.
-- Do **not** modify any \`app/**/page.tsx\` (layout excepted).`;
+- Do **not** modify any \`app/**/page.tsx\` (layout excepted).
+- Do **not** change chrome form / mount a second shell — polish links only.`;
 }
 
 export const CHROME_AGENT_VISIBLE_TOOL_NAMES = new Set([

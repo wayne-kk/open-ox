@@ -37,7 +37,6 @@ import {
   type PageImplementSummary,
 } from "./steps/chromeOptimizeAgent";
 import {
-  needsGlobalChromeScaffold,
   resolveChromeForm,
   shouldUsePassThroughLayout,
 } from "./shared/chromeForm";
@@ -1187,11 +1186,10 @@ async function runGenerateProjectInner(
     let scaffoldSummary = "";
     let scaffoldChromeForm = "unspecified";
     const skipChromeScaffold = blockSkillsForScreenshotReplicate;
+    // Agent-chosen chromeForm only — never invent from productType heuristics.
     const plannedChromeForm = resolveChromeForm({
       chromeForm: blueprint.site.informationArchitecture.chromeForm,
-      productType: blueprint.brief.productScope.productType,
     });
-    // Persist resolved form onto blueprint for agents / checkpoint traces.
     blueprint.site.informationArchitecture.chromeForm = plannedChromeForm;
 
     if (skipChromeScaffold) {
@@ -1217,6 +1215,7 @@ async function runGenerateProjectInner(
       scaffoldSummary = "screenshot replicate: minimal pass-through layout";
       scaffoldChromeForm = "none";
     } else if (shouldUsePassThroughLayout(plannedChromeForm)) {
+      // Pass-through only when Plan/Scaffold agent explicitly chose page-local / none.
       const { layoutPath, removedChromeDir } = await prepareReplicaSiteLayout(blueprint);
       logger.logStep(
         ARCHITECT_SCAFFOLD_AGENT_STEP,
@@ -1243,24 +1242,8 @@ async function runGenerateProjectInner(
       appendGeneratedFiles(result, collectExistingChromeOwnedRelativePaths());
       scaffoldSummary = "resumed: chrome scaffold already complete";
       scaffoldChromeForm = plannedChromeForm;
-    } else if (needsGlobalChromeScaffold(plannedChromeForm)) {
-      const scaffoldResult = await withLangfuseSpan(LfSpanGen.architectScaffoldAgent, () =>
-        runArchitectScaffoldStep({
-          blueprint,
-          designSystem,
-          artifactLogger,
-          logger,
-          onStep,
-          referenceScreenshotDataUrl: referenceScreenshot,
-          screenshotGuardrailId,
-        })
-      );
-      appendGeneratedFiles(result, scaffoldResult.files);
-      scaffoldSummary = scaffoldResult.summary;
-      scaffoldChromeForm = scaffoldResult.chromeForm || plannedChromeForm;
-      blueprint.site.informationArchitecture.chromeForm = scaffoldChromeForm;
     } else {
-      // unspecified / unknown — still scaffold a real shell (chrome-first default).
+      // Global form or unspecified: Scaffold Agent decides / implements the shell.
       const scaffoldResult = await withLangfuseSpan(LfSpanGen.architectScaffoldAgent, () =>
         runArchitectScaffoldStep({
           blueprint,

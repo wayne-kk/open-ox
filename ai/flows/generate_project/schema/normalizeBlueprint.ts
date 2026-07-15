@@ -186,12 +186,11 @@ function normalizePageMap(value: unknown): PageMapEntry[] {
 
 function normalizeInformationArchitecture(
   value: unknown,
-  pages: PageBlueprint[],
-  productType?: string
+  pages: PageBlueprint[]
 ): InformationArchitecture {
   if (!value || typeof value !== "object") {
     return {
-      navigationModel: "Simple top-level navigation aligned to the core MVP journey.",
+      navigationModel: "",
       pageMap: pages.map((page) => ({
         slug: page.slug,
         title: page.title,
@@ -200,9 +199,9 @@ function normalizeInformationArchitecture(
         supportingCapabilityIds: page.supportingCapabilityIds,
         journeyStage: page.journeyStage,
       })),
-      sharedShells: ["Global navigation", "Global footer"],
+      sharedShells: [],
       notes: [],
-      chromeForm: resolveChromeForm({ productType }),
+      chromeForm: resolveChromeForm({}),
       sharedContracts: [],
     };
   }
@@ -210,15 +209,12 @@ function normalizeInformationArchitecture(
   const candidate = value as Partial<InformationArchitecture> & Record<string, unknown>;
   return {
     navigationModel:
-      typeof candidate.navigationModel === "string"
-        ? candidate.navigationModel
-        : "Simple top-level navigation aligned to the core MVP journey.",
+      typeof candidate.navigationModel === "string" ? candidate.navigationModel : "",
     pageMap: normalizePageMap(candidate.pageMap),
-    sharedShells: normalizeStringArray(candidate.sharedShells, ["Global navigation", "Global footer"]),
+    sharedShells: normalizeStringArray(candidate.sharedShells, []),
     notes: normalizeStringArray(candidate.notes, []),
     chromeForm: resolveChromeForm({
       chromeForm: candidate.chromeForm,
-      productType,
     }),
     sharedContracts: normalizeSharedContracts(candidate.sharedContracts),
   };
@@ -381,7 +377,7 @@ function normalizeExperience(value: unknown): ProjectExperience {
   };
 }
 
-function normalizeSite(value: unknown, productType?: string): ProjectSiteBlueprint {
+function normalizeSite(value: unknown): ProjectSiteBlueprint {
   if (!value || typeof value !== "object") {
     throw new Error("analyze_project_requirement: site is missing");
   }
@@ -397,8 +393,7 @@ function normalizeSite(value: unknown, productType?: string): ProjectSiteBluepri
 
   const baseIa = normalizeInformationArchitecture(
     candidate.informationArchitecture,
-    pages,
-    productType
+    pages
   );
   const pageMap: PageMapEntry[] = pages.map((page) => ({
     slug: page.slug,
@@ -439,7 +434,7 @@ export function asProjectBlueprint(value: unknown): ProjectBlueprint {
       {
         brief,
         experience: normalizeExperience(candidate.experience),
-        site: normalizeSite(candidate.site, brief.productScope.productType),
+        site: normalizeSite(candidate.site),
       },
       value
     );
@@ -451,7 +446,7 @@ export function asProjectBlueprint(value: unknown): ProjectBlueprint {
       {
         brief,
         experience: normalizeExperience(candidate.experience),
-        site: normalizeSite(candidate.site, brief.productScope.productType),
+        site: normalizeSite(candidate.site),
       },
       value
     );
@@ -470,7 +465,7 @@ export function asProjectBlueprint(value: unknown): ProjectBlueprint {
         experience: normalizeExperience({
           designIntent: minimalNested.designIntent,
         }),
-        site: normalizeSite(minimalNested.site, brief.productScope.productType),
+        site: normalizeSite(minimalNested.site),
       },
       value
     );
@@ -507,13 +502,10 @@ export function asProjectBlueprint(value: unknown): ProjectBlueprint {
         experience: normalizeExperience({
           designIntent: flatCandidate.designIntent,
         }),
-        site: normalizeSite(
-          {
+        site: normalizeSite({
             informationArchitecture: flatCandidate.informationArchitecture,
             pages: flatCandidate.pages,
-          },
-          brief.productScope.productType
-        ),
+          }),
       },
       value
     );
@@ -564,8 +556,7 @@ export function asProjectBlueprint(value: unknown): ProjectBlueprint {
         site: {
           informationArchitecture: normalizeInformationArchitecture(
             undefined,
-            normalizedPages,
-            "marketing website"
+            normalizedPages
           ),
           pages: normalizedPages,
         },

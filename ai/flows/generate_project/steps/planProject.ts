@@ -63,7 +63,9 @@ ${blueprint.brief.projectDescription}
 - 核心结果：${blueprint.brief.productScope.coreOutcome}
 - 设计关键词：${blueprint.experience.designIntent.keywords.join(", ")}
 
-> 本步骤**必须**选定站点 chrome 形态（`chromeForm`），并在有 list/detail 等多页共享实体时输出 `sharedContracts`。下游 Chrome Scaffold 会先落壳，再并行写页。
+> 本步骤**必须由你自行判断**站点 chrome 形态（\`chromeForm\`），并在有 list/detail 等多页共享实体时输出 \`sharedContracts\`。下游 Chrome Scaffold 会按你的选择落壳，再并行写页。
+>
+> **不要**套用固定产品类型配方（例如「官网必有顶栏」「后台必有 sidebar」）。根据 brief、页面纲要与真实交互需求自由决定壳形态；没有跨页共享壳时选 \`page-local\` 或 \`none\`。
 
 请输出 JSON，结构如下：
 \`\`\`json
@@ -82,12 +84,7 @@ ${blueprint.brief.projectDescription}
 }
 \`\`\`
 
-chromeForm 选择指引：
-- marketing / landing / 官网 → \`top-nav+footer\`
-- admin / dashboard → \`sidebar\`
-- 移动信息流 / 短视频 / immersive feed → \`page-local\`（页面自带壳，不挂全局 Nav）
-- 全屏游戏 / 舞台 → \`none\`
-- 无 list/detail 共享实体时 \`sharedContracts\` 可为 \`[]\`
+\`chromeForm\` 是你的规划结果标签（供下游所有权编排），不是产品分类表。无 list/detail 共享实体时 \`sharedContracts\` 可为 \`[]\`。
 
 ${pageListHeading}
 ${blueprint.site.pages
@@ -153,7 +150,6 @@ ${blueprint.site.pages
         isObjectRecord(parsed.site.informationArchitecture) &&
         parsed.site.informationArchitecture.chromeForm) ??
       blueprint.site.informationArchitecture.chromeForm,
-    productType: blueprint.brief.productScope.productType,
   });
 
   const sharedContracts: SharedContract[] = normalizeSharedContracts(

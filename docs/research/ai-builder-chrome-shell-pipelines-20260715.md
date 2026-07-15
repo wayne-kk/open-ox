@@ -214,7 +214,7 @@ README 将「Backend Agent Architecture — Move from single model calls to agen
 
 ## 6. Implications for open-ox
 
-> **落地状态（2026-07-15）**：已采纳 ADR-0005 与 `docs/product/chrome-first-generate-pipeline-architecture.md`——默认 **chrome-first**（Scaffold 真壳 → 并行页内容 → polish），废弃 chrome-deferred 主路径。下文保留调研时的建议原文。
+> **落地状态（2026-07-15）**：已采纳 ADR-0005 与 `docs/product/chrome-first-generate-pipeline-architecture.md`——默认 **chrome-first**（Scaffold 真壳 → 并行页内容 → polish），废弃 chrome-deferred 主路径。`chromeForm` 由 Plan/Scaffold **Agent 判断**，代码与 prompt **禁止** productType→壳形态查表与页内 chrome 检测硬跳过。下文保留调研时的建议原文。
 
 以下为建议，非强制：
 

@@ -11,16 +11,11 @@
 
 ## Chrome-first 契约
 
-全局壳由下游 **Chrome Scaffold** 先写，Page Agent 只填内容。本步骤**必须**选定 `chromeForm`：
+全局壳由下游 **Chrome Scaffold** 先写（若你选了全局形态），Page Agent 只填内容。本步骤**必须由你自行判断** `chromeForm`：
 
-| chromeForm | 何时 |
-|---|---|
-| `top-nav+footer` | marketing / landing / 官网 |
-| `top-nav` | 只要顶栏、弱页脚 |
-| `sidebar` | admin / dashboard |
-| `bottom-tabs` | 移动 App 式底栏主导航 |
-| `page-local` | 沉浸式信息流 / 短视频等壳与内容不可分 |
-| `none` | 全屏游戏 / 舞台、无站点壳 |
+- 标签仅作所有权编排：`top-nav+footer` | `top-nav` | `sidebar` | `bottom-tabs` | `page-local` | `none`
+- **根据 brief 与页面纲要自由决定**需要什么壳；没有跨页共享壳就选 `page-local` 或 `none`
+- **禁止**套用固定产品类型配方（不要「官网→顶栏」「后台→sidebar」「短视频→page-local」这类硬映射）
 
 有 list + detail（或其它共享实体卡片）时，填写 `sharedContracts`（实体名、字段、建议 `components/shared/*.tsx` 路径、listSlug、detailRoutePattern）。无则 `[]`。
 
@@ -42,28 +37,25 @@
     {
       "title": "Home",
       "slug": "home",
-      "description": "与分析阶段一致的一句话",
-      "journeyStage": "entry",
+      "description": "...",
+      "journeyStage": "discover",
+      "primaryRoleIds": [],
+      "supportingCapabilityIds": [],
+      "sections": [],
       "pageDesignPlan": {
         "pageGoal": "...",
         "narrativeArc": "...",
         "layoutStrategy": "...",
-        "hierarchy": ["...", "..."],
-        "constraints": ["...", "..."]
-      },
-      "sections": []
+        "hierarchy": ["..."],
+        "constraints": ["..."]
+      }
     }
   ]
 }
 ```
 
-字段规则（严格）：
+### 硬性要求
 
 - 顶层包含：`chromeForm`、`sharedContracts`（可空数组）、`pages`。
-- `pages.length === 1`，且 `slug === "home"`（多页站点除外，以 analyze 阶段 pageMap 为准）。
-- 每个 `sections` **必须**存在且为 **空数组**。
-- **pageDesignPlan** 键固定：`pageGoal`、`narrativeArc`、`layoutStrategy`、`hierarchy`、`constraints`。
-
-## 输出
-
-只输出 JSON。
+- 每个 page 的 `sections` 必须是 `[]`。
+- `chromeForm` 必须是你基于 brief 的判断，不是默认营销站模板。
