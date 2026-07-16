@@ -18,6 +18,29 @@ Legacy semantic anchor; not the localization seam (v0.3).
 
 _See also_: `docs/product/studio-design-mode-source-writeback-architecture.md`, `docs/adr/0001-design-mode-source-coordinate-direct-apply.md`
 
+## Agent vocabulary
+
+**User-facing Agent**:
+Interactive agent that talks to the user (Modify loop, Intent Agent). Owns the final reply for that turn.
+_Avoid_: calling every pipeline LLM step an “Agent”
+
+**Pipeline Step**:
+Deterministic or single-shot LLM stage inside Generate (plan, tokens apply, run_build, …). Ordered by code orchestrator.
+_Avoid_: subagent spawn for one-shot transforms
+
+**Role Worker**:
+Bounded tool-loop role scheduled by the Generate orchestrator (Scaffold, Page Implement, Chrome Optimize). Parallelism is `Promise.all` over workers, not free parent-LLM spawn.
+_Avoid_: treating Role Workers as user-visible product agents
+
+**Subagent**:
+Isolated tool-loop child under `ai/shared/subagent`: own context, tool whitelist, summary-only return. Nesting depth max 1. v1 kinds: explore, verifier.
+_Avoid_: nested spawn trees, SE-role telephone games on the same feature
+
+**Handoff**:
+Transfer of work ownership across product surfaces (e.g. Intent commit → Generation Job). Not the same as in-loop `spawn_subagent`.
+
+_See also_: `docs/adr/0006-subagent-runtime.md`, `docs/research/agent-subagent-architecture-patterns-20260715.md`
+
 ## Modify Agent
 
 **Modify history turn**:

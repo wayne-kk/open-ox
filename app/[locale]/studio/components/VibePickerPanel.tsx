@@ -161,7 +161,7 @@ export function VibePickerPanel({
       <div className="space-y-1">
         <div className="text-[12px] font-medium text-foreground">选一个气质方向</div>
         <p className="text-[11px] leading-relaxed text-muted-foreground">
-          这是视觉方向样张，不是成品预览。先选定气质；受众 / 产品方向会在下一步再选，不用和这三张一起选。
+          建议先选一个气质方向，首次生成更稳；也可跳过用默认。这是视觉方向样张，不是成品预览。
           {loadingDirections ? " 正在按你的需求生成三套方向…" : null}
         </p>
       </div>
@@ -220,7 +220,7 @@ export function VibePickerPanel({
             onClick={onSkip}
             className="rounded-xl border border-border bg-muted/40 px-3 py-2 text-[12px] text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
           >
-            跳过，用默认
+            跳过，直接生成
           </button>
         ) : null}
       </div>

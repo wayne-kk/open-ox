@@ -149,3 +149,33 @@ export function getStepNarrative(step: BuildStep): {
         note: step.detail ?? undefined,
     };
 }
+
+/** Short chapter-style title for Studio generate progress (onboarding theater v0.1). */
+export function getStepChapterTitle(stepName: string): string | null {
+    if (stepName.startsWith("tool_call:") || stepName.startsWith("page_agent_tool:")) return null;
+    if (stepName.startsWith("architect_scaffold_agent_tool:")) return null;
+    if (stepName.startsWith("chrome_optimize_agent_tool:")) return null;
+    if (stepName.startsWith("architect_agent_tool:")) return null;
+
+    const chapters: Record<string, string> = {
+        analyze_project_requirement: "① 理解需求",
+        plan_project: "② 规划站点",
+        generate_project_design_system: "③ 设计系统",
+        apply_project_design_tokens: "③ 注入设计 Token",
+        clear_template: "④ 清理模板",
+        architect_scaffold_agent: "④ 搭建页面骨架",
+        chrome_optimize_agent: "④ 校正导航",
+        shared_contract_stubs: "④ 共享组件",
+        architect_agent: "④ 站点架构",
+        install_dependencies_generated: "⑤ 安装依赖",
+        verify_build: "⑥ 构建验证",
+        repair_build: "⑥ 自动修复",
+    };
+
+    if (chapters[stepName]) return chapters[stepName]!;
+    if (stepName.startsWith("page_implement_agent:")) {
+        const slug = stepName.replace("page_implement_agent:", "");
+        return `⑤ 实现页面 · ${slug}`;
+    }
+    return null;
+}

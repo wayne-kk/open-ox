@@ -97,7 +97,7 @@ export type ComponentSkillScore = {
   excludedKeywords: string[];
 };
 
-/** Project context forwarded to page implement agent and hero skill routing. */
+/** Project context forwarded to page implement agent. */
 export type PageAgentProjectContext = {
   projectTitle: string;
   projectDescription: string;
@@ -114,7 +114,7 @@ export type PageAgentProjectContext = {
   userProvidedContent?: UserProvidedContent;
   /** When set, page/architect agents receive the same screenshot for layout-faithful implementation. */
   referenceScreenshotDataUrl?: string | null;
-  /** Resolved from user wording when a reference image is present; drives screenshot guardrail + hero skill policy. */
+  /** Resolved from user wording when a reference image is present; drives screenshot guardrail policy. */
   screenshotIntentMode?: ScreenshotIntentMode;
 };
 

@@ -117,8 +117,8 @@ export default function SkillsPage() {
                 body: "提交时写入 styleGuide，截断后主要注入 generate_project_design_system，避免撑爆 analyze prompt。",
               },
               {
-                title: "Hero 运行时组件 skill",
-                body: "仅在 page_implement_agent 启动前、且策略命中时为该页 discoverAndSelectSkill；正文进入该页 Agent 的 user 消息，用于 Hero 特效级指引。",
+                title: "Page Agent 视觉输入",
+                body: "不再做 Hero 运行时 skill 选型；页面实现依赖 brief、pageDesignPlan、Visual Contract 摘要与 design tokens。",
               },
             ].map(({ title, body }) => (
               <div key={title} className="rounded-xl border border-border bg-card px-5 py-4">
@@ -129,8 +129,8 @@ export default function SkillsPage() {
           </div>
           <H3>菜单与菜谱分离</H3>
           <P>
-            运行时选型阶段尽量只传技能的 metadata / 短摘要；只有在确定选中后才读取完整 Markdown 正文，
-            以降低 LLM 往返与重复 token。
+            风格菜单只负责把 styleGuide 送进设计系统；完整 skill Markdown 仍可存在于仓库供参考，
+            但 generate 管道不再在 Page Agent 前做 discoverAndSelectSkill。
           </P>
         </section>
 

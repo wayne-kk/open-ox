@@ -2,6 +2,10 @@ import { getSystemToolDefinitions } from "@/ai/tools/systemToolCatalog";
 import type { ToolExecutor } from "@/ai/tools/types";
 import { chatCompletion, type ChatMessage } from "@/ai/flows/generate_project/shared/llm";
 import { lfModifyAgentRound } from "@/lib/observability/langfuseGenerationCatalog";
+import {
+  createSpawnSubagentTool,
+  SPAWN_SUBAGENT_TOOL_NAME,
+} from "@/ai/shared/subagent";
 import type { FileSnapshotTracker } from "../tracking/fileSnapshotTracker";
 import type { ModifyProfile } from "../profile/modifyProfile";
 import { toolNamesForProfile } from "../profile/modifyProfile";
@@ -22,6 +26,8 @@ export type RunAgentLoopOptions = {
   toolOverrides?: Record<string, ToolExecutor>;
   pendingImages?: PendingImage[];
   includeImageTools?: boolean;
+  /** When false, omit spawn_subagent. Default true. */
+  enableSubagents?: boolean;
 };
 
 function createInitialLoopState(): LoopState {
@@ -63,11 +69,43 @@ export async function runAgentLoop(
   loopOptions: RunAgentLoopOptions
 ): Promise<{ messages: ChatMessage[]; loopState: LoopState; iterations: number }> {
   const profile = loopOptions.profile;
+  const enableSubagents = loopOptions.enableSubagents !== false;
   const toolNameList = toolNamesForProfile(profile, {
     includeImageTools: loopOptions.includeImageTools === true,
-  });
+  }).filter((name) => enableSubagents || name !== SPAWN_SUBAGENT_TOOL_NAME);
   const model = modelOverride || profile.modelId;
-  const tools = getSystemToolDefinitions(toolNameList);
+  const catalogNames = toolNameList.filter((name) => name !== SPAWN_SUBAGENT_TOOL_NAME);
+  const tools = [...getSystemToolDefinitions(catalogNames)];
+  const toolOverrides: Record<string, ToolExecutor> = {
+    ...loopOptions.toolOverrides,
+  };
+
+  if (enableSubagents && toolNameList.includes(SPAWN_SUBAGENT_TOOL_NAME)) {
+    const { tool: spawnTool, execute: spawnExecute } = createSpawnSubagentTool({
+      allowedKinds: ["explore"],
+      model,
+      onEvent: (event) => {
+        if (event.type === "thinking") {
+          onEvent({
+            type: "thinking",
+            content: event.content,
+            subagentKind: event.subagentKind,
+          });
+          return;
+        }
+        onEvent({
+          type: "tool_call",
+          tool: event.tool,
+          args: event.args,
+          result: event.result,
+          subagentKind: event.subagentKind,
+        });
+      },
+    });
+    tools.push(spawnTool);
+    toolOverrides[SPAWN_SUBAGENT_TOOL_NAME] = spawnExecute;
+  }
+
   const loopState = createInitialLoopState();
   const touchedFiles = new Set<string>();
   const profiledExecute = createProfiledToolExecutor(profile, touchedFiles);
@@ -163,7 +201,7 @@ export async function runAgentLoop(
         await awaitPendingImages(loopOptions.pendingImages);
       }
 
-      const overrideExec = loopOptions.toolOverrides?.[name];
+      const overrideExec = toolOverrides[name];
       const result = overrideExec ? await overrideExec(args) : await profiledExecute(name, args);
 
       if (name === "generate_image") {
@@ -185,7 +223,13 @@ export async function runAgentLoop(
         }
       }
 
-      if (name === "search_code" || name === "list_dir" || name === "read_file" || name === "exec_shell") {
+      if (
+        name === "search_code" ||
+        name === "list_dir" ||
+        name === "read_file" ||
+        name === "exec_shell" ||
+        name === SPAWN_SUBAGENT_TOOL_NAME
+      ) {
         loopState.hasSearched = true;
         if (name === "read_file" && args.path) {
           const filePath = args.path as string;
@@ -200,7 +244,22 @@ export async function runAgentLoop(
 
       const out =
         typeof result === "string" ? result : result.success ? result.output ?? "ok" : result.error ?? "failed";
-      onEvent({ type: "tool_call", tool: name, args, result: out.slice(0, 500) });
+      const subagentKind =
+        typeof result === "object" &&
+        result &&
+        "meta" in result &&
+        result.meta &&
+        typeof result.meta === "object" &&
+        "subagentKind" in result.meta
+          ? String((result.meta as { subagentKind?: unknown }).subagentKind ?? "")
+          : undefined;
+      onEvent({
+        type: "tool_call",
+        tool: name,
+        args,
+        result: out.slice(0, 500),
+        ...(subagentKind ? { subagentKind } : {}),
+      });
       messages.push({
         role: "tool",
         tool_call_id: tc.id,

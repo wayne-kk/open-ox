@@ -46,14 +46,11 @@ import { stepInstallDependencies } from "./steps/installDependencies";
 import { stepInferDesignIntent, type DesignIntentResult } from "./steps/inferDesignIntent";
 import { stepPlanProject } from "./steps/planProject";
 import { runPageImplementAgent } from "./steps/pageImplementAgent";
-import { discoverAndSelectSkill } from "./steps/heroSkillSelection";
-import {
-  buildVirtualHeroSectionForSkillSelection,
-  shouldOfferHeroSkillForAgentPage,
-} from "./shared/agentHeroOpening";
 import { stepRepairBuild } from "./steps/repairBuild";
 import { stepRunBuild } from "./steps/runBuild";
 import { normalizeBlueprint } from "./normalization/blueprintNormalizer";
+import { emptyProjectExperience } from "./schema/normalizeBlueprint";
+import { applyDesignKeywordsBeforePlan } from "./shared/applyDesignKeywords";
 import { hasUserProvidedContent } from "./schema/normalizeUserProvidedContent";
 import { USER_PROVIDED_CONTENT_PATH } from "@/lib/content/userProvidedContentText";
 import { prepareUserProvidedContentForPageAgent } from "./shared/userProvidedContentContext";
@@ -480,42 +477,18 @@ async function generatePages(params: {
         async () =>
           runWithLangfuseSpanBranch(
             lfSpanGenPage(page.slug),
-            async () => {
-              let heroSkillIdInner: string | null = null;
-              let heroSkillPromptInner: string | undefined;
-              const screenshotBlocksHeroSkill = shouldBlockSkillsForScreenshotReplicate(
-                runtimeContext.screenshotIntentMode ?? "none",
-                Boolean(runtimeContext.referenceScreenshotDataUrl?.trim()),
-                runtimeContext.rawUserInput
-              );
-              if (
-                !screenshotBlocksHeroSkill &&
-                shouldOfferHeroSkillForAgentPage(page, runtimeContext.rawUserInput)
-              ) {
-                const virtualHero = buildVirtualHeroSectionForSkillSelection(page);
-                const sel = await discoverAndSelectSkill(
-                  virtualHero,
-                  runtimeContext.designKeywords,
-                  runtimeContext.rawUserInput,
-                );
-                heroSkillIdInner = sel.componentSkillId;
-                heroSkillPromptInner = sel.componentSkillPrompt || undefined;
-              }
-              return runPageImplementAgent({
+            async () =>
+              runPageImplementAgent({
                 page,
                 designSystem,
                 projectContext: runtimeContext,
-                heroSkillPrompt: heroSkillPromptInner,
-                heroSkillId: heroSkillIdInner,
                 onStep: params.onStep,
-              });
-            },
+              }),
             { metadata: { slug: page.slug, step: agentStepName } }
           ),
         (r) => ({
           detail: r.summary.slice(0, 260),
           trace: r.trace,
-          skillId: r.heroSkillId,
         }),
       );
 
@@ -524,7 +497,6 @@ async function generatePages(params: {
         summary: outcome.summary,
         toolInvocations: outcome.toolCallRecords,
         pendingImagesCount: outcome.pendingImages.length,
-        heroSkillId: outcome.heroSkillId,
       });
       await persistSiteFileArtifact(artifactLogger, agentStepName, outcome.pagePath, "page");
 
@@ -993,15 +965,14 @@ async function runGenerateProjectInner(
     }
 
     if (!rawBlueprint.experience) {
-      rawBlueprint.experience = {
-        designIntent: {
-          mood: ["clean", "trustworthy", "focused"],
-          colorDirection: "Neutral base with one clear accent direction.",
-          style: "Modern, content-first, conversion-oriented.",
-          keywords: ["clean", "professional", "focused", "confident", "modern"],
-        },
-      };
+      rawBlueprint.experience = emptyProjectExperience();
     }
+
+    // Inject Infer / user-confirmed keywords before Plan so it never sees SaaS filler defaults.
+    rawBlueprint = applyDesignKeywordsBeforePlan(rawBlueprint, {
+      confirmedKeywords: confirmedDesignKeywords,
+      inferredKeywords: inferredDesignIntent?.technicalKeywords,
+    });
 
     const normalizedBlueprint = normalizeBlueprint(rawBlueprint);
 
@@ -1091,11 +1062,10 @@ async function runGenerateProjectInner(
           dsOutcome.trace
         );
 
-        // Merge infer_design_intent technical keywords for Hero runtime skill routing.
-        if (inferredDesignIntent?.technicalKeywords?.length) {
-          const existing = blueprint.experience.designIntent.keywords;
-          const merged = [...new Set([...existing, ...inferredDesignIntent.technicalKeywords])];
-          blueprint.experience.designIntent.keywords = merged;
+        // Keywords already applied before plan_project (confirmed > infer). Keep plan output in sync.
+        if (normalizedBlueprint.experience?.designIntent?.keywords?.length) {
+          blueprint.experience.designIntent.keywords =
+            normalizedBlueprint.experience.designIntent.keywords;
         }
 
         // Keep plan_project artifact focused on fields that are actually produced by

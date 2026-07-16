@@ -28,4 +28,5 @@ Before every tool call, briefly state:
 - Prefer small, precise edits.
 - Do not call `run_build` during the loop. After you finish editing, scoped typecheck and (when needed) production build run automatically. Call `run_scoped_tsc` if you touched many TS/TSX files and want a quick check.
 - If repeated failures happen, pause and analyze root cause.
+- For **broad reconnaissance** (many unknown files, noisy search, "where is X across the repo?"), call **`spawn_subagent`** with `kind: "explore"` and a self-contained `task`. The child returns only a summary — continue from that summary; do not re-dump search noise into this conversation. Prefer direct `read_file` / `search_code` for a single known file.
 

@@ -38,6 +38,8 @@ export interface UseDesignModeOptions {
   onPreviewRefresh?: (url: string | null) => void;
   /** Prefill Modify chat with a draft (user must confirm send). */
   onHandoffToModify?: (draft: string) => void;
+  /** Fired after a successful Direct Apply writeback. */
+  onDirectPatchSuccess?: () => void;
   /** When true, Direct Apply is blocked (active BoardRun). */
   boardRunBlocking?: boolean;
 }
@@ -135,6 +137,7 @@ export function useDesignMode({
   directEditCapable,
   onPreviewRefresh,
   onHandoffToModify,
+  onDirectPatchSuccess,
   boardRunBlocking = false,
 }: UseDesignModeOptions): UseDesignModeResult {
   const pickEnabled = true;
@@ -504,6 +507,7 @@ export function useDesignMode({
       postToFrame({ action: "COMMIT_PREVIEW" });
       setApplyHint("Saved to source - preview refreshing.");
       trackEvent("design_mode_direct_patch", { editCount: newEdits.length });
+      onDirectPatchSuccess?.();
       onPreviewRefresh?.(body.data?.previewUrl ?? null);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Patch failed";
@@ -517,6 +521,7 @@ export function useDesignMode({
     canDirectPatch,
     className,
     directEditCapable,
+    onDirectPatchSuccess,
     onPreviewRefresh,
     postToFrame,
     precheckReason,

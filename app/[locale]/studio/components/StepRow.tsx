@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { BuildStep } from "../types/build-studio";
-import { getStepNarrative } from "../lib/narratives";
+import { getStepChapterTitle, getStepNarrative } from "../lib/narratives";
 import { TracePanel } from "./TracePanel";
 
 function formatMs(ms: number): string {
@@ -21,11 +21,14 @@ export function StepRow({ step, flowStart }: { step: BuildStep; flowStart: numbe
   const [open, setOpen] = useState(false);
   const isToolCall = step.step.startsWith("tool_call:");
   const isAgentTool = step.step.startsWith("page_agent_tool:");
-  const stepLabel = isToolCall
-    ? step.step.replace("tool_call:", "🔍 tool:")
-    : isAgentTool
-      ? (step.detail ?? step.step)
-      : step.step;
+  const chapter = getStepChapterTitle(step.step);
+  const stepLabel = chapter
+    ? chapter
+    : isToolCall
+      ? step.step.replace("tool_call:", "🔍 tool:")
+      : isAgentTool
+        ? (step.detail ?? step.step)
+        : step.step;
   const narrative = getStepNarrative(step);
   const hasTrace = step.trace != null;
 

@@ -348,32 +348,49 @@ function normalizeBrief(value: unknown): ProjectBrief {
   };
 }
 
+/** Empty experience — never inject SaaS-default keyword packs (clean/professional/…). */
+export function emptyProjectExperience(): ProjectExperience {
+  return {
+    designIntent: {
+      mood: [],
+      colorDirection: "",
+      style: "",
+      keywords: [],
+    },
+  };
+}
+
+function normalizeDesignIntent(value: unknown): ProjectExperience["designIntent"] {
+  if (!value || typeof value !== "object") {
+    return emptyProjectExperience().designIntent;
+  }
+  const di = value as Partial<ProjectExperience["designIntent"]>;
+  const keywords = Array.isArray(di.keywords)
+    ? di.keywords
+        .filter((k): k is string => typeof k === "string" && k.trim().length > 0)
+        .map((k) => k.trim())
+    : [];
+  const mood = Array.isArray(di.mood)
+    ? di.mood
+        .filter((k): k is string => typeof k === "string" && k.trim().length > 0)
+        .map((k) => k.trim())
+    : [];
+  return {
+    mood,
+    colorDirection: typeof di.colorDirection === "string" ? di.colorDirection : "",
+    style: typeof di.style === "string" ? di.style : "",
+    keywords,
+  };
+}
+
 function normalizeExperience(value: unknown): ProjectExperience {
   if (!value || typeof value !== "object") {
-    return {
-      designIntent: {
-        mood: ["clean", "trustworthy", "focused"],
-        colorDirection: "Neutral base with one clear accent direction.",
-        style: "Modern, content-first, conversion-oriented.",
-        keywords: ["clean", "professional", "focused", "confident", "modern"],
-      },
-    };
+    return emptyProjectExperience();
   }
 
   const candidate = value as Partial<ProjectExperience>;
-  if (!candidate.designIntent || typeof candidate.designIntent !== "object") {
-    return {
-      designIntent: {
-        mood: ["clean", "trustworthy", "focused"],
-        colorDirection: "Neutral base with one clear accent direction.",
-        style: "Modern, content-first, conversion-oriented.",
-        keywords: ["clean", "professional", "focused", "confident", "modern"],
-      },
-    };
-  }
-
   return {
-    designIntent: candidate.designIntent,
+    designIntent: normalizeDesignIntent(candidate.designIntent),
   };
 }
 

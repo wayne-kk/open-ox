@@ -32,6 +32,8 @@ The design system must also fit the product logic:
 
 Output a complete Markdown document following this exact structure.
 
+**Required early section:** Immediately after Design Philosophy, include `## Visual Contract (agent)` — a short, machine-readable brief for Page Agent bootstrap (not the full token dump). Downstream injects this section instead of the whole design system.
+
 ---
 
 # [Project Title] Design System
@@ -55,6 +57,29 @@ Output a complete Markdown document following this exact structure.
 - **[Signature 3]**: [Description]
 - **[Signature 4]**: [Description]
 - **[Signature 5]**: [Description]
+
+---
+
+## Visual Contract (agent)
+
+Short implementer brief (keep under ~40 lines). Page agents read **this** by default.
+
+### Color roles
+List hex for at least: `background`, `foreground`, `primary`, `muted`, `accent` (and `card` if distinct). One line each.
+
+### Font roles
+- `display`: [family]
+- `header`: [family]
+- `body`: [family]
+
+### Bold Factor (max 5)
+Numbered, verifiable. State real ceilings for this run (e.g. `font-display` H1 up to `md:text-6xl`; paper grain ≤8% on hero). Do not default to safe SaaS caps.
+
+### Hero
+1–2 sentences: first-viewport composition + media treatment.
+
+### Surfaces
+1–2 sentences: background/card rhythm; what to avoid (e.g. generic cream SaaS paper).
 
 ---
 
@@ -104,7 +129,7 @@ Typography roles are strict — no substitution allowed:
 
 > ⚠️ `font-label` is NOT part of this system. Use `font-body` with size/weight/tracking adjustments for badges, eyebrows, and metadata.
 
-**Scale & Styling** (H1 must not exceed `text-5xl` / 48px):
+**Scale & Styling** (default H1 ≤ `text-5xl`; larger only if Bold Factor says so, `font-display` only):
 
 - H1: [tailwind size class] [weight] [tracking] [text-transform if any]
 - H2: [tailwind size class] [weight] [tracking]
@@ -141,7 +166,7 @@ radius.full:   9999px — [usage: e.g., pills, avatars]
 --text-shadow-display: [value];
 ```
 
-[Include special effect CSS here if applicable: chromatic aberration, glow pulse, etc. Do NOT include noise/grain textures.]
+[Special-effect CSS if needed. Grain/noise only when documented in Visual Contract (opacity + where).]
 
 ---```css
 [CSS code]
@@ -202,7 +227,7 @@ Shared base: [list shared Tailwind classes all buttons inherit]
 
 - **Grid**: [desktop columns / tablet columns / mobile columns]
 - **Base spacing unit**: [e.g., 4px — describe how multiples are used]
-- **Section vertical rhythm**: define a range and usage rules (e.g., compact sections `py-12~py-16`, standard sections `py-14~py-20`, hero `py-20~py-24`)
+- **Section vertical rhythm**: e.g. compact `py-12~py-16`, standard `py-14~py-20`, hero `py-20~py-32` when the vibe needs air
 - **Density**: [`compact` definition] / [`comfortable` definition] — specify which sections use which
 - **Hero Rule**: Hero must include a Key Visual (image / illustration / product shot / 3D / graphic system). Text-only Hero is forbidden.
 
@@ -238,7 +263,7 @@ These choices are mandatory. Each must be verifiable in the output code.
 - Limit hover to one or two dimensions (e.g., color + shadow or color + slight translate).
 - Avoid strong transform stacks on standard cards/list items.
 - Recommend standard hover duration in `150ms-250ms` for most UI controls.
-- Do not mandate site-wide fixed noise/grain overlays by default.
+- No site-wide fixed grain by default; local grain only if Visual Contract specifies it.
 
 **Keyframe Animations** (define all used animations):
 
@@ -290,15 +315,10 @@ These choices are mandatory. Each must be verifiable in the output code.
 
 ## Hard Rules (non-negotiable)
 
-- All colors: hex format only
-- All fonts: Google Fonts only
-- All CSS variables: `--` prefix, kebab-case
+- Colors: hex only. Fonts: Google Fonts only. CSS vars: `--` + kebab-case.
 - Font roles: exactly 3 — `font-display`, `font-header`, `font-body`. No `font-label`.
-- H1 max size: `text-5xl` (48px). Never `text-6xl` or above.
-- Animations: global implementation only, no `styled-jsx`
-- Keep layout width strategy consistent across sections; avoid conflicting width rules between adjacent sections.
-- Do NOT output any Textures & Patterns section. No grain, noise, scanlines, film grain, or SVG noise overlays. Use solid color backgrounds only.
-- `clip-path / polygon()`: forbidden everywhere — no chamfered or custom clipping shapes
-- Output: Markdown document only, no explanation text
-- Keep copy concise by design: hero title max 2 lines; section title max 2 lines; body blocks should avoid long-wall paragraphs.
+- Aesthetic ceilings live in **Visual Contract / Bold Factor** (not here). Default H1 ≤ `text-5xl`; larger display / local grain only when Contract states where + limits.
+- Animations: global only, no `styled-jsx`. No `clip-path` / `polygon()`.
+- Consistent width strategy across sections. No Textures & Patterns dump section.
+- Output: Markdown only. Hero title ≤2 lines; section titles ≤2 lines; avoid wall-of-text body.
 

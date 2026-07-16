@@ -1,6 +1,8 @@
 /**
  * Page Agent bootstrap — preload workspace context before the Act loop (Cursor-style).
  * Runs synchronously on disk; does not consume LLM iterations.
+ *
+ * Injects Visual Contract (short) + layout/globals excerpts — not the full design-system.md.
  */
 
 import { USER_PROVIDED_CONTENT_PATH } from "@/lib/content/userProvidedContentText";
@@ -8,9 +10,9 @@ import { listSiteTree, readSiteFile } from "./files";
 import {
   PAGE_AGENT_DESIGN_SYSTEM_PATH,
   PAGE_AGENT_GLOBALS_PATH,
-  PAGE_AGENT_HERO_SKILL_PATH,
   PAGE_AGENT_LAYOUT_PATH,
 } from "./pageAgentBrief";
+import { extractVisualContract } from "./visualContract";
 
 function truncate(text: string, max: number): string {
   if (text.length <= max) return text;
@@ -35,8 +37,9 @@ export interface PageAgentBootstrapBundle {
 }
 
 export interface BuildPageAgentBootstrapParams {
-  heroSkillOnDisk: boolean;
   hasUserProvidedContent: boolean;
+  /** Full design-system markdown (in-memory) used to extract Visual Contract. */
+  designSystem?: string;
 }
 
 export function isPageAgentBootstrapEnabled(): boolean {
@@ -61,13 +64,16 @@ export function buildPageAgentBootstrap(
     fileSections.push(`### \`${relativePath}\`\n\`\`\`${fence}\n${body}\n\`\`\``);
   };
 
-  addFileSection(PAGE_AGENT_DESIGN_SYSTEM_PATH, 12_000, "markdown");
+  const dsFromDisk = readSiteFile(PAGE_AGENT_DESIGN_SYSTEM_PATH);
+  const designSystemSource =
+    params.designSystem?.trim() ||
+    (dsFromDisk && !dsFromDisk.includes("(missing") ? dsFromDisk : "") ||
+    "";
+  const visualContract = extractVisualContract(designSystemSource);
+
+  // Layout + globals only — full design-system.md is on disk for optional read_file.
   addFileSection(PAGE_AGENT_LAYOUT_PATH, 8_000, "tsx");
   addFileSection(PAGE_AGENT_GLOBALS_PATH, 6_000, "css");
-
-  if (params.heroSkillOnDisk) {
-    addFileSection(PAGE_AGENT_HERO_SKILL_PATH, 10_000, "markdown");
-  }
 
   if (params.hasUserProvidedContent) {
     addFileSection(USER_PROVIDED_CONTENT_PATH, 12_000, "markdown");
@@ -82,6 +88,8 @@ The pipeline loaded the references below **before your first tool turn**. They d
 
 **Chrome-first:** \`app/layout.tsx\` already mounts global chrome (or is intentional pass-through). Do **not** re-create Nav/Footer/bottom tabs in the page. Start from the first content section / main viewport. Prefer \`components/shared/**\` stubs when present.
 
+**Visual Contract** (below) is the default design brief. Full \`${PAGE_AGENT_DESIGN_SYSTEM_PATH}\` is on disk — \`read_file\` it only if you need a token/detail not covered here.
+
 **Act now:** use \`write_file\` / \`edit_file\` for the target page and page-local \`components/**\`. Only \`read_file\` paths **not** listed below (e.g. after \`read_lints\` points at a specific file).
 
 ### Tree: \`app/\`
@@ -94,14 +102,18 @@ ${appTree}
 ${componentsTree}
 \`\`\`
 
+### Visual Contract (from design system)
+\`\`\`markdown
+${visualContract}
+\`\`\`
+
 ${fileSections.join("\n\n")}`;
 
   const compactSummary = [
     "[Bootstrap still valid — do NOT re-read these paths]",
-    `- ${PAGE_AGENT_DESIGN_SYSTEM_PATH}`,
+    `- Visual Contract (injected; full ${PAGE_AGENT_DESIGN_SYSTEM_PATH} via read_file if needed)`,
     `- ${PAGE_AGENT_LAYOUT_PATH} (chrome already mounted — content only)`,
     `- ${PAGE_AGENT_GLOBALS_PATH}`,
-    ...(params.heroSkillOnDisk ? [`- ${PAGE_AGENT_HERO_SKILL_PATH}`] : []),
     ...(params.hasUserProvidedContent ? [`- ${USER_PROVIDED_CONTENT_PATH}`] : []),
     "Continue with write/edit on the target page, then call page_implementation_complete.",
   ].join("\n");

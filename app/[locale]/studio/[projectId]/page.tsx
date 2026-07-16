@@ -1,9 +1,10 @@
 "use client";
 
-import { use, useState, useEffect, useCallback, useRef } from "react";
+import { use, useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { GitBranch, History, Monitor, RefreshCw, ExternalLink, PanelLeftClose, PanelLeftOpen, FileCode2, ImagePlus, Loader2, MousePointer2, X } from "lucide-react";
 import { AppBackButton } from "@/app/components/AppBackButton";
 import { BrandMark } from "@/app/components/BrandMark";
@@ -25,6 +26,10 @@ import { useDesignMode } from "@/app/[locale]/studio/hooks/useDesignMode";
 import { filterPipelineSteps } from "@/app/[locale]/studio/lib/pipelineSteps";
 import type { ModifyPreviewSlot } from "@/app/[locale]/studio/lib/modifyHistoryView";
 import { isCodeChangeTurn } from "@/app/[locale]/studio/lib/modifyHistoryView";
+import { ProductTour } from "@/components/onboarding";
+import { trackEvent } from "@/lib/analytics/client";
+import { useOnboardingPreferences } from "@/lib/onboarding/useOnboardingPreferences";
+import { buildStudioOnboardingSteps } from "@/lib/onboarding/studioTourSteps";
 import {
   COVER_CAPTURE_POLL_INTERVAL_MS,
   COVER_CAPTURE_POLL_TIMEOUT_MS,
@@ -42,6 +47,7 @@ function formatMs(ms: number): string {
 }
 
 function StudioInner({ projectId }: { projectId: string }) {
+  const tOnboarding = useTranslations("onboarding");
   const router = useRouter();
   const searchParams = useSearchParams();
   const studio = useBuildStudio(projectId);
@@ -113,6 +119,55 @@ function StudioInner({ projectId }: { projectId: string }) {
     setLoadedPreviewSrcKey((prev) => (prev === srcKey ? prev : srcKey));
   }, []);
 
+  const onboardingDebug = searchParams.get("ox_onboarding") === "1";
+  const onboarding = useOnboardingPreferences({ debugForce: onboardingDebug });
+  const showOnboardingChrome = onboarding.ready && onboarding.showChrome;
+  const generateStartedTrackedRef = useRef(false);
+  const stepViewTrackedRef = useRef(false);
+  const previewReadyTrackedRef = useRef(false);
+  const generateDoneMarkedRef = useRef(false);
+  const designAutoEnabledRef = useRef(false);
+  const firstModifyTrackedRef = useRef(false);
+
+  useEffect(() => {
+    if (onboarding.prefs.generateDone) generateDoneMarkedRef.current = true;
+    if (onboarding.prefs.firstModifySendDone) firstModifyTrackedRef.current = true;
+    if (onboarding.prefs.designModeDone) designAutoEnabledRef.current = true;
+  }, [
+    onboarding.prefs.generateDone,
+    onboarding.prefs.firstModifySendDone,
+    onboarding.prefs.designModeDone,
+  ]);
+
+  // Debug gate: after reset, clear session refs so tips/auto-Design can re-fire
+  useEffect(() => {
+    if (!onboardingDebug) return;
+    if (
+      onboarding.prefs.dismissed ||
+      onboarding.prefs.generateDone ||
+      onboarding.prefs.designModeDone
+    ) {
+      return;
+    }
+    generateDoneMarkedRef.current = false;
+    designAutoEnabledRef.current = false;
+    previewReadyTrackedRef.current = false;
+    generateStartedTrackedRef.current = false;
+    stepViewTrackedRef.current = false;
+    firstModifyTrackedRef.current = false;
+  }, [
+    onboardingDebug,
+    onboarding.prefs.dismissed,
+    onboarding.prefs.generateDone,
+    onboarding.prefs.designModeDone,
+  ]);
+
+  const handleDirectPatchSuccess = useCallback(() => {
+    if (onboarding.prefs.designModeDone) return;
+    trackEvent("onboarding_design_complete");
+    void onboarding.patch({ designModeDone: true });
+  }, [onboarding]);
+
   const designMode = useDesignMode({
     projectId,
     iframeRef,
@@ -120,6 +175,7 @@ function StudioInner({ projectId }: { projectId: string }) {
     previewReady: previewPainted,
     directEditCapable: studio.directEditCapable,
     onPreviewRefresh: bumpPreviewAfterDirectPatch,
+    onDirectPatchSuccess: handleDirectPatchSuccess,
     onHandoffToModify: (draft) => {
       studio.setModifyInstruction(draft);
       setConversationCollapsed(false);
@@ -134,14 +190,108 @@ function StudioInner({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     studio.setOnBeforeModifySend(() => designMode.consumeSelectionForModify());
-    studio.setOnAfterModifySend(() => designMode.clearSelection());
+    studio.setOnAfterModifySend(() => {
+      designMode.clearSelection();
+      if (firstModifyTrackedRef.current) return;
+      firstModifyTrackedRef.current = true;
+      trackEvent("first_modify_send");
+      void onboarding.patch({ firstModifySendDone: true });
+    });
     return () => {
       studio.setOnBeforeModifySend(null);
       studio.setOnAfterModifySend(null);
     };
-    // Bind once per stable callbacks from designMode / studio setters
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- setters are stable; rebind when selection helpers change
-  }, [designMode.clearSelection, designMode.consumeSelectionForModify, studio.setOnAfterModifySend, studio.setOnBeforeModifySend]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setters stable; rebind when helpers change
+  }, [
+    designMode.clearSelection,
+    designMode.consumeSelectionForModify,
+    onboarding.patch,
+    studio.setOnAfterModifySend,
+    studio.setOnBeforeModifySend,
+  ]);
+
+  // Checklist / tip visibility analytics
+  useEffect(() => {
+    if (!showOnboardingChrome || stepViewTrackedRef.current) return;
+    stepViewTrackedRef.current = true;
+    trackEvent("onboarding_step_view", {
+      stepId: onboarding.prefs.generateDone ? "design" : "generate",
+    });
+  }, [showOnboardingChrome, onboarding.prefs.generateDone]);
+
+  // First generate pipeline activity
+  useEffect(() => {
+    if (!showOnboardingChrome || onboarding.prefs.generateDone) return;
+    if (!loading || pipelineSteps.length === 0) return;
+    if (generateStartedTrackedRef.current) return;
+    generateStartedTrackedRef.current = true;
+    trackEvent("onboarding_generate_started");
+  }, [showOnboardingChrome, onboarding.prefs.generateDone, loading, pipelineSteps.length]);
+
+  // Preview ready → step 1 + auto Design Mode
+  useEffect(() => {
+    if (!showOnboardingChrome || !previewPainted) return;
+
+    if (!onboarding.prefs.generateDone && !generateDoneMarkedRef.current) {
+      generateDoneMarkedRef.current = true;
+      if (!previewReadyTrackedRef.current) {
+        previewReadyTrackedRef.current = true;
+        trackEvent("onboarding_generate_preview_ready");
+      }
+      void onboarding.patch({ generateDone: true });
+    }
+
+    if (
+      !onboarding.prefs.designModeDone &&
+      studio.directEditCapable &&
+      hasGeneratedProject &&
+      !designMode.active &&
+      !designAutoEnabledRef.current
+    ) {
+      designAutoEnabledRef.current = true;
+      designMode.setActive(true);
+    }
+  }, [
+    showOnboardingChrome,
+    previewPainted,
+    onboarding.prefs.generateDone,
+    onboarding.prefs.designModeDone,
+    onboarding.patch,
+    studio.directEditCapable,
+    hasGeneratedProject,
+    designMode.active,
+    designMode.setActive,
+  ]);
+
+  const dismissOnboarding = useCallback(() => {
+    trackEvent("onboarding_dismiss");
+    void onboarding.patch({ dismissed: true });
+  }, [onboarding]);
+
+  const studioTourSteps = useMemo(
+    () =>
+      buildStudioOnboardingSteps({
+        welcomeEyebrow: tOnboarding("tourWelcomeEyebrow"),
+        welcomeTitle: tOnboarding("tourWelcomeTitle"),
+        welcomeBody: tOnboarding("tourWelcomeBody"),
+        conversationEyebrow: tOnboarding("tourConversationEyebrow"),
+        conversationTitle: tOnboarding("tourConversationTitle"),
+        conversationBody: tOnboarding("tourConversationBody"),
+        panelsEyebrow: tOnboarding("tourPanelsEyebrow"),
+        panelsTitle: tOnboarding("tourPanelsTitle"),
+        panelsBody: tOnboarding("tourPanelsBody"),
+        previewEyebrow: tOnboarding("tourPreviewEyebrow"),
+        previewTitle: tOnboarding("tourPreviewTitle"),
+        previewBody: tOnboarding("tourPreviewBody"),
+        designEyebrow: tOnboarding("tourDesignEyebrow"),
+        designTitle: tOnboarding("tourDesignTitle"),
+        designBody: tOnboarding("tourDesignBody"),
+        finishEyebrow: tOnboarding("tourFinishEyebrow"),
+        finishTitle: tOnboarding("tourFinishTitle"),
+        finishBody: tOnboarding("tourFinishBody"),
+      }),
+    [tOnboarding]
+  );
 
   useEffect(() => {
     if (rightPanel === "code") setCodePanelMounted(true);
@@ -565,7 +715,10 @@ function StudioInner({ projectId }: { projectId: string }) {
                 : "lg:w-[540px] lg:min-w-[540px] lg:max-w-[540px]",
             )}
           >
-            <div className="h-full min-h-0 max-h-full overflow-hidden lg:h-full">
+            <div
+              className="h-full min-h-0 max-h-full overflow-hidden lg:h-full"
+              data-ox-tour="studio-conversation"
+            >
               <BuildConversation
                 {...studio}
                 designSelectionLabel={designMode.selectionBadgeLabel}
@@ -602,7 +755,10 @@ function StudioInner({ projectId }: { projectId: string }) {
                 </button>
 
                 {/* Tab switcher — left */}
-                <div className="flex items-center rounded-lg border border-border bg-muted/40 overflow-hidden">
+                <div
+                  className="flex items-center rounded-lg border border-border bg-muted/40 overflow-hidden"
+                  data-ox-tour="studio-panels"
+                >
                   <button
                     onClick={() => setRightPanel("topology")}
                     className={`flex items-center gap-1.5 px-3 h-7 font-mono text-[10px] uppercase tracking-widest transition-all ${rightPanel === "topology"
@@ -662,6 +818,7 @@ function StudioInner({ projectId }: { projectId: string }) {
                 <div className="flex-1" />
 
                 {/* Action buttons — right */}
+                <div className="flex items-center gap-2" data-ox-tour="studio-design-pick">
                 {rightPanel === "preview" && previewSlot.mode === "live" && previewPainted && previewUrl && (
                   <>
                     {hasGeneratedProject ? (
@@ -718,6 +875,7 @@ function StudioInner({ projectId }: { projectId: string }) {
                     </a>
                   </>
                 )}
+                </div>
               </div>
               {rightPanel === "preview" && coverCaptureHint ? (
                 <div className="border-t border-border px-3 py-1.5 font-mono text-[10px] leading-snug text-primary/80">
@@ -781,7 +939,7 @@ function StudioInner({ projectId }: { projectId: string }) {
                       : undefined
                   }
                 >
-                  <div ref={previewContainerRef} className="relative flex min-h-0 flex-1">
+                  <div ref={previewContainerRef} className="relative flex min-h-0 flex-1" data-ox-tour="studio-preview">
                     <iframe
                       key={previewIframeSrc ?? `${previewUrl}_${previewVersion}`}
                       ref={iframeRef}
@@ -876,6 +1034,24 @@ function StudioInner({ projectId }: { projectId: string }) {
           </section>
         </div>
       </div>
+
+      <ProductTour
+        open={showOnboardingChrome}
+        steps={studioTourSteps}
+        labels={{
+          next: tOnboarding("tourNext"),
+          back: tOnboarding("tourBack"),
+          skip: tOnboarding("tourSkip"),
+          done: tOnboarding("tourDone"),
+          progress: tOnboarding("tourProgress"),
+        }}
+        onComplete={() => {
+          trackEvent("onboarding_design_complete", { via: "tour_done" });
+          dismissOnboarding();
+        }}
+        onSkip={dismissOnboarding}
+        onClose={dismissOnboarding}
+      />
     </main>
   );
 }

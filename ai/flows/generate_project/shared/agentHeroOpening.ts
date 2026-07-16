@@ -5,6 +5,8 @@ const UTILITY_SLUG_SNIPPET =
   /\b(sign-?in|sign-?up|log-?in|register|settings|billing|checkout|invite|otp|oauth|callback|reset-?password|verify|2fa|admin|console)\b/i;
 
 /**
+ * @deprecated Hero skill selection removed from generatePages / Page Agent.
+ *
  * Whether this route is a good candidate for attaching the **hero** skill
  * catalog (opening / above-the-fold visual patterns).
  *
@@ -79,6 +81,7 @@ function buildPageSignalBlob(page: PlannedPageBlueprint, rawUserInput?: string):
 }
 
 /**
+ * @deprecated Hero skill selection removed from generatePages.
  * Synthesize a section-shaped payload so `discoverAndSelectSkill` can run the
  * hero catalog + LLM picker. `type` is **`hero` only as a routing key** into
  * `section/hero/skills.yaml`, not as a planner-assigned label.

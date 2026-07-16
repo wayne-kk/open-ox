@@ -1,5 +1,40 @@
 import { describe, expect, it } from "vitest";
-import { asProjectBlueprint } from "./normalizeBlueprint";
+import { asProjectBlueprint, emptyProjectExperience } from "./normalizeBlueprint";
+
+describe("normalizeExperience defaults", () => {
+  it("fills empty experience with empty keywords (no SaaS defaults)", () => {
+    const result = asProjectBlueprint({
+      brief: {
+        projectTitle: "Demo",
+        projectDescription: "Desc",
+        roles: [],
+        taskLoops: [],
+        capabilities: [],
+        productScope: {
+          productType: "site",
+          mvpDefinition: "mvp",
+          coreOutcome: "outcome",
+          businessGoal: "goal",
+          audienceSummary: "audience",
+          inScope: ["x"],
+          outOfScope: [],
+        },
+      },
+      site: {
+        informationArchitecture: {
+          navigationModel: "nav",
+          pageMap: [],
+          sharedShells: [],
+          notes: [],
+        },
+        pages: [],
+      },
+    });
+    expect(result.experience.designIntent.keywords).toEqual([]);
+    expect(result.experience.designIntent.mood).toEqual([]);
+    expect(result.experience).toEqual(emptyProjectExperience());
+  });
+});
 
 describe("asProjectBlueprint", () => {
   it("accepts nested ProjectBlueprint shape", () => {

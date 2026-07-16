@@ -103,31 +103,34 @@
 </section>
 ```
 
-### 硬性禁止（必须遵守）
+### 硬性禁止（工程 — 必须遵守）
 
 - **`<style jsx>`** 等 TSX 格式红线见 **`outputTsx`** 规则。
-- 禁止使用 `clip-path`、`polygon()` 或有机异形剪裁。
-- 禁止在区块组件内注入页面级固定叠加层（颗粒/噪声/扫描线/暗角等）。
-- 禁止使用大于 `text-5xl` 的标题字号。
-- 禁止区块外层 `py-*` 大于 `py-24`。
-- 禁止使用包装类：`py-32`、`py-40`、`md:py-32`、`md:py-40`、`lg:py-32`、`lg:py-40`。
-- 禁止在用户可见内容、标签或替代文本中使用 emoji。
-- 除非区块说明明确要求，禁止默认套用「三等分」通用功能卡片行。
-- 禁止使用 Tailwind 任意背景图工具类：`bg-[url('真实地址')]` 里若写占位符或省略号，会变成 `url('...')` 导致打包器按模块解析报错。请写完整可访问 URL、用 `<Image>`，或在 `style` 里设 `backgroundImage`。
-- **禁止**在 `<img>`、`<Image>` 或作为视觉主体的背景图层上使用「默认灰阶/强降饱和 + 悬停才恢复全彩/正常」的效果（例如 `grayscale`、`saturate-0` 搭配 `hover:grayscale-0`、`group-hover:grayscale-0`，或以 `brightness-*` 与上述滤镜组合实现同类观感）。配图默认须保持正常色彩与对比，不得以悬停作为「解锁原图」的前提。**禁止**对上述图片再叠 `hover:scale-*` / `group-hover:scale-*` 一类悬停放大（不配 `duration-500` 等长过渡做大范围动效）。
+- 禁止 `clip-path` / `polygon()` / 有机异形剪裁。
+- 禁止用户可见文案中的 emoji。
+- 除非简述明确要求，禁止默认「三等分」通用功能卡片行。
+- 禁止 `bg-[url('...')]` 占位写法（会弄坏打包）；用完整 URL、`<Image>`，或 `style.backgroundImage`。
+- 禁止配图「灰阶/降饱和 + 悬停才全彩」；禁止图片 `hover:scale-*` / `group-hover:scale-*` 大范围放大。
+
+### 审美默认（Visual Contract 可覆盖）
+
+美观优先：下列为默认，**以 Visual Contract / Bold Factor 为准**，勿为「安全」主动压回奶油 SaaS。
+
+- 标题默认 ≤ `text-5xl`；Contract 写明时可更大（仅 `font-display` 的 H1）。
+- 常规 section 偏好 `py-12~py-24`；Hero / 宣言带间距以 Contract 为准（可更高）。
+- 无 Contract 依据时不要全页 grain/noise；Contract 允许时：单层、低透明（约 3–8%）、`pointer-events-none`。
 
 ### 区块视觉节奏
 
-滚动时每个区块必须读起来是**独立的一块**。遵循下方的 `Section Design Brief` 与设计 token。
+滚动时每个区块须读作**独立一块**。跟 Visual Contract + design token。
 
-- **表面阶梯**——至少使用设计体系中两种明确区分的 surface 色营造层次；当页面≥4 个区块时，鼓励有一处强对比横带（如 `bg-foreground` + `text-background`）。
-- **不要使用 `bg-card` 作为最外层 section 容器**——`bg-card` 仅用于内嵌卡片。
+- **表面阶梯**——至少两种可区分 surface；≥4 区块时鼓励一处强对比横带。
+- **不要**用 `bg-card` 作最外层 section（仅内嵌卡片）。
 - **文字色须与背景匹配**——深底浅字，浅底深字。
-- **背景装饰（若简述中有要求）**——仅网格/点阵、放射光晕、边缘渐变等；若页面整体已带颗粒/噪声/feTurbulence，则区块内不要再叠。
-- **节奏变化**——疏密交替。
-- **布局变化**——分栏、不对称、居中交替；避免连续 3 个完全相同的栅格。
-- **卡片对齐**——同一行卡片顶部对齐到同一基线。
-- 若 `DESIGN_VARIANCE > 4`，优先分栏或不对称布局，避免整页全是居中堆叠。
+- **背景装饰**——网格/光晕/边缘渐变等；同一视口最多一层 noise veil（以 Contract 为准）。
+- **节奏 / 布局变化**——疏密与分栏交替；避免连续 3 个相同栅格。
+- **卡片对齐**——同行顶部对齐。
+- 若 `DESIGN_VARIANCE > 4`，优先分栏/不对称，避免整页居中堆叠。
 
 ### 交互与悬停克制
 

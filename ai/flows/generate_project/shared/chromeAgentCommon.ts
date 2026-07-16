@@ -249,11 +249,9 @@ export function buildMinimalChromeRootLayout(blueprint: PlannedProjectBlueprint)
   const lang = blueprint.brief.language?.trim() || "en";
   const title = JSON.stringify(blueprint.brief.projectTitle);
   const description = JSON.stringify(blueprint.brief.projectDescription);
+  // Fonts come from design tokens (`--font-body` in globals.css) — never hardcode Inter.
   return `import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
-
-const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: ${title},
@@ -268,9 +266,9 @@ export default function RootLayout({
   return (
     <html lang="${lang}">
       <body
-        className={inter.className}
+        className="font-body antialiased"
         style={{
-          fontFamily: \`\${inter.style.fontFamily}, "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif\`,
+          fontFamily: 'var(--font-body), "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif',
         }}
       >
         {children}

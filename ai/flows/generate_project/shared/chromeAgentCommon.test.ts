@@ -1,9 +1,28 @@
 import { describe, expect, it } from "vitest";
 import {
   buildChromeLinkSurveyBlock,
+  buildMinimalChromeRootLayout,
   extractAnchorCandidateIds,
   pageFileToRoute,
 } from "./chromeAgentCommon";
+import type { PlannedProjectBlueprint } from "../types";
+
+describe("buildMinimalChromeRootLayout", () => {
+  it("uses font-body tokens and never imports Inter", () => {
+    const blueprint = {
+      brief: {
+        projectTitle: "Demo",
+        projectDescription: "Desc",
+        language: "zh",
+      },
+    } as PlannedProjectBlueprint;
+    const layout = buildMinimalChromeRootLayout(blueprint);
+    expect(layout).not.toContain("Inter");
+    expect(layout).not.toContain("next/font/google");
+    expect(layout).toContain("var(--font-body)");
+    expect(layout).toContain("font-body");
+  });
+});
 
 describe("pageFileToRoute", () => {
   it("maps app/page.tsx to /", () => {

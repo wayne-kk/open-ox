@@ -144,6 +144,10 @@ ${skillList}`;
   }
 }
 
+/**
+ * @deprecated Hero skill selection removed from generatePages / Page Agent (visual-signal-fixes).
+ * Kept for ad-hoc tooling / tests only — do not wire back into the chrome-first pipeline.
+ */
 export async function discoverAndSelectSkill(
   section: PlannedSectionSpec,
   designKeywords: string[],

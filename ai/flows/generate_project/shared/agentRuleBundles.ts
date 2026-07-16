@@ -23,7 +23,21 @@ function parseExtraRuleIds(envVar: string): string[] {
     .filter(Boolean);
 }
 
-/** Base stack for `runPageImplementAgent` (after `frontend` + `pageImplementAgent` step). */
+/**
+ * Base stack for `runPageImplementAgent` (after `frontend` + `pageImplementAgent` step).
+ *
+ * FROZEN LENGTH: new rules must **replace** an entry or load conditionally
+ * (`PAGE_IMPLEMENT_AGENT_EXTRA_RULES` / image-gated ids). Do **not** append
+ * indefinitely — context bloat dilutes visual attention.
+ *
+ * Soft caps: {@link PAGE_IMPLEMENT_AGENT_RULE_IDS_BASE_MAX_LENGTH} (count) and
+ * {@link PAGE_IMPLEMENT_AGENT_RULE_BODIES_MAX_CHARS} (sum of rule md bodies).
+ */
+export const PAGE_IMPLEMENT_AGENT_RULE_IDS_BASE_MAX_LENGTH = 8;
+
+/** Measured freeze ceiling for base rule markdown bodies (2026-07). Do not grow without review. */
+export const PAGE_IMPLEMENT_AGENT_RULE_BODIES_MAX_CHARS = 22_000;
+
 export const PAGE_IMPLEMENT_AGENT_RULE_IDS_BASE: readonly string[] = [
   "tailwindMappingGuide",
   "section.default",

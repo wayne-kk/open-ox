@@ -17,6 +17,7 @@
 
 - **不要**写各路由的 `app/**/page.tsx` 内容 —— Page Agent 负责内容区。
 - **不要**改 `app/globals.css`。
+- **不要**在 `app/layout.tsx` 里 `import { Inter }` 或任何 `next/font/google` 硬编码字体——body 用 `font-body` / `var(--font-body)`（tokens 已在 globals），中文 fallback 可跟 token。
 - **不要**精雕细琢：scroll 感知 Nav、移动端动效、锚点精确匹配 —— 留给 polish。
 - **不要**为单页站猜最终 `#anchor`；Nav 可先用 blueprint hierarchy 作**临时**标签。
 - **不要**装饰性全屏背景（hero 渐变、mesh 等）—— 主内容氛围由 Page Agent 完成。

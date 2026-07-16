@@ -16,6 +16,7 @@ describe("resolveModifyProfile", () => {
       "search_code",
       "list_dir",
       "think",
+      "spawn_subagent",
     ]);
   });
 
@@ -29,5 +30,15 @@ describe("resolveModifyProfile", () => {
     expect(profile.allowEdits).toBe(true);
     expect(profile.allowWriteFile).toBe(false);
     expect(profile.verificationMode).toBe("tsc_only");
+  });
+
+  it("edit profiles include spawn_subagent", () => {
+    const profile = resolveModifyProfile({
+      category: "code_change",
+      scope: "narrow",
+      preloadPaths: [],
+      assistantMessage: "",
+    });
+    expect(toolNamesForProfile(profile)).toContain("spawn_subagent");
   });
 });

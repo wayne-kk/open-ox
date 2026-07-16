@@ -6,6 +6,7 @@
 export const PAGE_AGENT_DESIGN_SYSTEM_PATH = "design-system.md";
 export const PAGE_AGENT_LAYOUT_PATH = "app/layout.tsx";
 export const PAGE_AGENT_GLOBALS_PATH = "app/globals.css";
+/** @deprecated Hero skill path removed from Page Agent pipeline. */
 export const PAGE_AGENT_HERO_SKILL_PATH = "content/hero-skill.md";
 
 export interface BuildPageAgentUserMessageParams {
@@ -19,9 +20,6 @@ export interface BuildPageAgentUserMessageParams {
   projectDescription: string;
   language: string;
   designKeywords: string[];
-  /** When set, hero skill body was written to {@link PAGE_AGENT_HERO_SKILL_PATH}. */
-  heroSkillId?: string | null;
-  heroSkillOnDisk?: boolean;
   userProvidedFileHint: string;
   userProvidedImagesBlock: string;
   userImageCount: number;
@@ -32,12 +30,9 @@ export interface BuildPageAgentUserMessageParams {
 
 function buildWorkspaceNoteBlock(params: BuildPageAgentUserMessageParams): string {
   const lines = [
-    "The **next message** pre-loads design-system, layout, globals, directory trees",
-    ...(params.heroSkillOnDisk && params.heroSkillId
-      ? [`and hero skill \`${params.heroSkillId}\``]
-      : []),
+    "The **next message** pre-loads Visual Contract, layout, globals, directory trees",
     ...(params.userProvidedFileHint ? ["and user-provided content"] : []),
-    "— **do not re-read** those paths; start writing.",
+    "— **do not re-read** those paths; start writing. Full `design-system.md` is on disk if needed.",
   ];
   return lines.join(" ");
 }
@@ -73,6 +68,11 @@ Fill page **sections** / main content only (e.g. feed viewport, hero). Single-pa
 Reuse \`components/shared/**\` stubs when present for list/detail cards.
 `;
 
+  const keywordsLine =
+    designKeywords.length > 0
+      ? designKeywords.join(", ")
+      : "(none — follow Visual Contract + brief; do not invent clean/modern/professional)";
+
   return `## Implement this Next.js route (App Router)
 
 **Target page file**: \`${targetPath}\`
@@ -96,7 +96,7 @@ ${layoutContractBlock}
 - Title: ${projectTitle}
 - Description: ${projectDescription}
 - Language: ${language}
-- Design keywords: ${designKeywords.join(", ")}
+- Design keywords: ${keywordsLine}
 ${userProvidedFileHint}${userProvidedImagesBlock}
 
 ## Instructions

@@ -9,7 +9,6 @@ import {
   loadStepPrompt,
   loadSystem,
   readSiteFile,
-  writeSiteFile,
 } from "../shared/files";
 import { callLLMWithToolsFromMessages } from "@/ai/shared/llm/toolLoop";
 import { lfPageImplementPhaseSlug } from "@/lib/observability/langfuseGenerationCatalog";
@@ -39,10 +38,7 @@ import {
   guardGenerateImageExecutor,
   listUserProvidedImageUrls,
 } from "../shared/userProvidedImageEnforcement";
-import {
-  buildPageAgentUserMessage,
-  PAGE_AGENT_HERO_SKILL_PATH,
-} from "../shared/pageAgentBrief";
+import { buildPageAgentUserMessage } from "../shared/pageAgentBrief";
 import {
   buildPageAgentBootstrap,
   isPageAgentBootstrapEnabled,
@@ -122,14 +118,6 @@ export interface RunPageImplementAgentParams {
   page: PlannedPageBlueprint;
   designSystem: string;
   projectContext: PageAgentProjectContext;
-  /**
-   * Pre-selected hero/opening-section skill prompt body (already loaded from
-   * `prompts/skills/section/<sectionType>/<skillId>.md`). When provided, the
-   * agent treats it as the canonical recipe for the hero section.
-   */
-  heroSkillPrompt?: string;
-  /** Skill id for tracing/UI display alongside the agent step record. */
-  heroSkillId?: string | null;
   onMessage?: (msg: ChatMessage) => void;
   /** Emit build sub-steps for UI progress visibility (topology + conversation). */
   onStep?: (step: BuildStep) => void;
@@ -137,8 +125,6 @@ export interface RunPageImplementAgentParams {
 
 export interface PageImplementAgentResult {
   pagePath: string;
-  /** Echoed back from input for logger / UI / artifact persistence. */
-  heroSkillId: string | null;
   trace: StepTrace;
   pendingImages: PendingImage[];
   summary: string;
@@ -151,8 +137,6 @@ export async function runPageImplementAgent(
   const {
     page,
     projectContext,
-    heroSkillPrompt,
-    heroSkillId,
     onMessage,
     onStep,
   } = params;
@@ -185,11 +169,6 @@ export async function runPageImplementAgent(
     2
   );
 
-  const heroSkillOnDisk = Boolean(heroSkillPrompt?.trim());
-  if (heroSkillOnDisk) {
-    writeSiteFile(PAGE_AGENT_HERO_SKILL_PATH, heroSkillPrompt!.trim());
-  }
-
   const userMessage = buildPageAgentUserMessage({
     targetPath,
     slug: page.slug,
@@ -201,8 +180,6 @@ export async function runPageImplementAgent(
     projectDescription: projectContext.projectDescription,
     language: projectContext.language,
     designKeywords: projectContext.designKeywords,
-    heroSkillId,
-    heroSkillOnDisk,
     userProvidedFileHint: userProvidedContentFileHint(hasUserContent),
     userProvidedImagesBlock: userProvidedContentImagesBlock(userContent),
     userImageCount,
@@ -252,8 +229,8 @@ export async function runPageImplementAgent(
   let bootstrapSummary = "";
   if (bootstrapEnabled) {
     const bootstrap = buildPageAgentBootstrap({
-      heroSkillOnDisk,
       hasUserProvidedContent: hasUserContent,
+      designSystem: params.designSystem,
     });
     bootstrappedPaths = bootstrap.bootstrappedPaths;
     bootstrapSummary = bootstrap.compactSummary;
@@ -490,7 +467,6 @@ export async function runPageImplementAgent(
       slug: page.slug,
       targetPath,
       pageDesignPlan: page.pageDesignPlan,
-      heroSkillId: heroSkillId ?? null,
     },
     output: {
       completeSummary,
@@ -508,7 +484,6 @@ export async function runPageImplementAgent(
 
   return {
     pagePath: targetPath,
-    heroSkillId: heroSkillId ?? null,
     trace,
     pendingImages,
     summary: completeSummary || content.slice(0, 500) || "ok",

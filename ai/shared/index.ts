@@ -10,3 +10,23 @@ export {
   type SkillMetadata,
   type SkillWhenCondition,
 } from "./skillDiscovery";
+
+export {
+  SUBAGENT_KINDS,
+  SPAWN_SUBAGENT_TOOL_NAME,
+  isSubagentKind,
+  registerSubagent,
+  getSubagentSpec,
+  listSubagentKinds,
+  runSubagent,
+  createSpawnSubagentTool,
+  runVerifierSubagent,
+  formatVerifierReport,
+  MAX_SUBAGENT_DEPTH,
+  type SubagentKind,
+  type SubagentSpec,
+  type SubagentRunInput,
+  type SubagentResult,
+  type SubagentHostContext,
+  type RunVerifierSubagentInput,
+} from "./subagent";

@@ -77,7 +77,13 @@ export function resolveModifyProfile(routed: ModifyIntentRouterResult): ModifyPr
   };
 }
 
-const READ_ONLY_TOOLS = ["read_file", "search_code", "list_dir", "think"] as const;
+const READ_ONLY_TOOLS = [
+  "read_file",
+  "search_code",
+  "list_dir",
+  "think",
+  "spawn_subagent",
+] as const;
 
 const EDIT_TOOLS = [
   "read_file",
@@ -87,6 +93,7 @@ const EDIT_TOOLS = [
   "think",
   "revert_file",
   "run_scoped_tsc",
+  "spawn_subagent",
 ] as const;
 
 export function toolNamesForProfile(

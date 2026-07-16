@@ -100,17 +100,17 @@ export default function SectionGenerationPage() {
             全部页面的 Page Agent 在 Architect 结束后用 <Code>Promise.all</Code> 并行启动；
             每页步骤名为 <Code>page_implement_agent:{"{slug}"}</Code>，拓扑与日志中可按 slug 区分。
           </P>
-          <H3>Hero 运行时 Skill</H3>
+          <H3>页面实现输入</H3>
           <P>
-            当策略判定需要为首页 Hero 注入额外特效指引时，会在该页 Agent 启动前调用{" "}
-            <Code>discoverAndSelectSkill</Code>（内部候选来自技能清单 + 关键词 fallback），
-            仅将选中技能的<strong>正文</strong>注入该页 Agent 的 user 消息；这不是全局步骤，也不替代用户在前端选择的{" "}
-            <Code>styleGuide</Code>（后者走设计系统生成）。
+            Page Agent 不再做 Hero Skill 运行时选型。视觉依据来自 brief、
+            <Code>pageDesignPlan</Code>、Design System 的{" "}
+            <Code>Visual Contract (agent)</Code> 摘要，以及 design tokens；
+            用户选择的 <Code>styleGuide</Code> 仍走设计系统生成。
           </P>
           <Pre>{`// runGenerateProject.ts — 每页并行
 const pageOutcomes = await Promise.all(
   blueprint.site.pages.map((page) =>
-    runPageImplementAgent({ page, designSystem, projectContext, heroSkillPrompt, ... })
+    runPageImplementAgent({ page, designSystem, projectContext, ... })
   )
 );`}</Pre>
         </section>

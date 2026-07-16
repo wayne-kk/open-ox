@@ -26,14 +26,14 @@ function cinematicOverlaySvg(w: number, h: number): Buffer {
     <radialGradient id="oxV" cx="50%" cy="46%" r="74%">
       <stop offset="0%" stop-color="#000" stop-opacity="0"/>
       <stop offset="58%" stop-color="#000" stop-opacity="0"/>
-      <stop offset="82%" stop-color="#000" stop-opacity="0.38"/>
-      <stop offset="100%" stop-color="#000" stop-opacity="0.72"/>
+      <stop offset="82%" stop-color="#000" stop-opacity="0.16"/>
+      <stop offset="100%" stop-color="#000" stop-opacity="0.32"/>
     </radialGradient>
     <linearGradient id="oxL" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#000" stop-opacity="0.2"/>
+      <stop offset="0%" stop-color="#000" stop-opacity="0.08"/>
       <stop offset="10%" stop-color="#000" stop-opacity="0"/>
       <stop offset="90%" stop-color="#000" stop-opacity="0"/>
-      <stop offset="100%" stop-color="#000" stop-opacity="0.24"/>
+      <stop offset="100%" stop-color="#000" stop-opacity="0.1"/>
     </linearGradient>
   </defs>
   <rect width="100%" height="100%" fill="url(#oxV)"/>

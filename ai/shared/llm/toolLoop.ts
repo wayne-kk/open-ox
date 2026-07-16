@@ -52,6 +52,13 @@ export async function callLLMWithTools(params: {
   executeToolOverrides?: Record<string, (args: Record<string, unknown>) => Promise<ToolResult | string>>;
   /** Optional: called for every message added to the conversation history. */
   onMessage?: (msg: ChatMessage) => void;
+  /** Called after each tool execution completes. */
+  onToolCall?: (info: {
+    name: string;
+    args: Record<string, unknown>;
+    iteration: number;
+    result: ToolResult | string;
+  }) => void;
   /**
    * Langfuse: stable phase slug for {@link lfToolAgentRound}, e.g.
    * {@link import("@/lib/observability/langfuseGenerationCatalog").LfToolPhase}.
@@ -146,6 +153,7 @@ export async function callLLMWithTools(params: {
       executeToolOverrides,
       emit,
       iteration,
+      onToolCall: params.onToolCall,
     });
   }
 

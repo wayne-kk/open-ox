@@ -88,7 +88,7 @@ export interface SectionReplicaAgentResult {
 export async function runSectionReplicaAgent(
   params: RunSectionReplicaAgentParams
 ): Promise<SectionReplicaAgentResult> {
-  const { pageSlug, section, pageSpecSection, language } = params;
+  const { pageSlug, section, pageSpecSection, language, designSystem } = params;
   const outputPath = buildSectionFilePath(pageSlug, section.fileName);
   const model = getModelForStep("section_replica_agent");
   const agentStepName = `section_replica_agent:${pageSlug}:${section.fileName}`;
@@ -113,8 +113,8 @@ export async function runSectionReplicaAgent(
 
   if (bootstrapEnabled) {
     const bootstrap = buildPageAgentBootstrap({
-      heroSkillOnDisk: false,
       hasUserProvidedContent: false,
+      designSystem,
     });
     bootstrappedPaths = bootstrap.bootstrappedPaths;
     bootstrapSummary = bootstrap.compactSummary;

@@ -18,6 +18,10 @@ import {
   runModifyCompletionSummary,
 } from "./engine/completionSummary";
 import { resolveModifyProfile, withAllowedTargets } from "./profile/modifyProfile";
+import {
+  formatVerifierReport,
+  runVerifierSubagent,
+} from "@/ai/shared/subagent";
 import { withLangfuseSpan } from "@/lib/observability/langfuseTracing";
 import { LfSpanModify } from "@/lib/observability/langfuseTraceCatalog";
 import {
@@ -100,6 +104,8 @@ export type RunModifyProjectBoardOptions = {
   preferBoardSuggest?: boolean;
   /** Injected BoardRun summary for card execution (Working Memory + short board context). */
   boardSummaryBlock?: string;
+  /** When false, disable spawn_subagent and post-edit verifier. Default true. */
+  enableSubagents?: boolean;
 };
 
 export async function runModifyProject(
@@ -155,6 +161,7 @@ async function runModifyProjectInner(
   artifactLogger: ModifyArtifactLogger,
 ): Promise<void> {
   const projectDir = pmGetSiteRoot(projectId);
+  const enableSubagents = boardOptions?.enableSubagents !== false;
   onEvent({ type: "step", name: "resolve_project", status: "done" });
 
   onEvent({ type: "step", name: "read_context", status: "running" });
@@ -444,6 +451,7 @@ async function runModifyProjectInner(
             toolOverrides,
             pendingImages,
             includeImageTools: modifyStopMode === "code_change",
+            enableSubagents,
           }
         ),
       { metadata: { projectId, scope: profile.scope } }
@@ -463,6 +471,41 @@ async function runModifyProjectInner(
         status: finalVerify.buildPassed ? "done" : "error",
         message: finalVerify.skippedBuild ? "scoped tsc only" : "full build",
       });
+
+      onEvent({ type: "step", name: "subagent_verifier", status: "running" });
+      const verifierResult = await runVerifierSubagent({
+        enableSubagents,
+        claim: [
+          `User instruction: ${effectiveInstruction}`,
+          `Touched files: ${loopState.touchedFiles.join(", ")}`,
+          `Deterministic verification: ${finalVerify.buildPassed ? "passed" : "failed"} (${finalVerify.skippedBuild ? "scoped tsc only" : "full build"})`,
+        ].join("\n"),
+        touchedFiles: loopState.touchedFiles,
+        extraContext: finalVerify.buildOutput.slice(0, 2500),
+        model: modelOverride || profile.modelId,
+      });
+      if (verifierResult) {
+        onEvent({
+          type: "thinking",
+          content: formatVerifierReport(verifierResult),
+          subagentKind: "verifier",
+        });
+        onEvent({
+          type: "step",
+          name: "subagent_verifier",
+          status: verifierResult.ok ? "done" : "error",
+          message: verifierResult.ok
+            ? `report (${verifierResult.toolCallCount} tool calls)`
+            : verifierResult.error ?? "verifier failed",
+        });
+      } else {
+        onEvent({
+          type: "step",
+          name: "subagent_verifier",
+          status: "done",
+          message: "skipped",
+        });
+      }
     }
 
     collectingOnEvent({

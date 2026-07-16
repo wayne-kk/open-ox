@@ -6,6 +6,10 @@ import { callLLMWithTools } from "../shared/llm";
 import { LfToolPhase } from "@/lib/observability/langfuseGenerationCatalog";
 import { getSystemToolDefinitions } from "../../../tools/systemToolCatalog";
 import { getModelForStep } from "@/lib/config/models";
+import {
+  formatVerifierReport,
+  runVerifierSubagent,
+} from "@/ai/shared/subagent";
 import type {
   BuildRepairResult,
   PlannedProjectBlueprint,
@@ -16,6 +20,8 @@ interface RepairBuildParams {
   blueprint: PlannedProjectBlueprint;
   buildOutput: string;
   generatedFiles: string[];
+  /** When false, skip post-repair verifier subagent. Default true. */
+  enableSubagents?: boolean;
 }
 
 function unique(values: string[]): string[] {
@@ -95,10 +101,37 @@ export function shouldShortCircuitRepairAfterCodeFix(outcome: {
   return outcome.resolved && outcome.touchedFiles.length > 0;
 }
 
+async function appendVerifierReport(
+  base: BuildRepairResult,
+  params: {
+    buildOutput: string;
+    enableSubagents?: boolean;
+  }
+): Promise<BuildRepairResult> {
+  if (!base.success || base.touchedFiles.length === 0) return base;
+  const verifierResult = await runVerifierSubagent({
+    enableSubagents: params.enableSubagents,
+    claim: [
+      "Repair claimed to fix the build failure by editing the listed files.",
+      `Touched files: ${base.touchedFiles.join(", ")}`,
+      `Repair output: ${base.output}`,
+    ].join("\n"),
+    touchedFiles: base.touchedFiles,
+    extraContext: params.buildOutput.slice(0, 2500),
+    model: getModelForStep("repair_build"),
+  });
+  if (!verifierResult) return base;
+  return {
+    ...base,
+    output: `${base.output}\n\n${formatVerifierReport(verifierResult)}`,
+  };
+}
+
 export async function stepRepairBuild({
   blueprint,
   buildOutput,
   generatedFiles,
+  enableSubagents,
 }: RepairBuildParams): Promise<BuildRepairResult> {
   const allowedFiles = selectRepairTargets(buildOutput, generatedFiles);
   if (allowedFiles.length === 0) {
@@ -113,12 +146,15 @@ export async function stepRepairBuild({
   const touchedFromCodeFix = [...codeFixOutcome.touchedFiles];
 
   if (shouldShortCircuitRepairAfterCodeFix(codeFixOutcome)) {
-    return {
-      success: true,
-      output:
-        `repair_build: TypeScript language-service fixes cleared diagnostics (${touchedFromCodeFix.join(", ") || "workspace"})`,
-      touchedFiles: touchedFromCodeFix,
-    };
+    return appendVerifierReport(
+      {
+        success: true,
+        output:
+          `repair_build: TypeScript language-service fixes cleared diagnostics (${touchedFromCodeFix.join(", ") || "workspace"})`,
+        touchedFiles: touchedFromCodeFix,
+      },
+      { buildOutput, enableSubagents }
+    );
   }
 
   const systemPrompt = [
@@ -183,17 +219,20 @@ Fix the build error using **apply_workspace_edits** with 0-based lines/character
       };
     }
 
-    return {
-      success: true,
-      output:
-        touchedFromCodeFix.length > 0
-          ? `repair_build: typescript code fixes and/or patches (${touchedFiles.length} file(s))`
-          : `repair_build: patched ${touchedFiles.length} file(s) via tool calls`,
-      touchedFiles,
-    };
+    return appendVerifierReport(
+      {
+        success: true,
+        output:
+          touchedFromCodeFix.length > 0
+            ? `repair_build: typescript code fixes and/or patches (${touchedFiles.length} file(s))`
+            : `repair_build: patched ${touchedFiles.length} file(s) via tool calls`,
+        touchedFiles,
+      },
+      { buildOutput, enableSubagents }
+    );
   } catch (error) {
     const fromCf = touchedFromCodeFix.length > 0;
-    return {
+    const partial: BuildRepairResult = {
       success: fromCf,
       output:
         error instanceof Error
@@ -201,5 +240,8 @@ Fix the build error using **apply_workspace_edits** with 0-based lines/character
           : String(error),
       touchedFiles: fromCf ? Array.from(new Set(touchedFromCodeFix)) : [],
     };
+    return fromCf
+      ? appendVerifierReport(partial, { buildOutput, enableSubagents })
+      : partial;
   }
 }

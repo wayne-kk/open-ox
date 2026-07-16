@@ -61,11 +61,16 @@ ${blueprint.brief.projectDescription}
 - 类型：${blueprint.brief.productScope.productType}
 - MVP：${blueprint.brief.productScope.mvpDefinition}
 - 核心结果：${blueprint.brief.productScope.coreOutcome}
-- 设计关键词：${blueprint.experience.designIntent.keywords.join(", ")}
+- 设计关键词：${
+    blueprint.experience.designIntent.keywords.length > 0
+      ? blueprint.experience.designIntent.keywords.join(", ")
+      : "（无 — 只信 brief 的「视觉与参考」，禁止脑补 clean / modern / professional）"
+  }
 
 > 本步骤**必须由你自行判断**站点 chrome 形态（\`chromeForm\`），并在有 list/detail 等多页共享实体时输出 \`sharedContracts\`。下游 Chrome Scaffold 会按你的选择落壳，再并行写页。
 >
 > **不要**套用固定产品类型配方（例如「官网必有顶栏」「后台必有 sidebar」）。根据 brief、页面纲要与真实交互需求自由决定壳形态；没有跨页共享壳时选 \`page-local\` 或 \`none\`。
+> **不要**在 keywords 为空时脑补 SaaS 气质词（clean / professional / modern 等）。
 
 请输出 JSON，结构如下：
 \`\`\`json

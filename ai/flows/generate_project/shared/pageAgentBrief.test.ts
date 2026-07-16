@@ -29,20 +29,19 @@ describe("pageAgentBrief", () => {
       projectDescription: "D",
       language: "en",
       designKeywords: ["clean"],
-      heroSkillId: "hero-x",
-      heroSkillOnDisk: true,
       userProvidedFileHint: "",
       userProvidedImagesBlock: "",
       userImageCount: 0,
       completeToolName: "page_implementation_complete",
     });
     expect(msg).toContain("Workspace context");
-    expect(msg).toContain("pre-loads design-system");
+    expect(msg).toContain("Visual Contract");
     expect(msg).toContain("do not re-read");
     expect(msg).toContain("Implement first");
     expect(msg).toContain("chrome-first");
     expect(msg).toContain("site-wide Nav/Navbar/Header/Sidebar/Footer");
     expect(msg).toContain("bottom tab bars");
+    expect(msg).not.toContain(PAGE_AGENT_HERO_SKILL_PATH);
     expect(msg.length).toBeLessThan(4_500);
   });
 
@@ -58,7 +57,6 @@ describe("pageAgentBrief", () => {
       projectDescription: "D",
       language: "en",
       designKeywords: [],
-      heroSkillOnDisk: false,
       userProvidedFileHint: "",
       userProvidedImagesBlock: "",
       userImageCount: 0,
@@ -70,7 +68,7 @@ describe("pageAgentBrief", () => {
     expect(msg).not.toContain("chrome deferred");
   });
 
-  it("omits hero skill path when not on disk", () => {
+  it("never references hero skill path", () => {
     const msg = buildPageAgentUserMessage({
       targetPath: "app/page.tsx",
       slug: "home",
@@ -82,13 +80,13 @@ describe("pageAgentBrief", () => {
       projectDescription: "D",
       language: "en",
       designKeywords: [],
-      heroSkillOnDisk: false,
       userProvidedFileHint: "",
       userProvidedImagesBlock: "",
       userImageCount: 0,
       completeToolName: "page_implementation_complete",
     });
     expect(msg).not.toContain(PAGE_AGENT_HERO_SKILL_PATH);
+    expect(msg).not.toContain("hero skill");
   });
 });
 
@@ -119,7 +117,7 @@ describe("pageAgentToolLoop", () => {
       result: {
         success: true,
         output: "Written to app/page.tsx with long diagnostics...",
-        meta: { path: "app/page.tsx", verifyErrorCount: 0, verifyWarningCount: 0 },
+        meta: { path: "app/page.tsx", verifyErrorCount: 0, fixWarningCount: 0 },
       },
     });
     expect(out).toMatch(/^✓ wrote app\/page\.tsx/);
