@@ -5,6 +5,8 @@ import {
   parseOnboardingPatch,
   parseOnboardingPreferences,
   shouldShowOnboardingChrome,
+  shouldShowProductTour,
+  shouldShowWorkspaceTour,
 } from "./onboardingPreferences";
 
 describe("shouldShowOnboardingChrome", () => {
@@ -37,6 +39,79 @@ describe("shouldShowOnboardingChrome", () => {
         mergeOnboardingPatch(defaultOnboardingPreferences(), { generateDone: true })
       )
     ).toBe(true);
+  });
+
+  it("still shows after tourSeen alone", () => {
+    expect(
+      shouldShowOnboardingChrome(
+        mergeOnboardingPatch(defaultOnboardingPreferences(), { tourSeen: true })
+      )
+    ).toBe(true);
+  });
+});
+
+describe("shouldShowProductTour", () => {
+  it("shows for fresh defaults", () => {
+    expect(shouldShowProductTour(defaultOnboardingPreferences())).toBe(true);
+  });
+
+  it("hides when tourSeen", () => {
+    expect(
+      shouldShowProductTour(
+        mergeOnboardingPatch(defaultOnboardingPreferences(), { tourSeen: true })
+      )
+    ).toBe(false);
+  });
+
+  it("hides when dismissed without requiring tourSeen", () => {
+    expect(
+      shouldShowProductTour(
+        mergeOnboardingPatch(defaultOnboardingPreferences(), { dismissed: true })
+      )
+    ).toBe(false);
+  });
+
+  it("hides when task chrome complete", () => {
+    expect(
+      shouldShowProductTour(
+        mergeOnboardingPatch(defaultOnboardingPreferences(), {
+          generateDone: true,
+          designModeDone: true,
+        })
+      )
+    ).toBe(false);
+  });
+});
+
+describe("shouldShowWorkspaceTour", () => {
+  it("shows for fresh defaults", () => {
+    expect(shouldShowWorkspaceTour(defaultOnboardingPreferences())).toBe(true);
+  });
+
+  it("hides when workspaceTourSeen", () => {
+    expect(
+      shouldShowWorkspaceTour(
+        mergeOnboardingPatch(defaultOnboardingPreferences(), {
+          workspaceTourSeen: true,
+        })
+      )
+    ).toBe(false);
+  });
+
+  it("still shows after Studio tourSeen alone", () => {
+    expect(
+      shouldShowWorkspaceTour(
+        mergeOnboardingPatch(defaultOnboardingPreferences(), { tourSeen: true })
+      )
+    ).toBe(true);
+  });
+
+  it("hides when dismissed", () => {
+    expect(
+      shouldShowWorkspaceTour(
+        mergeOnboardingPatch(defaultOnboardingPreferences(), { dismissed: true })
+      )
+    ).toBe(false);
   });
 });
 

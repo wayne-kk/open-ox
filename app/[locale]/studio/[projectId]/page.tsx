@@ -122,6 +122,14 @@ function StudioInner({ projectId }: { projectId: string }) {
   const onboardingDebug = searchParams.get("ox_onboarding") === "1";
   const onboarding = useOnboardingPreferences({ debugForce: onboardingDebug });
   const showOnboardingChrome = onboarding.ready && onboarding.showChrome;
+  /**
+   * Studio tour timing: first entry is almost always mid-generate.
+   * Hold the tour until generate is idle, then show when the workbench is
+   * actually usable (preview painted, or a finished project already exists).
+   */
+  const studioTourReady =
+    !loading && (previewPainted || hasGeneratedProject || onboardingDebug);
+  const showProductTour = onboarding.ready && onboarding.showTour && studioTourReady;
   const generateStartedTrackedRef = useRef(false);
   const stepViewTrackedRef = useRef(false);
   const previewReadyTrackedRef = useRef(false);
@@ -145,7 +153,8 @@ function StudioInner({ projectId }: { projectId: string }) {
     if (
       onboarding.prefs.dismissed ||
       onboarding.prefs.generateDone ||
-      onboarding.prefs.designModeDone
+      onboarding.prefs.designModeDone ||
+      onboarding.prefs.tourSeen
     ) {
       return;
     }
@@ -160,6 +169,7 @@ function StudioInner({ projectId }: { projectId: string }) {
     onboarding.prefs.dismissed,
     onboarding.prefs.generateDone,
     onboarding.prefs.designModeDone,
+    onboarding.prefs.tourSeen,
   ]);
 
   const handleDirectPatchSuccess = useCallback(() => {
@@ -263,10 +273,20 @@ function StudioInner({ projectId }: { projectId: string }) {
     designMode.setActive,
   ]);
 
-  const dismissOnboarding = useCallback(() => {
-    trackEvent("onboarding_dismiss");
-    void onboarding.patch({ dismissed: true });
+  const markTourSeen = useCallback(() => {
+    void onboarding.patch({ tourSeen: true });
   }, [onboarding]);
+
+  const handleStudioTourStepChange = useCallback(
+    (step: { panel?: "topology" | "preview" | "code" }) => {
+      if (!step.panel) return;
+      setRightPanel(step.panel);
+      if (step.panel === "preview" && projectId && previewState === "idle") {
+        void startPreview();
+      }
+    },
+    [setRightPanel, projectId, previewState, startPreview]
+  );
 
   const studioTourSteps = useMemo(
     () =>
@@ -277,6 +297,9 @@ function StudioInner({ projectId }: { projectId: string }) {
         conversationEyebrow: tOnboarding("tourConversationEyebrow"),
         conversationTitle: tOnboarding("tourConversationTitle"),
         conversationBody: tOnboarding("tourConversationBody"),
+        modifyEyebrow: tOnboarding("tourModifyEyebrow"),
+        modifyTitle: tOnboarding("tourModifyTitle"),
+        modifyBody: tOnboarding("tourModifyBody"),
         panelsEyebrow: tOnboarding("tourPanelsEyebrow"),
         panelsTitle: tOnboarding("tourPanelsTitle"),
         panelsBody: tOnboarding("tourPanelsBody"),
@@ -717,7 +740,6 @@ function StudioInner({ projectId }: { projectId: string }) {
           >
             <div
               className="h-full min-h-0 max-h-full overflow-hidden lg:h-full"
-              data-ox-tour="studio-conversation"
             >
               <BuildConversation
                 {...studio}
@@ -732,7 +754,7 @@ function StudioInner({ projectId }: { projectId: string }) {
             </div>
           </div>
 
-          <section className="defi-glass flex min-h-0 flex-1 flex-col overflow-hidden">
+          <section className="defi-glass relative flex min-h-0 flex-1 flex-col overflow-hidden">
             {/* Right panel toolbar */}
             <div className="flex shrink-0 flex-col border-b border-border">
               <div className="flex h-11 items-center px-3 gap-2">
@@ -1036,7 +1058,7 @@ function StudioInner({ projectId }: { projectId: string }) {
       </div>
 
       <ProductTour
-        open={showOnboardingChrome}
+        open={showProductTour}
         steps={studioTourSteps}
         labels={{
           next: tOnboarding("tourNext"),
@@ -1045,12 +1067,10 @@ function StudioInner({ projectId }: { projectId: string }) {
           done: tOnboarding("tourDone"),
           progress: tOnboarding("tourProgress"),
         }}
-        onComplete={() => {
-          trackEvent("onboarding_design_complete", { via: "tour_done" });
-          dismissOnboarding();
-        }}
-        onSkip={dismissOnboarding}
-        onClose={dismissOnboarding}
+        onStepChange={handleStudioTourStepChange}
+        onComplete={markTourSeen}
+        onSkip={markTourSeen}
+        onClose={markTourSeen}
       />
     </main>
   );

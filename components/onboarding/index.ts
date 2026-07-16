@@ -6,6 +6,7 @@ export type {
 } from "./types";
 export { ProductTour, type ProductTourProps } from "./ProductTour";
 export { useProductTour, type UseProductTourOptions } from "./useProductTour";
+export { ExampleBriefChips, type ExampleBriefChipsProps } from "./ExampleBriefChips";
 export {
   measureTourTarget,
   placeTourPopover,

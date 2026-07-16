@@ -56,7 +56,7 @@ export async function PATCH(req: Request) {
       return NextResponse.json(
         {
           error:
-            "Body must include { reset: true } or at least one boolean: dismissed, generateDone, designModeDone, firstModifySendDone",
+            "Body must include { reset: true } or at least one boolean: dismissed, generateDone, designModeDone, firstModifySendDone, tourSeen, workspaceTourSeen",
           code: "BAD_REQUEST",
         },
         { status: 400 }

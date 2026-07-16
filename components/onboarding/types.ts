@@ -29,6 +29,29 @@ export type ProductTourStep = {
   placement?: ProductTourPlacement;
   /** Spotlight padding around the target (px). */
   spotlightPadding?: number;
+  /**
+   * When the target is taller than the max spotlight, keep the top (`start`)
+   * or the middle (`center`, default) of the element in view.
+   */
+  spotlightAlign?: "start" | "center";
+  /** Cap spotlight height as a fraction of the viewport (default ~0.4). */
+  spotlightMaxHeightRatio?: number;
+  /** Absolute px height cap (applied after ratio). */
+  spotlightMaxHeightPx?: number;
+  /**
+   * Optional descendant selector used to measure visible content inside a large
+   * container target, while still anchoring to the target for placement.
+   */
+  spotlightContentSelector?: string;
+  /** Whether content measurement replaces both axes or only the vertical axis. */
+  spotlightContentAxis?: "both" | "vertical";
+  /** Keep the hole above another `[data-ox-tour]` (e.g. conversation above modify). */
+  spotlightClampAbove?: string;
+  /**
+   * Host hint — e.g. Studio should switch right panel when this step is shown.
+   * ProductTour does not interpret this; parents handle via `onStepChange`.
+   */
+  panel?: "topology" | "preview" | "code";
 };
 
 export type ProductTourLabels = {

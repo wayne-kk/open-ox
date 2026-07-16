@@ -10,6 +10,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { captureAppReturnTo } from "@/lib/navigation/appBack";
 import { resolveFolderIdFromSearchParam } from "@/lib/projectFolders";
 import { cn } from "@/lib/utils";
+import { ExampleBriefChips } from "@/components/onboarding/ExampleBriefChips";
 
 /** Survives redirect to /auth so we can resume POST /api/projects after login. */
 const PENDING_BUILD_KEY = "open-ox:pending-project-build";
@@ -54,7 +55,12 @@ function composeUserPrompt(snapshot: PendingBuildPayload): string | null {
   return text;
 }
 
-export function HeroPrompt() {
+export type HeroPromptProps = {
+  /** Logged-in Workspace empty: show welcome Credits soft promise under chips. */
+  showCreditsPromise?: boolean;
+};
+
+export function HeroPrompt({ showCreditsPromise = false }: HeroPromptProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const folderId = resolveFolderIdFromSearchParam(searchParams.get("folder"));
@@ -253,6 +259,7 @@ export function HeroPrompt() {
       className="mx-auto w-full max-w-4xl"
     >
       <div
+        data-ox-tour="workspace-prompt"
         className={cn(
           "relative flex flex-col gap-2.5 rounded-2xl border bg-card px-5 pb-3.5 pt-4 shadow-[var(--box-shadow-neon-sm)] transition-all duration-200",
           focused
@@ -329,6 +336,18 @@ export function HeroPrompt() {
           </div>
         </div>
       </div>
+
+      <ExampleBriefChips
+        className="mt-3.5 px-0.5"
+        showCreditsPromise={showCreditsPromise}
+        onSelect={(prompt) => {
+          setValue(prompt);
+          setFocused(true);
+          requestAnimationFrame(() => {
+            textareaRef.current?.focus();
+          });
+        }}
+      />
     </form>
   );
 }

@@ -2,20 +2,17 @@
 
 Mainstream product-tour pattern（对齐 Joyride / Shepherd / Driver.js）：
 
-- **Portal 到 `document.body`**，不改宿主业务 DOM 结构
-- **遮罩 + spotlight 挖洞**（`[data-ox-tour="<id>"]`），带微光描边
-- **分步卡片**：媒体区 / 占位插画、eyebrow、进度点、上一步 / 下一步 / 跳过
-- **媒体槽**：`step.media.src` 或 `step.media.node`；未配图时用设计过的占位层
+- **Portal 到 `document.body`**，`z-index: 9999`，压过侧栏 / sticky 头
+- **经典 box-shadow 挖洞**：整页遮罩始终在页面之上
+- **`onStepChange` + `step.panel`**：宿主可在步骤切换时切 Studio 面板（如 Preview）
+- **与两步任务解耦**：`tourSeen` / `workspaceTourSeen` 独立于 checklist
 
-## Studio 默认 6 步
+## Studio / Workspace
 
-欢迎 → 对话 → Topology/Code/Preview → 预览区 → Design Mode → 收尾（积分说明）
+- Studio：`lib/onboarding/studioTourSteps.ts`（欢迎图：`/onboarding/studio-tour-welcome.png`）
+- Workspace：`lib/onboarding/workspaceTourSteps.ts`
+- 调试：`?ox_onboarding=1`
 
-配置：`lib/onboarding/studioTourSteps.ts`  
-调试：`/studio/<id>?ox_onboarding=1`
+## Studio 出现时机
 
-## 加图
-
-```ts
-media: { src: "/onboarding/welcome.png", alt: "…" }
-```
+首次进 Studio 几乎一定在生成中。导览**不在生成中弹出**；等 `!loading`，且满足「预览已首屏画出」或「项目已有成品」后再出现。`?ox_onboarding=1` 仍可在空闲时强制调试。

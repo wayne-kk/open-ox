@@ -7,6 +7,9 @@ export type StudioTourCopy = {
   conversationEyebrow: string;
   conversationTitle: string;
   conversationBody: string;
+  modifyEyebrow: string;
+  modifyTitle: string;
+  modifyBody: string;
   panelsEyebrow: string;
   panelsTitle: string;
   panelsBody: string;
@@ -23,7 +26,7 @@ export type StudioTourCopy = {
 
 /**
  * Studio first-run tour. Targets: `[data-ox-tour="<id>"]`.
- * Drop images later via `media: { src, alt }` on any step.
+ * `panel` hints the host to switch Topology / Code / Preview when the step shows.
  */
 export function buildStudioOnboardingSteps(copy: StudioTourCopy): ProductTourStep[] {
   return [
@@ -34,6 +37,10 @@ export function buildStudioOnboardingSteps(copy: StudioTourCopy): ProductTourSte
       eyebrow: copy.welcomeEyebrow,
       title: copy.welcomeTitle,
       description: copy.welcomeBody,
+      media: {
+        src: "/onboarding/studio-tour-welcome.png",
+        alt: "Studio：对话、预览与构建工作台",
+      },
     },
     {
       id: "conversation",
@@ -42,7 +49,23 @@ export function buildStudioOnboardingSteps(copy: StudioTourCopy): ProductTourSte
       eyebrow: copy.conversationEyebrow,
       title: copy.conversationTitle,
       description: copy.conversationBody,
-      spotlightPadding: 14,
+      spotlightPadding: 8,
+      spotlightAlign: "start",
+      // flex-1 scroll rail is huge — show an upper band, stop above Modify.
+      spotlightContentSelector: ":scope > *",
+      spotlightContentAxis: "vertical",
+      spotlightMaxHeightRatio: 0.42,
+      spotlightMaxHeightPx: 420,
+      spotlightClampAbove: "studio-modify",
+    },
+    {
+      id: "modify",
+      target: "studio-modify",
+      placement: "right",
+      eyebrow: copy.modifyEyebrow,
+      title: copy.modifyTitle,
+      description: copy.modifyBody,
+      spotlightPadding: 10,
     },
     {
       id: "panels",
@@ -52,6 +75,7 @@ export function buildStudioOnboardingSteps(copy: StudioTourCopy): ProductTourSte
       title: copy.panelsTitle,
       description: copy.panelsBody,
       spotlightPadding: 10,
+      panel: "topology",
     },
     {
       id: "preview",
@@ -61,6 +85,7 @@ export function buildStudioOnboardingSteps(copy: StudioTourCopy): ProductTourSte
       title: copy.previewTitle,
       description: copy.previewBody,
       spotlightPadding: 12,
+      panel: "preview",
     },
     {
       id: "design-pick",
@@ -70,6 +95,7 @@ export function buildStudioOnboardingSteps(copy: StudioTourCopy): ProductTourSte
       title: copy.designTitle,
       description: copy.designBody,
       spotlightPadding: 10,
+      panel: "preview",
     },
     {
       id: "finish",
@@ -78,6 +104,7 @@ export function buildStudioOnboardingSteps(copy: StudioTourCopy): ProductTourSte
       eyebrow: copy.finishEyebrow,
       title: copy.finishTitle,
       description: copy.finishBody,
+      panel: "preview",
     },
   ];
 }

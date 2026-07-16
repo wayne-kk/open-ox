@@ -83,9 +83,10 @@ export function CreditsBalanceBadge({
         <TooltipTrigger asChild>
           <Link
             href="/pricing"
+            data-ox-tour="workspace-credits"
             aria-label={`${t("badgeAria", { balance: display })}${isPro ? " · Pro" : ""}`}
             className={cn(
-              "group relative flex items-center overflow-hidden rounded-lg border transition",
+              "group relative inline-flex max-w-full items-center overflow-hidden rounded-lg border transition",
               "border-border/50 bg-gradient-to-br from-background/90 to-muted/40",
               "hover:border-primary/35 hover:from-primary/[0.06] hover:to-muted/50",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",

@@ -534,7 +534,7 @@ export function BuildConversation({
 
     return (
         <aside className="flex h-full min-h-0 w-full shrink-0 flex-col overflow-hidden lg:w-[540px] lg:max-h-full scrollbar-hidden">
-            <div ref={chatRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-5 scrollbar-hidden">
+            <div ref={chatRef} data-ox-tour="studio-conversation" className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-5 scrollbar-hidden">
                 {leftPaneView === "changes" ? (
                     <div className="space-y-3">
                         {codeChangeTurns.length === 0 ? (
@@ -1111,7 +1111,7 @@ export function BuildConversation({
             {projectId && <MemoryDebugPanel projectId={projectId} sessionHistory={modifyHistory} externalOpen={memoryOpen} onToggle={setMemoryOpen} />}
 
             {/* Input area — keep within viewport; long Design Mode drafts scroll inside textarea */}
-            <div className="shrink-0 border-t border-border px-4 py-4">
+            <div className="shrink-0 border-t border-border px-4 py-4" data-ox-tour="studio-modify">
                 {projectId && !loading && hasGeneratedProject && response && !response.error ? (
                     /* Modify mode — project ready */
                     <div className="rounded-[24px] border border-border bg-muted/80 p-3">

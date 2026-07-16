@@ -63,6 +63,7 @@ function NavItem({
   collapsed,
   onClick,
   newTab,
+  tourId,
 }: {
   href?: string;
   label: string;
@@ -72,6 +73,8 @@ function NavItem({
   onClick?: () => void;
   /** Open in a new browser tab (docs / changelog leave the product shell). */
   newTab?: boolean;
+  /** Product tour target: `[data-ox-tour="<id>"]`. */
+  tourId?: string;
 }) {
   const className = cn(
     "flex w-full items-center rounded-lg py-2 text-left text-[13px] font-medium transition-[padding,background-color,color,box-shadow,gap] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
@@ -95,6 +98,8 @@ function NavItem({
     </>
   );
 
+  const tourProps = tourId ? { "data-ox-tour": tourId } : {};
+
   if (onClick && !href) {
     return (
       <button
@@ -103,6 +108,7 @@ function NavItem({
         className={className}
         title={collapsed ? label : undefined}
         aria-label={label}
+        {...tourProps}
       >
         {content}
       </button>
@@ -119,6 +125,7 @@ function NavItem({
       {...(newTab
         ? { target: "_blank", rel: "noopener noreferrer" }
         : {})}
+      {...tourProps}
     >
       {content}
     </Link>
@@ -207,6 +214,7 @@ function SidebarBody({
           icon={Sparkles}
           collapsed={collapsed}
           onClick={handleStartBuild}
+          tourId="workspace-start-build"
         />
 
         <div>
@@ -308,6 +316,7 @@ function SidebarBody({
           active={onPublished}
           collapsed={collapsed}
           onClick={onNavigate}
+          tourId="workspace-published"
         />
         <NavItem
           href="/community"
@@ -316,6 +325,7 @@ function SidebarBody({
           active={onCommunity}
           collapsed={collapsed}
           onClick={onNavigate}
+          tourId="workspace-community"
         />
         <NavItem
           href="/settings/integrations"

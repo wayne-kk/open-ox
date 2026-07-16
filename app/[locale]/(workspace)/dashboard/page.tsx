@@ -1,8 +1,9 @@
 "use client";
 
-import { Suspense, useEffect, useState, useCallback, useRef } from "react";
+import { Suspense, useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import {
   Trash2, Plus, FolderInput, Folder,
   AlertCircle, Loader2, Sparkles,
@@ -28,6 +29,9 @@ import {
 import { cn } from "@/lib/utils";
 import { WORKSPACE_PROMPT_ID } from "@/app/components/AppShell";
 import { HeroPrompt } from "@/app/components/HeroPrompt";
+import { ProductTour } from "@/components/onboarding";
+import { useOnboardingPreferences } from "@/lib/onboarding/useOnboardingPreferences";
+import { buildWorkspaceOnboardingSteps } from "@/lib/onboarding/workspaceTourSteps";
 import {
   isRootFolderParam,
   notifyFoldersChanged,
@@ -1049,6 +1053,7 @@ export default function ProjectsPage() {
 function ProjectsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const tOnboarding = useTranslations("onboarding");
   const { user: authUser, ready: authReady } = useAuthUser();
   const { isAdmin } = useAuthProfile();
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
@@ -1071,6 +1076,60 @@ function ProjectsPageContent() {
   const loadedFolderRef = useRef<string | null>(null);
   const projectsRef = useRef<ProjectMetadata[]>([]);
   projectsRef.current = projects;
+
+  const onboardingDebug = searchParams.get("ox_onboarding") === "1";
+  const onboarding = useOnboardingPreferences({ debugForce: onboardingDebug });
+  const showWorkspaceTour = onboarding.ready && onboarding.showWorkspaceTour;
+
+  const workspaceTourSteps = useMemo(
+    () =>
+      buildWorkspaceOnboardingSteps({
+        welcomeEyebrow: tOnboarding("workspaceTourWelcomeEyebrow"),
+        welcomeTitle: tOnboarding("workspaceTourWelcomeTitle"),
+        welcomeBody: tOnboarding("workspaceTourWelcomeBody"),
+        promptEyebrow: tOnboarding("workspaceTourPromptEyebrow"),
+        promptTitle: tOnboarding("workspaceTourPromptTitle"),
+        promptBody: tOnboarding("workspaceTourPromptBody"),
+        briefsEyebrow: tOnboarding("workspaceTourBriefsEyebrow"),
+        briefsTitle: tOnboarding("workspaceTourBriefsTitle"),
+        briefsBody: tOnboarding("workspaceTourBriefsBody"),
+        navEyebrow: tOnboarding("workspaceTourNavEyebrow"),
+        navTitle: tOnboarding("workspaceTourNavTitle"),
+        navBody: tOnboarding("workspaceTourNavBody"),
+        publishedEyebrow: tOnboarding("workspaceTourPublishedEyebrow"),
+        publishedTitle: tOnboarding("workspaceTourPublishedTitle"),
+        publishedBody: tOnboarding("workspaceTourPublishedBody"),
+        communityEyebrow: tOnboarding("workspaceTourCommunityEyebrow"),
+        communityTitle: tOnboarding("workspaceTourCommunityTitle"),
+        communityBody: tOnboarding("workspaceTourCommunityBody"),
+        creditsEyebrow: tOnboarding("workspaceTourCreditsEyebrow"),
+        creditsTitle: tOnboarding("workspaceTourCreditsTitle"),
+        creditsBody: tOnboarding("workspaceTourCreditsBody"),
+        finishEyebrow: tOnboarding("workspaceTourFinishEyebrow"),
+        finishTitle: tOnboarding("workspaceTourFinishTitle"),
+        finishBody: tOnboarding("workspaceTourFinishBody"),
+      }),
+    [tOnboarding]
+  );
+
+  const markWorkspaceTourSeen = useCallback(() => {
+    void onboarding.patch({ workspaceTourSeen: true });
+  }, [onboarding]);
+
+  const focusCreatePrompt = useCallback(() => {
+    const root = document.getElementById(WORKSPACE_PROMPT_ID);
+    root?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const textarea = root?.querySelector("textarea");
+    if (textarea instanceof HTMLTextAreaElement) {
+      window.setTimeout(() => textarea.focus(), 280);
+    }
+  }, []);
+
+  const completeWorkspaceTour = useCallback(() => {
+    markWorkspaceTourSeen();
+    // Wait a tick so the tour portal unmounts before focusing the prompt.
+    window.setTimeout(() => focusCreatePrompt(), 50);
+  }, [markWorkspaceTourSeen, focusCreatePrompt]);
 
   const applyFolderFilter = useCallback(
     (next: string) => {
@@ -1348,15 +1407,6 @@ function ProjectsPageContent() {
     [movingId, publishedOnly]
   );
 
-  const focusCreatePrompt = useCallback(() => {
-    const root = document.getElementById(WORKSPACE_PROMPT_ID);
-    root?.scrollIntoView({ behavior: "smooth", block: "start" });
-    const textarea = root?.querySelector("textarea");
-    if (textarea instanceof HTMLTextAreaElement) {
-      window.setTimeout(() => textarea.focus(), 280);
-    }
-  }, []);
-
   const openProject = useCallback(
     (projectId: string) => {
       captureAppReturnTo();
@@ -1471,7 +1521,7 @@ function ProjectsPageContent() {
               <div className="mx-auto h-40 w-full max-w-4xl animate-pulse rounded-2xl border border-border bg-card" />
             }
           >
-            <HeroPrompt />
+            <HeroPrompt showCreditsPromise={!loading && projects.length === 0} />
           </Suspense>
         </section>
 
@@ -1572,6 +1622,21 @@ function ProjectsPageContent() {
           100% { transform: translateX(100%); }
         }
       `}</style>
+
+      <ProductTour
+        open={showWorkspaceTour}
+        steps={workspaceTourSteps}
+        labels={{
+          next: tOnboarding("tourNext"),
+          back: tOnboarding("tourBack"),
+          skip: tOnboarding("tourSkip"),
+          done: tOnboarding("tourDone"),
+          progress: tOnboarding("tourProgress"),
+        }}
+        onComplete={completeWorkspaceTour}
+        onSkip={markWorkspaceTourSeen}
+        onClose={markWorkspaceTourSeen}
+      />
     </main>
   );
 }

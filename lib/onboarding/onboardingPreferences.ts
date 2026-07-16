@@ -4,7 +4,7 @@
  */
 
 export type OnboardingPreferences = {
-  /** User chose「不再显示」— chrome stays hidden forever. */
+  /** User chose「不再显示」— task chrome stays hidden forever. */
   dismissed: boolean;
   /** Step 1: previewable generate observed. */
   generateDone: boolean;
@@ -12,6 +12,10 @@ export type OnboardingPreferences = {
   designModeDone: boolean;
   /** Deep-activation observe: first Modify send already tracked. */
   firstModifySendDone: boolean;
+  /** Studio ProductTour finished or skipped. */
+  tourSeen: boolean;
+  /** Workspace (dashboard) first-login ProductTour finished or skipped. */
+  workspaceTourSeen: boolean;
 };
 
 export type OnboardingPreferencesPatch = Partial<OnboardingPreferences>;
@@ -22,11 +26,33 @@ export function defaultOnboardingPreferences(): OnboardingPreferences {
     generateDone: false,
     designModeDone: false,
     firstModifySendDone: false,
+    tourSeen: false,
+    workspaceTourSeen: false,
   };
 }
 
-/** Studio checklist / Design tip should render. */
+/** Studio checklist / Design tip should render (non-blocking task chrome). */
 export function shouldShowOnboardingChrome(prefs: OnboardingPreferences): boolean {
+  if (prefs.dismissed) return false;
+  if (prefs.generateDone && prefs.designModeDone) return false;
+  return true;
+}
+
+/**
+ * Studio ProductTour — independent of the 2-step lesson and Workspace tour.
+ */
+export function shouldShowProductTour(prefs: OnboardingPreferences): boolean {
+  if (prefs.tourSeen) return false;
+  if (prefs.dismissed) return false;
+  if (prefs.generateDone && prefs.designModeDone) return false;
+  return true;
+}
+
+/**
+ * Workspace dashboard first-login tour — lands before Studio.
+ */
+export function shouldShowWorkspaceTour(prefs: OnboardingPreferences): boolean {
+  if (prefs.workspaceTourSeen) return false;
   if (prefs.dismissed) return false;
   if (prefs.generateDone && prefs.designModeDone) return false;
   return true;
@@ -41,6 +67,8 @@ export function mergeOnboardingPatch(
     generateDone: patch.generateDone ?? current.generateDone,
     designModeDone: patch.designModeDone ?? current.designModeDone,
     firstModifySendDone: patch.firstModifySendDone ?? current.firstModifySendDone,
+    tourSeen: patch.tourSeen ?? current.tourSeen,
+    workspaceTourSeen: patch.workspaceTourSeen ?? current.workspaceTourSeen,
   };
 }
 
@@ -58,6 +86,8 @@ export function parseOnboardingPreferences(raw: unknown): OnboardingPreferences 
     generateDone: asBool(o.generateDone, base.generateDone),
     designModeDone: asBool(o.designModeDone, base.designModeDone),
     firstModifySendDone: asBool(o.firstModifySendDone, base.firstModifySendDone),
+    tourSeen: asBool(o.tourSeen, base.tourSeen),
+    workspaceTourSeen: asBool(o.workspaceTourSeen, base.workspaceTourSeen),
   };
 }
 
@@ -72,6 +102,8 @@ export function parseOnboardingPatch(raw: unknown): OnboardingPreferencesPatch |
     "generateDone",
     "designModeDone",
     "firstModifySendDone",
+    "tourSeen",
+    "workspaceTourSeen",
   ] as const) {
     if (key in o) {
       if (typeof o[key] !== "boolean") return null;

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   defaultOnboardingPreferences,
   shouldShowOnboardingChrome,
+  shouldShowProductTour,
+  shouldShowWorkspaceTour,
   type OnboardingPreferences,
   type OnboardingPreferencesPatch,
 } from "@/lib/onboarding/onboardingPreferences";
@@ -17,8 +19,8 @@ type State = {
 export type UseOnboardingPreferencesOptions = {
   /**
    * Debug gate: `?ox_onboarding=1`
-   * - resets server prefs once on mount
-   * - forces checklist chrome visible even if prefs say hide
+   * - resets server prefs once on mount (so tours/checklist show again)
+   * - visibility still follows prefs after that, so complete/skip can close the UI
    */
   debugForce?: boolean;
 };
@@ -109,13 +111,15 @@ export function useOnboardingPreferences(opts: UseOnboardingPreferencesOptions =
     }
   }, [refresh]);
 
-  const showChrome = debugForce || shouldShowOnboardingChrome(prefs);
-
+  // Do NOT OR debugForce into visibility — that prevented tours from closing.
+  // Debug only resets prefs; after complete/skip, seen flags hide the UI as normal.
   return {
     prefs,
     loading,
     ready,
-    showChrome,
+    showChrome: shouldShowOnboardingChrome(prefs),
+    showTour: shouldShowProductTour(prefs),
+    showWorkspaceTour: shouldShowWorkspaceTour(prefs),
     debugForce,
     refresh,
     patch,
