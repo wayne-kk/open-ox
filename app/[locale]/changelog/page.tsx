@@ -14,6 +14,57 @@ interface ChangeEntry {
 
 const CHANGELOG: ChangeEntry[] = [
   {
+    version: "v1.19",
+    date: "2026-07-17",
+    tag: "major",
+    title: "Linux.do 登录 · Subagent 运行时 · 获客归因",
+    body: "认证增加 Linux.do OAuth，与飞书 / Google 并列。共享 Subagent 运行时落地：Modify 可 spawn explore；Generate 在参考站 URL 前跑 research 摘要；repair 可按 verifier 结论再补一轮。Admin 侧 first-touch 获客归因（UTM / referrer）与项目标签能力一并上线。",
+    items: [
+      "GET /api/auth/linuxdo/start + callback；/auth 统一 SocialAuthSection",
+      "ai/shared/subagent：explore / verifier / research；嵌套深度上限 1（ADR-0006）",
+      "Generate：参考站 research → analyze；repair 可选 verifier refeed",
+      "迁移 033 user_acquisition + 032 project_tags；Admin Acquisition 面板",
+      "Studio 能力评估 evaluateStudioCapabilities（预览 / Design Mode 等门禁）",
+    ],
+  },
+  {
+    version: "v1.18",
+    date: "2026-07-16",
+    tag: "minor",
+    title: "新人引导 · Workspace / Studio Tour",
+    body: "首次进入 Workspace 与 Studio 提供短导览：挖洞 spotlight、步骤切面板、与「生成 → Design Mode」两步任务解耦。生成中不打断；预览首屏画出或已有成品后再弹出。示例 brief chips 降低冷启动成本。",
+    items: [
+      "ProductTour + workspaceTourSteps / studioTourSteps；?ox_onboarding=1 调试",
+      "偏好持久化：tourSeen / workspaceTourSeen（迁移 031 user_preferences_onboarding）",
+      "欢迎礼 12 积分文案与 checklist 对齐；中英文案 messages/*",
+    ],
+  },
+  {
+    version: "v1.17",
+    date: "2026-07-15",
+    tag: "major",
+    title: "生成流水线 · Chrome-first 默认路径",
+    body: "默认改为先落真实壳再并行写页：Plan 自选 chromeForm → architect_scaffold_agent 写 layout/chrome → Page Agent 只填内容 → chrome_optimize 仅做链接/锚点精修。去掉 productType→壳形态查表与页内 regex 抢壳，降低双重导航。见 ADR-0005。",
+    items: [
+      "Scaffold 为真实壳（非占位 pass-through）；Optimize 降为 link polish",
+      "例外仅计划结果：截图复刻 / chromeForm∈{page-local,none}",
+      "共享 list/detail 契约先 stub 再并行 Page Agent",
+      "docs/product/chrome-first-generate-pipeline-architecture.md",
+    ],
+  },
+  {
+    version: "v1.16",
+    date: "2026-07-13",
+    tag: "minor",
+    title: "Vibe 气质方向 · 生成前视觉澄清",
+    body: "生成前可先选气质方向（Vibe）：系统根据 brief 给出若干视觉方向与对比度友好的 token 预览，选定后再进入正式生成，稳住首屏风格。预览 iframe「已首屏画出」检测用于后续引导与空态时机。",
+    items: [
+      "POST /api/projects/[id]/vibe-directions；VibePickerPanel + generateVibeDirections",
+      "vibeTokenContrast：方向色板可读性校验",
+      "previewIframePainted：首屏绘制信号供 Studio / Tour 使用",
+    ],
+  },
+  {
     version: "v1.15",
     date: "2026-07-14",
     tag: "minor",
@@ -37,7 +88,6 @@ const CHANGELOG: ChangeEntry[] = [
       "docs/product/credits-v0.3-welcome.md",
     ],
   },
-
   {
     version: "v1.13",
     date: "2026-07-11",

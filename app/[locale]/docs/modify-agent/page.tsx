@@ -51,12 +51,14 @@ const TOOLS = [
   { name: "exec_shell", color: "text-cyan-400/80", bg: "bg-cyan-500/10", desc: "受限 shell（诊断与脚手架；受策略与白名单约束）" },
   { name: "think", color: "text-slate-400/80", bg: "bg-slate-500/10", desc: "无副作用推理草稿，压缩进 reasoning 轨迹" },
   { name: "revert_file", color: "text-rose-400/80", bg: "bg-rose-500/10", desc: "按快照回滚单个文件" },
+  { name: "spawn_subagent", color: "text-violet-300/80", bg: "bg-violet-500/10", desc: "派生 explore Subagent（只读侦察）；仅返回摘要，嵌套深度上限 1" },
 ];
 
 const TOC = [
   { id: "overview", label: "概览" },
   { id: "loop", label: "Agent 循环" },
   { id: "tools", label: "工具集" },
+  { id: "subagents", label: "Subagent" },
   { id: "stop-hooks", label: "Stop Hook" },
   { id: "memory", label: "工作记忆" },
   { id: "vision", label: "图片输入" },
@@ -72,7 +74,7 @@ export default function ModifyAgentPage() {
         <h1 className="text-3xl font-bold tracking-tight">修改 Agent</h1>
         <p className="mt-3 text-[15px] leading-7 text-muted-foreground">
           受 Claude Code <Code>query()</Code> 设计启发的 Agent 循环。
-          Agent 搜索、阅读、编辑、验证 — 配备质量门控，防止提前停止。
+          Agent 搜索、阅读、编辑、验证 — 配备质量门控与可选 Subagent，防止提前停止并压低主上下文噪音。
         </p>
 
         <section id="overview" className="scroll-mt-24">
@@ -137,6 +139,30 @@ export default function ModifyAgentPage() {
             <Code>old_string</Code> 必须在文件中精确匹配唯一一处。
             Agent 被要求包含上下文行以确保唯一性，防止意外的多处替换。
           </P>
+        </section>
+
+        <section id="subagents" className="scroll-mt-24">
+          <H2>Subagent（v1）</H2>
+          <P>
+            共享运行时位于 <Code>ai/shared/subagent</Code>（ADR-0006）。
+            父 Agent 保留最终对用户作答的所有权；子 Agent 只返回摘要，嵌套深度上限 1。
+          </P>
+          <div className="mt-4 space-y-2">
+            {[
+              { kind: "explore", host: "Modify loop", note: "只读侦察；经 spawn_subagent 注入（enableSubagents）" },
+              { kind: "verifier", host: "Modify / Generate repair", note: "只读报告；不自动改代码。Generate 可按 fail/partial 再 refeed 一轮" },
+              { kind: "research", host: "Generate 编排层", note: "参考站摘要；不由 Modify 自由 spawn" },
+            ].map(({ kind, host, note }) => (
+              <div key={kind} className="flex flex-col gap-1 rounded-lg border border-border bg-card px-4 py-3 sm:flex-row sm:items-start sm:gap-3">
+                <code className="shrink-0 font-mono text-[11px] text-violet-300/90 w-24">{kind}</code>
+                <code className="shrink-0 font-mono text-[11px] text-muted-foreground/50 sm:w-48">{host}</code>
+                <span className="text-[12px] text-muted-foreground/70">{note}</span>
+              </div>
+            ))}
+          </div>
+          <Callout>
+            <Code>spawn_subagent</Code> 不在 Generate 各 Role Worker 的 systemToolCatalog 中注册，避免 Scaffold / Page Agent 误派生。
+          </Callout>
         </section>
 
         <section id="stop-hooks" className="scroll-mt-24">

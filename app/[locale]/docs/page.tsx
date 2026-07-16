@@ -30,7 +30,7 @@ const CARDS = [
     icon: GitBranch,
     href: "/docs/pipeline",
     title: "AI 生成流水线",
-    desc: "从校验技能到构建验证的主路径编排 — analyze ∥ infer、plan → 设计系统、Chrome 两阶段、多页 Page Agent、最多 5 轮构建修复。",
+    desc: "Chrome-first 主路径：可选 research 摘要 → analyze ∥ infer → plan → 设计系统 → Scaffold 真壳 → 并行 Page Agent → Optimize 精修 → 最多 5 轮构建修复。",
     tag: "流水线",
     accent: "tertiary",
   },
@@ -94,7 +94,7 @@ const CARDS = [
     icon: MessageSquare,
     href: "/docs/modify-agent",
     title: "修改 Agent",
-    desc: "Intent 路由 + Agent 循环；工作记忆投影稳住短程续写；Stop Hook、图片输入与 /clear。",
+    desc: "Intent 路由 + Agent 循环；可 spawn explore Subagent；工作记忆投影；Stop Hook、图片输入与 /clear。",
     tag: "Agent",
     accent: "tertiary",
   },
@@ -180,7 +180,7 @@ export default function DocsPage() {
           </div>
           <div className="min-w-0">
             <p className="font-heading text-[14px] font-semibold text-foreground group-hover:text-primary transition-colors">更新日志</p>
-            <p className="mt-0.5 text-[12px] leading-5 text-muted-foreground">至 v1.12：工作台、社区、Design Mode、工作记忆等。</p>
+            <p className="mt-0.5 text-[12px] leading-5 text-muted-foreground">至 v1.19：Chrome-first、Subagent、新人引导、Linux.do、Vibe 等。</p>
           </div>
         </Link>
         <Link

@@ -2,7 +2,7 @@
 
 **版本**：v0.1  
 **日期**：2026-07-15  
-**状态**：目标架构（落地中）  
+**状态**：已落地（默认路径；见 ADR-0005 / changelog v1.17）  
 **调研**：[ai-builder-chrome-shell-pipelines-20260715.md](../research/ai-builder-chrome-shell-pipelines-20260715.md)  
 **ADR**：[0005-chrome-first-generate-pipeline.md](../adr/0005-chrome-first-generate-pipeline.md)
 

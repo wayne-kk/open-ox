@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 
 import { getSessionUser } from "@/lib/auth/session";
 import { isAdminUser } from "@/lib/auth/roles";
-import { canAccessStaticPreview } from "@/lib/auth/projectAccess";
-import { getProject } from "@/lib/projectManager";
 import {
   PREVIEW_CAPTURE_SECRET_HEADER,
   previewCaptureSecretMatches,
@@ -12,8 +10,12 @@ import {
   SITE_PREVIEWS_BUCKET,
   resolveProxiedContentType,
 } from "@/lib/staticSitePreview";
+import { resolveStaticPreviewAccess } from "@/lib/staticSitePreviewProxyAccess";
+import {
+  cacheControlForPreviewRel,
+  upstreamFetchCacheMode,
+} from "@/lib/staticSitePreviewProxyCache";
 import { mapStorageUpstreamStatus } from "@/lib/staticSitePreviewProxyMime";
-import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 import {
   designModeBridgeScriptPath,
   injectDesignModeBridgeIntoHtml,
@@ -25,37 +27,37 @@ export const runtime = "nodejs";
 async function assertStaticPreviewAccess(
   projectId: string,
   request: Request
-): Promise<NextResponse | null> {
-  let admin;
-  try {
-    admin = createSupabaseServiceRoleClient();
-  } catch {
-    return new NextResponse("Server misconfigured", { status: 503 });
-  }
-  const project = await getProject(admin, projectId);
-  if (!project) {
-    return new NextResponse("Not found", { status: 404 });
-  }
-
-  // Server-side cover capture (Playwright) — no owner cookie; shared secret only.
+): Promise<{ denied: NextResponse | null; setGrantCookie?: string }> {
+  // Fast path: capture secret never needs ACL row / session (cover capture).
   const captureSecret = request.headers.get(PREVIEW_CAPTURE_SECRET_HEADER);
   if (previewCaptureSecretMatches(captureSecret)) {
-    return null;
+    return { denied: null };
   }
 
-  const session = await getSessionUser();
-  const isAdmin = session
-    ? await isAdminUser({ supabase: session.supabase, userId: session.user.id })
-    : false;
-  if (
-    !canAccessStaticPreview(project, {
-      userId: session?.user.id ?? null,
-      isAdmin,
-    })
-  ) {
-    return new NextResponse("Forbidden", { status: 403 });
+  const result = await resolveStaticPreviewAccess({
+    projectId,
+    request,
+    getSessionUser,
+    isAdminUser,
+  });
+
+  if (result.status === "ok") {
+    return { denied: null, setGrantCookie: result.setGrantCookie };
   }
-  return null;
+  if (result.status === "misconfigured") {
+    return { denied: new NextResponse("Server misconfigured", { status: 503 }) };
+  }
+  if (result.status === "not_found") {
+    return { denied: new NextResponse("Not found", { status: 404 }) };
+  }
+  return { denied: new NextResponse("Forbidden", { status: 403 }) };
+}
+
+function applyGrantCookie(res: NextResponse, setGrantCookie?: string): NextResponse {
+  if (setGrantCookie) {
+    res.headers.append("Set-Cookie", setGrantCookie);
+  }
+  return res;
 }
 
 /**
@@ -100,7 +102,7 @@ async function proxyFromStorage(
 
   const upstream = await fetch(storageUrl, {
     method,
-    cache: "no-store",
+    cache: upstreamFetchCacheMode(rel),
     signal: AbortSignal.timeout(120_000),
   }).catch(() => null);
 
@@ -121,7 +123,7 @@ async function proxyFromStorage(
 
   const headers = new Headers();
   headers.set("Content-Type", contentType);
-  headers.set("Cache-Control", "public, max-age=60, s-maxage=60");
+  headers.set("Cache-Control", cacheControlForPreviewRel(rel));
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set("X-Robots-Tag", "noindex, nofollow");
   const etag = upstream.headers.get("etag");
@@ -136,9 +138,7 @@ async function proxyFromStorage(
     return new NextResponse(null, { status: 200, headers });
   }
 
-  if (
-    shouldInjectDesignModeBridge(rel, contentType)
-  ) {
+  if (shouldInjectDesignModeBridge(rel, contentType)) {
     const html = await upstream.text();
     // Root-absolute path (not request.url origin): behind nginx, req.url is often
     // http://127.0.0.1:3000 — injecting that as script src breaks HTTPS pages
@@ -165,14 +165,15 @@ export async function GET(req: Request, ctx: Ctx) {
   if (!id) {
     return new NextResponse("Missing projectId", { status: 400 });
   }
-  const denied = await assertStaticPreviewAccess(id, req);
-  if (denied) return denied;
+  const access = await assertStaticPreviewAccess(id, req);
+  if (access.denied) return access.denied;
   const segments = normalizePreviewPathSegments(path);
   if (!isSafePreviewSegments(segments)) {
     return new NextResponse("Invalid path", { status: 400 });
   }
   const rel = segments.length ? segments.join("/") : "index.html";
-  return proxyFromStorage(id, rel, "GET");
+  const res = await proxyFromStorage(id, rel, "GET");
+  return applyGrantCookie(res, access.setGrantCookie);
 }
 
 export async function HEAD(req: Request, ctx: Ctx) {
@@ -181,14 +182,15 @@ export async function HEAD(req: Request, ctx: Ctx) {
   if (!id) {
     return new NextResponse(null, { status: 400 });
   }
-  const denied = await assertStaticPreviewAccess(id, req);
-  if (denied) {
-    return new NextResponse(null, { status: denied.status });
+  const access = await assertStaticPreviewAccess(id, req);
+  if (access.denied) {
+    return new NextResponse(null, { status: access.denied.status });
   }
   const segments = normalizePreviewPathSegments(path);
   if (!isSafePreviewSegments(segments)) {
     return new NextResponse(null, { status: 400 });
   }
   const rel = segments.length ? segments.join("/") : "index.html";
-  return proxyFromStorage(id, rel, "HEAD");
+  const res = await proxyFromStorage(id, rel, "HEAD");
+  return applyGrantCookie(res, access.setGrantCookie);
 }

@@ -58,9 +58,10 @@ export default function SectionGenerationPage() {
         </p>
         <h1 className="text-3xl font-bold tracking-tight">Section 生成</h1>
         <p className="mt-3 text-[15px] leading-7 text-muted-foreground">
-          站点 UI 的主路径已收敛为：单一 <Code>architect_agent</Code> 拟定全局 chrome，
+          Chrome-first 主路径：<Code>architect_scaffold_agent</Code> 先落真实全局壳，
           再由每个页面的 <Code>page_implement_agent</Code> 工具闭环编写{" "}
-          <Code>page.tsx</Code> 及页面级组件。下文描述该路径及与之配套的 Hero skill 发现；
+          <Code>page.tsx</Code> 及页面级组件；全部页面完成后由{" "}
+          <Code>chrome_optimize_agent</Code> 做链接/锚点精修。
           历史上的「逐文件 generate_section 批量步骤」不再作为主路径。
         </p>
 
@@ -87,18 +88,20 @@ export default function SectionGenerationPage() {
             <Code>designPlan</Code>。
           </P>
           <Callout>
-            布局形态（顶 nav / sidebar / 工具栏 / 页脚 / 无 chrome 等）由下游页面实现 Agent 自行决定，
-            <Code>plan_project</Code> 与 <Code>analyze_project_requirement</Code> 都不负责预先指定全局 chrome。
+            <Code>plan_project</Code> 根据 brief 自选 <Code>chromeForm</Code>（无 productType 查表），
+            并规划 sharedContracts。全局壳由 Scaffold 写入；Page Agent 只填内容，不得再造一套 Nav/Footer。
+            例外：截图复刻或 <Code>chromeForm ∈ {"{ page-local, none }"}</Code>。见 ADR-0005。
           </Callout>
         </section>
 
         <section id="orchestration" className="scroll-mt-24">
           <H2>编排与并行</H2>
           <P>
-            <Code>apply_project_design_tokens</Code> 与 <Code>architect_agent</Code> 必须<strong>先于</strong>
+            <Code>apply_project_design_tokens</Code> 与 <Code>architect_scaffold_agent</Code> 必须先于
             任意 <Code>page_implement_agent</Code> 完成，以避免 globals / layout 竞态。
-            全部页面的 Page Agent 在 Architect 结束后用 <Code>Promise.all</Code> 并行启动；
+            全部页面的 Page Agent 在 Scaffold 结束后用 <Code>Promise.all</Code> 并行启动；
             每页步骤名为 <Code>page_implement_agent:{"{slug}"}</Code>，拓扑与日志中可按 slug 区分。
+            页面全部完成后跑 <Code>chrome_optimize_agent</Code>（link polish）。
           </P>
           <H3>页面实现输入</H3>
           <P>
@@ -155,7 +158,7 @@ const pageOutcomes = await Promise.all(
         <section id="downstream" className="scroll-mt-24">
           <H2>下游组装</H2>
           <P>
-            Page Agent 负责目标路由文件及其拆出的组件；全局 shell 已由 Architect 锁定。
+            Page Agent 负责目标路由文件及其拆出的组件；全局 shell 已由 Scaffold 锁定，Optimize 只校正链接。
             流水线在全部页面完成后执行依赖安装、可选范围类型检查与生产构建。
           </P>
           <P>

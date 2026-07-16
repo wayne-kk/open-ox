@@ -43,33 +43,44 @@ function Callout({ type = "info", children }: { type?: "info" | "warn"; children
 const STEPS = [
   { n: "00", name: "validate_skill_prompts", type: "verify", desc: "启动前校验 ai 流程技能 Markdown 的 frontmatter；失败则中止，避免运行中途才发现技能损坏。" },
   { n: "01", name: "project_intent_guide", type: "llm", desc: "可选（默认开启）。澄清建站意向；若需用户补充信息则提前结束并返回引导文案（不进入生成）。可用 enableIntentGuide=false 关闭。" },
+  {
+    n: "01b",
+    name: "research_subagent（可选）",
+    type: "llm+tool",
+    desc: "brief 含营销站参考 URL 时，编排层先跑 research Subagent 产出摘要；analyze 消费摘要，避免再吞整页 HTML。见 ADR-0006。",
+  },
   { n: "02", name: "analyze_project_requirement", type: "llm+tool", desc: "解析 ProjectBlueprint，配备 web_search。与步骤 03 并行。" },
   { n: "03", name: "infer_design_intent", type: "llm", desc: "独立风格/技术关键词推理；产物合并进设计系统输入与 blueprint.keywords。与步骤 02 并行。" },
-  { n: "04", name: "plan_project", type: "llm", desc: "扩展为 PlannedProjectBlueprint（pages、sections、pageDesignPlan）。" },
+  {
+    n: "04",
+    name: "plan_project",
+    type: "llm",
+    desc: "扩展为 PlannedProjectBlueprint；自选 chromeForm（无 productType→壳查表），并规划 sharedContracts 供并行页前 stub。",
+  },
   {
     n: "05",
     name: "generate_project_design_system",
     type: "llm",
-    desc: "根据 infer 文本 + 可选用户 styleGuide 生成 Style Reference 格式的 design-system.md。",
+    desc: "根据 infer 文本 + 可选用户 styleGuide / Vibe 方向生成 Style Reference 格式的 design-system.md。",
   },
   { n: "06", name: "apply_project_design_tokens", type: "llm", desc: "设计系统 Markdown + 当前 app/globals.css → LLM 产出完整 globals.css（保留模板结构意图）。须先于 Chrome / Page Agent。" },
   {
     n: "07",
     name: "architect_scaffold_agent",
     type: "llm+tool",
-    desc: "Chrome 搭壳 Agent：快速落盘 app/layout.tsx 与 components/chrome/**（结构完整，Nav 链接可占位），供 Page Agent 只读。",
+    desc: "Chrome-first：落盘真实壳 app/layout.tsx + components/chrome/**（全局 form 时）；Page Agent 启动前壳已可预览。",
   },
   {
     n: "08",
     name: "page_implement_agent ×M",
     type: "llm×M",
-    desc: "每页一个工具闭环（读写文件、generate_image、page_implementation_complete 等），多页并行；不得修改 layout/chrome/globals。单页主区块须带 section id。",
+    desc: "每页一个工具闭环，多页并行；只写页内容与页专属组件，不得改 layout/chrome/globals，不得复制全局 Nav/Footer。主区块须带 section id。",
   },
   {
     n: "09",
     name: "chrome_optimize_agent",
     type: "llm+tool",
-    desc: "Chrome 精修 Agent：全部页面落盘后，用工具勘察真实路由与锚点，校正 Nav/Footer 并 polish chrome。",
+    desc: "Link polish：全部页面落盘后勘察真实路由与 section 锚点，校正 Nav/Footer 链接；不换壳、不发明第二套导航。",
   },
   {
     n: "10",
@@ -83,10 +94,16 @@ const STEPS = [
     type: "verify",
     desc: "默认开启：对生成范围内的 TS/TSX 做语言服务级检查（非全仓 tsc）。失败时可触发 repair_build 打补丁。DISABLE_PREBUILD_TSC=1 跳过。" },
   { n: "12", name: "run_build (+ TS codeFix 内循环)", type: "build", desc: "本地 next build；编译错误时可反复尝试 TypeScript code-fix 再构建（与 repair 轮次配合）。" },
-  { n: "13", name: "repair_build ×0-5", type: "llm+tool", desc: "构建仍失败时进入 Agent 修复循环（最多 5 轮）；定位错误日志相关文件并增量修改。" },
+  {
+    n: "13",
+    name: "repair_build ×0-5",
+    type: "llm+tool",
+    desc: "构建仍失败时进入 Agent 修复循环（最多 5 轮）。修复后可挂 verifier Subagent；若 verdict 为 fail/partial，编排层可再调度一轮 refeed repair。",
+  },
 ];
 
 const TOC = [
+  { id: "chrome-first", label: "Chrome-first" },
   { id: "steps", label: "全部步骤" },
   { id: "parallel", label: "并行策略" },
   { id: "skills", label: "Skill 系统" },
@@ -103,9 +120,29 @@ export default function PipelinePage() {
         </p>
         <h1 className="text-3xl font-bold tracking-tight">AI 生成流水线</h1>
         <p className="mt-3 text-[15px] leading-7 text-muted-foreground">
-          下表为主路径步骤索引（含启动校验与可选意向引导）；checkpoint 恢复时会跳过已完成阶段。
-          页面代码由多路 <Code>page_implement_agent</Code> 并行落地；修改阶段仍走独立 Modify Agent。
+          默认 Chrome-first：先落真实全局壳，再并行写页内容，最后做链接精修。
+          下表为主路径步骤索引；checkpoint 恢复时会跳过已完成阶段。修改阶段仍走独立 Modify Agent。
         </p>
+
+        <section id="chrome-first" className="scroll-mt-24">
+          <H2>Chrome-first（默认）</H2>
+          <P>
+            旧路径曾是 chrome-deferred（先并行写页再后置挂壳），容易出现双重导航。
+            自 v1.17 / ADR-0005 起，默认所有权顺序为：
+          </P>
+          <Pre>{`Plan(chromeForm + sharedContracts)
+  → design tokens
+  → architect_scaffold_agent   // 真实 layout + components/chrome/**
+  → shared contract stubs
+  → page_implement_agent ×M    // 只填内容，可并行
+  → chrome_optimize_agent      // 仅 link / 锚点 polish
+  → images ∥ deps → typecheck → build → repair`}</Pre>
+          <Callout>
+            例外仅来自计划结果：截图复刻，或 Agent 显式选择{" "}
+            <Code>chromeForm ∈ {"{ page-local, none }"}</Code>。
+            代码与 prompt 不得用 productType 查表或页内 regex 强制 skip/mount。
+          </Callout>
+        </section>
 
         <section id="steps" className="scroll-mt-24">
           <H2>全部步骤</H2>
@@ -134,33 +171,30 @@ export default function PipelinePage() {
         <section id="parallel" className="scroll-mt-24">
           <H2>并行策略</H2>
           <P>当前编排里与耗时相关的并行阶段大致如下：</P>
-          <Pre>{`// 第一层：analyze + infer_design_intent（当前实现）
+          <Pre>{`// 可选：research Subagent（brief 含参考站 URL）
+const researchDigest = await runResearchSubagentIfNeeded(...);
+
+// 第一层：analyze + infer_design_intent
 await Promise.all([
-  stepAnalyzeProjectRequirement(userInput),
+  stepAnalyzeProjectRequirement({ ...userInput, researchDigest }),
   stepInferDesignIntent(userInput),
 ]);
 
-// 第二层：plan_project → generate_project_design_system（串行；截图复刻时中间插入 analyze_screenshot_layout）
+// 第二层：plan（含 chromeForm）→ design system（串行；截图复刻时可插 analyze_screenshot_layout）
 await stepPlanProject(...);
-// 可选：stepAnalyzeScreenshotLayout(...)
 await stepGenerateProjectDesignSystem(...);
 
-// 第三层：apply_project_design_tokens 必须单独先完成（写 globals.css，避免与 Agent 写文件竞态）
+// 第三层：apply_project_design_tokens 单独先完成（写 globals.css）
 
-// 第四层：Architect 先于 generatePages —— layout/chrome 落盘后再启动各 page_implement_agent，
-//        第一轮 prompt 中的 layout.tsx 快照与磁盘一致。
-await runArchitectStep({ blueprint, designSystem, ... });
-const { files, pendingImages } = await generatePages({
-  blueprint,
-  designSystem,
-  runtimeContext,
-  ...,
-});
+// 第四层：Chrome-first — Scaffold 真壳 →（shared stubs）→ 并行 Page Agents → Optimize polish
+await runArchitectScaffoldStep(...);
+await stubSharedContractsIfNeeded(...);
+const { files, pendingImages } = await generatePages(...); // 多页并行
+await runChromeOptimizeStep(...); // link polish only
 `}</Pre>
           <Callout>
-            Architect 仍是 chrome 的「单一拟定者」（layout + components/chrome/**）；Page Agent 不得修改这些路径。
-            Page Agent 在 Architect 完成之后启动，第一轮预读上下文中的 layout 与落盘版本对齐；墙钟时间上该段约等于 Architect
-            耗时加上与「最慢的 Page Agent」并行段之和。
+            Scaffold 是全局壳的「单一拟定者」；Optimize 只校正链接与锚点。
+            Page Agent 不得改 layout / chrome / globals，也不得在页内再造一套 Nav/Footer。
           </Callout>
         </section>
 
@@ -233,6 +267,12 @@ for (let repairRound = 0; repairRound <= maxRepairAttempts; repairRound++) {
             最多 5 轮修复。如果构建仍然失败，<Code>verificationStatus</Code> 设为
             <Code>failed</Code>，项目标记为包含未验证文件。
           </Callout>
+          <H3>Verifier refeed</H3>
+          <P>
+            修复轮次结束后可挂只读 <Code>verifier</Code> Subagent（报告不改代码）。
+            当 verdict 为 <Code>fail</Code> / <Code>partial</Code> 时，编排层可再调度一轮
+            refeed repair（有上限，避免无限循环）。见 ADR-0006。
+          </P>
         </section>
 
         <div className="mt-14 border-t border-border pt-8 flex justify-between">

@@ -97,8 +97,8 @@ export default function ArchitecturePage() {
         └── POST /api/.../preview   → 启动/刷新预览（后端随 OPEN_OX_PREVIEW_BACKEND 分支）
 
 服务端（Next.js API Routes）
-  ├── AI 流水线（generate_project / modify_project）
-  ├── Supabase（projects 表 + project-files / site-previews Storage）
+  ├── AI 流水线（generate Chrome-first · modify + Subagent）
+  ├── Supabase（projects + acquisition / credits / tags + Storage）
   └── 预览：OPEN_OX_PREVIEW_BACKEND env → local | storage | e2b`}</Pre>
           <Callout>
             <Code>projectId</Code> 在 AI 流水线启动之前就已创建。用户可以在生成过程中关闭浏览器，
@@ -162,8 +162,10 @@ export default function ArchitecturePage() {
                   ["语言", "TypeScript 严格模式", "AI 生成代码的类型安全保障"],
                   ["样式", "Tailwind CSS v4 + shadcn/ui", "CSS 变量驱动主题，AI 可直接操作"],
                   ["数据库", "Supabase (PostgreSQL)", "托管 Postgres + Storage + 实时订阅"],
+                  ["认证", "飞书 / Google / Linux.do OAuth", "按环境开关；/api/auth/config 暴露可用提供商"],
                   ["沙箱 / 预览", "local · Storage · E2B", "预览后端可选：本地 dev、静态导出+代理、或云端沙箱"],
                   ["LLM", "OpenAI-compatible API", "可切换 Gemini / GPT / 任意提供商"],
+                  ["Subagent", "ai/shared/subagent", "explore / verifier / research；嵌套深度 1（ADR-0006）"],
                 ].map(([layer, tech, why]) => (
                   <tr key={layer} className="hover:bg-muted/50">
                     <td className="px-4 py-2.5 font-mono text-[11px] text-muted-foreground/60">{layer}</td>

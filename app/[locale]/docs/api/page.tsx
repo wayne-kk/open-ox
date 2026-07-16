@@ -88,10 +88,15 @@ const SECTIONS: { title: string; rows: { method: Method; path: string; desc: str
     title: "会话与认证",
     rows: [
       { method: "GET", path: "/api/auth/user", desc: "当前登录用户（含 user_metadata）" },
-      { method: "GET", path: "/api/auth/config", desc: "当前启用的登录提供商（飞书 / Google）" },
+      { method: "GET", path: "/api/auth/config", desc: "当前启用的登录提供商（飞书 / Google / Linux.do）" },
       { method: "GET", path: "/api/auth/feishu/start", desc: "飞书 OAuth 授权跳转" },
       { method: "GET", path: "/api/auth/feishu/callback", desc: "飞书 OAuth 回调，建立会话" },
-      { method: "GET", path: "/api/auth/google/start", desc: "Google OAuth 授权跳转" },
+      { method: "GET", path: "/api/auth/google/start", desc: "Google OAuth 授权跳转（回调走 /auth/callback）" },
+      { method: "GET", path: "/api/auth/linuxdo/start", desc: "Linux.do OAuth 授权跳转" },
+      { method: "GET", path: "/api/auth/linuxdo/callback", desc: "Linux.do OAuth 回调，建立会话" },
+      { method: "GET", path: "/api/me/onboarding", desc: "读取新人引导偏好（tour / checklist）" },
+      { method: "PATCH", path: "/api/me/onboarding", desc: "更新新人引导偏好" },
+      { method: "POST", path: "/api/projects/[id]/vibe-directions", desc: "根据 brief 生成气质方向候选（Vibe）" },
     ],
   },
 ];
