@@ -14,6 +14,9 @@ import { revertFileTool } from "./system/revertFileTool";
 import { generateImageTool } from "./system/generateImageTool";
 import { readLintsTool } from "./system/readLintsTool";
 import { runScopedTscTool } from "./system/runScopedTscTool";
+import { referenceSiteDigestTool } from "./system/referenceSiteDigestTool";
+import { fetchReferencePageTool } from "./system/fetchReferencePageTool";
+import { webSearchTool } from "./system/webSearchTool";
 
 const toolDefinitions: Record<string, ChatCompletionTool> = {
   write_file: writeFileTool,
@@ -31,6 +34,9 @@ const toolDefinitions: Record<string, ChatCompletionTool> = {
   generate_image: generateImageTool,
   read_lints: readLintsTool,
   run_scoped_tsc: runScopedTscTool,
+  reference_site_digest: referenceSiteDigestTool,
+  fetch_reference_page: fetchReferencePageTool,
+  web_search: webSearchTool,
 };
 
 export function getSystemToolDefinitions(names: string[]): ChatCompletionTool[] {

@@ -21,9 +21,11 @@
  
 ### 可用工具（与生成配置一致）
 
-- **`reference_site_digest`**：用户 prompt 中有参考链接时**优先**调用：浏览器视口截图 + 可见文本 + 多模态摘要，再写入 `ProjectBlueprint` 可字段。
-- **`fetch_reference_page`**：digest 不可用或需对照时的 HTTP HTML 轻量摘要。
-- **`web_search`**：遇到陌生品牌/产品名等需要核实时再使用。
+- 若用户消息已含 **Reference research brief（research subagent 预消化）**：直接采信该 brief 写入 `ProjectBlueprint` 可字段；**不要**再请求参考站工具。
+- 否则可用：
+  - **`reference_site_digest`**：用户 prompt 中有参考链接时**优先**调用：浏览器视口截图 + 可见文本 + 多模态摘要，再写入 `ProjectBlueprint` 可字段。
+  - **`fetch_reference_page`**：digest 不可用或需对照时的 HTTP HTML 轻量摘要。
+  - **`web_search`**：遇到陌生品牌/产品名等需要核实时再使用。
 
 ## 输出格式（权威）
 

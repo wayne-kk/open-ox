@@ -33,6 +33,7 @@ export const LfSpanGen = {
   /** Wraps the full generate inner pipeline when a parent trace already exists. */
   fullPipeline: `${OX_SPAN_PREFIX}.gen.00_full_pipeline`,
   intentGuide: `${OX_SPAN_PREFIX}.gen.01_intent_guide`,
+  researchReferenceSites: `${OX_SPAN_PREFIX}.gen.01b_research_reference_sites`,
   analyzeBlueprintParallel: `${OX_SPAN_PREFIX}.gen.02_analyze_blueprint_parallel`,
   planAndDesignSystem: `${OX_SPAN_PREFIX}.gen.03_plan_and_design_system`,
   applyDesignTokens: `${OX_SPAN_PREFIX}.gen.04_apply_design_tokens`,

@@ -7,7 +7,7 @@ import {
   feishuSyntheticEmail,
   timingSafeEqualString,
 } from "@/lib/auth/feishu-oauth";
-import { provisionFeishuUserAndSignIn } from "@/lib/auth/feishu-supabase";
+import { provisionOAuthUserAndSignIn } from "@/lib/auth/feishu-supabase";
 import { getPublicOrigin } from "@/lib/auth/request-origin";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 
@@ -122,7 +122,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/auth?error=feishu_config", origin));
   }
 
-  const result = await provisionFeishuUserAndSignIn(admin, supabase, {
+  const result = await provisionOAuthUserAndSignIn(admin, supabase, {
     email,
     password,
     userMetadata,

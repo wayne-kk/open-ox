@@ -2,10 +2,18 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { startStudioHeartbeat, trackPageView } from "@/lib/analytics/client";
+import {
+  ensureAcquisitionCaptured,
+  startStudioHeartbeat,
+  trackPageView,
+} from "@/lib/analytics/client";
 
 export function AnalyticsProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+
+  useEffect(() => {
+    ensureAcquisitionCaptured();
+  }, []);
 
   useEffect(() => {
     trackPageView(pathname);

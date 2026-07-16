@@ -1,6 +1,6 @@
 import type { ToolResult } from "@/ai/tools/types";
 
-export const SUBAGENT_KINDS = ["explore", "verifier"] as const;
+export const SUBAGENT_KINDS = ["explore", "verifier", "research"] as const;
 export type SubagentKind = (typeof SUBAGENT_KINDS)[number];
 
 export function isSubagentKind(value: string): value is SubagentKind {

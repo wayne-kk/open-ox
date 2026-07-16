@@ -13,7 +13,8 @@ export type RunVerifierSubagentInput = {
 
 /**
  * Orchestrator-facing verifier: report-only, never edits.
- * Hosts call this after modify final verification or repair — do not auto-reopen edit loops.
+ * Hosts call this after modify final verification or repair.
+ * Generate build-repair may re-invoke repair from the verdict (code-scheduled); Modify stays report-only.
  */
 export async function runVerifierSubagent(
   input: RunVerifierSubagentInput

@@ -2,13 +2,12 @@
 
 import { Suspense, useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { useTranslations } from "next-intl";
 import {
   Trash2, Plus, FolderInput, Folder,
   AlertCircle, Loader2, Sparkles,
   AlertTriangle, MoreHorizontal, Globe2, FolderCog, Check, Pencil,
-  Repeat2, Clock, ArrowUpRight, Rocket, ImagePlus,
+  Repeat2, Clock, ArrowUpRight, Rocket, ImagePlus, Search, Tag, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { openOxVercelReconnectHref } from "@/lib/vercel/dashboardUrl";
@@ -48,6 +47,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+interface ProjectTag {
+  id: string;
+  name: string;
+  createdAt?: string;
+}
+
 interface ProjectMetadata {
   id: string;
   name: string;
@@ -65,6 +70,7 @@ interface ProjectMetadata {
   publishPreview?: boolean;
   allowRemix?: boolean;
   staticPreviewSyncedAt?: string | null;
+  tags?: ProjectTag[];
 }
 
 interface ProjectFolder {
@@ -129,6 +135,7 @@ function ProjectCardSkeleton() {
 
 function ProjectCard({
   project, onDelete, onClick, deleting, canDelete, onPublishChange, folders, onMove,
+  allTags, onTagsChange, onFilterByTag,
 }: {
   project: ProjectMetadata;
   onDelete: () => void;
@@ -138,6 +145,9 @@ function ProjectCard({
   onPublishChange: (projectId: string, state: ProjectPublishState) => void;
   folders: ProjectFolder[];
   onMove: (folderId: string | null) => void;
+  allTags: ProjectTag[];
+  onTagsChange: (projectId: string, tags: ProjectTag[]) => void;
+  onFilterByTag: (tagId: string) => void;
 }) {
   const isReady = project.status === "ready";
   const isFailed = project.status === "failed";
@@ -145,6 +155,8 @@ function ProjectCard({
   /** Studio 在生成中会轮询进度，列表应可进入 */
   const isClickable = isReady || isFailed || isGenerating;
   const [coverBusy, setCoverBusy] = useState(false);
+  const [tagBusy, setTagBusy] = useState(false);
+  const [newTagName, setNewTagName] = useState("");
   const [coverOverride, setCoverOverride] = useState<{
     status: "pending" | "ready" | "failed" | null;
     updatedAt: string | null;
@@ -240,6 +252,87 @@ function ProjectCard({
       return;
     }
     onPublishChange(project.id, result.state);
+  };
+
+  const projectTags = project.tags ?? [];
+  const projectTagIds = new Set(projectTags.map((t) => t.id));
+
+  const applyTagIds = async (nextIds: string[]) => {
+    if (tagBusy) return;
+    setTagBusy(true);
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(project.id)}/tags`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tagIds: nextIds }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        toast.error(body.error || "更新标签失败");
+        return;
+      }
+      const tags = (await res.json()) as ProjectTag[];
+      onTagsChange(project.id, tags);
+    } catch {
+      toast.error("更新标签失败");
+    } finally {
+      setTagBusy(false);
+    }
+  };
+
+  const toggleTag = (tagId: string) => {
+    const next = new Set(projectTagIds);
+    if (next.has(tagId)) next.delete(tagId);
+    else next.add(tagId);
+    void applyTagIds([...next]);
+  };
+
+  const createAndAddTag = async () => {
+    const name = newTagName.trim();
+    if (!name || tagBusy) return;
+    setTagBusy(true);
+    try {
+      let tag: ProjectTag | null = null;
+      const existing = allTags.find(
+        (t) => t.name.toLowerCase() === name.toLowerCase()
+      );
+      if (existing) {
+        tag = existing;
+      } else {
+        const createRes = await fetch("/api/tags", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        });
+        if (!createRes.ok) {
+          const body = (await createRes.json().catch(() => ({}))) as { error?: string };
+          toast.error(body.error || "创建标签失败");
+          return;
+        }
+        tag = (await createRes.json()) as ProjectTag;
+      }
+      if (!tag) return;
+      setNewTagName("");
+      const nextIds = projectTagIds.has(tag.id)
+        ? [...projectTagIds]
+        : [...projectTagIds, tag.id];
+      const res = await fetch(`/api/projects/${encodeURIComponent(project.id)}/tags`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tagIds: nextIds }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        toast.error(body.error || "更新标签失败");
+        return;
+      }
+      const tags = (await res.json()) as ProjectTag[];
+      onTagsChange(project.id, tags);
+    } catch {
+      toast.error("创建标签失败");
+    } finally {
+      setTagBusy(false);
+    }
   };
 
   const runDeploy = async () => {
@@ -641,6 +734,77 @@ function ProjectCard({
                     })}
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger
+                    className={cn(
+                      menuItemClass,
+                      "bg-transparent focus:bg-muted data-[state=open]:bg-muted data-[state=open]:!text-foreground data-[state=open]:!**:text-foreground data-open:bg-muted data-open:!text-foreground data-open:!**:text-foreground"
+                    )}
+                  >
+                    <Tag className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span className="flex-1 whitespace-nowrap text-left">标签</span>
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="max-h-72 w-56 overflow-y-auto overflow-x-hidden rounded-xl border border-border bg-popover p-1.5 text-foreground shadow-[var(--box-shadow-neon-lg)] ring-0">
+                    {allTags.length === 0 ? (
+                      <p className="px-2.5 py-2 text-[11px] text-muted-foreground">
+                        还没有标签，在下方新建
+                      </p>
+                    ) : (
+                      allTags.map((t) => {
+                        const current = projectTagIds.has(t.id);
+                        return (
+                          <DropdownMenuItem
+                            key={t.id}
+                            disabled={tagBusy}
+                            className={menuItemClass}
+                            onSelect={(e) => {
+                              e.preventDefault();
+                              toggleTag(t.id);
+                            }}
+                          >
+                            <span className="min-w-0 flex-1 truncate">{t.name}</span>
+                            {current ? (
+                              <Check className="h-3.5 w-3.5 shrink-0 text-primary" />
+                            ) : null}
+                          </DropdownMenuItem>
+                        );
+                      })
+                    )}
+                    <DropdownMenuSeparator className="mx-0 my-1 bg-muted" />
+                    <div
+                      className="flex items-center gap-1 px-1.5 py-1"
+                      onPointerDown={(e) => e.preventDefault()}
+                    >
+                      <input
+                        type="text"
+                        value={newTagName}
+                        maxLength={32}
+                        placeholder="新建标签"
+                        disabled={tagBusy}
+                        onChange={(e) => setNewTagName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            void createAndAddTag();
+                          }
+                        }}
+                        className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-[12px] text-foreground outline-none placeholder:text-muted-foreground focus:border-primary/40"
+                      />
+                      <button
+                        type="button"
+                        disabled={tagBusy || !newTagName.trim()}
+                        onClick={() => void createAndAddTag()}
+                        className="shrink-0 rounded-md border border-border px-2 py-1.5 text-[11px] text-muted-foreground transition-colors hover:border-primary/35 hover:text-primary disabled:opacity-40"
+                      >
+                        {tagBusy ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          "添加"
+                        )}
+                      </button>
+                    </div>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
                 <DropdownMenuSeparator className="mx-0 my-1 bg-muted" />
                 <DropdownMenuItem
                   variant="destructive"
@@ -663,6 +827,28 @@ function ProjectCard({
         ) : (
           <p className="text-[11px] text-foreground/30">暂无描述</p>
         )}
+
+        {projectTags.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {projectTags.slice(0, 4).map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onFilterByTag(t.id);
+                }}
+                className="inline-flex max-w-full items-center truncate rounded-md border border-border bg-muted/40 px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground transition-colors hover:border-primary/35 hover:text-primary"
+                title={`筛选标签：${t.name}`}
+              >
+                {t.name}
+              </button>
+            ))}
+            {projectTags.length > 4 ? (
+              <span className="text-[9px] text-muted-foreground/70">+{projectTags.length - 4}</span>
+            ) : null}
+          </div>
+        ) : null}
 
         {publishError ? (
           <p className="text-[10px] text-red-400/85">{publishError}</p>
@@ -1059,8 +1245,12 @@ function ProjectsPageContent() {
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const [projects, setProjects] = useState<ProjectMetadata[]>([]);
   const [folders, setFolders] = useState<ProjectFolder[]>([]);
+  const [tags, setTags] = useState<ProjectTag[]>([]);
   const [folderFilter, setFolderFilter] = useState<string>("all");
   const [publishedOnly, setPublishedOnly] = useState(false);
+  const [tagFilter, setTagFilter] = useState<string>("");
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [manageFoldersOpen, setManageFoldersOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [switchingFolder, setSwitchingFolder] = useState(false);
@@ -1128,46 +1318,80 @@ function ProjectsPageContent() {
     window.setTimeout(() => focusCreatePrompt(), 50);
   }, [markWorkspaceTourSeen, focusCreatePrompt]);
 
-  const applyFolderFilter = useCallback(
-    (next: string) => {
-      setPublishedOnly(false);
-      setFolderFilter(next);
-      const path =
-        next === "all"
-          ? "/dashboard?mine=1&folder=all"
-          : `/dashboard?mine=1&folder=${encodeURIComponent(next)}`;
-      router.replace(path, { scroll: false });
-    },
-    [router]
-  );
-
   useEffect(() => {
     const published =
       searchParams.get("published") === "1" || searchParams.get("published") === "true";
     setPublishedOnly((prev) => (prev === published ? prev : published));
     if (published) {
       setFolderFilter((prev) => (prev === "all" ? prev : "all"));
-      return;
+    } else {
+      const f = searchParams.get("folder");
+      const next = isRootFolderParam(f) ? "all" : f!;
+      setFolderFilter((prev) => (prev === next ? prev : next));
     }
-    const f = searchParams.get("folder");
-    const next = isRootFolderParam(f) ? "all" : f!;
-    setFolderFilter((prev) => (prev === next ? prev : next));
+    const tag = (searchParams.get("tag") || "").trim();
+    setTagFilter((prev) => (prev === tag ? prev : tag));
   }, [searchParams]);
 
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      const next = searchInput.trim();
+      setSearchQuery((prev) => (prev === next ? prev : next));
+    }, 1000);
+    return () => window.clearTimeout(handle);
+  }, [searchInput]);
+
   const folderQuery = isRootFolderParam(folderFilter) ? "all" : folderFilter;
-  const listScopeKey = publishedOnly ? "published" : folderQuery;
+  const listScopeKey = [
+    publishedOnly ? "published" : folderQuery,
+    searchQuery,
+    tagFilter,
+  ].join("|");
   const authUserId = authUser?.id ?? null;
+  const hasActiveQuery = Boolean(searchQuery || tagFilter);
 
   type GalleryPagePayload = {
     projects: ProjectMetadata[];
   };
+
+  const syncListQueryToUrl = useCallback(
+    (opts: { tag?: string; folder?: string; published?: boolean }) => {
+      const params = new URLSearchParams();
+      params.set("mine", "1");
+      const published = opts.published ?? publishedOnly;
+      if (published) {
+        params.set("published", "1");
+      } else {
+        const folder = opts.folder ?? folderQuery;
+        params.set("folder", folder);
+      }
+      const tag = (opts.tag ?? tagFilter).trim();
+      if (tag) params.set("tag", tag);
+      router.replace(`/dashboard?${params.toString()}`, { scroll: false });
+    },
+    [folderQuery, publishedOnly, router, tagFilter]
+  );
+
+  const applyFolderFilter = useCallback(
+    (next: string) => {
+      setPublishedOnly(false);
+      setFolderFilter(next);
+      syncListQueryToUrl({
+        folder: next === "all" ? "all" : next,
+        published: false,
+      });
+    },
+    [syncListQueryToUrl]
+  );
 
   const fetchProjectsPage = useCallback(
     async (
       offset: number,
       limit: number,
       folder: string,
-      published: boolean
+      published: boolean,
+      q: string,
+      tag: string
     ): Promise<GalleryPagePayload | null> => {
       try {
         const params = new URLSearchParams();
@@ -1179,6 +1403,8 @@ function ProjectsPageContent() {
         } else {
           params.set("folder", folder);
         }
+        if (q.trim()) params.set("q", q.trim());
+        if (tag.trim()) params.set("tag", tag.trim());
         const galleryUrl = `/api/projects/gallery?${params.toString()}`;
         const res = await fetchProjectGalleryDeduped(galleryUrl);
         if (res.status === 401) {
@@ -1201,25 +1427,46 @@ function ProjectsPageContent() {
     }
   }, []);
 
+  const loadTags = useCallback(async () => {
+    const res = await fetch("/api/tags");
+    if (res.ok) {
+      setTags((await res.json()) as ProjectTag[]);
+    }
+  }, []);
+
   const loadInitialProjects = useCallback(
-    async (scope: string, published: boolean, opts?: { soft?: boolean }) => {
-      const requestKey = `${scope}|0|${PAGE_SIZE}`;
+    async (opts?: { soft?: boolean }) => {
+      const requestKey = `${listScopeKey}|0|${PAGE_SIZE}`;
       galleryRequestKeyRef.current = requestKey;
       const soft = opts?.soft ?? loadedFolderRef.current !== null;
       if (soft) setSwitchingFolder(true);
       else setLoading(true);
 
-      const payload = await fetchProjectsPage(0, PAGE_SIZE, scope, published);
+      const payload = await fetchProjectsPage(
+        0,
+        PAGE_SIZE,
+        folderQuery,
+        publishedOnly,
+        searchQuery,
+        tagFilter
+      );
       if (galleryRequestKeyRef.current !== requestKey) return;
       if (payload) {
         setProjects(payload.projects);
         setHasMore(payload.projects.length === PAGE_SIZE);
-        loadedFolderRef.current = scope;
+        loadedFolderRef.current = listScopeKey;
       }
       setLoading(false);
       setSwitchingFolder(false);
     },
-    [fetchProjectsPage]
+    [
+      fetchProjectsPage,
+      folderQuery,
+      listScopeKey,
+      publishedOnly,
+      searchQuery,
+      tagFilter,
+    ]
   );
 
   const loadMoreProjects = useCallback(async () => {
@@ -1229,7 +1476,9 @@ function ProjectsPageContent() {
       projects.length,
       PAGE_SIZE,
       folderQuery,
-      publishedOnly
+      publishedOnly,
+      searchQuery,
+      tagFilter
     );
     if (payload) {
       setProjects((prev) => [...prev, ...payload.projects]);
@@ -1240,6 +1489,8 @@ function ProjectsPageContent() {
     fetchProjectsPage,
     folderQuery,
     publishedOnly,
+    searchQuery,
+    tagFilter,
     hasMore,
     loading,
     loadingMore,
@@ -1250,13 +1501,48 @@ function ProjectsPageContent() {
   const refreshLoadedProjects = useCallback(async () => {
     const loadedCount = projectsRef.current.length;
     if (loadedCount === 0) return;
-    const scope = loadedFolderRef.current ?? listScopeKey;
-    const payload = await fetchProjectsPage(0, loadedCount, scope, publishedOnly);
+    const payload = await fetchProjectsPage(
+      0,
+      loadedCount,
+      folderQuery,
+      publishedOnly,
+      searchQuery,
+      tagFilter
+    );
     if (payload) {
       setProjects(payload.projects);
       setHasMore(payload.projects.length === loadedCount);
     }
-  }, [fetchProjectsPage, listScopeKey, publishedOnly]);
+  }, [
+    fetchProjectsPage,
+    folderQuery,
+    publishedOnly,
+    searchQuery,
+    tagFilter,
+  ]);
+
+  const handleProjectTagsChange = useCallback(
+    (projectId: string, nextTags: ProjectTag[]) => {
+      setProjects((prev) =>
+        prev.map((p) => (p.id === projectId ? { ...p, tags: nextTags } : p))
+      );
+      setTags((prev) => {
+        const byId = new Map(prev.map((t) => [t.id, t]));
+        for (const t of nextTags) byId.set(t.id, t);
+        return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+      });
+    },
+    []
+  );
+
+  const applyTagFilter = useCallback(
+    (tagId: string) => {
+      const next = tagFilter === tagId ? "" : tagId;
+      setTagFilter(next);
+      syncListQueryToUrl({ tag: next });
+    },
+    [syncListQueryToUrl, tagFilter]
+  );
 
   useEffect(() => {
     if (!authReady) return;
@@ -1266,13 +1552,16 @@ function ProjectsPageContent() {
   }, [authReady, authUserId, router]);
 
   useEffect(() => {
-    if (authUserId) void loadFolders();
-  }, [authUserId, loadFolders]);
+    if (authUserId) {
+      void loadFolders();
+      void loadTags();
+    }
+  }, [authUserId, loadFolders, loadTags]);
 
   useEffect(() => {
     if (!authReady || !authUserId) return;
-    void loadInitialProjects(listScopeKey, publishedOnly);
-  }, [authReady, authUserId, listScopeKey, publishedOnly, loadInitialProjects]);
+    void loadInitialProjects();
+  }, [authReady, authUserId, listScopeKey, loadInitialProjects]);
 
   const hasGenerating = projects.some((p) => p.status === "generating");
 
@@ -1370,7 +1659,7 @@ function ProjectsPageContent() {
         if (folderFilter === id) {
           applyFolderFilter("all");
         } else {
-          await loadInitialProjects(listScopeKey, publishedOnly, { soft: true });
+          await loadInitialProjects({ soft: true });
         }
       }
     } finally {
@@ -1421,11 +1710,11 @@ function ProjectsPageContent() {
         return prev.map((p) =>
           p.id === projectId
             ? {
-                ...p,
-                publishPreview: state.publishPreview,
-                allowRemix: state.allowRemix,
-                staticPreviewSyncedAt: state.staticPreviewSyncedAt,
-              }
+              ...p,
+              publishPreview: state.publishPreview,
+              allowRemix: state.allowRemix,
+              staticPreviewSyncedAt: state.staticPreviewSyncedAt,
+            }
             : p
         );
       });
@@ -1434,21 +1723,28 @@ function ProjectsPageContent() {
   );
 
   const atRoot = !publishedOnly && isRootFolderParam(folderFilter);
+  const activeTagName = tagFilter
+    ? tags.find((t) => t.id === tagFilter)?.name
+    : null;
   const currentFolderTitle = publishedOnly
     ? "已发布"
     : atRoot
       ? "我的项目"
       : folders.find((f) => f.id === folderFilter)?.name ?? "文件夹";
-  const emptyTitle = publishedOnly
-    ? "还没有已发布的项目"
-    : atRoot
-      ? "还没有项目"
-      : "这个文件夹还是空的";
-  const emptyHint = publishedOnly
-    ? "在项目菜单里选择「发布到社区」后会出现在这里"
-    : atRoot
-      ? "描述你的想法，AI 帮你生成完整网站"
-      : "在上方创建，或从其他位置移动项目到这里";
+  const emptyTitle = hasActiveQuery
+    ? "没有匹配的项目"
+    : publishedOnly
+      ? "还没有已发布的项目"
+      : atRoot
+        ? "还没有项目"
+        : "这个文件夹还是空的";
+  const emptyHint = hasActiveQuery
+    ? "试试其他关键词，或清除搜索 / 标签筛选"
+    : publishedOnly
+      ? "在项目菜单里选择「发布到社区」后会出现在这里"
+      : atRoot
+        ? "描述你的想法，AI 帮你生成完整网站"
+        : "在上方创建，或从其他位置移动项目到这里";
 
   if (!authReady || !authUser) {
     return (
@@ -1518,22 +1814,88 @@ function ProjectsPageContent() {
               <div className="mx-auto h-40 w-full max-w-4xl animate-pulse rounded-2xl border border-border bg-card" />
             }
           >
-            <HeroPrompt showCreditsPromise={!loading && projects.length === 0} />
+            <HeroPrompt
+              showCreditsPromise={!loading && projects.length === 0 && !hasActiveQuery}
+            />
           </Suspense>
         </section>
 
-        <div className="mb-8 px-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="font-heading text-lg font-semibold tracking-tight text-foreground sm:text-xl">
-            {currentFolderTitle}
-          </h2>
-          <button
-            type="button"
-            onClick={() => setManageFoldersOpen(true)}
-            className="inline-flex items-center gap-1.5 self-start rounded-lg border border-border bg-muted/40 px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:border-primary/35 hover:bg-primary/10 hover:text-primary sm:self-auto"
-          >
-            <FolderCog className="h-3.5 w-3.5" />
-            管理文件夹
-          </button>
+        <div className="mb-8 px-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+            <h2 className="shrink-0 font-heading text-lg font-semibold tracking-tight text-foreground sm:text-xl">
+              {currentFolderTitle}
+            </h2>
+            <div className="flex w-full flex-col gap-2.5 sm:w-auto sm:flex-row sm:items-center sm:justify-end sm:gap-2.5">
+              <div className="relative w-full sm:w-64 md:w-72">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="search"
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  placeholder="搜索项目名称或描述…"
+                  className="h-9 w-full rounded-lg border border-border bg-muted/30 py-2 pl-9 pr-9 text-[13px] text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary/40 focus:bg-background"
+                  aria-label="搜索项目"
+                />
+                {searchInput ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchInput("");
+                      setSearchQuery("");
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    aria-label="清除搜索"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                onClick={() => setManageFoldersOpen(true)}
+                className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-border bg-muted/40 px-3 text-[12px] font-medium text-muted-foreground transition-colors hover:border-primary/35 hover:bg-primary/10 hover:text-primary"
+              >
+                <FolderCog className="h-3.5 w-3.5" />
+                管理文件夹
+              </button>
+            </div>
+          </div>
+          {tags.length > 0 ? (
+            <div className="mt-4 flex flex-wrap items-center gap-1.5 border-t border-border/60 pt-4">
+              <span className="mr-0.5 inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                <Tag className="h-3 w-3" />
+                标签
+              </span>
+              {tags.map((t) => {
+                const active = tagFilter === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => applyTagFilter(t.id)}
+                    className={cn(
+                      "rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors",
+                      active
+                        ? "border-primary/40 bg-primary/10 text-primary"
+                        : "border-border bg-muted/30 text-muted-foreground hover:border-primary/30 hover:text-foreground"
+                    )}
+                  >
+                    {t.name}
+                  </button>
+                );
+              })}
+              {tagFilter ? (
+                <button
+                  type="button"
+                  onClick={() => applyTagFilter(tagFilter)}
+                  className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-3 w-3" />
+                  清除{activeTagName ? `「${activeTagName}」` : "筛选"}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         {loading ? (
@@ -1555,7 +1917,20 @@ function ProjectsPageContent() {
               <h2 className="text-lg font-semibold text-foreground">{emptyTitle}</h2>
               <p className="text-sm text-foreground/65">{emptyHint}</p>
             </div>
-            {publishedOnly ? (
+            {hasActiveQuery ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchInput("");
+                  setSearchQuery("");
+                  setTagFilter("");
+                  syncListQueryToUrl({ tag: "" });
+                }}
+                className="defi-button px-6 py-3 text-sm font-semibold uppercase tracking-[0.14em]"
+              >
+                清除筛选
+              </button>
+            ) : publishedOnly ? (
               <button
                 type="button"
                 onClick={() => applyFolderFilter("all")}
@@ -1596,6 +1971,9 @@ function ProjectsPageContent() {
                   onPublishChange={handlePublishChange}
                   folders={folders}
                   onMove={(folderId) => void handleMoveProject(project.id, folderId)}
+                  allTags={tags}
+                  onTagsChange={handleProjectTagsChange}
+                  onFilterByTag={applyTagFilter}
                 />
               ))}
             </div>

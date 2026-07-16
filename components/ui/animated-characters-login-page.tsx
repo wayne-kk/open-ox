@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
-import { FeishuAuthBlock } from "@/components/auth/feishu-auth-block";
-import { GoogleAuthBlock } from "@/components/auth/google-auth-block";
+import { SocialAuthSection } from "@/components/auth/social-auth-section";
 import { AuthSessionRedirect } from "@/components/auth/auth-session-redirect";
 
 interface PupilProps {
@@ -178,6 +178,7 @@ const EyeBall = ({
 type AuthMode = "login" | "register";
 
 function AuthPage() {
+  const t = useTranslations("auth");
   const searchParams = useSearchParams();
   const [mode, setMode] = useState<AuthMode>(
     searchParams.get("mode") === "register" ? "register" : "login"
@@ -324,19 +325,18 @@ function AuthPage() {
 
     if (mode === "register") {
       if (password !== confirmPassword) {
-        setError("Passwords do not match.");
+        setError(t("errorPasswordMismatch"));
         setIsLoading(false);
         return;
       }
       if (password.length < 6) {
-        setError("Password must be at least 6 characters.");
+        setError(t("errorPasswordShort"));
         setIsLoading(false);
         return;
       }
       // Mock sign-up
-      window.alert(
-        `Account created for ${email}${name ? ` (${name})` : ""}. You can now sign in.`
-      );
+      const accountLabel = name ? `${email} (${name})` : email;
+      window.alert(t("alertAccountCreated", { email: accountLabel }));
       setMode("login");
       setConfirmPassword("");
       setPassword("");
@@ -345,9 +345,9 @@ function AuthPage() {
     }
 
     if (email === "erik@gmail.com" && password === "1234") {
-      window.alert("Login successful! Welcome, Erik!");
+      window.alert(t("alertLoginSuccess"));
     } else {
-      setError("Invalid email or password. Please try again.");
+      setError(t("errorInvalidCredentials"));
     }
 
     setIsLoading(false);
@@ -364,7 +364,7 @@ function AuthPage() {
         >
           <Link href="/">
             <ArrowLeft className="size-4" strokeWidth={1.75} />
-            返回首页
+            {t("backHome")}
           </Link>
         </Button>
       </div>
@@ -683,12 +683,10 @@ function AuthPage() {
         <div className="w-full max-w-[420px]">
           <div className="text-center mb-10">
             <h1 className="text-3xl font-bold tracking-tight mb-2">
-              {mode === "login" ? "Welcome back!" : "Create an account"}
+              {mode === "login" ? t("welcomeTitle") : t("registerTitle")}
             </h1>
             <p className="text-muted-foreground text-sm">
-              {mode === "login"
-                ? "Please enter your details"
-                : "Sign up to get started"}
+              {mode === "login" ? t("welcomeSubtitle") : t("registerSubtitle")}
             </p>
           </div>
 
@@ -696,12 +694,13 @@ function AuthPage() {
             {mode === "register" && (
               <div className="space-y-2">
                 <Label htmlFor="name" className="text-sm font-medium">
-                  Name <span className="text-muted-foreground font-normal">(optional)</span>
+                  {t("name")}{" "}
+                  <span className="text-muted-foreground font-normal">{t("nameOptional")}</span>
                 </Label>
                 <Input
                   id="name"
                   type="text"
-                  placeholder="Anna"
+                  placeholder={t("namePlaceholder")}
                   value={name}
                   autoComplete="name"
                   onChange={(e) => setName(e.target.value)}
@@ -714,12 +713,12 @@ function AuthPage() {
 
             <div className="space-y-2">
               <Label htmlFor="email" className="text-sm font-medium">
-                Email
+                {t("email")}
               </Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="anna@gmail.com"
+                placeholder={t("emailPlaceholder")}
                 value={email}
                 autoComplete="email"
                 onChange={(e) => setEmail(e.target.value)}
@@ -732,7 +731,7 @@ function AuthPage() {
 
             <div className="space-y-2">
               <Label htmlFor="password" className="text-sm font-medium">
-                Password
+                {t("password")}
               </Label>
               <div className="relative">
                 <Input
@@ -764,7 +763,7 @@ function AuthPage() {
             {mode === "register" && (
               <div className="space-y-2">
                 <Label htmlFor="confirm-password" className="text-sm font-medium">
-                  Confirm password
+                  {t("confirmPassword")}
                 </Label>
                 <div className="relative">
                   <Input
@@ -799,21 +798,21 @@ function AuthPage() {
                 <div className="flex items-center space-x-2">
                   <Checkbox id="remember" className="border-white"/>
                   <Label htmlFor="remember" className="text-sm font-normal cursor-pointer">
-                    Remember for 30 days
+                    {t("remember")}
                   </Label>
                 </div>
                 <a
                   href="#"
                   className="text-sm text-primary hover:underline font-medium"
                 >
-                  Forgot password?
+                  {t("forgotPassword")}
                 </a>
               </div>
             )}
 
             {mode === "register" && (
               <p className="text-xs text-muted-foreground">
-                By signing up you agree to our terms. This demo does not persist accounts.
+                {t("registerTerms")}
               </p>
             )}
 
@@ -831,11 +830,11 @@ function AuthPage() {
             >
               {isLoading
                 ? mode === "login"
-                  ? "Signing in..."
-                  : "Creating account..."
+                  ? t("signingIn")
+                  : t("creatingAccount")
                 : mode === "login"
-                  ? "Log in"
-                  : "Sign up"}
+                  ? t("logIn")
+                  : t("signUp")}
             </Button>
           </form>
 
@@ -844,17 +843,16 @@ function AuthPage() {
               <span className="w-full border-t border-border/60" />
             </div>
             <div className="relative flex justify-center text-xs uppercase tracking-wide">
-              <span className="bg-background px-2 text-muted-foreground">或</span>
+              <span className="bg-background px-2 text-muted-foreground">{t("or")}</span>
             </div>
           </div>
 
-          <GoogleAuthBlock />
-          <FeishuAuthBlock />
+          <SocialAuthSection />
 
           <div className="text-center text-sm text-muted-foreground mt-8">
             {mode === "login" ? (
               <>
-                Don&apos;t have an account?{" "}
+                {t("noAccount")}{" "}
                 <button
                   type="button"
                   className="text-foreground font-medium hover:underline"
@@ -863,12 +861,12 @@ function AuthPage() {
                     setError("");
                   }}
                 >
-                  Sign up
+                  {t("signUp")}
                 </button>
               </>
             ) : (
               <>
-                Already have an account?{" "}
+                {t("hasAccount")}{" "}
                 <button
                   type="button"
                   className="text-foreground font-medium hover:underline"
@@ -878,7 +876,7 @@ function AuthPage() {
                     setConfirmPassword("");
                   }}
                 >
-                  Log in
+                  {t("logIn")}
                 </button>
               </>
             )}

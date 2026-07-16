@@ -99,6 +99,15 @@ export function isFeishuOAuthConfigured(env?: EnvSource): boolean {
   );
 }
 
+export function isLinuxDoOAuthConfigured(env?: EnvSource): boolean {
+  return Boolean(
+    envString("LINUXDO_CLIENT_ID", env) &&
+      envString("LINUXDO_CLIENT_SECRET", env) &&
+      envString("LINUXDO_OAUTH_HMAC_SECRET", env) &&
+      envString("SUPABASE_SERVICE_ROLE_KEY", env)
+  );
+}
+
 export function isGoogleOAuthConfigured(env?: EnvSource): boolean {
   if (envFlagDisabled("GOOGLE_LOGIN_ENABLED", env)) return false;
   return Boolean(
@@ -140,6 +149,7 @@ export function isE2bConfigured(env?: EnvSource): boolean {
 export function envCapabilities(env?: EnvSource) {
   return {
     feishuLogin: isFeishuOAuthConfigured(env),
+    linuxdoLogin: isLinuxDoOAuthConfigured(env),
     googleLogin: isGoogleOAuthConfigured(env),
     vercelDeploy: isVercelDeployConfigured(env),
     stripeBilling: isStripeBillingConfigured(env),

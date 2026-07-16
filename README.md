@@ -250,7 +250,7 @@ pnpm check:env
 pnpm dev
 ```
 
-Optional features (Feishu / Google / Stripe / Vercel / E2B / Langfuse / Ark) are capability-gated — leave them unset and the matching UI stays off. See `.env.example` for the full matrix. Capability helpers live in `lib/env.ts`.
+Optional features (Feishu / Google / Linux.do / Stripe / Vercel / E2B / Langfuse / Ark) are capability-gated — leave them unset and the matching UI stays off. See `.env.example` for the full matrix. Capability helpers live in `lib/env.ts`.
 
 ---
 

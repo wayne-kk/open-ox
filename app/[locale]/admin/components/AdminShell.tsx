@@ -13,6 +13,7 @@ import {
   GitBranch,
   LayoutDashboard,
   ListOrdered,
+  Megaphone,
   Shield,
   Users,
 } from "lucide-react";
@@ -20,6 +21,7 @@ import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/admin/dashboard", label: "总览", icon: LayoutDashboard },
+  { href: "/admin/analytics/acquisition", label: "获客", icon: Megaphone },
   { href: "/admin/analytics/engagement", label: "停留", icon: Clock },
   { href: "/admin/analytics/activation", label: "激活漏斗", icon: Filter },
   { href: "/admin/analytics/retention", label: "留存", icon: GitBranch },

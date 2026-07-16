@@ -225,7 +225,7 @@ export default function DocsPage() {
       <div className="mt-10 border-t border-border pt-8">
         <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground/40 mb-4">// 技术栈</p>
         <div className="flex flex-wrap gap-2">
-          {["Next.js 16", "React 19", "TypeScript", "Tailwind CSS v4", "Supabase", "Preview: Storage / local / E2B", "OpenAI-compatible API", "飞书 / Google OAuth"].map((t) => (
+          {["Next.js 16", "React 19", "TypeScript", "Tailwind CSS v4", "Supabase", "Preview: Storage / local / E2B", "OpenAI-compatible API", "飞书 / Google / Linux.do OAuth"].map((t) => (
             <span key={t} className="rounded-full border border-border bg-muted/40 px-3 py-1 font-mono text-[11px] text-muted-foreground/70">
               {t}
             </span>

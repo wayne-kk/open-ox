@@ -16,6 +16,23 @@ import { asProjectBlueprint } from "../schema/normalizeBlueprint";
 import { detectBlueprintInputShape, warnOnBlueprintFallback } from "../schema/projectBlueprint.schema";
 import { getModelForStep } from "@/lib/config/models";
 
+function buildAnalyzeUserMessage(
+  userInput: string,
+  researchBrief?: string | null
+): string {
+  const brief = researchBrief?.trim();
+  if (!brief) return userInput;
+  return [
+    "## Reference research brief (pre-digested by research subagent)",
+    "Use this as primary evidence for reference-site signals. Do not re-fetch the same URLs unless the brief is empty or clearly insufficient.",
+    "",
+    brief,
+    "",
+    "## User request",
+    userInput,
+  ].join("\n");
+}
+
 export async function stepAnalyzeProjectRequirement(
   userInput: string,
   onToolCall?: (name: string, args: Record<string, unknown>, result: string) => void,
@@ -23,6 +40,8 @@ export async function stepAnalyzeProjectRequirement(
     referenceImageBase64?: string | null;
     /** When set with a reference image, selects screenshot handling rule (replicate vs extract). */
     screenshotGuardrailId?: string | null;
+    /** Pre-digested reference research; when present, research tools are omitted. */
+    researchBrief?: string | null;
   }
 ): Promise<{ blueprint: ProjectBlueprint; trace: StepTrace }> {
   const hasRef = Boolean(options?.referenceImageBase64?.trim());
@@ -38,23 +57,33 @@ export async function stepAnalyzeProjectRequirement(
     ...(screenshotGr ? [loadGuardrail(screenshotGr)] : []),
   ]);
 
-  const userContent = buildUserVisionContent(userInput, options?.referenceImageBase64 ?? null);
-  const traceUserLabel = visionTraceUserLabel(userInput, hasRef);
+  const researchBrief = options?.researchBrief?.trim() || "";
+  const analyzeUserMessage = buildAnalyzeUserMessage(userInput, researchBrief);
+  const userContent = buildUserVisionContent(
+    analyzeUserMessage,
+    options?.referenceImageBase64 ?? null
+  );
+  const traceUserLabel = visionTraceUserLabel(analyzeUserMessage, hasRef);
+  const hasResearchBrief = Boolean(researchBrief);
 
   const { content: raw, toolCalls } = await callLLMWithTools({
     systemPrompt,
-    userMessage: userInput,
+    userMessage: analyzeUserMessage,
     userContent,
-    tools: [referenceSiteDigestTool, fetchReferencePageTool, webSearchTool],
+    tools: hasResearchBrief
+      ? []
+      : [referenceSiteDigestTool, fetchReferencePageTool, webSearchTool],
     temperature: 0.5,
-    maxIterations: 8,
-    maxTokens: userInput.length > 2000 ? 16_384 : 8_192,
+    maxIterations: hasResearchBrief ? 1 : 8,
+    maxTokens: analyzeUserMessage.length > 2000 ? 16_384 : 8_192,
     model,
-    executeToolOverrides: {
-      fetch_reference_page: executeFetchReferencePage,
-      reference_site_digest: executeReferenceSiteDigest,
-      web_search: executeWebSearch,
-    },
+    executeToolOverrides: hasResearchBrief
+      ? undefined
+      : {
+          fetch_reference_page: executeFetchReferencePage,
+          reference_site_digest: executeReferenceSiteDigest,
+          web_search: executeWebSearch,
+        },
     langfusePhase: LfToolPhase.analyzeRequirement,
   });
 

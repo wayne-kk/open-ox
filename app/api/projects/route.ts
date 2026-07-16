@@ -3,12 +3,17 @@ import type { GenerationMode, ProjectFolderFilter } from "@/lib/projectManager";
 import { createProject, listProjectsSummary } from "@/lib/projectManager";
 import { getSessionUser } from "@/lib/auth/session";
 import { getUserDisplayName } from "@/lib/auth/display-name";
+import {
+  listTagsByProjectIds,
+  normalizeGallerySearchQuery,
+} from "@/lib/tagManager";
 
 /**
  * GET /api/projects — current user's Workspace projects only.
  * Query: offset, limit, folder (`all` | `uncategorized` | folder uuid),
- * published (`1` = only publish_preview, any folder; ignores folder).
- * `all` / `uncategorized` = root only (`folder_id` null).
+ * published (`1` = only publish_preview, any folder; ignores folder),
+ * q (name / prompt search), tag (tag uuid filter).
+ * `all` / `uncategorized` = root only (`folder_id` null), unless `q` is set.
  */
 export async function GET(req: Request) {
   try {
@@ -23,6 +28,9 @@ export async function GET(req: Request) {
     const folderParam = (searchParams.get("folder") || "all").trim() || "all";
     const publishedOnly =
       searchParams.get("published") === "1" || searchParams.get("published") === "true";
+    const searchQuery = normalizeGallerySearchQuery(searchParams.get("q"));
+    const tagIdRaw = (searchParams.get("tag") || "").trim();
+    const tagId = tagIdRaw || null;
     const offset = Number.isFinite(offsetParam) && offsetParam >= 0 ? Math.floor(offsetParam) : 0;
     const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.floor(limitParam) : undefined;
 
@@ -30,12 +38,22 @@ export async function GET(req: Request) {
     if (folderParam === "uncategorized") folder = "uncategorized";
     else if (folderParam !== "all") folder = folderParam;
 
-    const projects = await listProjectsSummary(session.supabase, {
+    const projectsRaw = await listProjectsSummary(session.supabase, {
       userId: session.user.id,
       ...(publishedOnly ? { publishedOnly: true } : { folder }),
+      ...(searchQuery ? { searchQuery } : {}),
+      ...(tagId ? { tagId } : {}),
       limit,
       offset,
     });
+    const tagsByProject = await listTagsByProjectIds(
+      session.supabase,
+      projectsRaw.map((p) => p.id)
+    );
+    const projects = projectsRaw.map((p) => ({
+      ...p,
+      tags: tagsByProject.get(p.id) ?? [],
+    }));
     return NextResponse.json(projects);
   } catch (err) {
     console.error("[GET /api/projects]", err);

@@ -1,5 +1,12 @@
 "use client";
 
+import {
+  acquisitionTouchToProperties,
+  captureClientAcquisition,
+  readOxAcqCookie,
+} from "@/lib/analytics/acquisition";
+import { AnalyticsEventName } from "@/lib/analytics/catalog";
+
 const ANON_KEY = "ox_anonymous_id";
 const SESSION_KEY = "ox_session_id";
 const FLUSH_INTERVAL_MS = 5_000;
@@ -64,6 +71,12 @@ function scheduleFlush() {
   }, FLUSH_INTERVAL_MS);
 }
 
+function acquisitionPropsForEvents(): Record<string, unknown> {
+  const touch = readOxAcqCookie();
+  if (!touch) return {};
+  return acquisitionTouchToProperties(touch) as Record<string, unknown>;
+}
+
 export function trackEvent(
   eventName: string,
   properties: Record<string, unknown> = {}
@@ -71,7 +84,10 @@ export function trackEvent(
   if (typeof window === "undefined") return;
   queue.push({
     eventName,
-    properties,
+    properties: {
+      ...acquisitionPropsForEvents(),
+      ...properties,
+    },
     clientTs: new Date().toISOString(),
     sessionId: getSessionId(),
     anonymousId: getAnonymousId(),
@@ -83,15 +99,28 @@ export function trackEvent(
   scheduleFlush();
 }
 
+/**
+ * First-touch capture on landing. Writes ox_acq once and emits acquisition_captured.
+ */
+export function ensureAcquisitionCaptured(): void {
+  if (typeof window === "undefined") return;
+  const touch = captureClientAcquisition({ anonymousId: getAnonymousId() });
+  if (!touch) return;
+  trackEvent(
+    AnalyticsEventName.acquisitionCaptured,
+    acquisitionTouchToProperties(touch) as Record<string, unknown>
+  );
+}
+
 export function trackPageView(path: string): void {
-  trackEvent("page_view", { path });
+  trackEvent(AnalyticsEventName.pageView, { path });
 }
 
 export function startStudioHeartbeat(path: string): () => void {
-  trackEvent("studio_enter", { path });
+  trackEvent(AnalyticsEventName.studioEnter, { path });
   const timer = setInterval(() => {
     if (document.visibilityState === "hidden") return;
-    trackEvent("studio_heartbeat", { path });
+    trackEvent(AnalyticsEventName.studioHeartbeat, { path });
   }, 30_000);
   return () => clearInterval(timer);
 }

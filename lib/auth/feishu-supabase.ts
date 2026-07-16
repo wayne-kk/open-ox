@@ -36,9 +36,10 @@ async function findUserIdByEmail(admin: SupabaseClient, email: string): Promise<
 }
 
 /**
- * Ensures auth.users has this Feishu user, then signs in with email/password on sessionClient (sets cookies on response).
+ * Ensures auth.users has this synthetic email/password user, then signs in on sessionClient (sets cookies).
+ * Used by custom OAuth providers (Feishu, Linux.do) that do not go through Supabase Auth providers.
  */
-export async function provisionFeishuUserAndSignIn(
+export async function provisionOAuthUserAndSignIn(
   admin: SupabaseClient,
   sessionClient: SupabaseClient,
   args: {

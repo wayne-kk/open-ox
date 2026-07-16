@@ -11,6 +11,10 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  studioCapabilityReasonLabel,
+  type CapabilityDecision,
+} from "@/lib/studio/capabilities";
 
 type DeployStatus = "queued" | "building" | "uploading" | "ready" | "error";
 
@@ -91,11 +95,18 @@ async function fetchDeployStatus(projectId: string): Promise<Omit<DeployState, "
   };
 }
 
-export function StudioDeployMenu({ projectId }: { projectId: string }) {
+export function StudioDeployMenu({
+  projectId,
+  gate,
+}: {
+  projectId: string;
+  gate: CapabilityDecision;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
+  const gateBlocked = !gate.allowed;
   const [busy, setBusy] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const autoDeployStarted = useRef(false);
@@ -139,6 +150,7 @@ export function StudioDeployMenu({ projectId }: { projectId: string }) {
   }, [projectId]);
 
   const startDeploy = useCallback(async () => {
+    if (!gate.allowed) return;
     setBusy(true);
     setState((s) => ({ ...s, lastError: null, status: "queued" }));
     try {
@@ -190,7 +202,7 @@ export function StudioDeployMenu({ projectId }: { projectId: string }) {
     } finally {
       setBusy(false);
     }
-  }, [projectId]);
+  }, [projectId, gate.allowed]);
 
   // Prefetch status so the menu is ready; also drives post-OAuth auto-deploy.
   useEffect(() => {
@@ -213,7 +225,7 @@ export function StudioDeployMenu({ projectId }: { projectId: string }) {
 
   // After OAuth: /studio/:id?deploy=1&vercel=connected → open menu + auto Deploy once.
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || gateBlocked) return;
     const wantDeploy = searchParams.get("deploy") === "1";
     if (!wantDeploy) return;
 
@@ -245,6 +257,7 @@ export function StudioDeployMenu({ projectId }: { projectId: string }) {
     });
   }, [
     hydrated,
+    gateBlocked,
     state.configured,
     state.connected,
     state.status,
@@ -257,14 +270,25 @@ export function StudioDeployMenu({ projectId }: { projectId: string }) {
 
   const inProgress = state.status != null && IN_PROGRESS.includes(state.status);
   const ready = state.status === "ready" && Boolean(state.productionUrl);
+  const gateTitle = gateBlocked
+    ? studioCapabilityReasonLabel(gate.reason)
+    : undefined;
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
+    <DropdownMenu
+      open={gateBlocked ? false : open}
+      onOpenChange={(next) => {
+        if (gateBlocked) return;
+        setOpen(next);
+      }}
+    >
       <DropdownMenuTrigger asChild>
         <button
           type="button"
+          disabled={gateBlocked}
+          title={gateTitle}
           className={cn(
-            "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 font-mono text-[10px] transition-colors",
+            "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 font-mono text-[10px] transition-colors disabled:cursor-not-allowed disabled:opacity-40",
             ready
               ? "border-emerald-400/35 bg-emerald-500/12 text-emerald-200 hover:bg-emerald-500/18"
               : inProgress
@@ -347,11 +371,12 @@ export function StudioDeployMenu({ projectId }: { projectId: string }) {
 
             <button
               type="button"
-              disabled={busy || inProgress}
+              disabled={gateBlocked || busy || inProgress}
               onClick={() => void startDeploy()}
+              title={gateTitle}
               className={cn(
                 "inline-flex w-full items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-[11px] font-medium transition-colors",
-                busy || inProgress
+                gateBlocked || busy || inProgress
                   ? "cursor-not-allowed border-border bg-muted text-muted-foreground"
                   : "border-primary/35 bg-primary/15 text-primary hover:bg-primary/22"
               )}

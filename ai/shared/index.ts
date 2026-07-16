@@ -22,6 +22,11 @@ export {
   createSpawnSubagentTool,
   runVerifierSubagent,
   formatVerifierReport,
+  runResearchSubagent,
+  formatResearchBriefForParent,
+  parseVerifierVerdict,
+  shouldRefeedRepairFromVerifier,
+  buildRepairRefeedBuildOutput,
   MAX_SUBAGENT_DEPTH,
   type SubagentKind,
   type SubagentSpec,
@@ -29,4 +34,6 @@ export {
   type SubagentResult,
   type SubagentHostContext,
   type RunVerifierSubagentInput,
+  type RunResearchSubagentInput,
+  type VerifierVerdict,
 } from "./subagent";

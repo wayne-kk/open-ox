@@ -12,6 +12,7 @@ import {
   isE2bConfigured,
   isFeishuOAuthConfigured,
   isGoogleOAuthConfigured,
+  isLinuxDoOAuthConfigured,
   isLangfuseConfigured,
   isStripeBillingConfigured,
   isVercelDeployConfigured,
@@ -80,6 +81,15 @@ describe("capability gates", () => {
     vi.stubEnv("FEISHU_OAUTH_HMAC_SECRET", "hmac");
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "srk");
     expect(isFeishuOAuthConfigured()).toBe(true);
+  });
+
+  it("gates Linux.do on client id, secret, hmac, service role", () => {
+    expect(isLinuxDoOAuthConfigured({})).toBe(false);
+    vi.stubEnv("LINUXDO_CLIENT_ID", "id");
+    vi.stubEnv("LINUXDO_CLIENT_SECRET", "secret");
+    vi.stubEnv("LINUXDO_OAUTH_HMAC_SECRET", "hmac-secret-16+");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "srk");
+    expect(isLinuxDoOAuthConfigured()).toBe(true);
   });
 
   it("gates Google on Supabase public env unless disabled", () => {

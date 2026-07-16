@@ -338,8 +338,14 @@ export interface RepairWrite {
   content: string;
 }
 
+export type RepairVerifierVerdict = "pass" | "fail" | "partial" | "unknown" | "skipped";
+
 export interface BuildRepairResult {
   success: boolean;
   output: string;
   touchedFiles: string[];
+  /** Present when a post-repair verifier subagent ran (or was skipped). */
+  verifierVerdict?: RepairVerifierVerdict;
+  /** Raw verifier report text (without flipping repair success). */
+  verifierReport?: string;
 }

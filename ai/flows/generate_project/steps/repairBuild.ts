@@ -8,6 +8,7 @@ import { getSystemToolDefinitions } from "../../../tools/systemToolCatalog";
 import { getModelForStep } from "@/lib/config/models";
 import {
   formatVerifierReport,
+  parseVerifierVerdict,
   runVerifierSubagent,
 } from "@/ai/shared/subagent";
 import type {
@@ -108,7 +109,9 @@ async function appendVerifierReport(
     enableSubagents?: boolean;
   }
 ): Promise<BuildRepairResult> {
-  if (!base.success || base.touchedFiles.length === 0) return base;
+  if (!base.success || base.touchedFiles.length === 0) {
+    return { ...base, verifierVerdict: "skipped" };
+  }
   const verifierResult = await runVerifierSubagent({
     enableSubagents: params.enableSubagents,
     claim: [
@@ -120,10 +123,18 @@ async function appendVerifierReport(
     extraContext: params.buildOutput.slice(0, 2500),
     model: getModelForStep("repair_build"),
   });
-  if (!verifierResult) return base;
+  if (!verifierResult) {
+    return { ...base, verifierVerdict: "skipped" };
+  }
+  const report = formatVerifierReport(verifierResult);
+  const verdict = verifierResult.ok
+    ? parseVerifierVerdict(verifierResult.summary)
+    : ("unknown" as const);
   return {
     ...base,
-    output: `${base.output}\n\n${formatVerifierReport(verifierResult)}`,
+    output: `${base.output}\n\n${report}`,
+    verifierVerdict: verdict,
+    verifierReport: report,
   };
 }
 

@@ -8,6 +8,10 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  studioCapabilityReasonLabel,
+  type CapabilityDecision,
+} from "@/lib/studio/capabilities";
 
 export type ProjectPublishState = {
   publishPreview: boolean;
@@ -249,12 +253,15 @@ export function ProjectPublishToggles({
 export function StudioPublishMenu({
   projectId,
   initial,
+  gate,
 }: {
   projectId: string;
   initial?: Partial<ProjectPublishState> | null;
+  gate: CapabilityDecision;
 }) {
   const [open, setOpen] = useState(false);
   const [published, setPublished] = useState(initial?.publishPreview === true);
+  const gateBlocked = !gate.allowed;
 
   useEffect(() => {
     if (initial?.publishPreview !== undefined) {
@@ -263,12 +270,24 @@ export function StudioPublishMenu({
   }, [initial?.publishPreview]);
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
+    <DropdownMenu
+      open={gateBlocked ? false : open}
+      onOpenChange={(next) => {
+        if (gateBlocked) return;
+        setOpen(next);
+      }}
+    >
       <DropdownMenuTrigger asChild>
         <button
           type="button"
+          disabled={gateBlocked}
+          title={
+            gateBlocked
+              ? studioCapabilityReasonLabel(gate.reason)
+              : undefined
+          }
           className={cn(
-            "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 font-mono text-[10px] transition-colors",
+            "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 font-mono text-[10px] transition-colors disabled:cursor-not-allowed disabled:opacity-40",
             published
               ? "border-primary/35 bg-primary/12 text-primary hover:bg-primary/18"
               : "border-border bg-muted/40 text-muted-foreground hover:border-border hover:bg-muted hover:text-foreground"

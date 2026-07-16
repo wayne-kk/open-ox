@@ -53,7 +53,54 @@
     "remixedFrom": "Remix 自 {title}"
   },
   "auth": {
-    "loading": "加载…"
+    "loading": "加载…",
+    "backHome": "返回首页",
+    "welcomeTitle": "欢迎回来！",
+    "welcomeSubtitle": "请输入登录信息",
+    "registerTitle": "创建账户",
+    "registerSubtitle": "注册后开始使用",
+    "name": "名称",
+    "nameOptional": "（可选）",
+    "namePlaceholder": "小明",
+    "email": "邮箱",
+    "emailPlaceholder": "anna@gmail.com",
+    "password": "密码",
+    "confirmPassword": "确认密码",
+    "remember": "记住 30 天",
+    "forgotPassword": "忘记密码？",
+    "registerTerms": "注册即表示同意相关条款。此演示不会持久化账户。",
+    "logIn": "登录",
+    "signUp": "注册",
+    "signingIn": "登录中…",
+    "creatingAccount": "创建账户中…",
+    "or": "或",
+    "noAccount": "还没有账户？",
+    "hasAccount": "已有账户？",
+    "errorPasswordMismatch": "两次输入的密码不一致。",
+    "errorPasswordShort": "密码至少需要 6 个字符。",
+    "errorInvalidCredentials": "邮箱或密码不正确，请重试。",
+    "alertAccountCreated": "已为 {email} 创建账户，现在可以登录。",
+    "alertLoginSuccess": "登录成功！欢迎，Erik！",
+    "oauth": {
+      "checking": "检查登录方式…",
+      "google": "使用 Google 登录",
+      "linuxdo": "使用 Linux.do 登录",
+      "feishu": "使用飞书登录",
+      "feishuInternal": "内部测试",
+      "errors": {
+        "config": "服务端未配置 Supabase。",
+        "auth": "第三方登录回调失败，请重试。",
+        "googleConfig": "Google 登录未启用。",
+        "googleStart": "无法发起 Google 授权，请稍后重试。",
+        "feishuDenied": "已取消飞书授权。",
+        "state": "登录状态失效，请重试。",
+        "feishuConfig": "飞书登录配置异常。",
+        "feishuFailed": "飞书登录失败，请稍后重试。",
+        "linuxdoDenied": "已取消 Linux.do 授权。",
+        "linuxdoConfig": "Linux.do 登录配置异常。",
+        "linuxdoFailed": "Linux.do 登录失败，请稍后重试。"
+      }
+    }
   },
   "seo": {
     "home": {

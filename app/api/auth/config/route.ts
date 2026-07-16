@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isFeishuOAuthConfigured } from "@/lib/auth/feishu-env";
 import { isGoogleOAuthConfigured } from "@/lib/auth/google-env";
+import { isLinuxDoOAuthConfigured } from "@/lib/auth/linuxdo-env";
 import { isVercelDeployConfigured } from "@/lib/vercel/env";
 
 /**
@@ -10,6 +11,7 @@ export async function GET() {
   return NextResponse.json({
     feishuLoginEnabled: isFeishuOAuthConfigured(),
     googleLoginEnabled: isGoogleOAuthConfigured(),
+    linuxdoLoginEnabled: isLinuxDoOAuthConfigured(),
     vercelDeployEnabled: isVercelDeployConfigured(),
   });
 }

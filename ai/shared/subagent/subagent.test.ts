@@ -26,10 +26,11 @@ afterEach(() => {
 });
 
 describe("subagent registry", () => {
-  it("registers builtin explore and verifier", () => {
-    expect(listSubagentKinds().sort()).toEqual(["explore", "verifier"]);
+  it("registers builtin explore, verifier, and research", () => {
+    expect(listSubagentKinds().sort()).toEqual(["explore", "research", "verifier"]);
     expect(getSubagentSpec("explore").readonly).toBe(true);
     expect(getSubagentSpec("verifier").toolNames).toContain("run_scoped_tsc");
+    expect(getSubagentSpec("research").toolNames).toContain("reference_site_digest");
   });
 
   it("allows replacing a kind via registerSubagent", () => {

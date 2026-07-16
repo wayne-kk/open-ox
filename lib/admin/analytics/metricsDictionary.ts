@@ -5,6 +5,16 @@ export const DAU_EVENT_NAMES = new Set(["page_view", "studio_heartbeat"]);
 
 export const TERMINAL_RUN_STATUSES = new Set(["succeeded", "failed"]);
 
+/**
+ * Acquisition channel for a registration (UTC day of auth.users.created_at):
+ * - utm: any first-touch utm_* on user_acquisition
+ * - referral: else external referrer
+ * - direct: else row present without marketing signal
+ * - unknown: no user_acquisition row
+ * See docs/admin-analytics-prd.md §4.0 and docs/adr/0007.
+ */
+export const ACQUISITION_CHANNELS = ["utm", "referral", "direct", "unknown"] as const;
+
 export function dateKeyFromIso(iso: string | null | undefined): string | null {
   if (!iso) return null;
   const date = new Date(iso);

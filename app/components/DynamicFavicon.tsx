@@ -2,6 +2,11 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import { useFavicon, type FaviconState } from "@/app/contexts/FaviconContext";
+import {
+  DYNAMIC_FAVICON_OWNED_ATTR,
+  isIconLink,
+  preferOwnedIconLink,
+} from "@/app/components/dynamicFaviconDom";
 
 // ── Brand palette ────────────────────────────────────────────────────────────
 const BRAND = {
@@ -17,25 +22,9 @@ const BRAND = {
 const SIZE = 64;
 const TARGET_FPS = 24;
 const FRAME_INTERVAL = 1000 / TARGET_FPS;
-const OWNED_ATTR = "data-dynamic-favicon";
 
 function isAnimatedState(state: FaviconState): boolean {
   return state !== "idle";
-}
-
-function isIconLink(node: Node): node is HTMLLinkElement {
-  if (!(node instanceof HTMLLinkElement)) return false;
-  const rel = (node.getAttribute("rel") || "").toLowerCase();
-  return rel.split(/\s+/).some((token) => token === "icon" || token === "shortcut");
-}
-
-/** Remove every favicon <link> except our owned one (Next metadata may re-inject). */
-function stripForeignIconLinks(owned: HTMLLinkElement) {
-  for (const link of document.querySelectorAll<HTMLLinkElement>(
-    'link[rel="icon"], link[rel="shortcut icon"], link[rel="shortcut"]',
-  )) {
-    if (link !== owned) link.remove();
-  }
 }
 
 /**
@@ -289,7 +278,7 @@ export function DynamicFavicon() {
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, [startLoop, stopLoop]);
 
-  // ── Bootstrap: exclusive icon link + strip Next metadata re-injects ──────
+  // ── Bootstrap: owned icon link + demote Next metadata re-injects ─────────
 
   useEffect(() => {
     const canvas = document.createElement("canvas");
@@ -300,11 +289,11 @@ export function DynamicFavicon() {
     const link = document.createElement("link");
     link.rel = "icon";
     link.type = "image/png";
-    link.setAttribute(OWNED_ATTR, "true");
+    link.setAttribute(DYNAMIC_FAVICON_OWNED_ATTR, "true");
     document.head.appendChild(link);
     linkRef.current = link;
 
-    stripForeignIconLinks(link);
+    preferOwnedIconLink(link);
 
     const observer = new MutationObserver((mutations) => {
       let sawForeign = false;
@@ -317,7 +306,7 @@ export function DynamicFavicon() {
         }
         if (sawForeign) break;
       }
-      if (sawForeign) stripForeignIconLinks(link);
+      if (sawForeign) preferOwnedIconLink(link);
     });
     observer.observe(document.head, { childList: true, subtree: true });
 
@@ -328,7 +317,7 @@ export function DynamicFavicon() {
     return () => {
       observer.disconnect();
       stopLoop();
-      link.remove();
+      if (link.isConnected) link.remove();
       linkRef.current = null;
       canvasRef.current = null;
       lastHrefRef.current = "";

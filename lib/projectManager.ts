@@ -8,6 +8,11 @@ import {
   ensureProjectNodeModules as ensureProjectNodeModulesImpl,
   type EnsureProjectNodeModulesResult,
 } from "@/lib/ensureProjectNodeModules";
+import {
+  listProjectIdsWithTag,
+  shouldSearchAcrossFolders,
+  type ProjectTagRow,
+} from "@/lib/tagManager";
 
 export const WORKSPACE_ROOT = process.cwd();
 
@@ -94,6 +99,8 @@ export interface ProjectMetadata {
   remixedFromOwnerUsername?: string | null;
   /** When static export last synced to site-previews storage. */
   staticPreviewSyncedAt?: string | null;
+  /** Owner workspace tags (populated by gallery / tag APIs). */
+  tags?: ProjectTagRow[];
 }
 
 interface ProjectRow {
@@ -244,8 +251,23 @@ export async function listProjectsSummary(
     communityListed?: boolean;
     /** Owner workspace: only projects with publish_preview on (any folder) */
     publishedOnly?: boolean;
+    /** Case-insensitive substring match on name + user_prompt (already sanitized). */
+    searchQuery?: string | null;
+    /** Owner workspace: only projects linked to this tag id. */
+    tagId?: string | null;
   }
 ): Promise<ProjectMetadata[]> {
+  const searchQuery =
+    typeof options.searchQuery === "string" && options.searchQuery.trim()
+      ? options.searchQuery.trim()
+      : null;
+
+  let taggedIds: string[] | null = null;
+  if (options.tagId) {
+    taggedIds = await listProjectIdsWithTag(db, options.tagId);
+    if (taggedIds.length === 0) return [];
+  }
+
   let query = db
     .from("projects")
     .select(
@@ -262,9 +284,18 @@ export async function listProjectsSummary(
     if (options.publishedOnly) {
       query = query.eq("publish_preview", true);
     } else {
-      // `all` and legacy `uncategorized` both mean root (folder_id IS NULL).
+      // `all` and legacy `uncategorized` both mean root (folder_id IS NULL),
+      // unless search/tag filter is active — then include every owned project.
       const folder = options.folder ?? "all";
-      if (folder === "all" || folder === "uncategorized") {
+      if (
+        shouldSearchAcrossFolders(
+          folder,
+          Boolean(searchQuery),
+          Boolean(options.tagId)
+        )
+      ) {
+        // no folder_id constraint
+      } else if (folder === "all" || folder === "uncategorized") {
         query = query.is("folder_id", null);
       } else {
         query = query.eq("folder_id", folder);
@@ -272,6 +303,15 @@ export async function listProjectsSummary(
     }
   } else if (options.filterOwnerUserId) {
     query = query.eq("user_id", options.filterOwnerUserId);
+  }
+
+  if (taggedIds) {
+    query = query.in("id", taggedIds);
+  }
+
+  if (searchQuery) {
+    const pattern = `%${searchQuery}%`;
+    query = query.or(`name.ilike.${pattern},user_prompt.ilike.${pattern}`);
   }
 
   if (

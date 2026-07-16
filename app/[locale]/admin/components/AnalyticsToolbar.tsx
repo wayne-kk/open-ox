@@ -7,7 +7,7 @@ type AnalyticsToolbarProps = {
   onDaysChange: (days: number) => void;
   excludeInternal: boolean;
   onExcludeInternalChange: (value: boolean) => void;
-  exportType: "funnel" | "retention" | "engagement";
+  exportType?: "funnel" | "retention" | "engagement";
   anchor?: "registration" | "firstReady";
   onAnchorChange?: (anchor: "registration" | "firstReady") => void;
 };
@@ -22,6 +22,7 @@ export function AnalyticsToolbar({
   onAnchorChange,
 }: AnalyticsToolbarProps) {
   async function handleExport() {
+    if (!exportType) return;
     const { from, to } = getDateRangeParams(days);
     const params = new URLSearchParams({
       type: exportType,
@@ -57,13 +58,15 @@ export function AnalyticsToolbar({
           <option value="firstReady">Cohort：首次 Ready 周</option>
         </select>
       ) : null}
-      <button
-        type="button"
-        onClick={() => void handleExport()}
-        className="rounded-md border border-primary/35 bg-primary/15 px-3 py-1.5 text-xs text-primary"
-      >
-        导出 CSV
-      </button>
+      {exportType ? (
+        <button
+          type="button"
+          onClick={() => void handleExport()}
+          className="rounded-md border border-primary/35 bg-primary/15 px-3 py-1.5 text-xs text-primary"
+        >
+          导出 CSV
+        </button>
+      ) : null}
     </div>
   );
 }

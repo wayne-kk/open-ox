@@ -53,7 +53,54 @@
     "remixedFrom": "Remixed from {title}"
   },
   "auth": {
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "backHome": "Back to home",
+    "welcomeTitle": "Welcome back!",
+    "welcomeSubtitle": "Please enter your details",
+    "registerTitle": "Create an account",
+    "registerSubtitle": "Sign up to get started",
+    "name": "Name",
+    "nameOptional": "(optional)",
+    "namePlaceholder": "Anna",
+    "email": "Email",
+    "emailPlaceholder": "anna@gmail.com",
+    "password": "Password",
+    "confirmPassword": "Confirm password",
+    "remember": "Remember for 30 days",
+    "forgotPassword": "Forgot password?",
+    "registerTerms": "By signing up you agree to our terms. This demo does not persist accounts.",
+    "logIn": "Log in",
+    "signUp": "Sign up",
+    "signingIn": "Signing in…",
+    "creatingAccount": "Creating account…",
+    "or": "or",
+    "noAccount": "Don't have an account?",
+    "hasAccount": "Already have an account?",
+    "errorPasswordMismatch": "Passwords do not match.",
+    "errorPasswordShort": "Password must be at least 6 characters.",
+    "errorInvalidCredentials": "Invalid email or password. Please try again.",
+    "alertAccountCreated": "Account created for {email}. You can now sign in.",
+    "alertLoginSuccess": "Login successful! Welcome, Erik!",
+    "oauth": {
+      "checking": "Checking sign-in options…",
+      "google": "Continue with Google",
+      "linuxdo": "Continue with Linux.do",
+      "feishu": "Continue with Feishu",
+      "feishuInternal": "Internal",
+      "errors": {
+        "config": "Supabase is not configured on the server.",
+        "auth": "Third-party sign-in failed. Please try again.",
+        "googleConfig": "Google sign-in is not enabled.",
+        "googleStart": "Could not start Google authorization. Please try again.",
+        "feishuDenied": "Feishu authorization was cancelled.",
+        "state": "Sign-in session expired. Please try again.",
+        "feishuConfig": "Feishu sign-in is misconfigured.",
+        "feishuFailed": "Feishu sign-in failed. Please try again.",
+        "linuxdoDenied": "Linux.do authorization was cancelled.",
+        "linuxdoConfig": "Linux.do sign-in is misconfigured.",
+        "linuxdoFailed": "Linux.do sign-in failed. Please try again."
+      }
+    }
   },
   "seo": {
     "home": {

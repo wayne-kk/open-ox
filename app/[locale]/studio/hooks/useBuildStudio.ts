@@ -19,6 +19,11 @@ import {
   buildVibeSelectUserMessage,
   type VibeDirection,
 } from "@/lib/studio/vibeDirections";
+import {
+  evaluateStudioCapabilities,
+  type StudioCapabilities,
+  type StudioProjectLifecycleStatus,
+} from "@/lib/studio/capabilities";
 
 function trackPreviewOpen(projectId: string) {
   trackEvent("preview_open", { projectId, path: "/studio" });
@@ -29,6 +34,31 @@ function projectNameFromBuildResult(result: {
 }): string | null {
   const title = result.blueprint?.brief?.projectTitle;
   return typeof title === "string" && title.trim() ? title.trim() : null;
+}
+
+function lifecycleFromBuildResult(result: AiResponse): StudioProjectLifecycleStatus {
+  const turn = result.intentAgent;
+  if (
+    turn &&
+    turn.status !== "commit_generate" &&
+    !(result.buildSteps?.length)
+  ) {
+    return "awaiting_input";
+  }
+  if (result.verificationStatus || (result.generatedFiles?.length ?? 0) > 0 || result.blueprint) {
+    return "ready";
+  }
+  if (result.error) return "failed";
+  return "ready";
+}
+
+function hasOperableArtifactFromResponse(response: AiResponse | null): boolean {
+  if (!response) return false;
+  return Boolean(
+    response.verificationStatus ||
+      (response.generatedFiles?.length ?? 0) > 0 ||
+      (response.blueprint && (response.buildSteps?.length ?? 0) > 0)
+  );
 }
 
 export type RightPanel = "topology" | "preview" | "code";
@@ -201,6 +231,11 @@ export interface BuildStudioState {
   iframeRef: React.RefObject<HTMLIFrameElement | null>;
   /** Bumped when modify writes workspace files — CODE panel refreshes clean tabs. */
   codeWorkspaceEpoch: number;
+
+  /** Persisted project lifecycle (awaiting_input | generating | ready | failed). */
+  projectStatus: StudioProjectLifecycleStatus | null;
+  /** Studio interaction gate (code/preview/deploy/…). */
+  capabilities: StudioCapabilities;
 }
 
 const AUTO_PREVIEW_STORAGE_KEY = "open-ox:studio:autoPreviewAfterBuild";
@@ -404,6 +439,8 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
   const [projectLoading, setProjectLoading] = useState<boolean>(!!initialProjectId);
   const [projectNotFound, setProjectNotFound] = useState(false);
   const [projectName, setProjectName] = useState<string | null>(null);
+  const [projectStatus, setProjectStatus] = useState<StudioProjectLifecycleStatus | null>(null);
+  const [hasStaticPreview, setHasStaticPreview] = useState(false);
   const [remixedFromTitle, setRemixedFromTitle] = useState<string | null>(null);
   const [remixedFromOwnerUsername, setRemixedFromOwnerUsername] = useState<string | null>(null);
   const [confirmedVibe, setConfirmedVibe] = useState<VibeDirection | null>(null);
@@ -563,6 +600,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     buildSteps?: unknown[]; generatedFiles?: string[]; blueprint?: unknown;
     verificationStatus?: string; logDirectory?: string; error?: string;
     totalDuration?: number;
+    staticPreviewSyncedAt?: string | null;
     remixedFromTitle?: string | null;
     remixedFromOwnerUsername?: string | null;
     modificationHistory?: Array<{
@@ -626,6 +664,19 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     setLastRunInput(project.userPrompt ?? null);
     setProjectName(
       typeof project.name === "string" && project.name.trim() ? project.name.trim() : null
+    );
+    const lifecycle = project.status as StudioProjectLifecycleStatus;
+    if (
+      lifecycle === "awaiting_input" ||
+      lifecycle === "generating" ||
+      lifecycle === "ready" ||
+      lifecycle === "failed"
+    ) {
+      setProjectStatus(lifecycle);
+    }
+    setHasStaticPreview(
+      typeof project.staticPreviewSyncedAt === "string" &&
+        project.staticPreviewSyncedAt.trim().length > 0
     );
     setRemixedFromTitle(
       typeof project.remixedFromTitle === "string" && project.remixedFromTitle.trim()
@@ -743,6 +794,8 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       setResponse(null);
       setLastRunInput(null);
       setProjectName(null);
+      setProjectStatus(null);
+      setHasStaticPreview(false);
       setIntentAgent(null);
       setConversationMessages([]);
       setConfirmedVibe(null);
@@ -930,6 +983,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     setStartedAt(t0);
     setElapsed(0);
     setLoading(true);
+    setProjectStatus("generating");
     intentProgressLogRef.current = [];
     setIntentProgressLog([]);
     // Preserve existing buildSteps to avoid topology flash.
@@ -1072,6 +1126,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
             finishBuildLiveState(result.buildTotalDuration);
             setIntentAgent(turn);
             setMergedBrief(result.mergedBriefFromAgent ?? result.mergedBrief ?? null);
+            setProjectStatus(lifecycleFromBuildResult(result));
             // done payload carries the authoritative final buildSteps from the server.
             // This replaces whatever the SSE stream built up, ensuring consistency.
             setResponse((prev) => ({ ...result, buildSteps: result.buildSteps ?? prev?.buildSteps }));
@@ -1098,6 +1153,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
             if (msg === "已取消" || msg === "Aborted") {
               return;
             }
+            setProjectStatus("failed");
             appendConversationMessage({ role: "assistant", content: `流程出错：${msg}` });
             setResponse({ content: "", error: msg });
           },
@@ -1167,6 +1223,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     setStartedAt(t0);
     setElapsed(0);
     setLoading(true);
+    setProjectStatus("generating");
     // Clear steps for retry — user explicitly wants a fresh run
     setResponse((prev) => ({
       content: "",
@@ -1188,6 +1245,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
           onStep: handleStepEvent,
           onDone: (result) => {
             finishBuildLiveState(result.buildTotalDuration);
+            setProjectStatus(lifecycleFromBuildResult(result));
             setResponse((prev) => ({ ...result, buildSteps: result.buildSteps ?? prev?.buildSteps }));
             const titled = projectNameFromBuildResult(result);
             if (titled) setProjectName(titled);
@@ -1209,6 +1267,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
             if (msg === "已取消" || msg === "Aborted") {
               return;
             }
+            setProjectStatus("failed");
             setResponse({ content: "", error: msg });
           },
         },
@@ -1275,6 +1334,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     setStartedAt(t0);
     setElapsed(0);
     setLoading(true);
+    setProjectStatus("generating");
     setGenerationSeemsStuck(false);
     setResponse((prev) =>
       prev
@@ -1299,6 +1359,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
           onStep: handleStepEvent,
           onDone: (result) => {
             finishBuildLiveState(result.buildTotalDuration);
+            setProjectStatus(lifecycleFromBuildResult(result));
             setResponse((prev) => ({ ...result, buildSteps: result.buildSteps ?? prev?.buildSteps }));
             const titled = projectNameFromBuildResult(result);
             if (titled) setProjectName(titled);
@@ -1320,6 +1381,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
             if (msg === "已取消" || msg === "Aborted") {
               return;
             }
+            setProjectStatus("failed");
             appendConversationMessage({ role: "assistant", content: `流程出错：${msg}` });
             setResponse({ content: "", error: msg });
           },
@@ -2148,6 +2210,25 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       ? response.buildSteps[0].timestamp - response.buildSteps[0].duration
       : startedAt ?? 0;
 
+  const effectiveProjectStatus: StudioProjectLifecycleStatus | null =
+    projectStatus ?? (loading ? "generating" : null);
+
+  const capabilities = evaluateStudioCapabilities(
+    !projectId || projectNotFound
+      ? null
+      : {
+          status: effectiveProjectStatus ?? "awaiting_input",
+          verificationStatus:
+            response?.verificationStatus === "passed" ||
+            response?.verificationStatus === "failed"
+              ? response.verificationStatus
+              : undefined,
+          hydration: projectLoading ? "loading" : "ready",
+          hasStaticPreview,
+          hasOperableArtifact: hasOperableArtifactFromResponse(response),
+        }
+  );
+
   return {
     input, setInput, loading, clearing, response, intentAgent, mergedBrief, conversationMessages, intentProgressLog, userInputScrollNonce, lastRunInput, elapsed, flowStart,
     handleRun, handleConfirmVibe, handleSkipVibe, handleClear, handleRetry,
@@ -2195,5 +2276,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     skipBoardTask,
     iframeRef,
     codeWorkspaceEpoch,
+    projectStatus: effectiveProjectStatus,
+    capabilities,
   };
 }

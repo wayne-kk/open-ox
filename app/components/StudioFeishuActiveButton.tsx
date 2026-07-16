@@ -5,6 +5,10 @@ import { useSearchParams } from "next/navigation";
 import { MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import {
+  studioCapabilityReasonLabel,
+  type CapabilityDecision,
+} from "@/lib/studio/capabilities";
 
 type ActiveState = {
   projectId: string | null;
@@ -62,16 +66,23 @@ async function launchFeishu(projectId: string): Promise<{
 /**
  * Studio one-shot: bind identity + set current project + open Feishu bot.
  */
-export function StudioFeishuActiveButton({ projectId }: { projectId: string }) {
+export function StudioFeishuActiveButton({
+  projectId,
+  gate,
+}: {
+  projectId: string;
+  gate: CapabilityDecision;
+}) {
   const searchParams = useSearchParams();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
   const isActive = activeId === projectId;
+  const gateBlocked = !gate.allowed;
 
   const runLaunch = useCallback(async () => {
-    if (busy) return;
+    if (busy || !gate.allowed) return;
     setBusy(true);
     try {
       const result = await launchFeishu(projectId);
@@ -98,7 +109,7 @@ export function StudioFeishuActiveButton({ projectId }: { projectId: string }) {
     } finally {
       setBusy(false);
     }
-  }, [busy, projectId]);
+  }, [busy, projectId, gate.allowed]);
 
   useEffect(() => {
     let cancelled = false;
@@ -116,7 +127,7 @@ export function StudioFeishuActiveButton({ projectId }: { projectId: string }) {
 
   // After Feishu OAuth return (?feishu_launch=1), auto-open bot once.
   useEffect(() => {
-    if (!loaded) return;
+    if (!loaded || gateBlocked) return;
     if (searchParams.get("feishu_launch") !== "1") return;
     const url = new URL(window.location.href);
     url.searchParams.delete("feishu_launch");
@@ -124,7 +135,7 @@ export function StudioFeishuActiveButton({ projectId }: { projectId: string }) {
     void runLaunch();
     // intentionally once when loaded + query present
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loaded, searchParams]);
+  }, [loaded, gateBlocked, searchParams]);
 
   if (!loaded) return null;
 
@@ -132,11 +143,15 @@ export function StudioFeishuActiveButton({ projectId }: { projectId: string }) {
     <button
       type="button"
       onClick={() => void runLaunch()}
-      disabled={busy}
-      title="绑定当前项目并用飞书改站（自动打开机器人）"
+      disabled={busy || gateBlocked}
+      title={
+        gateBlocked
+          ? studioCapabilityReasonLabel(gate.reason)
+          : "绑定当前项目并用飞书改站（自动打开机器人）"
+      }
       aria-label="在飞书中改"
       className={cn(
-        "flex h-7 items-center gap-1.5 rounded-md border px-2 font-mono text-[10px] tracking-[0.08em] transition-colors",
+        "flex h-7 items-center gap-1.5 rounded-md border px-2 font-mono text-[10px] tracking-[0.08em] transition-colors disabled:cursor-not-allowed disabled:opacity-40",
         isActive
           ? "border-primary/35 bg-primary/10 text-primary"
           : "border-border bg-muted/40 text-muted-foreground/70 hover:border-border hover:text-foreground",

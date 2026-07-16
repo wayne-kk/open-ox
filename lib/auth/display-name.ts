@@ -1,10 +1,13 @@
 import type { User } from "@supabase/supabase-js";
 
-const FEISHU_PLACEHOLDER_DOMAIN = "@feishu.open-ox.local";
+const PLACEHOLDER_EMAIL_DOMAINS = [
+  "@feishu.open-ox.local",
+  "@linuxdo.open-ox.local",
+] as const;
 
 export function isPlaceholderAccountEmail(email: string | null | undefined): boolean {
   if (!email) return false;
-  return email.endsWith(FEISHU_PLACEHOLDER_DOMAIN);
+  return PLACEHOLDER_EMAIL_DOMAINS.some((domain) => email.endsWith(domain));
 }
 
 /**

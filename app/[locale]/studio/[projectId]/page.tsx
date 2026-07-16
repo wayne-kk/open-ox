@@ -40,6 +40,15 @@ import {
   afterNextPaint,
   previewDocumentLooksPainted,
 } from "@/app/[locale]/studio/lib/previewIframePainted";
+import {
+  studioCapabilityReasonLabel,
+  type CapabilityDecision,
+} from "@/lib/studio/capabilities";
+
+function capabilityTitle(decision: CapabilityDecision, whenAllowed?: string): string | undefined {
+  if (decision.allowed) return whenAllowed;
+  return studioCapabilityReasonLabel(decision.reason);
+}
 
 function formatMs(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
@@ -57,6 +66,7 @@ function StudioInner({ projectId }: { projectId: string }) {
     autoPreviewAfterBuild, setAutoPreviewAfterBuild,
     bumpPreviewAfterDirectPatch,
     remixedFromTitle, remixedFromOwnerUsername,
+    capabilities,
   } = studio;
   const justRemixed = searchParams.get("remixed") === "1";
   const [lineageDismissed, setLineageDismissed] = useState(false);
@@ -66,6 +76,22 @@ function StudioInner({ projectId }: { projectId: string }) {
     if (!projectNotFound) return;
     router.replace("/dashboard");
   }, [projectNotFound, router]);
+
+  // Leave Code/Preview when the capability gate closes (e.g. verification failed).
+  useEffect(() => {
+    if (rightPanel === "code" && !capabilities.code.allowed) {
+      setRightPanel("topology");
+      return;
+    }
+    if (rightPanel === "preview" && !capabilities.preview.allowed) {
+      setRightPanel("topology");
+    }
+  }, [
+    rightPanel,
+    capabilities.code.allowed,
+    capabilities.preview.allowed,
+    setRightPanel,
+  ]);
 
   // Sync AI processing state → dynamic favicon
   useFaviconSync({
@@ -81,14 +107,8 @@ function StudioInner({ projectId }: { projectId: string }) {
     pipelineSteps.length === 0 &&
     !loading
   );
-  const canPreview = !!projectId && !loading;
-  const canCode = !!projectId && !projectLoading;
   const [conversationCollapsed, setConversationCollapsed] = useState(false);
-  const hasGeneratedProject = Boolean(
-    response?.verificationStatus ||
-    (response?.generatedFiles?.length ?? 0) > 0 ||
-    (response?.blueprint && (response?.buildSteps?.length ?? 0) > 0)
-  );
+  const hasGeneratedProject = capabilities.history.allowed;
   const [coverCaptureBusy, setCoverCaptureBusy] = useState(false);
   const previewContainerRef = useRef<HTMLDivElement | null>(null);
   const [coverCaptureHint, setCoverCaptureHint] = useState<string | null>(null);
@@ -254,7 +274,7 @@ function StudioInner({ projectId }: { projectId: string }) {
     if (
       !onboarding.prefs.designModeDone &&
       studio.directEditCapable &&
-      hasGeneratedProject &&
+      capabilities.preview.allowed &&
       !designMode.active &&
       !designAutoEnabledRef.current
     ) {
@@ -268,7 +288,7 @@ function StudioInner({ projectId }: { projectId: string }) {
     onboarding.prefs.designModeDone,
     onboarding.patch,
     studio.directEditCapable,
-    hasGeneratedProject,
+    capabilities.preview.allowed,
     designMode.active,
     designMode.setActive,
   ]);
@@ -668,7 +688,7 @@ function StudioInner({ projectId }: { projectId: string }) {
 
                 {/* Right: history + live + actions */}
                 <div className="flex items-center gap-2 shrink-0">
-                  {hasGeneratedProject ? (
+                  {capabilities.history.allowed ? (
                     <button
                       type="button"
                       onClick={() => {
@@ -694,11 +714,21 @@ function StudioInner({ projectId }: { projectId: string }) {
                   ) : null}
                   {projectId ? (
                     <Suspense fallback={null}>
-                      <StudioFeishuActiveButton projectId={projectId} />
+                      <StudioFeishuActiveButton
+                        projectId={projectId}
+                        gate={capabilities.feishuEdit}
+                      />
                     </Suspense>
                   ) : null}
-                  {projectId ? <StudioDeployMenu projectId={projectId} /> : null}
-                  {projectId ? <StudioPublishMenu projectId={projectId} /> : null}
+                  {projectId ? (
+                    <StudioDeployMenu projectId={projectId} gate={capabilities.deploy} />
+                  ) : null}
+                  {projectId ? (
+                    <StudioPublishMenu
+                      projectId={projectId}
+                      gate={capabilities.publishPreview}
+                    />
+                  ) : null}
                   <Link
                     href="/dashboard"
                     className="hidden sm:flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-3 py-1.5 font-mono text-[10px] text-muted-foreground transition-colors hover:border-border hover:text-foreground"
@@ -798,7 +828,8 @@ function StudioInner({ projectId }: { projectId: string }) {
                   </button>
                   <button
                     onClick={() => setRightPanel("code")}
-                    disabled={!canCode}
+                    disabled={!capabilities.code.allowed}
+                    title={capabilityTitle(capabilities.code)}
                     className={`flex items-center gap-1.5 px-3 h-7 font-mono text-[10px] uppercase tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed ${rightPanel === "code"
                       ? "bg-white/8 text-foreground"
                       : "text-muted-foreground/50 hover:text-muted-foreground"
@@ -809,7 +840,8 @@ function StudioInner({ projectId }: { projectId: string }) {
                   </button>
                   <button
                     onClick={() => setRightPanel("preview")}
-                    disabled={!canPreview}
+                    disabled={!capabilities.preview.allowed}
+                    title={capabilityTitle(capabilities.preview)}
                     className={`flex items-center gap-1.5 px-3 h-7 font-mono text-[10px] uppercase tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed ${rightPanel === "preview"
                       ? "bg-white/8 text-foreground"
                       : "text-muted-foreground/50 hover:text-muted-foreground"
@@ -843,7 +875,7 @@ function StudioInner({ projectId }: { projectId: string }) {
                 <div className="flex items-center gap-2" data-ox-tour="studio-design-pick">
                 {rightPanel === "preview" && previewSlot.mode === "live" && previewPainted && previewUrl && (
                   <>
-                    {hasGeneratedProject ? (
+                    {capabilities.preview.allowed ? (
                       <button
                         type="button"
                         onClick={() => designMode.setActive(!designMode.active)}

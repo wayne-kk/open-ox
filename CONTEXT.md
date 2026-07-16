@@ -33,7 +33,7 @@ Bounded tool-loop role scheduled by the Generate orchestrator (Scaffold, Page Im
 _Avoid_: treating Role Workers as user-visible product agents
 
 **Subagent**:
-Isolated tool-loop child under `ai/shared/subagent`: own context, tool whitelist, summary-only return. Nesting depth max 1. v1 kinds: explore, verifier.
+Isolated tool-loop child under `ai/shared/subagent`: own context, tool whitelist, summary-only return. Nesting depth max 1. v1 kinds: explore, verifier, research.
 _Avoid_: nested spawn trees, SE-role telephone games on the same feature
 
 **Handoff**:
@@ -87,3 +87,19 @@ _Avoid_: fork, clone, “open in Studio” on someone else’s project
 Recorded provenance on a remixed project (`remixed_from` id + author/title snapshots) for attribution after the source is unlisted or deleted.
 
 _See also_: `docs/product/workspace-community-publish-remix-v0.1.md`, `docs/adr/0002-workspace-private-community-publish-remix.md`
+
+## Product analytics
+
+**Acquisition touch**:
+One marketing snapshot: UTM params, external referrer, and landing path. Not a product behavior event.
+_Avoid_: click, session, campaign (alone)
+
+**First-touch acquisition**:
+The single acquisition touch bound to a user for their lifetime (write-once). Later visits do not replace it.
+_Avoid_: last-touch, multi-touch attribution
+
+**Analytics event**:
+An append-only product behavior fact (page view, auth success, generate, …). May carry acquisition fields as properties but is not the user-level source of truth for channel.
+_Avoid_: user profile, acquisition row
+
+_See also_: `docs/adr/0007-first-party-acquisition-attribution.md`, `docs/admin-analytics-prd.md`

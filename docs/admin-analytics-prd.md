@@ -87,6 +87,7 @@ Open-OX 是面向网站生产的 AI Harness 平台。运营团队需要回答：
 |------|------|----------|
 | **DAU** | 已登录用户，当日 UTC 至少 1 次 `page_view` 或 `studio_heartbeat`。建项目 / 建 run **不计**。匿名 PV 不计。 | 分析默认排除 |
 | **新增注册** | Auth `created_at` 按 UTC 日聚合；census 翻完 Auth 分页（无静默 4000 顶） | 分析默认排除 |
+| **获客渠道（注册）** | 按注册日 UTC 归桶；渠道由 first-touch `user_acquisition` 派生：有任一 `utm_*` → `utm`；否则外站 `referrer` → `referral`；有行但无信号 → `direct`；无行 → `unknown`。维度另报 Top `utm_source` / `utm_medium` / `utm_campaign` / referrer host | 分析默认排除 |
 | **新增项目** | `projects.created_at` 按 UTC 日 | 分析默认排除 |
 | **首项目** | 每用户 lifetime 最早一次 `projects.created_at` 落在当日才 +1。API/图表字段：`firstProject`（不再使用误标的 `firstPrompt`） | 分析默认排除 |
 | **首 Prompt** | 等埋点 `prompt_submit` 后再上；**当前不做** | — |

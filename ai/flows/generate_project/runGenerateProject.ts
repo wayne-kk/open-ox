@@ -60,6 +60,18 @@ import {
   appendInstalledDependencies,
   createInitialResult,
 } from "./orchestration/resultAccumulator";
+import {
+  buildVerifierRefeedBuildOutput,
+  describeVerifierVerdict,
+  mergeRepairTouchedFiles,
+  repairVerifierNeedsRefeed,
+} from "./orchestration/verifierRepairRefeed";
+import {
+  formatResearchBriefForParent,
+  runResearchSubagent,
+} from "@/ai/shared/subagent";
+import { listReferenceSiteCandidateUrls } from "@/lib/reference/referenceSiteUrls";
+import { getModelForStep } from "@/lib/config/models";
 import type {
   BuildStep,
   GenerateProjectResult,
@@ -177,6 +189,10 @@ function getBuildStepName(attempt: number): string {
 
 function getRepairStepName(attempt: number): string {
   return `repair_build:${attempt}`;
+}
+
+function getRepairVerifierRefeedStepName(attempt: number): string {
+  return `repair_build:${attempt}:verifier_refeed`;
 }
 
 function getInstallDependenciesStepName(scope: string): string {
@@ -593,7 +609,7 @@ async function runBuildWithRepair(params: {
       break;
     }
 
-    const repairResult = await logger.timed(
+    let repairResult = await logger.timed(
       getRepairStepName(repairRound + 1),
       () =>
         stepRepairBuild({
@@ -601,7 +617,10 @@ async function runBuildWithRepair(params: {
           buildOutput: buildResult.output,
           generatedFiles: result.generatedFiles,
         }),
-      (value) => (value.success ? value.touchedFiles.join(", ") || "repair applied" : value.output)
+      (value) =>
+        value.success
+          ? `${value.touchedFiles.join(", ") || "repair applied"} (verifier=${describeVerifierVerdict(value.verifierVerdict)})`
+          : value.output
     );
     await persistJsonArtifact(artifactLogger, getRepairStepName(repairRound + 1), "output", repairResult);
 
@@ -610,6 +629,35 @@ async function runBuildWithRepair(params: {
         verificationStatus: "failed",
         verificationOutput: buildResult.output,
       };
+    }
+
+    // One code-scheduled re-repair when verifier is skeptical (fail/partial).
+    if (repairVerifierNeedsRefeed(repairResult)) {
+      const refeedStep = getRepairVerifierRefeedStepName(repairRound + 1);
+      const firstRepair = repairResult;
+      const refeedResult = await logger.timed(
+        refeedStep,
+        () =>
+          stepRepairBuild({
+            blueprint,
+            buildOutput: buildVerifierRefeedBuildOutput({
+              originalBuildOutput: buildResult.output,
+              repairResult: firstRepair,
+            }),
+            generatedFiles: result.generatedFiles,
+          }),
+        (value) =>
+          value.success
+            ? `${value.touchedFiles.join(", ") || "refeed applied"} (verifier=${describeVerifierVerdict(value.verifierVerdict)})`
+            : value.output
+      );
+      await persistJsonArtifact(artifactLogger, refeedStep, "output", refeedResult);
+      if (refeedResult.success) {
+        repairResult = {
+          ...refeedResult,
+          touchedFiles: mergeRepairTouchedFiles(firstRepair, refeedResult),
+        };
+      }
     }
 
     appendGeneratedFiles(result, repairResult.touchedFiles);
@@ -849,6 +897,49 @@ async function runGenerateProjectInner(
       effectiveUserInput
     );
 
+    let researchBrief: string | null = null;
+    const referenceSiteUrls = listReferenceSiteCandidateUrls(effectiveUserInput);
+    if (!cp?.skipAnalyze && referenceSiteUrls.length > 0) {
+      logger.startStep("research_reference_sites");
+      const researchResult = await withLangfuseSpan(
+        LfSpanGen.researchReferenceSites,
+        () =>
+          runResearchSubagent({
+            userBrief: effectiveUserInput,
+            candidateUrls: referenceSiteUrls,
+            model: getModelForStep("analyze_project_requirement"),
+          })
+      );
+      if (researchResult?.ok && researchResult.summary.trim()) {
+        researchBrief = formatResearchBriefForParent(researchResult);
+        logger.logStep(
+          "research_reference_sites",
+          "ok",
+          `${referenceSiteUrls.length} url(s), ${researchResult.toolCallCount} tool calls`
+        );
+        await persistTextArtifact(
+          artifactLogger,
+          "research_reference_sites",
+          "brief",
+          researchBrief,
+          "md"
+        );
+      } else {
+        logger.logStep(
+          "research_reference_sites",
+          "ok",
+          researchResult
+            ? `skipped_or_failed: ${researchResult.error ?? "empty summary"}`
+            : "skipped: no research run"
+        );
+        await persistJsonArtifact(artifactLogger, "research_reference_sites", "output", {
+          ok: researchResult?.ok ?? false,
+          error: researchResult?.error ?? null,
+          urls: referenceSiteUrls,
+        });
+      }
+    }
+
     let rawBlueprint!: ProjectBlueprint;
     let inferredDesignIntent: DesignIntentResult | null = null;
     const confirmedDesignMarkdown = options.confirmedDesignDirectionMarkdown?.trim() || "";
@@ -898,7 +989,11 @@ async function runGenerateProjectInner(
               duration: 0,
             });
           },
-          { referenceImageBase64: referenceScreenshot, screenshotGuardrailId }
+          {
+            referenceImageBase64: referenceScreenshot,
+            screenshotGuardrailId,
+            researchBrief,
+          }
         );
 
         inferredDesignIntent = {
@@ -936,7 +1031,11 @@ async function runGenerateProjectInner(
                 duration: 0,
               });
             },
-            { referenceImageBase64: referenceScreenshot, screenshotGuardrailId }
+            {
+              referenceImageBase64: referenceScreenshot,
+              screenshotGuardrailId,
+              researchBrief,
+            }
           ),
           stepInferDesignIntent(effectiveUserInput, {
             referenceImageBase64: referenceScreenshot,
@@ -1401,7 +1500,7 @@ async function runGenerateProjectInner(
         console.warn(
           `[typecheck] scoped: ${errorCount} error(s) in ${scoped.fileCount} file(s), attempting repair...`
         );
-        const repairResult = await withLangfuseSpan(
+        let repairResult = await withLangfuseSpan(
           LfSpanGen.typescriptRepair,
           () =>
             stepRepairBuild({
@@ -1410,6 +1509,30 @@ async function runGenerateProjectInner(
               generatedFiles: result.generatedFiles,
             })
         );
+        if (
+          repairResult.success &&
+          repairVerifierNeedsRefeed(repairResult)
+        ) {
+          const firstRepair = repairResult;
+          const refeedResult = await withLangfuseSpan(
+            LfSpanGen.typescriptRepair,
+            () =>
+              stepRepairBuild({
+                blueprint,
+                buildOutput: buildVerifierRefeedBuildOutput({
+                  originalBuildOutput: scoped.tscStyleLog,
+                  repairResult: firstRepair,
+                }),
+                generatedFiles: result.generatedFiles,
+              })
+          );
+          if (refeedResult.success) {
+            repairResult = {
+              ...refeedResult,
+              touchedFiles: mergeRepairTouchedFiles(firstRepair, refeedResult),
+            };
+          }
+        }
         if (repairResult.success && repairResult.touchedFiles.length > 0) {
           appendGeneratedFiles(result, repairResult.touchedFiles);
         }

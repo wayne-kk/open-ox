@@ -250,7 +250,7 @@ pnpm check:env
 pnpm dev
 ```
 
-可选能力（飞书 / Google / Stripe / Vercel / E2B / Langfuse / Ark）按需配置；未配置时对应 UI 不会出现。完整变量见 `.env.example`，能力判断见 `lib/env.ts`。
+可选能力（飞书 / Google / Linux.do / Stripe / Vercel / E2B / Langfuse / Ark）按需配置；未配置时对应 UI 不会出现。完整变量见 `.env.example`，能力判断见 `lib/env.ts`。
 
 ---
 

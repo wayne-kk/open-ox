@@ -1,4 +1,5 @@
 import { exploreSubagentSpec } from "./kinds/explore";
+import { researchSubagentSpec } from "./kinds/research";
 import { verifierSubagentSpec } from "./kinds/verifier";
 import type { SubagentKind, SubagentSpec } from "./types";
 
@@ -8,6 +9,7 @@ function ensureBuiltinsRegistered(): void {
   if (specs.size > 0) return;
   specs.set(exploreSubagentSpec.kind, exploreSubagentSpec);
   specs.set(verifierSubagentSpec.kind, verifierSubagentSpec);
+  specs.set(researchSubagentSpec.kind, researchSubagentSpec);
 }
 
 /** Register or replace a subagent spec (tests / future custom kinds). */
