@@ -205,17 +205,6 @@
   },
   "onboarding": {
     "creditsSoftPromise": "New accounts get 12 welcome credits once — roughly enough for one full generate and a few edits (actual usage may vary).",
-    "exampleBriefsLabel": "Try an idea",
-    "briefLocalServiceLabel": "Local service",
-    "briefLocalServicePrompt": "Build a site for a neighborhood barbershop: services and prices, hours, location, and online booking.",
-    "briefSaasMarketingLabel": "SaaS marketing",
-    "briefSaasMarketingPrompt": "A B2B project-management SaaS landing page: pain points, value prop, feature highlights, pricing tiers, and a clear signup CTA.",
-    "briefPortfolioLabel": "Portfolio",
-    "briefPortfolioPrompt": "A UX designer portfolio: intro, selected case studies (problem / process / outcome), about, and contact — restrained and professional.",
-    "briefEventLandingLabel": "Event landing",
-    "briefEventLandingPrompt": "A design summit landing page: theme and agenda, speakers, ticket tiers and registration — ceremonial but not flashy.",
-    "briefBrandNarrativeLabel": "Brand narrative",
-    "briefBrandNarrativePrompt": "An online portal for a narrative art museum: curatorial philosophy, current exhibition, visitor guide, and booking — light, shadow, and story.",
     "stepGenerate": "Generate a previewable site",
     "stepDesign": "Edit once in Design Mode",
     "dismiss": "Don't show again",
@@ -256,9 +245,6 @@
     "workspaceTourPromptEyebrow": "Start building",
     "workspaceTourPromptTitle": "Describe the site in one sentence",
     "workspaceTourPromptBody": "Write a brief here and hit Build to open Studio and generate a previewable Next.js project. More specific briefs land better on the first run.",
-    "workspaceTourBriefsEyebrow": "Example ideas",
-    "workspaceTourBriefsTitle": "Stuck? Tap a curated brief",
-    "workspaceTourBriefsBody": "These chips fill the prompt with a solid starting brief — tweak a few words and build.",
     "workspaceTourNavEyebrow": "Sidebar",
     "workspaceTourNavTitle": "“Start building” jumps back to the prompt",
     "workspaceTourNavBody": "Use the sidebar for projects, community, integrations, and docs. Start building scrolls to and focuses the prompt.",
@@ -273,6 +259,6 @@
     "workspaceTourCreditsBody": "New accounts get welcome credits. Generate spends credits; Design Mode pick-edits don’t. Top up from here when you’re low.",
     "workspaceTourFinishEyebrow": "Next",
     "workspaceTourFinishTitle": "Write a brief, enter Studio",
-    "workspaceTourFinishBody": "After your first generate, Studio has a short preview + Design Mode lesson. Pick an example chip — or write your own — and build."
+    "workspaceTourFinishBody": "After your first generate, Studio has a short preview + Design Mode lesson. Write a brief and build."
   }
 }

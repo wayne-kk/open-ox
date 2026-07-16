@@ -90,8 +90,8 @@ export type ModifySSEEvent =
   | { type: "step"; name: string; status: "running" | "done" | "error"; message?: string }
   | { type: "plan"; plan: { analysis: string; changes: Array<{ path: string; action: string; reasoning: string }> }; intentCategory?: ModifyIntentCategory }
   | { type: "diff"; file: string; reasoning: string; patch: string; stats: DiffStats }
-  | { type: "tool_call"; tool: string; args: Record<string, unknown>; result: string }
-  | { type: "thinking"; content: string }
+  | { type: "tool_call"; tool: string; args: Record<string, unknown>; result: string; subagentKind?: string }
+  | { type: "thinking"; content: string; subagentKind?: string }
   | { type: "credits"; charged: number; usd: number }
   /** Board propose path — no agent loop / no site writes. */
   | { type: "board_proposed"; boardRun: BoardRun }

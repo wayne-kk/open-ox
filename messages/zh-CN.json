@@ -205,17 +205,6 @@
   },
   "onboarding": {
     "creditsSoftPromise": "新账号赠送 12 积分：约可完整生成 1 次，并再改几轮（以实际消耗为准）。",
-    "exampleBriefsLabel": "试试这些想法",
-    "briefLocalServiceLabel": "本地服务",
-    "briefLocalServicePrompt": "为一家社区理发店做官网：展示服务项目与价目、营业时间、门店地址，并支持在线预约到店。",
-    "briefSaasMarketingLabel": "SaaS 营销",
-    "briefSaasMarketingPrompt": "做一个 B2B 项目管理 SaaS 的落地页：说清痛点与价值主张、功能亮点、定价档位，以及清晰的注册 CTA。",
-    "briefPortfolioLabel": "作品集",
-    "briefPortfolioPrompt": "UX 设计师个人作品集：首页介绍、精选案例（问题/过程/结果）、关于我与联系方式，气质克制专业。",
-    "briefEventLandingLabel": "活动落地",
-    "briefEventLandingPrompt": "一场设计峰会的活动落地页：主题与议程、嘉宾介绍、票种与报名入口，视觉有仪式感但不花哨。",
-    "briefBrandNarrativeLabel": "品牌叙事",
-    "briefBrandNarrativePrompt": "人文叙事美术馆线上门户：策展理念、当前展览、访客指南与预约观展，强调光影与叙事气质。",
     "stepGenerate": "生成可预览站点",
     "stepDesign": "用 Design Mode 改一处",
     "dismiss": "不再显示",
@@ -256,9 +245,6 @@
     "workspaceTourPromptEyebrow": "开始构建",
     "workspaceTourPromptTitle": "用一句话描述你想要的站点",
     "workspaceTourPromptBody": "在这里写下 brief，点「构建」会进入 Studio 生成可预览的真实 Next.js 项目。写得越具体，第一次出站越稳。",
-    "workspaceTourBriefsEyebrow": "示例想法",
-    "workspaceTourBriefsTitle": "没灵感？点一条示例直接填入",
-    "workspaceTourBriefsBody": "这些是产品写好的 brief 芯片，一点即可写入输入框，再按需改几个词就能开建。",
     "workspaceTourNavEyebrow": "侧栏",
     "workspaceTourNavTitle": "「开始构建」随时回到输入框",
     "workspaceTourNavBody": "侧栏可跳转我的项目、社区、集成与文档。「开始构建」会滚回并聚焦上方 prompt。",
@@ -273,6 +259,6 @@
     "workspaceTourCreditsBody": "新账号有欢迎积分；生成会消耗积分，Design Mode 点选精修不耗积分。余额不够时从这里去充值或升级。",
     "workspaceTourFinishEyebrow": "下一步",
     "workspaceTourFinishTitle": "写一句 brief，进入 Studio",
-    "workspaceTourFinishBody": "构建成功后，Studio 里还有预览与 Design Mode 的短引导。现在就选一条示例，或自己写一句开始。"
+    "workspaceTourFinishBody": "构建成功后，Studio 里还有预览与 Design Mode 的短引导。现在写一句 brief 开始构建。"
   }
 }

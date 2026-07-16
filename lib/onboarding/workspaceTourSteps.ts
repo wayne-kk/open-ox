@@ -7,9 +7,6 @@ export type WorkspaceTourCopy = {
   promptEyebrow: string;
   promptTitle: string;
   promptBody: string;
-  briefsEyebrow: string;
-  briefsTitle: string;
-  briefsBody: string;
   navEyebrow: string;
   navTitle: string;
   navBody: string;
@@ -46,15 +43,6 @@ export function buildWorkspaceOnboardingSteps(copy: WorkspaceTourCopy): ProductT
       title: copy.promptTitle,
       description: copy.promptBody,
       spotlightPadding: 8,
-    },
-    {
-      id: "workspace-briefs",
-      target: "workspace-example-briefs",
-      placement: "top",
-      eyebrow: copy.briefsEyebrow,
-      title: copy.briefsTitle,
-      description: copy.briefsBody,
-      spotlightPadding: 10,
     },
     {
       id: "workspace-start-build",

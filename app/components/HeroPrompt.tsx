@@ -10,7 +10,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { captureAppReturnTo } from "@/lib/navigation/appBack";
 import { resolveFolderIdFromSearchParam } from "@/lib/projectFolders";
 import { cn } from "@/lib/utils";
-import { ExampleBriefChips } from "@/components/onboarding/ExampleBriefChips";
+import { useTranslations } from "next-intl";
 
 /** Survives redirect to /auth so we can resume POST /api/projects after login. */
 const PENDING_BUILD_KEY = "open-ox:pending-project-build";
@@ -64,6 +64,7 @@ export function HeroPrompt({ showCreditsPromise = false }: HeroPromptProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const folderId = resolveFolderIdFromSearchParam(searchParams.get("folder"));
+  const tOnboarding = useTranslations("onboarding");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -337,17 +338,11 @@ export function HeroPrompt({ showCreditsPromise = false }: HeroPromptProps) {
         </div>
       </div>
 
-      <ExampleBriefChips
-        className="mt-3.5 px-0.5"
-        showCreditsPromise={showCreditsPromise}
-        onSelect={(prompt) => {
-          setValue(prompt);
-          setFocused(true);
-          requestAnimationFrame(() => {
-            textareaRef.current?.focus();
-          });
-        }}
-      />
+      {showCreditsPromise ? (
+        <p className="mt-3.5 max-w-xl px-0.5 text-[11px] leading-relaxed text-muted-foreground/85">
+          {tOnboarding("creditsSoftPromise")}
+        </p>
+      ) : null}
     </form>
   );
 }
