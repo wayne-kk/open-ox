@@ -34,13 +34,29 @@ describe("preview access grant cookie", () => {
   });
 
   it("parses cookie header and builds Path-scoped Set-Cookie", () => {
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://app.example.com");
+    vi.stubEnv("NEXT_PUBLIC_PREVIEW_ORIGIN", "");
     const token = mintPreviewAccessGrant("2026-07-16T10-51-18-282Z_project", 1_700_000_000)!;
     const header = `${PREVIEW_ACCESS_GRANT_COOKIE}=${encodeURIComponent(token)}; other=1`;
     expect(readPreviewAccessGrantFromCookieHeader(header)).toBe(token);
     const set = previewAccessGrantSetCookieHeader("2026-07-16T10-51-18-282Z_project", token);
-    expect(set).toContain(`Path=/site-previews/${encodeURIComponent("2026-07-16T10-51-18-282Z_project")}`);
+    expect(set).toContain(
+      `Path=/site-previews/${encodeURIComponent("2026-07-16T10-51-18-282Z_project")}`
+    );
     expect(set).toContain("HttpOnly");
     expect(set).toContain("SameSite=Lax");
+    expect(set).not.toContain("SameSite=None");
+  });
+
+  it("scopes grant cookie Path to /{id} on dedicated preview origin", () => {
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://app.example.com");
+    vi.stubEnv("NEXT_PUBLIC_PREVIEW_ORIGIN", "https://p.example.com");
+    const token = mintPreviewAccessGrant("p1", 1_700_000_000)!;
+    const set = previewAccessGrantSetCookieHeader("p1", token);
+    expect(set).toContain("Path=/p1");
+    expect(set).toContain("SameSite=None");
+    expect(set).toContain("Secure");
+    expect(set).toContain("Partitioned");
   });
 });
 
@@ -147,6 +163,26 @@ describe("resolveStaticPreviewAccess", () => {
       nowSec: 1_700_000_000,
     });
     expect(result).toEqual({ status: "ok" });
+    expect(getSessionUser).not.toHaveBeenCalled();
+  });
+
+  it("allows private project via ox_grant query and sets cookie", async () => {
+    const token = mintPreviewAccessGrant("p1", 1_700_000_000)!;
+    const getSessionUser = vi.fn();
+    const result = await resolveStaticPreviewAccess({
+      projectId: "p1",
+      request: new Request(
+        `http://p.example.com/p1?ox_grant=${encodeURIComponent(token)}`
+      ),
+      getSessionUser,
+      isAdminUser: vi.fn(),
+      db: mockDb({ id: "p1", user_id: "owner-1", publish_preview: false }),
+      nowSec: 1_700_000_000,
+    });
+    expect(result.status).toBe("ok");
+    if (result.status === "ok") {
+      expect(result.setGrantCookie).toContain(PREVIEW_ACCESS_GRANT_COOKIE);
+    }
     expect(getSessionUser).not.toHaveBeenCalled();
   });
 

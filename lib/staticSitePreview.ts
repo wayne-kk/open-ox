@@ -1,14 +1,17 @@
 /**
- * Static site preview: `next build` with `OPEN_OX_STATIC_BASE_PATH=/site-previews/{url-encoded projectId}` so
- * `/_next` chunk URLs resolve under the preview proxy. Files from `public/` stay as `/images/…` in Next's HTML;
- * we rewrite those absolute paths under the sync step before upload. Objects live at Storage keys `p/{projectId}/*`,
- * and the **browser** loads them via `GET /site-previews/{projectId}/...` (see `app/site-previews/.../route.ts`).
+ * Static site preview: `next build` with `OPEN_OX_STATIC_BASE_PATH` so `/_next` chunk URLs resolve under the
+ * preview proxy. Files from `public/` stay as `/images/…` in Next's HTML; we rewrite those absolute paths
+ * under the sync step before upload. Objects live at Storage keys `p/{projectId}/*`.
+ *
+ * Browser entry:
+ * - Legacy: `{SITE_URL}/site-previews/{projectId}` → `app/site-previews/.../route.ts`
+ * - Dedicated: `{NEXT_PUBLIC_PREVIEW_ORIGIN}/{projectId}` (rewritten to the same route)
  *
  * Supabase public object responses include `Content-Security-Policy: default-src 'none'; sandbox`, which
- * blocks scripts inside an iframe — proxying through this app avoids forwarding that CSP.
+ * blocks scripts inside an iframe — proxying avoids forwarding that CSP.
  *
  * Env: OPEN_OX_PREVIEW_BACKEND=storage, NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
- * NEXT_PUBLIC_SITE_URL (proxy origin). Optional: OPEN_OX_STATIC_UPLOAD_CONCURRENCY (default 8).
+ * NEXT_PUBLIC_SITE_URL, optional NEXT_PUBLIC_PREVIEW_ORIGIN. Optional: OPEN_OX_STATIC_UPLOAD_CONCURRENCY.
  */
 
 import { createHash } from "node:crypto";
@@ -54,6 +57,12 @@ import {
   contentTypeForRelPath,
   resolveProxiedContentType,
 } from "@/lib/staticSitePreviewProxyMime";
+import {
+  buildStaticPreviewUrl,
+  getPreviewPublicOrigin,
+  getStoragePreviewBasePath as previewBasePath,
+  isDedicatedPreviewOrigin,
+} from "@/lib/previewOrigin";
 
 export { contentTypeForRelPath, resolveProxiedContentType };
 
@@ -100,33 +109,31 @@ function isRetryableStorageError(message: string): boolean {
   );
 }
 
+/** Public origin used in preview iframe URLs (preview subdomain when configured). */
 export function getStoragePreviewProxyOrigin(): string {
-  const site = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/$/, "");
-  if (!site) {
+  const origin = getPreviewPublicOrigin();
+  if (!origin) {
     throw new Error(
       "NEXT_PUBLIC_SITE_URL is required for OPEN_OX_PREVIEW_BACKEND=storage (preview is served via /site-previews proxy)"
     );
   }
-  return site;
+  return origin;
 }
 
 /**
- * Path prefix (leading slash, no trailing slash) matching `OPEN_OX_STATIC_BASE_PATH` / the `/site-previews/...` proxy.
+ * Path prefix (leading slash, no trailing slash) matching `OPEN_OX_STATIC_BASE_PATH`.
+ * Dedicated preview host → `/{id}`; legacy → `/site-previews/{id}`.
  */
 export function getStoragePreviewBasePath(projectId: string): string {
-  return `/site-previews/${encodeURIComponent(projectId)}`;
+  return previewBasePath(projectId);
 }
 
 /**
- * Browser entry URL for static Storage preview — proxied through this app (no `index.html` in the path;
- * `app/site-previews/.../route` serves `index.html` when the path segment is empty).
- *
- * No trailing slash: Next defaults to `trailingSlash: false` and 308s `/site-previews/id/` →
- * `/site-previews/id`. Returning the canonical form avoids an extra redirect before the iframe paints.
+ * Browser entry URL for static Storage preview (no `index.html` in the path).
+ * No trailing slash — avoids Next trailingSlash redirect before the iframe paints.
  */
 export function getStaticPreviewUrl(projectId: string): string {
-  const origin = getStoragePreviewProxyOrigin();
-  return `${origin}${getStoragePreviewBasePath(projectId)}`;
+  return buildStaticPreviewUrl(projectId);
 }
 
 /**
@@ -146,9 +153,13 @@ export function getStoragePreviewPublicObjectUrl(projectId: string, rel = "index
   return `${supabaseUrl}/storage/v1/object/public/${SITE_PREVIEWS_BUCKET}/${encodedPath}`;
 }
 
-/** Stable 16-char hash of preview proxy origin (NEXT_PUBLIC_SITE_URL) for storage sync skip logic. */
+/**
+ * Stable 16-char hash of preview public origin + path mode for storage sync skip logic.
+ * Changing NEXT_PUBLIC_PREVIEW_ORIGIN forces a one-time resync with the new basePath.
+ */
 export function storagePreviewOriginFingerprint(): string {
-  return createHash("sha256").update(getStoragePreviewProxyOrigin()).digest("hex").slice(0, 16);
+  const material = `${getStoragePreviewProxyOrigin()}|base=${isDedicatedPreviewOrigin() ? "root" : "site-previews"}`;
+  return createHash("sha256").update(material).digest("hex").slice(0, 16);
 }
 
 async function collectOutRelativePaths(uploadRoot: string): Promise<string[]> {
@@ -250,10 +261,13 @@ async function uploadOutDir(
   const admin = storage;
 
   const uploadOne = async (rel: string): Promise<void> => {
-    const localPath = path.join(uploadRoot, ...rel.split("/"));
+    const localPath = path.join(
+      /* turbopackIgnore: true */ uploadRoot,
+      ...rel.split("/")
+    );
     let raw: Buffer;
     try {
-      raw = await fs.readFile(localPath);
+      raw = await fs.readFile(/* turbopackIgnore: true */ localPath);
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
       if (code === "ENOENT") {

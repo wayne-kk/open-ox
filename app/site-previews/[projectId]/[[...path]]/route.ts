@@ -17,6 +17,11 @@ import {
 } from "@/lib/staticSitePreviewProxyCache";
 import { mapStorageUpstreamStatus } from "@/lib/staticSitePreviewProxyMime";
 import {
+  getCachedPreviewUpstream,
+  setCachedPreviewUpstream,
+  shouldCachePreviewUpstream,
+} from "@/lib/staticSitePreviewUpstreamCache";
+import {
   designModeBridgeScriptPath,
   injectDesignModeBridgeIntoHtml,
   shouldInjectDesignModeBridge,
@@ -86,6 +91,24 @@ function isSafePreviewSegments(segments: string[]): boolean {
   return segments.every((s) => !s.includes("..") && !s.includes("\\"));
 }
 
+function previewResponseHeaders(opts: {
+  rel: string;
+  contentType: string;
+  etag: string | null;
+  contentLength?: string | null;
+  cacheStatus?: "HIT" | "MISS" | "BYPASS";
+}): Headers {
+  const headers = new Headers();
+  headers.set("Content-Type", opts.contentType);
+  headers.set("Cache-Control", cacheControlForPreviewRel(opts.rel));
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("X-Robots-Tag", "noindex, nofollow");
+  if (opts.etag) headers.set("etag", opts.etag);
+  if (opts.contentLength) headers.set("content-length", opts.contentLength);
+  if (opts.cacheStatus) headers.set("X-Open-OX-Preview-Cache", opts.cacheStatus);
+  return headers;
+}
+
 async function proxyFromStorage(
   projectId: string,
   rel: string,
@@ -100,8 +123,26 @@ async function proxyFromStorage(
     return new NextResponse(message, { status: 500 });
   }
 
+  const cached = getCachedPreviewUpstream(projectId, rel);
+  if (cached) {
+    const contentType = resolveProxiedContentType(rel, cached.contentType);
+    const headers = previewResponseHeaders({
+      rel,
+      contentType,
+      etag: cached.etag,
+      contentLength: cached.contentLength ?? String(cached.body.byteLength),
+      cacheStatus: "HIT",
+    });
+    if (method === "HEAD") {
+      return new NextResponse(null, { status: 200, headers });
+    }
+    return new NextResponse(cached.body, { status: 200, headers });
+  }
+
+  // Prefer GET for cacheable paths so we can populate the upstream cache even on HEAD.
+  const fetchMethod = shouldCachePreviewUpstream(rel) ? "GET" : method;
   const upstream = await fetch(storageUrl, {
-    method,
+    method: fetchMethod,
     cache: upstreamFetchCacheMode(rel),
     signal: AbortSignal.timeout(120_000),
   }).catch(() => null);
@@ -120,23 +161,10 @@ async function proxyFromStorage(
   }
 
   const contentType = resolveProxiedContentType(rel, upstream.headers.get("content-type"));
-
-  const headers = new Headers();
-  headers.set("Content-Type", contentType);
-  headers.set("Cache-Control", cacheControlForPreviewRel(rel));
-  headers.set("X-Content-Type-Options", "nosniff");
-  headers.set("X-Robots-Tag", "noindex, nofollow");
   const etag = upstream.headers.get("etag");
-  if (etag) headers.set("etag", etag);
 
   // Intentionally omit Storage `Content-Security-Policy` (includes `sandbox` without allow-scripts),
   // which blocks Next.js static chunks inside an iframe.
-
-  if (method === "HEAD") {
-    const len = upstream.headers.get("content-length");
-    if (len) headers.set("content-length", len);
-    return new NextResponse(null, { status: 200, headers });
-  }
 
   if (shouldInjectDesignModeBridge(rel, contentType)) {
     const html = await upstream.text();
@@ -144,8 +172,47 @@ async function proxyFromStorage(
     // http://127.0.0.1:3000 — injecting that as script src breaks HTTPS pages
     // (mixed content) and leaves a dead data-open-ox-design-bridge tag that blocks retries.
     const body = injectDesignModeBridgeIntoHtml(html, designModeBridgeScriptPath());
-    headers.set("Content-Length", String(Buffer.byteLength(body, "utf8")));
+    const headers = previewResponseHeaders({
+      rel,
+      contentType,
+      etag,
+      contentLength: String(Buffer.byteLength(body, "utf8")),
+      cacheStatus: "BYPASS",
+    });
     return new NextResponse(body, { status: 200, headers });
+  }
+
+  if (shouldCachePreviewUpstream(rel)) {
+    const buf = Buffer.from(await upstream.arrayBuffer());
+    setCachedPreviewUpstream(projectId, rel, {
+      body: buf,
+      contentType: upstream.headers.get("content-type"),
+      etag,
+      contentLength: String(buf.byteLength),
+    });
+    const headers = previewResponseHeaders({
+      rel,
+      contentType,
+      etag,
+      contentLength: String(buf.byteLength),
+      cacheStatus: "MISS",
+    });
+    if (method === "HEAD") {
+      return new NextResponse(null, { status: 200, headers });
+    }
+    return new NextResponse(buf, { status: 200, headers });
+  }
+
+  const headers = previewResponseHeaders({
+    rel,
+    contentType,
+    etag,
+    contentLength: upstream.headers.get("content-length"),
+    cacheStatus: "BYPASS",
+  });
+
+  if (method === "HEAD") {
+    return new NextResponse(null, { status: 200, headers });
   }
 
   return new NextResponse(upstream.body, { status: 200, headers });

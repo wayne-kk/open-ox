@@ -61,17 +61,22 @@ export async function stripOxSourceFromProject(projectDir: string): Promise<Stri
   const roots = ["components", "app"];
   const files: string[] = [];
   for (const root of roots) {
-    files.push(...(await listTsxFiles(path.join(projectDir, root), projectDir)));
+    files.push(
+      ...(await listTsxFiles(
+        path.join(/* turbopackIgnore: true */ projectDir, root),
+        projectDir
+      ))
+    );
   }
 
   const filesTouched: string[] = [];
   let attrsRemoved = 0;
 
   for (const rel of files) {
-    const abs = path.join(projectDir, rel);
+    const abs = path.join(/* turbopackIgnore: true */ projectDir, rel);
     let source: string;
     try {
-      source = await fs.readFile(abs, "utf-8");
+      source = await fs.readFile(/* turbopackIgnore: true */ abs, "utf-8");
     } catch {
       continue;
     }

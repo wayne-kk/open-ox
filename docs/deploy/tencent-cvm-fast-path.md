@@ -1,6 +1,6 @@
 # open-ox 腾讯云快速部署（PM2）
 
-**日期**：2026-07-15  
+**日期**：2026-07-15（2026-07-17 补充预览子域）  
 **目标机器**：腾讯云中国区单机 CVM  
 **日常发版**：`rsync` →（按需）`pnpm install` → `pnpm build` → `pm2 reload`
 
@@ -80,6 +80,25 @@ pm2 save
 curl -sS http://127.0.0.1:3000/health
 curl -sS http://127.0.0.1:3921/health
 ```
+
+---
+
+## 2.1 静态预览子域（可选，推荐）
+
+目标：`NEXT_PUBLIC_PREVIEW_ORIGIN=https://p.open-ox.tech`，与主站 cookie 隔离；nginx 对 `/_next/static/` 做磁盘缓存。
+
+1. DNS：`p.open-ox.tech` A/AAAA → 同 CVM  
+2. 证书：`sudo certbot --nginx -d open-ox.tech -d www.open-ox.tech -d p.open-ox.tech`  
+3. 应用示例配置：`deploy/open-ox.tech.conf.example`（含 `p.open-ox.tech` server + `proxy_cache_path`）  
+4. 缓存目录：`sudo mkdir -p /var/cache/nginx/open-ox-preview && sudo chown www-data:www-data /var/cache/nginx/open-ox-preview`  
+5. GitHub Actions secret（推荐）：
+   - `NEXT_PUBLIC_PREVIEW_ORIGIN=https://p.open-ox.tech`
+   - 未设置时，CI 会从 `NEXT_PUBLIC_SITE_URL` **推导**为 `https://p.<site-host>`（去掉 `www.`）
+   - CI 写入 `.env.production` 后随 rsync 到服务器；`deploy-on-server.sh` 在 **`pnpm build` 前** 加载（rewrites 进构建产物）
+6. `sudo nginx -t && sudo systemctl reload nginx` → `bash scripts/deploy-on-server.sh`  
+7. 验证：打开 Studio 预览，Network 里资源 host 为 `p.open-ox.tech`；二次加载看响应头 `X-Open-OX-Nginx-Cache: HIT` 或 `X-Open-OX-Preview-Cache: HIT`。
+
+未配置时仍走主站 `/site-previews/{id}`，行为不变。
 
 ---
 

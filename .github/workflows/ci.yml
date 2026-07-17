@@ -67,12 +67,29 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Generate .env.production
+        env:
+          NEXT_PUBLIC_SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
+          # Dedicated preview host (Form 1). Falls back to https://p.<site-host> when unset.
+          NEXT_PUBLIC_PREVIEW_ORIGIN: ${{ secrets.NEXT_PUBLIC_PREVIEW_ORIGIN }}
         run: |
+          set -euo pipefail
+          SITE_URL="${NEXT_PUBLIC_SITE_URL:-}"
+          PREVIEW_ORIGIN="${NEXT_PUBLIC_PREVIEW_ORIGIN:-}"
+          if [ -z "$PREVIEW_ORIGIN" ] && [ -n "$SITE_URL" ]; then
+            # https://open-ox.tech → https://p.open-ox.tech
+            SITE_HOST="$(printf '%s' "$SITE_URL" | sed -E 's#^https?://##' | cut -d/ -f1 | sed 's/^www\.//')"
+            SITE_SCHEME="$(printf '%s' "$SITE_URL" | sed -E 's#^(https?)://.*#\1#')"
+            if [ -n "$SITE_HOST" ]; then
+              PREVIEW_ORIGIN="${SITE_SCHEME}://p.${SITE_HOST}"
+              echo "Derived NEXT_PUBLIC_PREVIEW_ORIGIN=${PREVIEW_ORIGIN}"
+            fi
+          fi
           {
             echo "OPEN_OX_IMAGE_TAG=${GITHUB_SHA}"
             echo "NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}"
             echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY }}"
-            echo "NEXT_PUBLIC_SITE_URL=${{ secrets.NEXT_PUBLIC_SITE_URL }}"
+            echo "NEXT_PUBLIC_SITE_URL=${SITE_URL}"
+            echo "NEXT_PUBLIC_PREVIEW_ORIGIN=${PREVIEW_ORIGIN}"
             echo "OPEN_OX_PREVIEW_BACKEND=${{ secrets.OPEN_OX_PREVIEW_BACKEND }}"
             echo "OPEN_OX_PREVIEW_CAPTURE_SECRET=${{ secrets.OPEN_OX_PREVIEW_CAPTURE_SECRET }}"
             echo "SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}"

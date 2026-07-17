@@ -12,6 +12,11 @@ import {
   PREVIEW_CAPTURE_SECRET_HEADER,
   previewCaptureSecretMatches,
 } from "@/lib/previewCaptureAuth";
+import {
+  isDedicatedPreviewOrigin,
+  previewAccessGrantCookiePath,
+  readPreviewAccessGrantFromUrl,
+} from "@/lib/previewOrigin";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 
 export const PREVIEW_ACCESS_GRANT_COOKIE = "ox_sp_grant";
@@ -107,16 +112,25 @@ export function previewAccessGrantSetCookieHeader(
   projectId: string,
   token: string
 ): string {
-  const path = `/site-previews/${encodeURIComponent(projectId)}`;
+  const path = previewAccessGrantCookiePath(projectId);
   const parts = [
     `${PREVIEW_ACCESS_GRANT_COOKIE}=${encodeURIComponent(token)}`,
     `Path=${path}`,
     `Max-Age=${PREVIEW_ACCESS_GRANT_TTL_SEC}`,
     "HttpOnly",
-    "SameSite=Lax",
   ];
-  if (process.env.NODE_ENV === "production") {
-    parts.push("Secure");
+  // Studio (site origin) embeds preview in a cross-site iframe. SameSite=Lax
+  // cookies set on that navigation are dropped by modern browsers, so JS/CSS
+  // then hit ACL without grant → 403. None+Secure(+Partitioned) keeps the
+  // bootstrap cookie available for same-origin asset requests inside the frame.
+  // http://*.localhost is a secure context, so Secure works in local dev too.
+  if (isDedicatedPreviewOrigin()) {
+    parts.push("SameSite=None", "Secure", "Partitioned");
+  } else {
+    parts.push("SameSite=Lax");
+    if (process.env.NODE_ENV === "production") {
+      parts.push("Secure");
+    }
   }
   return parts.join("; ");
 }
@@ -213,8 +227,19 @@ export async function resolveStaticPreviewAccess(params: {
     return { status: "ok" };
   }
 
-  const grant = readPreviewAccessGrantFromCookieHeader(request.headers.get("cookie"));
+  const grantFromQuery = readPreviewAccessGrantFromUrl(request.url);
+  const grantFromCookie = readPreviewAccessGrantFromCookieHeader(
+    request.headers.get("cookie")
+  );
+  const grant = grantFromQuery ?? grantFromCookie;
   if (verifyPreviewAccessGrant(projectId, grant, nowSec)) {
+    // Bootstrap from ?ox_grant= → set cookie so subsequent assets skip the query.
+    if (grantFromQuery && grant) {
+      return {
+        status: "ok",
+        setGrantCookie: previewAccessGrantSetCookieHeader(projectId, grant),
+      };
+    }
     return { status: "ok" };
   }
 

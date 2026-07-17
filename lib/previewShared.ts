@@ -187,13 +187,13 @@ export async function computeProjectFingerprint(projectId: string): Promise<stri
 
 export async function writePreviewFallbackFilesIfMissing(projectDir: string): Promise<void> {
   for (const fallback of PREVIEW_FALLBACK_FILES) {
-    const dest = path.join(projectDir, fallback.path);
+    const dest = path.join(/* turbopackIgnore: true */ projectDir, fallback.path);
     try {
-      await fs.access(dest);
+      await fs.access(/* turbopackIgnore: true */ dest);
     } catch {
       const destDir = path.dirname(dest);
-      await fs.mkdir(destDir, { recursive: true });
-      await fs.writeFile(dest, fallback.content, "utf-8");
+      await fs.mkdir(/* turbopackIgnore: true */ destDir, { recursive: true });
+      await fs.writeFile(/* turbopackIgnore: true */ dest, fallback.content, "utf-8");
     }
   }
 }
@@ -207,10 +207,13 @@ export async function ensureProjectConfigFromTemplate(projectId: string, relPath
   const fileSet = new Set(relPaths);
   for (const f of TEMPLATE_BASE_FILE_NAMES) {
     if (fileSet.has(f)) continue;
-    const src = path.join(SITES_TEMPLATE_DIR, f);
-    const dest = path.join(projectDir, f);
+    const src = path.join(/* turbopackIgnore: true */ SITES_TEMPLATE_DIR, f);
+    const dest = path.join(/* turbopackIgnore: true */ projectDir, f);
     try {
-      await fs.copyFile(src, dest);
+      await fs.copyFile(
+        /* turbopackIgnore: true */ src,
+        /* turbopackIgnore: true */ dest
+      );
     } catch {
       /* optional */
     }

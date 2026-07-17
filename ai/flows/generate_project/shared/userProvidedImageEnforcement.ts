@@ -34,12 +34,16 @@ function walkTsxFiles(dir: string, files: string[]): void {
 
 function readSiteSourceBundle(): string {
   const root = getSiteRoot();
-  const roots = ["app", "components"].map((d) => join(root, d));
+  const roots = ["app", "components"].map((d) =>
+    join(/* turbopackIgnore: true */ root, d)
+  );
   const files: string[] = [];
   for (const dir of roots) {
     walkTsxFiles(dir, files);
   }
-  return files.map((f) => readFileSync(f, "utf-8")).join("\n");
+  return files
+    .map((f) => readFileSync(/* turbopackIgnore: true */ f, "utf-8"))
+    .join("\n");
 }
 
 const GOOGLE_USER_IMAGE_URL_RE =

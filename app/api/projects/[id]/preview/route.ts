@@ -16,6 +16,7 @@ import {
 } from "@/lib/auth/projectAccess";
 import { isAdminUser } from "@/lib/auth/roles";
 import { getProject } from "@/lib/projectManager";
+import { attachPreviewAccessGrantIfNeeded } from "@/lib/previewAccessGrantAttach";
 import { getPreviewBackend, isPreviewStorage } from "@/lib/previewMode";
 import { getStaticPreviewUrl } from "@/lib/staticSitePreview";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
@@ -50,7 +51,11 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const { db } = access;
   try {
     const result = await ensureDevServerAlive(db, id);
-    return NextResponse.json(withPreviewMeta(result as Record<string, unknown>));
+    const payload =
+      result.status === "ok" && typeof result.url === "string"
+        ? attachPreviewAccessGrantIfNeeded(id, { ...result, url: result.url })
+        : result;
+    return NextResponse.json(withPreviewMeta(payload as Record<string, unknown>));
   } catch (err) {
     console.error("[GET /api/projects/[id]/preview]", err);
     return NextResponse.json({ status: "down" });
@@ -141,7 +146,9 @@ export async function POST(_req: NextRequest, { params }: Params) {
   const { db } = access;
   try {
     const result = await startDevServer(db, id);
-    return NextResponse.json(withPreviewMeta(result as Record<string, unknown>));
+    return NextResponse.json(
+      withPreviewMeta(attachPreviewAccessGrantIfNeeded(id, result) as Record<string, unknown>)
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (message.includes("Project directory not found")) {
@@ -192,14 +199,17 @@ export async function PUT(req: NextRequest, { params }: Params) {
       const mode = classifyModificationScope(body.diffs);
       if (mode === "hot" && body.changedFiles && body.changedFiles.length > 0) {
         console.log(`[PUT /preview] Hot refresh for ${body.changedFiles.length} file(s)`);
-        const result = await hotRefreshDevServer(db, id, body.changedFiles);
+        const result = attachPreviewAccessGrantIfNeeded(
+          id,
+          await hotRefreshDevServer(db, id, body.changedFiles)
+        );
         return NextResponse.json(withPreviewMeta({ ...result, refreshMode: "hot" }));
       }
     }
 
     // Full rebuild
     console.log(`[PUT /preview] Full rebuild for project ${id}`);
-    const result = await rebuildDevServer(db, id);
+    const result = attachPreviewAccessGrantIfNeeded(id, await rebuildDevServer(db, id));
     console.log(`[PUT /preview] Rebuild complete: ${result.url}`);
     return NextResponse.json(withPreviewMeta({ ...result, refreshMode: "rebuild" }));
   } catch (err) {

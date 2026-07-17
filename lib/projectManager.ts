@@ -192,8 +192,9 @@ export function hasUsableStaticPreview(
 }
 
 export function getSiteRoot(projectId: string): string {
-  const sitesDir = path.join(WORKSPACE_ROOT, "sites");
-  const resolved = path.join(sitesDir, projectId);
+  // Bound NFT to `sites/` (not whole WORKSPACE_ROOT) for Turbopack tracing.
+  const sitesDir = path.join(/* turbopackIgnore: true */ WORKSPACE_ROOT, "sites");
+  const resolved = path.join(/* turbopackIgnore: true */ sitesDir, projectId);
   if (!resolved.startsWith(sitesDir + path.sep) && resolved !== sitesDir) {
     throw new Error(`Path traversal detected: "${projectId}" escapes WORKSPACE_ROOT/sites/`);
   }

@@ -32,4 +32,19 @@ describe("previewUrlAllowedForScreenshot", () => {
       process.env.NEXT_PUBLIC_SITE_URL = prev;
     }
   });
+
+  it("allows dedicated NEXT_PUBLIC_PREVIEW_ORIGIN host", () => {
+    const prevSite = process.env.NEXT_PUBLIC_SITE_URL;
+    const prevPreview = process.env.NEXT_PUBLIC_PREVIEW_ORIGIN;
+    process.env.NEXT_PUBLIC_SITE_URL = "https://myapp.example";
+    process.env.NEXT_PUBLIC_PREVIEW_ORIGIN = "https://p.myapp.example";
+    try {
+      const u = previewUrlAllowedForScreenshot("https://p.myapp.example/p1");
+      expect(u.hostname).toBe("p.myapp.example");
+    } finally {
+      process.env.NEXT_PUBLIC_SITE_URL = prevSite;
+      if (prevPreview === undefined) delete process.env.NEXT_PUBLIC_PREVIEW_ORIGIN;
+      else process.env.NEXT_PUBLIC_PREVIEW_ORIGIN = prevPreview;
+    }
+  });
 });

@@ -1,5 +1,3 @@
-import type { ReactNode } from "react";
-import { JetBrains_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import { hasLocale, NextIntlClientProvider } from "next-intl";
 import { getMessages, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
@@ -9,23 +7,12 @@ import { ConsoleEasterEgg } from "@/app/components/ConsoleEasterEgg";
 import { DynamicFavicon } from "@/app/components/DynamicFavicon";
 import { FaviconProvider } from "@/app/contexts/FaviconContext";
 import { AuthUserProvider } from "@/app/contexts/AuthUserContext";
+import { jetBrainsMono, plusJakarta } from "@/app/fonts";
 import { AnalyticsProvider } from "@/components/analytics/AnalyticsProvider";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { Toaster } from "@/components/ui/sonner";
 import { routing } from "@/i18n/routing";
 import "@/app/globals.css";
-
-const plusJakarta = Plus_Jakarta_Sans({
-  variable: "--font-jakarta",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
-
-const jetBrainsMono = JetBrains_Mono({
-  variable: "--font-jetbrains",
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-});
 
 export function generateStaticParams() {
   return routing.locales.map((locale) => ({ locale }));

@@ -1,12 +1,17 @@
 # /etc/nginx/conf.d/open-ox.tech.conf
-# Open-OX → Docker / Node on 127.0.0.1:3000
+# Open-OX → PM2 / Node on 127.0.0.1:3000
 #
 # Install:
 #   sudo cp deploy/open-ox.tech.conf.example /etc/nginx/conf.d/open-ox.tech.conf
 #   # First boot: keep only the :80 server (comment out the :443 block) until certbot succeeds
 #   sudo nginx -t && sudo systemctl reload nginx
-#   sudo certbot --nginx -d open-ox.tech -d www.open-ox.tech
+#   sudo certbot --nginx -d open-ox.tech -d www.open-ox.tech -d p.open-ox.tech
 #   sudo nginx -t && sudo systemctl reload nginx
+#
+# Preview subdomain (Form 1 + nginx edge cache):
+#   NEXT_PUBLIC_SITE_URL=https://open-ox.tech
+#   NEXT_PUBLIC_PREVIEW_ORIGIN=https://p.open-ox.tech
+#   DNS: p.open-ox.tech → same CVM as open-ox.tech
 #
 # If another conf already defines `upstream open_ox_app`, omit this block
 # (or rename) to avoid duplicate upstream errors.
@@ -16,11 +21,20 @@ upstream open_ox_app {
     keepalive 32;
 }
 
+# Shared disk cache for dedicated preview host (immutable _next/static + short HTML).
+# Create once: sudo mkdir -p /var/cache/nginx/open-ox-preview && sudo chown www-data:www-data ...
+proxy_cache_path /var/cache/nginx/open-ox-preview
+    levels=1:2
+    keys_zone=open_ox_preview:32m
+    max_size=2g
+    inactive=7d
+    use_temp_path=off;
+
 # HTTP — ACME + redirect to HTTPS
 server {
     listen 80;
     listen [::]:80;
-    server_name open-ox.tech www.open-ox.tech;
+    server_name open-ox.tech www.open-ox.tech p.open-ox.tech;
 
     location ^~ /.well-known/acme-challenge/ {
         root /var/www/certbot;
@@ -28,7 +42,7 @@ server {
     }
 
     location / {
-        return 301 https://open-ox.tech$request_uri;
+        return 301 https://$host$request_uri;
     }
 }
 
@@ -139,5 +153,77 @@ server {
         proxy_connect_timeout 60s;
         proxy_send_timeout    300s;
         proxy_read_timeout    300s;
+    }
+}
+
+# Dedicated static-preview host — same Node upstream, nginx proxy_cache for warm assets.
+# App rewrites /{projectId}/… → /site-previews/{projectId}/… (see next.config + proxy.ts).
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name p.open-ox.tech;
+
+    ssl_certificate     /etc/letsencrypt/live/open-ox.tech/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/open-ox.tech/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+
+    access_log /sharedata/wayne/open-ox/logs/nginx-preview-access.log;
+    error_log  /sharedata/wayne/open-ox/logs/nginx-preview-error.log;
+
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+    add_header X-Robots-Tag "noindex, nofollow" always;
+
+    # Hashed Next chunks — long cache at the edge (respects upstream Cache-Control).
+    location ~* /_next/static/ {
+        proxy_pass http://open_ox_app;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-Host  $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+
+        proxy_cache open_ox_preview;
+        proxy_cache_key "$scheme$host$request_uri";
+        proxy_cache_valid 200 365d;
+        proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+        proxy_ignore_headers Set-Cookie;
+        add_header X-Open-OX-Nginx-Cache $upstream_cache_status always;
+
+        proxy_buffer_size          128k;
+        proxy_buffers              4 256k;
+        proxy_busy_buffers_size    256k;
+        proxy_connect_timeout 60s;
+        proxy_send_timeout    120s;
+        proxy_read_timeout    120s;
+    }
+
+    location / {
+        proxy_pass http://open_ox_app;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-Host  $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+
+        # HTML / grant bootstrap — short cache only
+        proxy_cache open_ox_preview;
+        proxy_cache_key "$scheme$host$request_uri$http_cookie";
+        proxy_cache_valid 200 30s;
+        proxy_cache_bypass $http_upgrade $arg_ox_grant;
+        proxy_no_cache $arg_ox_grant;
+        add_header X-Open-OX-Nginx-Cache $upstream_cache_status always;
+
+        proxy_buffer_size          128k;
+        proxy_buffers              4 256k;
+        proxy_busy_buffers_size    256k;
+        proxy_connect_timeout 60s;
+        proxy_send_timeout    120s;
+        proxy_read_timeout    120s;
     }
 }
