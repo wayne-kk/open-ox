@@ -38,7 +38,6 @@ import {
 } from "./steps/chromeOptimizeAgent";
 import {
   resolveChromeForm,
-  shouldUsePassThroughLayout,
 } from "./shared/chromeForm";
 import { writeSharedContractStubs } from "./shared/writeSharedContractStubs";
 import { stepGenerateProjectDesignSystem } from "./steps/generateProjectDesignSystem";
@@ -1283,36 +1282,12 @@ async function runGenerateProjectInner(
       appendGeneratedFiles(result, [layoutPath]);
       scaffoldSummary = "screenshot replicate: minimal pass-through layout";
       scaffoldChromeForm = "none";
-    } else if (shouldUsePassThroughLayout(plannedChromeForm)) {
-      // Pass-through only when Plan/Scaffold agent explicitly chose page-local / none.
-      const { layoutPath, removedChromeDir } = await prepareReplicaSiteLayout(blueprint);
-      logger.logStep(
-        ARCHITECT_SCAFFOLD_AGENT_STEP,
-        "ok",
-        `chromeForm=${plannedChromeForm} — pass-through (page-local shell)`
-      );
-      await persistJsonArtifact(artifactLogger, ARCHITECT_SCAFFOLD_AGENT_STEP, "output", {
-        layoutPath,
-        chromeForm: plannedChromeForm,
-        skipped: true,
-        removedChromeDir,
-        reason: `plan chromeForm=${plannedChromeForm}; pages own shell`,
-      });
-      await persistSiteFileArtifact(
-        artifactLogger,
-        ARCHITECT_SCAFFOLD_AGENT_STEP,
-        layoutPath,
-        "layout"
-      );
-      appendGeneratedFiles(result, [layoutPath]);
-      scaffoldSummary = `plan ${plannedChromeForm}: pass-through layout`;
-      scaffoldChromeForm = plannedChromeForm;
     } else if (cp?.skipScaffold) {
       appendGeneratedFiles(result, collectExistingChromeOwnedRelativePaths());
       scaffoldSummary = "resumed: chrome scaffold already complete";
       scaffoldChromeForm = plannedChromeForm;
     } else {
-      // Global form or unspecified: Scaffold Agent decides / implements the shell.
+      // Always scaffold shell (Nav / Sidebar / Footer / tabs). chromeForm never skips.
       const scaffoldResult = await withLangfuseSpan(LfSpanGen.architectScaffoldAgent, () =>
         runArchitectScaffoldStep({
           blueprint,
@@ -1376,13 +1351,11 @@ async function runGenerateProjectInner(
       pageOutcome.pageSummaries.length === blueprint.site.pages.length;
 
     if (allPagesImplemented && !cp?.skipChromeOptimize) {
-      if (skipChromeScaffold || shouldUsePassThroughLayout(plannedChromeForm)) {
+      if (skipChromeScaffold) {
         logger.logStep(
           CHROME_OPTIMIZE_AGENT_STEP,
           "ok",
-          skipChromeScaffold
-            ? "skipped — screenshot replicate (page sections own header/footer)"
-            : `skipped — chromeForm=${plannedChromeForm} (no global chrome to polish)`
+          "skipped — screenshot replicate (page sections own header/footer)"
         );
       } else {
         const optimizeResult = await withLangfuseSpan(LfSpanGen.chromeOptimizeAgent, () =>

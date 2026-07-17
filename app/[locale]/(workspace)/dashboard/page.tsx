@@ -70,6 +70,8 @@ interface ProjectMetadata {
   publishPreview?: boolean;
   allowRemix?: boolean;
   staticPreviewSyncedAt?: string | null;
+  deletedAt?: string | null;
+  purgeAfter?: string | null;
   tags?: ProjectTag[];
 }
 
@@ -773,7 +775,13 @@ function ProjectCard({
                     <DropdownMenuSeparator className="mx-0 my-1 bg-muted" />
                     <div
                       className="flex items-center gap-1 px-1.5 py-1"
-                      onPointerDown={(e) => e.preventDefault()}
+                      onPointerDown={(e) => {
+                        // Keep the submenu open, but still allow the input to take focus.
+                        e.preventDefault();
+                        if (e.target instanceof HTMLInputElement) {
+                          e.target.focus();
+                        }
+                      }}
                     >
                       <input
                         type="text"
@@ -783,6 +791,8 @@ function ProjectCard({
                         disabled={tagBusy}
                         onChange={(e) => setNewTagName(e.target.value)}
                         onKeyDown={(e) => {
+                          // Avoid Radix menu typeahead / item focus stealing keystrokes.
+                          e.stopPropagation();
                           if (e.key === "Enter") {
                             e.preventDefault();
                             void createAndAddTag();
@@ -813,7 +823,7 @@ function ProjectCard({
                   onSelect={() => onDelete()}
                 >
                   <Trash2 className="h-3.5 w-3.5 shrink-0" />
-                  删除项目
+                  移到回收站
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -1174,9 +1184,10 @@ function ConfirmDeleteModal({
   onCancel,
 }: {
   projectName: string;
-  onConfirm: () => void;
+  onConfirm: (autoPurge: boolean) => void;
   onCancel: () => void;
 }) {
+  const [autoPurge, setAutoPurge] = useState(true);
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-2xl">
@@ -1184,12 +1195,26 @@ function ConfirmDeleteModal({
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/10 border border-red-500/20">
             <AlertTriangle className="h-5 w-5 text-red-400" />
           </div>
-          <h3 className="text-[15px] font-semibold text-foreground">确认删除</h3>
+          <h3 className="text-[15px] font-semibold text-foreground">移到回收站</h3>
         </div>
         <p className="text-[13px] text-muted-foreground leading-relaxed mb-1">
-          确定要删除项目 <span className="text-foreground/90 font-medium">&ldquo;{projectName}&rdquo;</span> 吗？
+          确定将项目 <span className="text-foreground/90 font-medium">&ldquo;{projectName}&rdquo;</span>{" "}
+          移到回收站吗？
         </p>
-        <p className="text-[12px] text-red-400/60 mb-6">此操作不可撤销，项目所有数据将被永久删除。</p>
+        <p className="text-[12px] text-muted-foreground/80 mb-4">
+          可从回收站恢复。若已发布到社区，将立即取消发布。
+        </p>
+        <label className="mb-6 flex items-start gap-2.5 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={autoPurge}
+            onChange={(e) => setAutoPurge(e.target.checked)}
+            className="mt-0.5 h-3.5 w-3.5 rounded border-border accent-red-500"
+          />
+          <span className="text-[12px] text-muted-foreground leading-relaxed">
+            30 天后自动永久删除
+          </span>
+        </label>
         <div className="flex items-center justify-end gap-3">
           <button
             onClick={onCancel}
@@ -1198,10 +1223,10 @@ function ConfirmDeleteModal({
             取消
           </button>
           <button
-            onClick={onConfirm}
+            onClick={() => onConfirm(autoPurge)}
             className="rounded-xl px-4 py-2 text-[12px] font-medium text-foreground bg-red-500/80 hover:bg-red-500 border border-red-500/40 transition-colors"
           >
-            确认删除
+            移到回收站
           </button>
         </div>
       </div>
@@ -1217,6 +1242,108 @@ function DeletingOverlay({ label }: { label: string }) {
         <HamsterLoader size="sm" />
         <p className="font-mono text-sm text-muted-foreground tracking-wider">{label}</p>
         <p className="font-mono text-[10px] text-foreground/55">请勿关闭页面</p>
+      </div>
+    </div>
+  );
+}
+
+function ConfirmPurgeModal({
+  projectName,
+  onConfirm,
+  onCancel,
+}: {
+  projectName: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-2xl">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/10 border border-red-500/20">
+            <AlertTriangle className="h-5 w-5 text-red-400" />
+          </div>
+          <h3 className="text-[15px] font-semibold text-foreground">永久删除</h3>
+        </div>
+        <p className="text-[13px] text-muted-foreground leading-relaxed mb-1">
+          确定永久删除{" "}
+          <span className="text-foreground/90 font-medium">&ldquo;{projectName}&rdquo;</span> 吗？
+        </p>
+        <p className="text-[12px] text-red-400/70 mb-6">此操作不可撤销，项目文件将被清除。</p>
+        <div className="flex items-center justify-end gap-3">
+          <button
+            onClick={onCancel}
+            className="rounded-xl px-4 py-2 text-[12px] font-medium text-muted-foreground border border-border hover:bg-muted transition-colors"
+          >
+            取消
+          </button>
+          <button
+            onClick={onConfirm}
+            className="rounded-xl px-4 py-2 text-[12px] font-medium text-foreground bg-red-500/80 hover:bg-red-500 border border-red-500/40 transition-colors"
+          >
+            永久删除
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function purgeStatusLabel(purgeAfter: string | null | undefined): string {
+  if (!purgeAfter) return "不会自动删除";
+  const due = new Date(purgeAfter).getTime();
+  if (!Number.isFinite(due)) return "不会自动删除";
+  const days = Math.ceil((due - Date.now()) / 86_400_000);
+  if (days <= 0) return "即将永久删除";
+  return `${days} 天后永久删除`;
+}
+
+function TrashedProjectCard({
+  project,
+  busy,
+  onRestore,
+  onPurge,
+}: {
+  project: ProjectMetadata;
+  busy: boolean;
+  onRestore: () => void;
+  onPurge: () => void;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card",
+        busy && "pointer-events-none opacity-50"
+      )}
+    >
+      <div className="flex flex-1 flex-col gap-2 px-3.5 py-3.5">
+        <h3 className="line-clamp-2 text-[14px] font-semibold leading-snug text-foreground">
+          {project.name || "未命名项目"}
+        </h3>
+        <p className="text-[12px] text-muted-foreground">
+          删除于 {project.deletedAt ? timeAgo(project.deletedAt) : "—"}
+        </p>
+        <p className="text-[11px] text-muted-foreground/80">
+          {purgeStatusLabel(project.purgeAfter)}
+        </p>
+        <div className="mt-auto flex items-center gap-2 border-t border-border/80 pt-2.5">
+          <button
+            type="button"
+            onClick={onRestore}
+            disabled={busy}
+            className="rounded-lg border border-border bg-muted/40 px-2.5 py-1.5 text-[12px] font-medium text-foreground hover:bg-muted"
+          >
+            恢复
+          </button>
+          <button
+            type="button"
+            onClick={onPurge}
+            disabled={busy}
+            className="rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-[12px] font-medium text-red-400 hover:bg-red-500/20"
+          >
+            永久删除
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1248,6 +1375,7 @@ function ProjectsPageContent() {
   const [tags, setTags] = useState<ProjectTag[]>([]);
   const [folderFilter, setFolderFilter] = useState<string>("all");
   const [publishedOnly, setPublishedOnly] = useState(false);
+  const [trashedOnly, setTrashedOnly] = useState(false);
   const [tagFilter, setTagFilter] = useState<string>("");
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -1258,6 +1386,8 @@ function ProjectsPageContent() {
   const [hasMore, setHasMore] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [pendingPurgeId, setPendingPurgeId] = useState<string | null>(null);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
   const [pendingDeleteFolderId, setPendingDeleteFolderId] = useState<string | null>(null);
   const [pendingDissolveCount, setPendingDissolveCount] = useState<number | null>(null);
   const [deletingFolder, setDeletingFolder] = useState(false);
@@ -1321,8 +1451,14 @@ function ProjectsPageContent() {
   useEffect(() => {
     const published =
       searchParams.get("published") === "1" || searchParams.get("published") === "true";
-    setPublishedOnly((prev) => (prev === published ? prev : published));
-    if (published) {
+    const trashed =
+      searchParams.get("trashed") === "1" || searchParams.get("trashed") === "true";
+    setTrashedOnly((prev) => (prev === trashed ? prev : trashed));
+    setPublishedOnly((prev) => {
+      const next = trashed ? false : published;
+      return prev === next ? prev : next;
+    });
+    if (trashed || published) {
       setFolderFilter((prev) => (prev === "all" ? prev : "all"));
     } else {
       const f = searchParams.get("folder");
@@ -1343,7 +1479,7 @@ function ProjectsPageContent() {
 
   const folderQuery = isRootFolderParam(folderFilter) ? "all" : folderFilter;
   const listScopeKey = [
-    publishedOnly ? "published" : folderQuery,
+    trashedOnly ? "trashed" : publishedOnly ? "published" : folderQuery,
     searchQuery,
     tagFilter,
   ].join("|");
@@ -1355,30 +1491,35 @@ function ProjectsPageContent() {
   };
 
   const syncListQueryToUrl = useCallback(
-    (opts: { tag?: string; folder?: string; published?: boolean }) => {
+    (opts: { tag?: string; folder?: string; published?: boolean; trashed?: boolean }) => {
       const params = new URLSearchParams();
       params.set("mine", "1");
+      const trashed = opts.trashed ?? trashedOnly;
       const published = opts.published ?? publishedOnly;
-      if (published) {
+      if (trashed) {
+        params.set("trashed", "1");
+      } else if (published) {
         params.set("published", "1");
       } else {
         const folder = opts.folder ?? folderQuery;
         params.set("folder", folder);
       }
       const tag = (opts.tag ?? tagFilter).trim();
-      if (tag) params.set("tag", tag);
+      if (tag && !trashed) params.set("tag", tag);
       router.replace(`/dashboard?${params.toString()}`, { scroll: false });
     },
-    [folderQuery, publishedOnly, router, tagFilter]
+    [folderQuery, publishedOnly, router, tagFilter, trashedOnly]
   );
 
   const applyFolderFilter = useCallback(
     (next: string) => {
       setPublishedOnly(false);
+      setTrashedOnly(false);
       setFolderFilter(next);
       syncListQueryToUrl({
         folder: next === "all" ? "all" : next,
         published: false,
+        trashed: false,
       });
     },
     [syncListQueryToUrl]
@@ -1390,6 +1531,7 @@ function ProjectsPageContent() {
       limit: number,
       folder: string,
       published: boolean,
+      trashed: boolean,
       q: string,
       tag: string
     ): Promise<GalleryPagePayload | null> => {
@@ -1398,13 +1540,15 @@ function ProjectsPageContent() {
         params.set("offset", String(offset));
         params.set("limit", String(limit));
         params.set("mine", "1");
-        if (published) {
+        if (trashed) {
+          params.set("trashed", "1");
+        } else if (published) {
           params.set("published", "1");
         } else {
           params.set("folder", folder);
         }
         if (q.trim()) params.set("q", q.trim());
-        if (tag.trim()) params.set("tag", tag.trim());
+        if (tag.trim() && !trashed) params.set("tag", tag.trim());
         const galleryUrl = `/api/projects/gallery?${params.toString()}`;
         const res = await fetchProjectGalleryDeduped(galleryUrl);
         if (res.status === 401) {
@@ -1447,6 +1591,7 @@ function ProjectsPageContent() {
         PAGE_SIZE,
         folderQuery,
         publishedOnly,
+        trashedOnly,
         searchQuery,
         tagFilter
       );
@@ -1464,6 +1609,7 @@ function ProjectsPageContent() {
       folderQuery,
       listScopeKey,
       publishedOnly,
+      trashedOnly,
       searchQuery,
       tagFilter,
     ]
@@ -1477,6 +1623,7 @@ function ProjectsPageContent() {
       PAGE_SIZE,
       folderQuery,
       publishedOnly,
+      trashedOnly,
       searchQuery,
       tagFilter
     );
@@ -1489,6 +1636,7 @@ function ProjectsPageContent() {
     fetchProjectsPage,
     folderQuery,
     publishedOnly,
+    trashedOnly,
     searchQuery,
     tagFilter,
     hasMore,
@@ -1506,6 +1654,7 @@ function ProjectsPageContent() {
       loadedCount,
       folderQuery,
       publishedOnly,
+      trashedOnly,
       searchQuery,
       tagFilter
     );
@@ -1517,6 +1666,7 @@ function ProjectsPageContent() {
     fetchProjectsPage,
     folderQuery,
     publishedOnly,
+    trashedOnly,
     searchQuery,
     tagFilter,
   ]);
@@ -1612,14 +1762,43 @@ function ProjectsPageContent() {
     setPendingDeleteId(id);
   };
 
-  // Step 2: confirm → show loading overlay, do the delete
-  const handleConfirmDelete = async () => {
+  // Step 2: confirm → show loading overlay, move to Recycle Bin
+  const handleConfirmDelete = async (autoPurge: boolean) => {
     const id = pendingDeleteId;
     if (!id) return;
     setPendingDeleteId(null);
     setDeletingId(id);
     try {
-      const res = await fetch(`/api/projects/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/projects/${id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ autoPurge }),
+      });
+      if (res.ok) setProjects((prev) => prev.filter((p) => p.id !== id));
+    } catch { /* ignore */ }
+    finally { setDeletingId(null); }
+  };
+
+  const handleRestore = async (id: string) => {
+    setRestoringId(id);
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(id)}/restore`, {
+        method: "POST",
+      });
+      if (res.ok) setProjects((prev) => prev.filter((p) => p.id !== id));
+    } catch { /* ignore */ }
+    finally { setRestoringId(null); }
+  };
+
+  const handleConfirmPurge = async () => {
+    const id = pendingPurgeId;
+    if (!id) return;
+    setPendingPurgeId(null);
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(id)}/purge`, {
+        method: "DELETE",
+      });
       if (res.ok) setProjects((prev) => prev.filter((p) => p.id !== id));
     } catch { /* ignore */ }
     finally { setDeletingId(null); }
@@ -1722,29 +1901,32 @@ function ProjectsPageContent() {
     [publishedOnly]
   );
 
-  const atRoot = !publishedOnly && isRootFolderParam(folderFilter);
-  const activeTagName = tagFilter
-    ? tags.find((t) => t.id === tagFilter)?.name
-    : null;
-  const currentFolderTitle = publishedOnly
-    ? "已发布"
-    : atRoot
-      ? "我的项目"
-      : folders.find((f) => f.id === folderFilter)?.name ?? "文件夹";
+  const atRoot = !publishedOnly && !trashedOnly && isRootFolderParam(folderFilter);
+  const currentFolderTitle = trashedOnly
+    ? "回收站"
+    : publishedOnly
+      ? "已发布"
+      : atRoot
+        ? "我的项目"
+        : folders.find((f) => f.id === folderFilter)?.name ?? "文件夹";
   const emptyTitle = hasActiveQuery
     ? "没有匹配的项目"
-    : publishedOnly
-      ? "还没有已发布的项目"
-      : atRoot
-        ? "还没有项目"
-        : "这个文件夹还是空的";
+    : trashedOnly
+      ? "回收站是空的"
+      : publishedOnly
+        ? "还没有已发布的项目"
+        : atRoot
+          ? "还没有项目"
+          : "这个文件夹还是空的";
   const emptyHint = hasActiveQuery
     ? "试试其他关键词，或清除搜索 / 标签筛选"
-    : publishedOnly
-      ? "在项目菜单里选择「发布到社区」后会出现在这里"
-      : atRoot
-        ? "描述你的想法，AI 帮你生成完整网站"
-        : "在上方创建，或从其他位置移动项目到这里";
+    : trashedOnly
+      ? "删除的项目会出现在这里，可恢复或永久删除"
+      : publishedOnly
+        ? "在项目菜单里选择「发布到社区」后会出现在这里"
+        : atRoot
+          ? "描述你的想法，AI 帮你生成完整网站"
+          : "在上方创建，或从其他位置移动项目到这里";
 
   if (!authReady || !authUser) {
     return (
@@ -1770,7 +1952,20 @@ function ProjectsPageContent() {
         />
       )}
 
-      {deletingId ? <DeletingOverlay label="正在删除项目..." /> : null}
+      {pendingPurgeId && (
+        <ConfirmPurgeModal
+          projectName={projects.find((p) => p.id === pendingPurgeId)?.name || "未命名项目"}
+          onConfirm={() => void handleConfirmPurge()}
+          onCancel={() => setPendingPurgeId(null)}
+        />
+      )}
+
+      {deletingId ? (
+        <DeletingOverlay
+          label={trashedOnly ? "正在永久删除..." : "正在移到回收站..."}
+        />
+      ) : null}
+      {restoringId ? <DeletingOverlay label="正在恢复..." /> : null}
       {deletingFolder ? <DeletingOverlay label="正在解散文件夹..." /> : null}
 
       {pendingDeleteFolderId && (
@@ -1796,6 +1991,7 @@ function ProjectsPageContent() {
       )}
 
       <div className="relative z-[1]  mx-auto min-h-screen px-8 py-8 sm:px-6 md:py-10 lg:px-8">
+        {!trashedOnly ? (
         <section
           id={WORKSPACE_PROMPT_ID}
           className="relative mb-12 scroll-mt-4 overflow-hidden rounded-[32px] border border-border bg-muted/30 px-4 py-12 sm:px-8 sm:py-16 md:py-20 dark:bg-transparent"
@@ -1819,6 +2015,7 @@ function ProjectsPageContent() {
             />
           </Suspense>
         </section>
+        ) : null}
 
         <div className="mb-8 px-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
@@ -1850,17 +2047,19 @@ function ProjectsPageContent() {
                   </button>
                 ) : null}
               </div>
-              <button
-                type="button"
-                onClick={() => setManageFoldersOpen(true)}
-                className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-border bg-muted/40 px-3 text-[12px] font-medium text-muted-foreground transition-colors hover:border-primary/35 hover:bg-primary/10 hover:text-primary"
-              >
-                <FolderCog className="h-3.5 w-3.5" />
-                管理文件夹
-              </button>
+              {!trashedOnly ? (
+                <button
+                  type="button"
+                  onClick={() => setManageFoldersOpen(true)}
+                  className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-border bg-muted/40 px-3 text-[12px] font-medium text-muted-foreground transition-colors hover:border-primary/35 hover:bg-primary/10 hover:text-primary"
+                >
+                  <FolderCog className="h-3.5 w-3.5" />
+                  管理文件夹
+                </button>
+              ) : null}
             </div>
           </div>
-          {tags.length > 0 ? (
+          {!trashedOnly && tags.length > 0 ? (
             <div className="mt-4 flex flex-wrap items-center gap-1.5 border-t border-border/60 pt-4">
               <span className="mr-0.5 inline-flex items-center gap-1 text-[11px] text-muted-foreground">
                 <Tag className="h-3 w-3" />
@@ -1884,16 +2083,6 @@ function ProjectsPageContent() {
                   </button>
                 );
               })}
-              {tagFilter ? (
-                <button
-                  type="button"
-                  onClick={() => applyTagFilter(tagFilter)}
-                  className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
-                >
-                  <X className="h-3 w-3" />
-                  清除{activeTagName ? `「${activeTagName}」` : "筛选"}
-                </button>
-              ) : null}
             </div>
           ) : null}
         </div>
@@ -1930,7 +2119,7 @@ function ProjectsPageContent() {
               >
                 清除筛选
               </button>
-            ) : publishedOnly ? (
+            ) : trashedOnly || publishedOnly ? (
               <button
                 type="button"
                 onClick={() => applyFolderFilter("all")}
@@ -1957,7 +2146,19 @@ function ProjectsPageContent() {
                 switchingFolder && "pointer-events-none opacity-45"
               )}
             >
-              {projects.map((project) => (
+              {trashedOnly
+                ? projects.map((project) => (
+                    <TrashedProjectCard
+                      key={project.id}
+                      project={project}
+                      busy={
+                        deletingId === project.id || restoringId === project.id
+                      }
+                      onRestore={() => void handleRestore(project.id)}
+                      onPurge={() => setPendingPurgeId(project.id)}
+                    />
+                  ))
+                : projects.map((project) => (
                 <ProjectCard
                   key={project.id}
                   project={project}

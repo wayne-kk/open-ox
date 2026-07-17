@@ -30,9 +30,9 @@ export interface BuildPageAgentUserMessageParams {
 
 function buildWorkspaceNoteBlock(params: BuildPageAgentUserMessageParams): string {
   const lines = [
-    "The **next message** pre-loads Visual Contract, layout, globals, directory trees",
+    "The **next message** pre-loads full `design-system.md`, layout, globals, directory trees",
     ...(params.userProvidedFileHint ? ["and user-provided content"] : []),
-    "— **do not re-read** those paths; start writing. Full `design-system.md` is on disk if needed.",
+    "— **do not re-read** those paths; start writing.",
   ];
   return lines.join(" ");
 }
@@ -62,8 +62,8 @@ export function buildPageAgentUserMessage(params: BuildPageAgentUserMessageParam
 **Do not** create \`components/chrome/**\`. Reproduce header/nav/footer from the reference **inside** \`${targetPath}\` or \`components/**\` section files.
 `
     : `## Layout contract (chrome-first — shell already mounted)
-\`${PAGE_AGENT_LAYOUT_PATH}\` already mounts global chrome (or is intentionally pass-through for page-local products).
-**Do not** create \`components/chrome/**\`, and **do not** implement site-wide Nav/Navbar/Header/Sidebar/Footer, **bottom tab bars**, or **app shell** frames in \`${targetPath}\` or page section components.
+\`${PAGE_AGENT_LAYOUT_PATH}\` already mounts global chrome from Chrome Scaffold (\`components/chrome/**\`: Nav / Sidebar / Footer / tabs).
+**Do not** create \`components/chrome/**\`, and **do not** implement site-wide Nav/Navbar/Header/Sidebar/Footer, **bottom tab bars**, or **app shell** frames in \`${targetPath}\` or page section components — the shell is always owned by Chrome.
 Fill page **sections** / main content only (e.g. feed viewport, hero). Single-page sites: stable section \`id\` attributes (e.g. \`id="features"\`).
 Reuse \`components/shared/**\` stubs when present for list/detail cards.
 `;

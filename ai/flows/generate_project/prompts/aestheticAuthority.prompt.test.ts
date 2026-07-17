@@ -24,8 +24,9 @@ describe("aesthetic authority prompts", () => {
     expect(text).not.toMatch(/Use solid color backgrounds only/);
   });
 
-  it("pageImplementAgent states Contract > engineering", () => {
+  it("pageImplementAgent states design-system > engineering", () => {
     const text = read("steps/pageImplementAgent.md");
+    expect(text).toContain("完整 **`design-system.md`**");
     expect(text).toContain("Visual Contract / Bold Factor");
     expect(text).not.toContain("hero skill");
   });

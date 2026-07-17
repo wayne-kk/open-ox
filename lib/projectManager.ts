@@ -101,6 +101,10 @@ export interface ProjectMetadata {
   staticPreviewSyncedAt?: string | null;
   /** Owner workspace tags (populated by gallery / tag APIs). */
   tags?: ProjectTagRow[];
+  /** Recycle Bin: when set, project is soft-deleted. */
+  deletedAt?: string | null;
+  /** When set, eligible for automatic permanent delete after this time. */
+  purgeAfter?: string | null;
 }
 
 interface ProjectRow {
@@ -137,6 +141,44 @@ interface ProjectRow {
   remixed_from_title?: string | null;
   remixed_from_owner_username?: string | null;
   static_preview_synced_at?: string | null;
+  deleted_at?: string | null;
+  purge_after?: string | null;
+}
+
+/** Days after trash before auto permanent delete when the confirm checkbox is on. */
+export const TRASH_AUTO_PURGE_DAYS = 30;
+
+export type TrashProjectOptions = {
+  /** When true (default), schedule permanent delete after TRASH_AUTO_PURGE_DAYS. */
+  autoPurge?: boolean;
+  /** Injectable clock for tests. */
+  now?: Date;
+};
+
+/** DB patch for moving a project into the Recycle Bin (no file cleanup). */
+export function buildTrashUpdate(options: TrashProjectOptions = {}): {
+  deleted_at: string;
+  purge_after: string | null;
+  publish_preview: false;
+  allow_remix: false;
+  updated_at: string;
+} {
+  const now = options.now ?? new Date();
+  const deletedAt = now.toISOString();
+  const autoPurge = options.autoPurge !== false;
+  let purgeAfter: string | null = null;
+  if (autoPurge) {
+    const due = new Date(now.getTime());
+    due.setUTCDate(due.getUTCDate() + TRASH_AUTO_PURGE_DAYS);
+    purgeAfter = due.toISOString();
+  }
+  return {
+    deleted_at: deletedAt,
+    purge_after: purgeAfter,
+    publish_preview: false,
+    allow_remix: false,
+    updated_at: deletedAt,
+  };
 }
 
 function rowToMetadata(row: ProjectRow): ProjectMetadata {
@@ -178,6 +220,8 @@ function rowToMetadata(row: ProjectRow): ProjectMetadata {
     remixedFromTitle: row.remixed_from_title ?? null,
     remixedFromOwnerUsername: row.remixed_from_owner_username ?? null,
     staticPreviewSyncedAt: row.static_preview_synced_at ?? null,
+    deletedAt: row.deleted_at ?? null,
+    purgeAfter: row.purge_after ?? null,
   };
 }
 
@@ -226,6 +270,8 @@ interface ProjectListRow {
   remixed_from_title?: string | null;
   remixed_from_owner_username?: string | null;
   static_preview_synced_at?: string | null;
+  deleted_at?: string | null;
+  purge_after?: string | null;
 }
 
 export type ProjectFolderFilter = "all" | "uncategorized" | string;
@@ -252,6 +298,8 @@ export async function listProjectsSummary(
     communityListed?: boolean;
     /** Owner workspace: only projects with publish_preview on (any folder) */
     publishedOnly?: boolean;
+    /** Owner Recycle Bin: only soft-deleted projects */
+    trashedOnly?: boolean;
     /** Case-insensitive substring match on name + user_prompt (already sanitized). */
     searchQuery?: string | null;
     /** Owner workspace: only projects linked to this tag id. */
@@ -272,9 +320,15 @@ export async function listProjectsSummary(
   let query = db
     .from("projects")
     .select(
-      "id,name,user_prompt,status,created_at,updated_at,completed_at,error,verification_status,model_id,generation_mode,folder_id,user_id,owner_username,cover_image_status,cover_image_storage_path,cover_image_updated_at,publish_preview,allow_remix,listing,remixed_from_project_id,remixed_from_title,remixed_from_owner_username,static_preview_synced_at"
+      "id,name,user_prompt,status,created_at,updated_at,completed_at,error,verification_status,model_id,generation_mode,folder_id,user_id,owner_username,cover_image_status,cover_image_storage_path,cover_image_updated_at,publish_preview,allow_remix,listing,remixed_from_project_id,remixed_from_title,remixed_from_owner_username,static_preview_synced_at,deleted_at,purge_after"
     )
-    .order("created_at", { ascending: false });
+    .order(options.trashedOnly ? "deleted_at" : "created_at", { ascending: false });
+
+  if (options.trashedOnly) {
+    query = query.not("deleted_at", "is", null);
+  } else {
+    query = query.is("deleted_at", null);
+  }
 
   if (options.communityListed) {
     query = query.eq("publish_preview", true).eq("listing", "listed");
@@ -282,7 +336,9 @@ export async function listProjectsSummary(
 
   if (options.userId) {
     query = query.eq("user_id", options.userId);
-    if (options.publishedOnly) {
+    if (options.trashedOnly) {
+      // Owner Recycle Bin: all folders
+    } else if (options.publishedOnly) {
       query = query.eq("publish_preview", true);
     } else {
       // `all` and legacy `uncategorized` both mean root (folder_id IS NULL),
@@ -362,6 +418,8 @@ export async function listProjectsSummary(
     remixedFromTitle: row.remixed_from_title ?? null,
     remixedFromOwnerUsername: row.remixed_from_owner_username ?? null,
     staticPreviewSyncedAt: row.static_preview_synced_at ?? null,
+    deletedAt: row.deleted_at ?? null,
+    purgeAfter: row.purge_after ?? null,
   }));
 }
 
@@ -626,6 +684,65 @@ export async function renameProject(db: SupabaseClient, id: string, name: string
   if (error) throw new Error(`[projectManager] renameProject failed: ${error.message}`);
 }
 
+/**
+ * Soft-delete into Recycle Bin: clear Community publish flags, optional 30-day purge.
+ * Does not remove site directory or object-storage files.
+ */
+export async function trashProject(
+  db: SupabaseClient,
+  id: string,
+  options: TrashProjectOptions = {}
+): Promise<void> {
+  const patch = buildTrashUpdate(options);
+  const { error } = await db.from("projects").update(patch).eq("id", id);
+  if (error) throw new Error(`[projectManager] trashProject failed: ${error.message}`);
+}
+
+/** Restore from Recycle Bin. Does not re-enable Publish Preview / Allow Remix. */
+export async function restoreProject(db: SupabaseClient, id: string): Promise<void> {
+  const { error } = await db
+    .from("projects")
+    .update({
+      deleted_at: null,
+      purge_after: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) throw new Error(`[projectManager] restoreProject failed: ${error.message}`);
+}
+
+/**
+ * Soft-deleted projects whose auto-purge time has passed (for the sweep job).
+ * Caps batch size so a single run cannot starve the process.
+ */
+export async function listDueTrashProjectIds(
+  db: SupabaseClient,
+  options?: { now?: Date; limit?: number }
+): Promise<string[]> {
+  const now = options?.now ?? new Date();
+  const limit =
+    typeof options?.limit === "number" &&
+    Number.isFinite(options.limit) &&
+    options.limit > 0
+      ? Math.min(Math.floor(options.limit), 200)
+      : 50;
+
+  const { data, error } = await db
+    .from("projects")
+    .select("id")
+    .not("deleted_at", "is", null)
+    .not("purge_after", "is", null)
+    .lte("purge_after", now.toISOString())
+    .order("purge_after", { ascending: true })
+    .limit(limit);
+
+  if (error) {
+    throw new Error(`[projectManager] listDueTrashProjectIds failed: ${error.message}`);
+  }
+  return ((data ?? []) as { id: string }[]).map((r) => r.id).filter(Boolean);
+}
+
+/** Hard-delete project row and site directory (permanent). Storage cleanup is caller's job. */
 export async function deleteProject(db: SupabaseClient, id: string): Promise<void> {
   const { error } = await db.from("projects").delete().eq("id", id);
   if (error) throw new Error(`[projectManager] deleteProject failed: ${error.message}`);

@@ -3,6 +3,9 @@
  *
  * Labels are **agent-chosen** vocabulary for ownership / orchestration.
  * Do not map productType (or any scene heuristic) onto a form in code.
+ *
+ * Shell (Nav / Sidebar / Footer / bottom tabs) is always owned by Chrome Scaffold.
+ * Page agents never write global chrome. `page-local` is removed.
  */
 
 export const CHROME_FORMS = [
@@ -10,7 +13,6 @@ export const CHROME_FORMS = [
   "top-nav+footer",
   "sidebar",
   "bottom-tabs",
-  "page-local",
   "none",
   "unspecified",
 ] as const;
@@ -54,8 +56,9 @@ export function normalizeChromeForm(raw: unknown): ChromeForm {
       "bottom-tabs": "bottom-tabs",
       bottomtabs: "bottom-tabs",
       "bottom-tab": "bottom-tabs",
-      "page-local": "page-local",
-      pagelocal: "page-local",
+      // Legacy: page-local removed — let Scaffold choose a real shell.
+      "page-local": "unspecified",
+      pagelocal: "unspecified",
       none: "none",
       minimal: "none",
       unspecified: "unspecified",
@@ -67,7 +70,8 @@ export function normalizeChromeForm(raw: unknown): ChromeForm {
     if (/top[\s_-]*nav/.test(trimmed)) return "top-nav";
     if (/sidebar/.test(trimmed)) return "sidebar";
     if (/bottom[\s_-]*tab/.test(trimmed)) return "bottom-tabs";
-    if (/page[\s_-]*local/.test(trimmed)) return "page-local";
+    // Legacy page-local wording → Scaffold decides.
+    if (/page[\s_-]*local/.test(trimmed)) return "unspecified";
     if (isChromeForm(compact)) return compact;
   }
   return "unspecified";
@@ -83,12 +87,14 @@ export function needsGlobalChromeScaffold(chromeForm: ChromeForm): boolean {
 }
 
 /**
- * Skip writing/mounting global chrome (pass-through layout).
- * Only when an agent explicitly chose page-local / none.
+ * Pass-through layout is **not** selected via chromeForm anymore.
+ * Chrome Scaffold always owns the shell (Nav / Sidebar / Footer / tabs).
  * Screenshot replicate is handled by the caller separately.
+ *
+ * `none` still runs Scaffold (minimal shell / no marketing chrome UI) — pages never own chrome.
  */
-export function shouldUsePassThroughLayout(chromeForm: ChromeForm): boolean {
-  return chromeForm === "page-local" || chromeForm === "none";
+export function shouldUsePassThroughLayout(_chromeForm: ChromeForm): boolean {
+  return false;
 }
 
 export function normalizeSharedContracts(raw: unknown): SharedContract[] {

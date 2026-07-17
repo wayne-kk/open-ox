@@ -17,6 +17,7 @@ import {
   BookOpen,
   CreditCard,
   Plug,
+  Trash2,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -152,14 +153,17 @@ function SidebarBody({
   const tSettings = useTranslations("settings");
   const folderParam = searchParams.get("folder");
   const publishedParam = searchParams.get("published");
+  const trashedParam = searchParams.get("trashed");
   const onDashboard = pathname === "/dashboard";
   const onPublished =
     onDashboard && (publishedParam === "1" || publishedParam === "true");
+  const onTrashed =
+    onDashboard && (trashedParam === "1" || trashedParam === "true");
   const onCommunity = pathname === "/community" || pathname.startsWith("/community/");
   const onIntegrations =
     pathname === "/settings/integrations" || pathname.startsWith("/settings/integrations");
   const onDashboardRoot =
-    onDashboard && !onPublished && isRootFolderParam(folderParam);
+    onDashboard && !onPublished && !onTrashed && isRootFolderParam(folderParam);
 
   const handleStartBuild = () => {
     onNavigate?.();
@@ -317,6 +321,15 @@ function SidebarBody({
           collapsed={collapsed}
           onClick={onNavigate}
           tourId="workspace-published"
+        />
+        <NavItem
+          href="/dashboard?mine=1&trashed=1"
+          label={t("recycleBin")}
+          icon={Trash2}
+          active={onTrashed}
+          collapsed={collapsed}
+          onClick={onNavigate}
+          tourId="workspace-recycle-bin"
         />
         <NavItem
           href="/community"

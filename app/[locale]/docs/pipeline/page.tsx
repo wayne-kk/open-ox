@@ -138,9 +138,10 @@ export default function PipelinePage() {
   → chrome_optimize_agent      // 仅 link / 锚点 polish
   → images ∥ deps → typecheck → build → repair`}</Pre>
           <Callout>
-            例外仅来自计划结果：截图复刻，或 Agent 显式选择{" "}
-            <Code>chromeForm ∈ {"{ page-local, none }"}</Code>。
-            代码与 prompt 不得用 productType 查表或页内 regex 强制 skip/mount。
+            例外仅截图复刻（pass-through）。普通生成一律由 Chrome Scaffold
+            落壳；<Code>page-local</Code> 已删除；<Code>none</Code> 仍为 Chrome
+            拥有的极简壳。代码与 prompt 不得用 productType 查表或页内 regex 强制
+            skip/mount。
           </Callout>
         </section>
 

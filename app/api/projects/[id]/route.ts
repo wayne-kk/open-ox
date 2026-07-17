@@ -2,11 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   getProject,
   renameProject,
-  deleteProject,
+  trashProject,
   setProjectFolder,
   setProjectPublishSettings,
 } from "@/lib/projectManager";
-import { deleteProjectFiles } from "@/lib/storage";
 import { stopDevServer } from "@/lib/devServerManager";
 import { getSessionUser } from "@/lib/auth/session";
 import { requireOwnedProject } from "@/lib/auth/projectAccess";
@@ -134,7 +133,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   return NextResponse.json(responsePayload);
 }
 
-export async function DELETE(_req: NextRequest, { params }: Params) {
+export async function DELETE(req: NextRequest, { params }: Params) {
   const session = await getSessionUser();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
@@ -149,14 +148,27 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
       { status: 404 }
     );
   }
+  if (project.deletedAt) {
+    return NextResponse.json(
+      { error: "Project already in Recycle Bin", code: "PROJECT_ALREADY_TRASHED" },
+      { status: 409 }
+    );
+  }
+
+  let autoPurge = true;
+  try {
+    const body = (await req.json()) as { autoPurge?: unknown };
+    if (body && typeof body === "object" && body.autoPurge === false) {
+      autoPurge = false;
+    }
+  } catch {
+    // Empty body → default autoPurge true
+  }
 
   // Skip getDevServerStatus: on E2B it connects to the sandbox just to see if serve is up — slow and unnecessary.
   // stopDevServer only reads sandbox_id from DB and kills when present (or stops local preview).
   await stopDevServer(db, id);
 
-  await deleteProject(db, id);
-  deleteProjectFiles(id).catch((err) =>
-    console.error("[DELETE /api/projects/:id] Storage cleanup failed:", err)
-  );
+  await trashProject(db, id, { autoPurge });
   return new NextResponse(null, { status: 204 });
 }

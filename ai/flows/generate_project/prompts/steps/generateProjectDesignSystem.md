@@ -32,7 +32,7 @@ The design system must also fit the product logic:
 
 Output a complete Markdown document following this exact structure.
 
-**Required early section:** Immediately after Design Philosophy, include `## Visual Contract (agent)` — a short, machine-readable brief for Page Agent bootstrap (not the full token dump). Downstream injects this section instead of the whole design system.
+**Required early section:** Immediately after Design Philosophy, include `## Visual Contract (agent)` — a short, machine-readable brief inside the design system (ceilings / bold factor / hero notes). Downstream Page Agent bootstrap injects the **full** `design-system.md` (not only this section).
 
 ---
 
@@ -62,7 +62,7 @@ Output a complete Markdown document following this exact structure.
 
 ## Visual Contract (agent)
 
-Short implementer brief (keep under ~40 lines). Page agents read **this** by default.
+Short implementer brief (keep under ~40 lines). Lives inside the full design system that Page agents receive.
 
 ### Color roles
 List hex for at least: `background`, `foreground`, `primary`, `muted`, `accent` (and `card` if distinct). One line each.

@@ -31,6 +31,8 @@ export type StaticPreviewAccessRow = {
   id: string;
   ownerUserId: string | null;
   publishPreview: boolean;
+  /** Soft-deleted projects are never previewable. */
+  deleted: boolean;
 };
 
 type CachedRow = {
@@ -139,6 +141,7 @@ type LeanRow = {
   id: string;
   user_id: string | null;
   publish_preview: boolean | null;
+  deleted_at?: string | null;
 };
 
 export async function loadStaticPreviewAccessRow(
@@ -168,7 +171,7 @@ export async function loadStaticPreviewAccessRow(
 
   const { data, error } = await db
     .from("projects")
-    .select("id, user_id, publish_preview")
+    .select("id, user_id, publish_preview, deleted_at")
     .eq("id", projectId)
     .maybeSingle();
 
@@ -178,10 +181,17 @@ export async function loadStaticPreviewAccessRow(
   }
 
   const lean = data as LeanRow;
+  // Soft-deleted → treat as missing for all preview surfaces.
+  if (lean.deleted_at) {
+    rowCache.set(projectId, { row: null, expiresAt: nowMs + PREVIEW_ACCESS_ROW_TTL_MS });
+    return null;
+  }
+
   const row: StaticPreviewAccessRow = {
     id: lean.id,
     ownerUserId: lean.user_id,
     publishPreview: lean.publish_preview === true,
+    deleted: false,
   };
   rowCache.set(projectId, { row, expiresAt: nowMs + PREVIEW_ACCESS_ROW_TTL_MS });
   return row;
@@ -227,6 +237,21 @@ export async function resolveStaticPreviewAccess(params: {
     return { status: "ok" };
   }
 
+  // Resolve project first so Recycle Bin (soft-delete) revokes grants immediately.
+  const row = await loadStaticPreviewAccessRow(projectId, { db, nowMs });
+  if (!row) {
+    // When caller did not pass `db`, load may return null because service role
+    // env is missing — probe once for a misconfigured signal.
+    if (!db) {
+      try {
+        createSupabaseServiceRoleClient();
+      } catch {
+        return { status: "misconfigured" };
+      }
+    }
+    return { status: "not_found" };
+  }
+
   const grantFromQuery = readPreviewAccessGrantFromUrl(request.url);
   const grantFromCookie = readPreviewAccessGrantFromCookieHeader(
     request.headers.get("cookie")
@@ -241,18 +266,6 @@ export async function resolveStaticPreviewAccess(params: {
       };
     }
     return { status: "ok" };
-  }
-
-  const row = await loadStaticPreviewAccessRow(projectId, { db, nowMs });
-  if (!row) {
-    // Distinguish misconfigured service role (no client) from missing project:
-    // load returns null for both; try creating client once more for misconfig signal.
-    try {
-      createSupabaseServiceRoleClient();
-    } catch {
-      return { status: "misconfigured" };
-    }
-    return { status: "not_found" };
   }
 
   if (

@@ -130,7 +130,7 @@ Step 12: run_build                       ← next build（内含 TS code-fix 重
 Step 13: repair_build × 0–5             ← 构建仍失败则 Agent 增量修复（最多 5 轮）
 ```
 
-说明：`clear_template` 属于项目脚手架 / 首次初始化逻辑，不计入上述 SSE 步骤枚举；checkpoint 恢复时会跳过已完成阶段。默认管线为 **chrome-first**（见 `docs/product/chrome-first-generate-pipeline-architecture.md`、ADR-0005）；screenshot replicate / `chromeForm=page-local|none` 时 Scaffold 可为 pass-through。
+说明：`clear_template` 属于项目脚手架 / 首次初始化逻辑，不计入上述 SSE 步骤枚举；checkpoint 恢复时会跳过已完成阶段。默认管线为 **chrome-first**（见 `docs/product/chrome-first-generate-pipeline-architecture.md`、ADR-0005）；Chrome Scaffold 始终落壳，仅 screenshot replicate 可为 pass-through。
 
 4.2 analyze_project_requirement（含并行 infer_design_intent）
 

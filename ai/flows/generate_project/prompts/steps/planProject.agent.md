@@ -11,11 +11,13 @@
 
 ## Chrome-first 契约
 
-全局壳由下游 **Chrome Scaffold** 先写（若你选了全局形态），Page Agent 只填内容。本步骤**必须由你自行判断** `chromeForm`：
+全局壳（Nav / Sidebar / Footer / bottom tabs）**一律**由下游 **Chrome Scaffold** 写入 `components/chrome/**` 并挂进 `app/layout.tsx`。Page Agent **只填内容区**，禁止写壳。本步骤**必须由你自行判断** `chromeForm`：
 
-- 标签仅作所有权编排：`top-nav+footer` | `top-nav` | `sidebar` | `bottom-tabs` | `page-local` | `none`
-- **根据 brief 与页面纲要自由决定**需要什么壳；没有跨页共享壳就选 `page-local` 或 `none`
-- **禁止**套用固定产品类型配方（不要「官网→顶栏」「后台→sidebar」「短视频→page-local」这类硬映射）
+- 标签仅作壳形态编排：`top-nav+footer` | `top-nav` | `sidebar` | `bottom-tabs` | `none`
+- **根据 brief 与页面纲要决定壳形态**（营销站常用 `top-nav+footer`；工具台常用 `sidebar`；移动 App 常用 `bottom-tabs`）
+- `none` = Scaffold 仍拥有 layout，但采用极简/无营销导航的壳（**不是**把壳交给 Page）
+- **禁止**使用已删除的 `page-local`（壳不能由页面实现）
+- **禁止**套用死板产品类型配方；但仍须选出一种由 Chrome 落盘的壳形态
 
 有 list + detail（或其它共享实体卡片）时，填写 `sharedContracts`（实体名、字段、建议 `components/shared/*.tsx` 路径、listSlug、detailRoutePattern）。无则 `[]`。
 

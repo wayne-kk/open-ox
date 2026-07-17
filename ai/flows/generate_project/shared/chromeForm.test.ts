@@ -11,7 +11,8 @@ describe("chromeForm", () => {
   it("normalizes aliases from agent-provided strings", () => {
     expect(normalizeChromeForm("Top Nav + Footer")).toBe("top-nav+footer");
     expect(normalizeChromeForm("sidebar+topbar")).toBe("sidebar");
-    expect(normalizeChromeForm("page-local")).toBe("page-local");
+    // Legacy page-local → Scaffold decides (unspecified)
+    expect(normalizeChromeForm("page-local")).toBe("unspecified");
   });
 
   it("resolveChromeForm only normalizes explicit agent values — never invents from productType", () => {
@@ -21,11 +22,10 @@ describe("chromeForm", () => {
     expect(resolveChromeForm({ chromeForm: "" })).toBe("unspecified");
   });
 
-  it("classifies global vs pass-through from agent-chosen labels only", () => {
+  it("classifies global forms; chromeForm never selects pass-through", () => {
     expect(needsGlobalChromeScaffold("top-nav+footer")).toBe(true);
-    expect(needsGlobalChromeScaffold("page-local")).toBe(false);
     expect(needsGlobalChromeScaffold("unspecified")).toBe(false);
-    expect(shouldUsePassThroughLayout("none")).toBe(true);
+    expect(shouldUsePassThroughLayout("none")).toBe(false);
     expect(shouldUsePassThroughLayout("sidebar")).toBe(false);
     expect(shouldUsePassThroughLayout("unspecified")).toBe(false);
   });

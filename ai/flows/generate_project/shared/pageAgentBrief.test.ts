@@ -35,7 +35,7 @@ describe("pageAgentBrief", () => {
       completeToolName: "page_implementation_complete",
     });
     expect(msg).toContain("Workspace context");
-    expect(msg).toContain("Visual Contract");
+    expect(msg).toContain("design-system.md");
     expect(msg).toContain("do not re-read");
     expect(msg).toContain("Implement first");
     expect(msg).toContain("chrome-first");

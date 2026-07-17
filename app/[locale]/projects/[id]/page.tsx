@@ -69,8 +69,12 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     setShowDeleteConfirm(false);
     setDeleting(true);
     try {
-      const res = await fetch(`/api/projects/${id}`, { method: "DELETE" });
-      if (res.ok) router.push("/dashboard");
+      const res = await fetch(`/api/projects/${id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ autoPurge: true }),
+      });
+      if (res.ok) router.push("/dashboard?mine=1&trashed=1");
     } catch { /* ignore */ }
     finally { setDeleting(false); }
   };
@@ -212,10 +216,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-destructive/10 border border-destructive/20">
                 <AlertTriangle className="h-5 w-5 text-destructive" />
               </div>
-              <h3 className="text-[15px] font-semibold text-foreground">确认删除</h3>
+              <h3 className="text-[15px] font-semibold text-foreground">移到回收站</h3>
             </div>
-            <p className="text-[13px] text-muted-foreground leading-relaxed mb-1">确定要删除这个项目吗？</p>
-            <p className="text-[12px] text-destructive/80 mb-6">此操作不可撤销，项目所有数据将被永久删除。</p>
+            <p className="text-[13px] text-muted-foreground leading-relaxed mb-1">确定将此项目移到回收站吗？</p>
+            <p className="text-[12px] text-muted-foreground/80 mb-6">可从回收站恢复；默认 30 天后自动永久删除。已发布到社区会立即取消。</p>
             <div className="flex items-center justify-end gap-3">
               <button
                 onClick={() => setShowDeleteConfirm(false)}
@@ -227,7 +231,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 onClick={handleDelete}
                 className="rounded-xl px-4 py-2 text-[12px] font-medium text-white bg-destructive hover:bg-destructive/90 border border-destructive/40 transition-colors"
               >
-                确认删除
+                移到回收站
               </button>
             </div>
           </div>

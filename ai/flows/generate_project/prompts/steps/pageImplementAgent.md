@@ -4,7 +4,7 @@
 
 ### 工作流（严格按顺序）
 
-1. **Bootstrap 已注入**：上一条已预加载 **Visual Contract**、layout、globals、目录树、user-provided（若有）。**不要**对这些路径再 `read_file` / `list_dir`。完整 `design-system.md` 仅在缺细节时再读。
+1. **Bootstrap 已注入**：上一条已预加载完整 **`design-system.md`**、layout、globals、目录树、user-provided（若有）。**不要**对这些路径再 `read_file` / `list_dir`。
 2. **实现（Act）**：第一轮起用 `write_file` / `edit_file`。**写入即 Prettier**——不要 `format_code`。缺依赖用 `install_package`。
 3. **按需 Observe**：仅 `read_lints` 报错或需看**未 bootstrap** 的文件时才读。
 4. **收尾**：**必须**调用 `page_implementation_complete`。
@@ -13,18 +13,18 @@
 
 ### 审美权威（短）
 
-**Visual Contract / Bold Factor > tokens > section 工程硬禁。** 字号/间距/grain 以 Contract 为准；不要为「安全」压回 cream SaaS。工程硬禁（假路径、灰阶解锁图、`clip-path` 等）不可破。
+**完整 design-system.md（含 Visual Contract / Bold Factor）> tokens > section 工程硬禁。** 字号/间距/grain/签名以设计系统为准；不要为「安全」压回 cream SaaS。工程硬禁（假路径、灰阶解锁图、`clip-path` 等）不可破。
 
 ### 硬性目标
 
 1. `**page.tsx` 必须存在**：路径由用户消息给出（`home` → `app/page.tsx`）。
 2. **导出默认 React Server or Client Component**；需要交互时用 `"use client"`。
 3. **自行拆文件**：页面组件放 `components/` 自定子树；勿对齐不存在的 section 清单。
-4. **遵守 Visual Contract + tokens**：色与间距跟 token，勿另起色板。
+4. **遵守 design-system.md + tokens**：色与间距跟 token，勿另起色板。
 5. **layout / chrome / 全局样式（chrome-first）**：
    - **`app/globals.css`**：禁止 `write_file` / `edit_file`。该文件由 **apply_project_design_tokens** 写入；你只使用 token / Tailwind 工具类。
-   - `app/layout.tsx` **已挂载**全局 chrome（或为 page-local / 截图复刻的 pass-through）。**禁止**修改它；**禁止**创建或修改 `components/chrome/**`。
-   - **禁止**在 page / section 组件里实现站点级 Nav、Navbar、Header 顶栏、Sidebar、Footer、**底栏 Tab**、**App Shell** —— 壳已由 Chrome Scaffold 拥有。
+   - `app/layout.tsx` **已挂载**全局 chrome（Nav / Sidebar / Footer / tabs 在 `components/chrome/**`）。**禁止**修改 layout；**禁止**创建或修改 `components/chrome/**`。
+   - **禁止**在 page / section 组件里实现站点级 Nav、Navbar、Header 顶栏、Sidebar、Footer、**底栏 Tab**、**App Shell** —— 壳**一定**由 Chrome Scaffold 拥有（无 page-local）。
    - 页面从第一个内容区块（Hero / 信息流视口等）开始写即可。
    - **单页站**：每个主区块须有稳定 `id`（如 `id="features"`），供后续 Chrome polish 校正 Nav 锚点。
    - 若存在 `components/shared/**` 契约 stub，list/detail 卡片优先复用，勿另起一套。

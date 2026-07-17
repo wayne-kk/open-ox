@@ -53,6 +53,18 @@ const CHANGELOG: ChangeEntry[] = [
     ],
   },
   {
+    version: "v1.17.1",
+    date: "2026-07-17",
+    tag: "patch",
+    title: "Chrome 所有权 · 删除 page-local，壳必由 Scaffold 落盘",
+    body: "去掉 chromeForm=page-local 透传例外，避免「跳过 Scaffold 且禁止 Page 写壳」的真空。Nav / Sidebar / Footer / tabs 一律拆到 components/chrome/**；Page 只填内容。遗留 page-local 归一为 unspecified。见 ADR-0005。",
+    items: [
+      "chromeForm 不再选择 pass-through；仅截图复刻例外",
+      "Page Agent bootstrap 注入完整 design-system.md",
+      "Plan / Scaffold / Optimize prompt 同步",
+    ],
+  },
+  {
     version: "v1.16",
     date: "2026-07-13",
     tag: "minor",

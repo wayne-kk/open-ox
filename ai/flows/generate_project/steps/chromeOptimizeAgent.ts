@@ -135,7 +135,7 @@ ${truncateChromeAgentText(designSystem, 6_000)}
 
 ## Workflow
 1. **Polish only** — global chrome was already scaffolded (chrome-first). Fix Nav/Footer hrefs from the Disk survey; do **not** invent a second Navigation.
-2. If Prior \`chromeForm\` is \`page-local\` / \`none\` or layout is pass-through: keep it; call complete immediately.
+2. Shell should already exist under \`components/chrome/**\` — polish hrefs only. Pass-through is screenshot-replicate only.
 3. Optional micro-polish (sticky / mobile menu) if budget remains.
 4. Call \`${CHROME_OPTIMIZE_COMPLETE}\` promptly (target ≤8 tool rounds).
 
@@ -144,7 +144,8 @@ Hard rules:
 - Do **not** modify \`app/**/page.tsx\`.
 - Do **not** modify \`app/globals.css\`.
 - Do **not** invent routes or \`#id\` anchors missing from the Disk survey.
-- Do **not** mount a second global Nav on top of an existing shell.`;
+- Do **not** mount a second global Nav on top of an existing shell.
+- Do **not** move shell into pages (\`page-local\` removed).`;
 
   const refGr =
     referenceScreenshotDataUrl?.trim() && screenshotGuardrailId?.trim()

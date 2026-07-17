@@ -89,8 +89,8 @@ export default function SectionGenerationPage() {
           </P>
           <Callout>
             <Code>plan_project</Code> 根据 brief 自选 <Code>chromeForm</Code>（无 productType 查表），
-            并规划 sharedContracts。全局壳由 Scaffold 写入；Page Agent 只填内容，不得再造一套 Nav/Footer。
-            例外：截图复刻或 <Code>chromeForm ∈ {"{ page-local, none }"}</Code>。见 ADR-0005。
+            并规划 sharedContracts。全局壳（Nav / Sidebar / Footer）一律由 Scaffold 写入；Page Agent 只填内容，不得再造一套壳。
+            例外仅截图复刻（pass-through）。<Code>page-local</Code> 已删除。见 ADR-0005。
           </Callout>
         </section>
 

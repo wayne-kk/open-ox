@@ -42,13 +42,15 @@ type Session = { supabase: SupabaseClient; user: User };
 /**
  * Load a project the caller may mutate / open in Studio.
  * Owners use the session client (RLS). Admins may use service role when `allowAdmin` is true.
+ * Soft-deleted (Recycle Bin) projects are rejected unless `allowTrashed` is true.
  */
 export async function requireOwnedProject(
   session: Session,
   projectId: string,
-  options?: { allowAdmin?: boolean }
+  options?: { allowAdmin?: boolean; allowTrashed?: boolean }
 ): Promise<{ project: ProjectMetadata; db: SupabaseClient; isAdmin: boolean } | { error: NextResponse }> {
   const allowAdmin = options?.allowAdmin === true;
+  const allowTrashed = options?.allowTrashed === true;
   let isAdmin = false;
   if (allowAdmin) {
     isAdmin = await isAdminUser({
@@ -64,6 +66,9 @@ export async function requireOwnedProject(
   }
   if (!isAdmin && !isProjectOwner(project, session.user.id)) {
     return { error: forbiddenProjectResponse() };
+  }
+  if (!allowTrashed && project.deletedAt) {
+    return { error: projectNotFoundResponse() };
   }
   return { project, db, isAdmin };
 }

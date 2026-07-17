@@ -14,6 +14,7 @@ import {
  * Covers are loaded via `/api/projects/:id/cover?v=` on the client.
  * Query: offset, limit, folder (`all` | `uncategorized` | folder uuid),
  * published (`1` = only publish_preview, any folder; ignores folder),
+ * trashed (`1` = Recycle Bin only; ignores folder / published),
  * q (name / prompt search), tag (tag uuid filter).
  * `all` / `uncategorized` = root only (`folder_id` null), unless `q` is set
  * (then search spans every owned project).
@@ -32,6 +33,8 @@ export async function GET(req: Request) {
     const folderParam = (searchParams.get("folder") || "all").trim() || "all";
     const publishedOnly =
       searchParams.get("published") === "1" || searchParams.get("published") === "true";
+    const trashedOnly =
+      searchParams.get("trashed") === "1" || searchParams.get("trashed") === "true";
     const searchQuery = normalizeGallerySearchQuery(searchParams.get("q"));
     const tagIdRaw = (searchParams.get("tag") || "").trim();
     const tagId = tagIdRaw || null;
@@ -46,9 +49,13 @@ export async function GET(req: Request) {
 
     const projectsRaw = await listProjectsSummary(db, {
       userId: session.user.id,
-      ...(publishedOnly ? { publishedOnly: true } : { folder }),
+      ...(trashedOnly
+        ? { trashedOnly: true }
+        : publishedOnly
+          ? { publishedOnly: true }
+          : { folder }),
       ...(searchQuery ? { searchQuery } : {}),
-      ...(tagId ? { tagId } : {}),
+      ...(tagId && !trashedOnly ? { tagId } : {}),
       limit,
       offset,
     });

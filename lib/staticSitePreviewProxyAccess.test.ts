@@ -71,6 +71,7 @@ describe("loadStaticPreviewAccessRow", () => {
         id: "p1",
         user_id: "owner-1",
         publish_preview: true,
+        deleted_at: null,
       },
       error: null,
     });
@@ -84,12 +85,32 @@ describe("loadStaticPreviewAccessRow", () => {
       id: "p1",
       ownerUserId: "owner-1",
       publishPreview: true,
+      deleted: false,
     });
-    expect(select).toHaveBeenCalledWith("id, user_id, publish_preview");
+    expect(select).toHaveBeenCalledWith("id, user_id, publish_preview, deleted_at");
 
     const row2 = await loadStaticPreviewAccessRow("p1", { db, nowMs: 2000 });
     expect(row2).toEqual(row1);
     expect(maybeSingle).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats soft-deleted projects as missing", async () => {
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        id: "p1",
+        user_id: "owner-1",
+        publish_preview: true,
+        deleted_at: "2026-07-17T12:00:00.000Z",
+      },
+      error: null,
+    });
+    const eq = vi.fn(() => ({ maybeSingle }));
+    const select = vi.fn(() => ({ eq }));
+    const from = vi.fn(() => ({ select }));
+    const db = { from } as never;
+
+    const row = await loadStaticPreviewAccessRow("p1", { db, nowMs: 1000 });
+    expect(row).toBeNull();
   });
 });
 
@@ -107,8 +128,14 @@ describe("resolveStaticPreviewAccess", () => {
     id: string;
     user_id: string | null;
     publish_preview: boolean | null;
+    deleted_at?: string | null;
   } | null) {
-    const maybeSingle = vi.fn().mockResolvedValue({ data: row, error: null });
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: row
+        ? { deleted_at: null, ...row }
+        : null,
+      error: null,
+    });
     const eq = vi.fn(() => ({ maybeSingle }));
     const select = vi.fn(() => ({ eq }));
     const from = vi.fn(() => ({ select }));
@@ -214,5 +241,27 @@ describe("resolveStaticPreviewAccess", () => {
       db: mockDb({ id: "p1", user_id: "owner-1", publish_preview: false }),
     });
     expect(result).toEqual({ status: "forbidden" });
+  });
+
+  it("denies grant cookie after project is soft-deleted", async () => {
+    const token = mintPreviewAccessGrant("p1", 1_700_000_000)!;
+    const result = await resolveStaticPreviewAccess({
+      projectId: "p1",
+      request: new Request("http://localhost/site-previews/p1", {
+        headers: {
+          cookie: `${PREVIEW_ACCESS_GRANT_COOKIE}=${encodeURIComponent(token)}`,
+        },
+      }),
+      getSessionUser: vi.fn(),
+      isAdminUser: vi.fn(),
+      db: mockDb({
+        id: "p1",
+        user_id: "owner-1",
+        publish_preview: true,
+        deleted_at: "2026-07-17T12:00:00.000Z",
+      }),
+      nowSec: 1_700_000_000,
+    });
+    expect(result).toEqual({ status: "not_found" });
   });
 });
