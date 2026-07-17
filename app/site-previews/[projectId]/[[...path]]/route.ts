@@ -136,7 +136,7 @@ async function proxyFromStorage(
     if (method === "HEAD") {
       return new NextResponse(null, { status: 200, headers });
     }
-    return new NextResponse(cached.body, { status: 200, headers });
+    return new NextResponse(new Uint8Array(cached.body), { status: 200, headers });
   }
 
   // Prefer GET for cacheable paths so we can populate the upstream cache even on HEAD.
@@ -200,7 +200,7 @@ async function proxyFromStorage(
     if (method === "HEAD") {
       return new NextResponse(null, { status: 200, headers });
     }
-    return new NextResponse(buf, { status: 200, headers });
+    return new NextResponse(new Uint8Array(buf), { status: 200, headers });
   }
 
   const headers = previewResponseHeaders({
