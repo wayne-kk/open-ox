@@ -1,10 +1,32 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { scheduleCaptureProjectCover } from "@/lib/projectCoverCapture";
+import { getSiteRoot } from "@/lib/projectManager";
+import { isPreparingSiteHomePageStub } from "@/lib/preparingSiteHomePageStub";
 import { syncLocalProjectFingerprint } from "@/lib/previewFingerprintDb";
 import { shouldPublishStaticSitePreview } from "@/lib/previewMode";
 import { uploadFullProject } from "@/lib/storage";
 import { syncStaticSitePreview } from "@/lib/staticSitePreview";
+
+async function assertHomePageNotPreparingStub(projectId: string): Promise<void> {
+  const pagePath = path.join(getSiteRoot(projectId), "app", "page.tsx");
+  let content = "";
+  try {
+    content = await fs.readFile(pagePath, "utf-8");
+  } catch {
+    throw new Error(
+      `[preview pipeline] app/page.tsx missing after generation projectId=${projectId}`
+    );
+  }
+  if (isPreparingSiteHomePageStub(content)) {
+    throw new Error(
+      `[preview pipeline] app/page.tsx is still the Preparing stub after generation ` +
+        `projectId=${projectId} — refusing to publish static preview`
+    );
+  }
+}
 
 /**
  * Sync fingerprint + static preview (force). Does not upload sources or capture cover.
@@ -14,16 +36,20 @@ export async function awaitPostModifyStaticPreviewSync(
   db: SupabaseClient,
   projectId: string
 ): Promise<void> {
-  try {
-    await syncLocalProjectFingerprint(db, projectId);
-  } catch (fpErr) {
-    console.warn(
-      `[preview pipeline] syncLocalProjectFingerprint failed ${projectId}:`,
-      fpErr instanceof Error ? fpErr.message : fpErr
-    );
-  }
+  // Do NOT stamp files_hash here — syncStaticSitePreview(force) decides whether
+  // local fingerprint is safe to trust (never stamps while home is still the
+  // Preparing stub). Premature stamp was racing first auto-preview and blocking restore.
   if (shouldPublishStaticSitePreview()) {
     await syncStaticSitePreview(db, projectId, { force: true });
+  } else {
+    try {
+      await syncLocalProjectFingerprint(db, projectId);
+    } catch (fpErr) {
+      console.warn(
+        `[preview pipeline] syncLocalProjectFingerprint failed ${projectId}:`,
+        fpErr instanceof Error ? fpErr.message : fpErr
+      );
+    }
   }
 }
 
@@ -40,8 +66,18 @@ export function schedulePostGenerationPreviewPipeline(
 ): void {
   void (async () => {
     try {
+      await assertHomePageNotPreparingStub(projectId);
+      // Publish static preview from local disk first (coalesces with Studio Rebuild),
+      // then upload the full source snapshot for cross-device restore.
       await awaitPostModifyStaticPreviewSync(db, projectId);
-      await uploadFullProject(projectId);
+      try {
+        await uploadFullProject(projectId);
+      } catch (uploadErr) {
+        console.error(
+          `[preview pipeline] uploadFullProject failed ${projectId}:`,
+          uploadErr
+        );
+      }
       scheduleCaptureProjectCover(projectId);
     } catch (err) {
       console.error(`[preview pipeline] post-generation failed ${projectId}:`, err);

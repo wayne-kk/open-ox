@@ -6,6 +6,7 @@
  *
  * Shell (Nav / Sidebar / Footer / bottom tabs) is always owned by Chrome Scaffold.
  * Page agents never write global chrome. `page-local` is removed.
+ * Pass-through layout is **only** for screenshot replicate (handled by the caller).
  */
 
 export const CHROME_FORMS = [
@@ -56,7 +57,7 @@ export function normalizeChromeForm(raw: unknown): ChromeForm {
       "bottom-tabs": "bottom-tabs",
       bottomtabs: "bottom-tabs",
       "bottom-tab": "bottom-tabs",
-      // Legacy: page-local removed — let Scaffold choose a real shell.
+      // Legacy: page-local removed — Scaffold must choose a real shell.
       "page-local": "unspecified",
       pagelocal: "unspecified",
       none: "none",
@@ -84,17 +85,6 @@ export function resolveChromeForm(params: { chromeForm?: unknown }): ChromeForm 
 
 export function needsGlobalChromeScaffold(chromeForm: ChromeForm): boolean {
   return GLOBAL_CHROME_FORMS.has(chromeForm);
-}
-
-/**
- * Pass-through layout is **not** selected via chromeForm anymore.
- * Chrome Scaffold always owns the shell (Nav / Sidebar / Footer / tabs).
- * Screenshot replicate is handled by the caller separately.
- *
- * `none` still runs Scaffold (minimal shell / no marketing chrome UI) — pages never own chrome.
- */
-export function shouldUsePassThroughLayout(_chromeForm: ChromeForm): boolean {
-  return false;
 }
 
 export function normalizeSharedContracts(raw: unknown): SharedContract[] {

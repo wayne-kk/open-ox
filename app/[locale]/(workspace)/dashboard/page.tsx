@@ -7,7 +7,7 @@ import {
   Trash2, Plus, FolderInput, Folder,
   AlertCircle, Loader2, Sparkles,
   AlertTriangle, MoreHorizontal, Globe2, FolderCog, Check, Pencil,
-  Repeat2, Clock, ArrowUpRight, Rocket, ImagePlus, Search, Tag, X,
+  Repeat2, Clock, ArrowUpRight, Rocket, ImagePlus, Search, Tag, X, Undo2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { openOxVercelReconnectHref } from "@/lib/vercel/dashboardUrl";
@@ -1309,43 +1309,148 @@ function TrashedProjectCard({
   onRestore: () => void;
   onPurge: () => void;
 }) {
+  const hasCover = project.coverImageStatus === "ready";
+  const [coverLoaded, setCoverLoaded] = useState(false);
+  const [coverFailed, setCoverFailed] = useState(false);
+  const coverImgRef = useRef<HTMLImageElement | null>(null);
+  const coverSrc = hasCover
+    ? projectCoverDisplayUrl(project.id, project.coverImageUpdatedAt ?? null)
+    : null;
+  const showCoverImage = Boolean(coverSrc) && !coverFailed;
+  const colors = hashColor(project.id);
+  const initials = (project.name || "P")
+    .split(/[\s-_]+/)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("");
+
+  useEffect(() => {
+    setCoverLoaded(false);
+    setCoverFailed(false);
+  }, [coverSrc]);
+
+  useEffect(() => {
+    if (!showCoverImage) return;
+    const img = coverImgRef.current;
+    if (!img) return;
+    if (img.complete && img.naturalWidth > 0) {
+      setCoverLoaded(true);
+    } else if (img.complete && img.naturalWidth === 0) {
+      setCoverFailed(true);
+    }
+  }, [showCoverImage, coverSrc]);
+
   return (
-    <div
+    <article
       className={cn(
-        "flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card",
+        "group/card ox-project-card relative flex h-full flex-col overflow-hidden rounded-xl",
+        "border border-border bg-card",
         busy && "pointer-events-none opacity-50"
       )}
     >
-      <div className="flex flex-1 flex-col gap-2 px-3.5 py-3.5">
-        <h3 className="line-clamp-2 text-[14px] font-semibold leading-snug text-foreground">
+      <div
+        className={cn(
+          "relative block w-full overflow-hidden aspect-[16/10]",
+          !showCoverImage && `bg-gradient-to-br ${colors.bg}`,
+          showCoverImage && "bg-muted"
+        )}
+      >
+        {showCoverImage && coverSrc ? (
+          <>
+            {!coverLoaded ? (
+              <div className="absolute inset-0 z-[1] animate-pulse bg-muted" aria-hidden />
+            ) : null}
+            {/* eslint-disable-next-line @next/next/no-img-element -- versioned app cover proxy */}
+            <img
+              ref={coverImgRef}
+              src={coverSrc}
+              alt=""
+              className={cn(
+                "ox-card-cover absolute inset-0 z-0 h-full w-full object-cover object-center",
+                coverLoaded ? "opacity-100" : "opacity-0"
+              )}
+              loading="lazy"
+              decoding="async"
+              onLoad={() => setCoverLoaded(true)}
+              onError={() => {
+                setCoverFailed(true);
+                setCoverLoaded(false);
+              }}
+            />
+          </>
+        ) : (
+          <>
+            <div
+              className="absolute inset-0 opacity-[0.07]"
+              style={{
+                backgroundImage: "radial-gradient(circle, white 1px, transparent 1px)",
+                backgroundSize: "20px 20px",
+              }}
+            />
+            <span
+              className={cn(
+                "relative z-[1] flex h-full items-center justify-center font-heading text-2xl font-bold tracking-tight sm:text-3xl",
+                colors.text,
+                "opacity-80"
+              )}
+            >
+              {initials || "?"}
+            </span>
+          </>
+        )}
+
+        <span className="pointer-events-none absolute left-2.5 top-2.5 z-20 inline-flex items-center gap-1 rounded-full border border-border bg-background/80 px-2 py-0.5 text-muted-foreground backdrop-blur-md">
+          <Trash2 className="h-3 w-3 shrink-0" />
+          <span className="text-[9px] font-medium tracking-wide">已删除</span>
+        </span>
+      </div>
+
+      <div className="flex min-h-0 flex-1 flex-col gap-2 px-3.5 py-3">
+        <h3 className="ox-card-title min-w-0 text-[13px] font-semibold leading-snug text-foreground/95 line-clamp-2">
           {project.name || "未命名项目"}
         </h3>
-        <p className="text-[12px] text-muted-foreground">
-          删除于 {project.deletedAt ? timeAgo(project.deletedAt) : "—"}
-        </p>
-        <p className="text-[11px] text-muted-foreground/80">
-          {purgeStatusLabel(project.purgeAfter)}
-        </p>
-        <div className="mt-auto flex items-center gap-2 border-t border-border/80 pt-2.5">
+
+        {project.userPrompt?.trim() ? (
+          <p className="line-clamp-2 text-[11px] leading-relaxed text-foreground/55">
+            {project.userPrompt.trim()}
+          </p>
+        ) : (
+          <p className="text-[11px] text-foreground/30">暂无描述</p>
+        )}
+
+        <div className="mt-auto flex flex-wrap items-center gap-x-2.5 gap-y-1 border-t border-border/80 pt-2.5">
+          <span className="inline-flex items-center gap-1 text-[10px] tabular-nums text-muted-foreground">
+            <Clock className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+            删除于 {project.deletedAt ? timeAgo(project.deletedAt) : "—"}
+          </span>
+          <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+            <AlertTriangle className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+            {purgeStatusLabel(project.purgeAfter)}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={onRestore}
             disabled={busy}
-            className="rounded-lg border border-border bg-muted/40 px-2.5 py-1.5 text-[12px] font-medium text-foreground hover:bg-muted"
+            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-border bg-muted/40 px-2.5 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:border-primary/35 hover:bg-primary/10 hover:text-primary"
           >
+            <Undo2 className="h-3.5 w-3.5 shrink-0" />
             恢复
           </button>
           <button
             type="button"
             onClick={onPurge}
             disabled={busy}
-            className="rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-[12px] font-medium text-red-400 hover:bg-red-500/20"
+            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-[12px] font-medium text-red-400 transition-colors hover:bg-red-500/20"
           >
+            <Trash2 className="h-3.5 w-3.5 shrink-0" />
             永久删除
           </button>
         </div>
       </div>
-    </div>
+    </article>
   );
 }
 

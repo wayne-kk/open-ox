@@ -125,6 +125,8 @@ export interface RunPageImplementAgentParams {
 
 export interface PageImplementAgentResult {
   pagePath: string;
+  /** All paths the agent wrote/edited (page + extracted components). */
+  writtenPaths: string[];
   trace: StepTrace;
   pendingImages: PendingImage[];
   summary: string;
@@ -460,7 +462,17 @@ export async function runPageImplementAgent(
     );
   }
   assertDefaultExportPage(tsx, targetPath);
+  if (tsx.includes("Preparing your site")) {
+    throw new Error(
+      `page_implement_agent:${page.slug}: ${targetPath} is still the default stub ` +
+        `("Preparing your site…") after the agent signaled completion`
+    );
+  }
   await formatSiteFile(targetPath);
+
+  const writtenPaths = Array.from(
+    new Set([...sessionState.writtenPaths, ...sessionState.editedPaths, targetPath])
+  );
 
   const trace: StepTrace = {
     input: {
@@ -484,6 +496,7 @@ export async function runPageImplementAgent(
 
   return {
     pagePath: targetPath,
+    writtenPaths,
     trace,
     pendingImages,
     summary: completeSummary || content.slice(0, 500) || "ok",

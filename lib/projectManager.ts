@@ -8,6 +8,7 @@ import {
   ensureProjectNodeModules as ensureProjectNodeModulesImpl,
   type EnsureProjectNodeModulesResult,
 } from "@/lib/ensureProjectNodeModules";
+import { DEFAULT_HOME_PAGE_TSX } from "@/lib/preparingSiteHomePageStub";
 import {
   listProjectIdsWithTag,
   shouldSearchAcrossFolders,
@@ -808,14 +809,6 @@ export default function RootLayout({
  * Stub home route so local `next dev` does not 404 before Page Agent writes the real page.
  * Template copy intentionally excludes `app/page.tsx` (Architect/Page Agent own it).
  */
-const DEFAULT_HOME_PAGE_TSX = `export default function HomePage() {
-  return (
-    <main className="flex min-h-[50vh] items-center justify-center p-8 text-center text-muted-foreground">
-      <p>Preparing your site…</p>
-    </main>
-  );
-}
-`;
 
 async function writeDefaultRootLayout(projectDir: string): Promise<void> {
   const appDir = path.join(projectDir, "app");

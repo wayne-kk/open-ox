@@ -33,6 +33,7 @@ import {
   collectChromeFilesFromToolCalls,
   truncateChromeAgentText,
 } from "../shared/chromeAgentCommon";
+import { resolveChromeForm } from "../shared/chromeForm";
 
 export const CHROME_OPTIMIZE_AGENT_STEP = "chrome_optimize_agent";
 export const CHROME_OPTIMIZE_COMPLETE = "chrome_optimize_complete";
@@ -170,7 +171,7 @@ Hard rules:
 
   let optimizeComplete = false;
   let completeSummary = "";
-  let chromeForm = scaffoldContext.chromeForm || "unspecified";
+  let chromeForm = resolveChromeForm({ chromeForm: scaffoldContext.chromeForm });
 
   const maxIterations = Math.max(
     6,
@@ -190,10 +191,12 @@ Hard rules:
       ): Promise<ToolResult> => {
         optimizeComplete = true;
         completeSummary = typeof args.summary === "string" ? args.summary.trim() : "";
-        chromeForm =
-          typeof args.chromeForm === "string" && args.chromeForm.trim()
-            ? args.chromeForm.trim()
-            : chromeForm;
+        chromeForm = resolveChromeForm({
+          chromeForm:
+            typeof args.chromeForm === "string" && args.chromeForm.trim()
+              ? args.chromeForm.trim()
+              : chromeForm,
+        });
         return { success: true, output: "chrome_optimize_complete acknowledged" };
       },
     },

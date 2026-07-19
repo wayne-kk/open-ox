@@ -516,7 +516,8 @@ async function generatePages(params: {
       await persistSiteFileArtifact(artifactLogger, agentStepName, outcome.pagePath, "page");
 
       return {
-        files: [outcome.pagePath],
+        files:
+          outcome.writtenPaths.length > 0 ? outcome.writtenPaths : [outcome.pagePath],
         pendingImages: outcome.pendingImages,
         pageSummary: {
           slug: page.slug,

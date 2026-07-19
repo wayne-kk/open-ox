@@ -30,7 +30,8 @@ import {
 import { envForNextWebpackChild } from "@/lib/nextWebpackChildEnv";
 import { withSiteBuildLock } from "@/lib/siteBuildLock";
 import { getSiteRoot } from "@/lib/projectManager";
-import { ensureProjectSourcesOnDisk } from "@/lib/storage";
+import { isPreparingSiteHomePageStub } from "@/lib/preparingSiteHomePageStub";
+import { ensureProjectSourcesOnDisk, restoreProjectFiles } from "@/lib/storage";
 import {
   computeProjectFingerprint,
   ensureGlobalErrorFromTemplateForProject,
@@ -40,6 +41,7 @@ import {
   getSavedFingerprint,
   parseProjectsFilesHash,
   saveFingerprint,
+  syncLocalProjectFingerprint,
 } from "@/lib/previewFingerprintDb";
 import { canUseInstantStaticPreview } from "@/lib/staticSitePreviewFastPath";
 import {
@@ -50,6 +52,7 @@ import {
 } from "@/lib/staticPreviewBuildStamp";
 import {
   resolveInFlightSyncPolicy,
+  shouldStampLocalFingerprintBeforeEnsure,
   staticExportFingerprintDrifted,
 } from "@/lib/staticSitePreviewInFlight";
 import { rewriteExportedPublicRootPathsInText } from "@/lib/staticExportPublicPathRewrite";
@@ -471,7 +474,15 @@ async function persistSyncError(db: SupabaseClient, projectId: string, message: 
     .eq("id", projectId);
 }
 
-const inFlight = new Map<string, Promise<{ url: string; port: number; skipped?: boolean }>>();
+export type StaticPreviewSyncResult = {
+  url: string;
+  port: number;
+  skipped?: boolean;
+  /** Present when skipped because app/page.tsx is still the init stub. */
+  skippedReason?: "preparing_stub";
+};
+
+const inFlight = new Map<string, Promise<StaticPreviewSyncResult>>();
 
 export type SyncStaticPreviewOptions = {
   /** Skip fingerprint short-circuit (always rebuild + upload). */
@@ -528,7 +539,7 @@ async function tryInstantStaticPreviewReturn(
   db: SupabaseClient,
   projectId: string,
   force: boolean
-): Promise<{ url: string; port: number; skipped: true } | null> {
+): Promise<StaticPreviewSyncResult | null> {
   const row = await loadStaticPreviewRow(db, projectId);
   let diskFp: string | null = null;
   try {
@@ -561,7 +572,7 @@ export async function syncStaticSitePreview(
   db: SupabaseClient,
   projectId: string,
   options?: SyncStaticPreviewOptions
-): Promise<{ url: string; port: number; skipped?: boolean }> {
+): Promise<StaticPreviewSyncResult> {
   const force = options?.force === true;
   const existing = inFlight.get(projectId);
   const inFlightPolicy = resolveInFlightSyncPolicy({
@@ -587,11 +598,81 @@ export async function syncStaticSitePreview(
     }
 
     const projectDir = getSiteRoot(projectId);
+    const homePagePath = path.join(projectDir, "app", "page.tsx");
+
+    let homeBeforeEnsure = "";
+    try {
+      homeBeforeEnsure = await fs.readFile(homePagePath, "utf-8");
+    } catch {
+      homeBeforeEnsure = "";
+    }
+
+    // Force rebuild may stamp local files_hash so a just-finished generate tree is
+    // not replaced by a stale Storage snapshot. Never stamp while home is still the
+    // Preparing stub — that hides drift and blocks restoring the real page.
+    if (
+      shouldStampLocalFingerprintBeforeEnsure({
+        force,
+        localHomeIsPreparingStub: isPreparingSiteHomePageStub(homeBeforeEnsure),
+      })
+    ) {
+      try {
+        await syncLocalProjectFingerprint(db, projectId);
+      } catch (fpErr) {
+        console.warn(
+          `[staticPreview] syncLocalProjectFingerprint failed projectId=${projectId}:`,
+          fpErr instanceof Error ? fpErr.message : fpErr
+        );
+      }
+    }
+
     await ensureProjectSourcesOnDisk(projectId, { db });
     try {
       await fs.access(path.join(projectDir, "package.json"));
     } catch {
       throw new Error(`Project directory not found: ${projectDir}`);
+    }
+
+    // First auto-preview (Studio PUT force) often races the last page write / restore.
+    // Wait longer on force so we don't soft-skip a just-finished generate.
+    const homeWaitAttempts = force ? 12 : 5;
+    let homePageContent = "";
+    for (let attempt = 0; attempt < homeWaitAttempts; attempt += 1) {
+      try {
+        homePageContent = await fs.readFile(homePagePath, "utf-8");
+      } catch {
+        homePageContent = "";
+      }
+      if (!isPreparingSiteHomePageStub(homePageContent) && homePageContent.trim()) {
+        break;
+      }
+      // Local tree was wiped back to the init stub after a successful generate —
+      // force one Storage restore before giving up (common after disk cleanup).
+      if (attempt === 1 || attempt === 4 || attempt === 8) {
+        try {
+          await restoreProjectFiles(projectId);
+        } catch (restoreErr) {
+          console.warn(
+            `[staticPreview] restoreProjectFiles while waiting for home page failed projectId=${projectId}:`,
+            restoreErr instanceof Error ? restoreErr.message : restoreErr
+          );
+        }
+      }
+      // Generation may still be flushing page.tsx when Studio auto-previews.
+      await new Promise((r) => setTimeout(r, force ? 500 : 400));
+    }
+    if (isPreparingSiteHomePageStub(homePageContent) || !homePageContent.trim()) {
+      // Mid-gen / race: do not publish stub as a successful Storage export.
+      // Soft-skip (never throw) so Studio can retry instead of showing a hard error.
+      console.warn(
+        `[staticPreview] refusing to publish Preparing stub home page projectId=${projectId} force=${force}`
+      );
+      return {
+        url: getStaticPreviewUrl(projectId),
+        port: 0,
+        skipped: true,
+        skippedReason: "preparing_stub",
+      };
     }
 
     await ensureGlobalErrorFromTemplateForProject(projectId);

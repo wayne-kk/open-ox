@@ -34,6 +34,7 @@ import {
   hasChromeLayoutDefaultExport,
   truncateChromeAgentText,
 } from "../shared/chromeAgentCommon";
+import { resolveChromeForm } from "../shared/chromeForm";
 
 export const ARCHITECT_SCAFFOLD_AGENT_STEP = "architect_scaffold_agent";
 export const ARCHITECT_SCAFFOLD_COMPLETE = "architect_scaffold_complete";
@@ -79,10 +80,9 @@ export async function runArchitectScaffoldAgent(
   const thinking = getThinkingLevelForStep(ARCHITECT_SCAFFOLD_AGENT_STEP);
   const preRead = buildChromePreReadContext();
   const pagesSummary = buildBlueprintPagesSummary(blueprint);
-  const plannedChromeForm =
-    typeof blueprint.site.informationArchitecture.chromeForm === "string"
-      ? blueprint.site.informationArchitecture.chromeForm
-      : "unspecified";
+  const plannedChromeForm = resolveChromeForm({
+    chromeForm: blueprint.site.informationArchitecture.chromeForm,
+  });
 
   const userMessage = `## Scaffold global chrome (chrome-first — fast draft, links may be provisional)
 
@@ -91,6 +91,7 @@ ${buildChromeProjectHeader(blueprint)}
 ## Planned chromeForm (from Plan — agent-chosen contract)
 - **chromeForm**: \`${plannedChromeForm}\`
 - If set to a global form, implement that shell. If \`unspecified\`, decide one coherent shell from the brief. Do **not** invent a second shell family on top.
+- Never use \`page-local\` / pass-through — Chrome Scaffold always owns the shell (\`none\` = minimal shell still owned here).
 
 ## Page plans (Page Agents will implement content next — leave {children} for them)
 ${pagesSummary}
@@ -156,10 +157,12 @@ Hard rules:
       ): Promise<ToolResult> => {
         scaffoldComplete = true;
         completeSummary = typeof args.summary === "string" ? args.summary.trim() : "";
-        chromeForm =
-          typeof args.chromeForm === "string" && args.chromeForm.trim()
-            ? args.chromeForm.trim()
-            : chromeForm;
+        chromeForm = resolveChromeForm({
+          chromeForm:
+            typeof args.chromeForm === "string" && args.chromeForm.trim()
+              ? args.chromeForm.trim()
+              : chromeForm,
+        });
         return { success: true, output: "architect_scaffold_complete acknowledged" };
       },
     },
@@ -226,7 +229,7 @@ Hard rules:
     await writeSiteFile("app/layout.tsx", buildMinimalChromeRootLayout(blueprint));
     await formatSiteFile("app/layout.tsx");
     fellBackToMinimal = true;
-    chromeForm = "minimal-fallback";
+    chromeForm = "none";
     if (!completeSummary) {
       completeSummary =
         "Scaffold agent did not produce a valid layout; pipeline fell back to minimal root layout.";

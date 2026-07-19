@@ -26,3 +26,17 @@ export function staticExportFingerprintDrifted(
 ): boolean {
   return fingerprintAtSyncStart !== fingerprintAfterBuild;
 }
+
+/**
+ * Force sync may stamp local `files_hash` before restore so a just-finished
+ * generate tree is not replaced by a stale Storage snapshot.
+ *
+ * Never do that while `app/page.tsx` is still the Preparing stub — stamping the
+ * stub fingerprint hides Storage drift and blocks restoring the real home page.
+ */
+export function shouldStampLocalFingerprintBeforeEnsure(args: {
+  force: boolean;
+  localHomeIsPreparingStub: boolean;
+}): boolean {
+  return args.force && !args.localHomeIsPreparingStub;
+}

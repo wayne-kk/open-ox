@@ -15,6 +15,7 @@ import archiver from "archiver";
 import AdmZip from "adm-zip";
 import { computeProjectFingerprint } from "./previewShared";
 import { getSavedFingerprint, parseProjectsFilesHash } from "./previewFingerprintDb";
+import { isPreparingSiteHomePageStub } from "./preparingSiteHomePageStub";
 import { getProjectFilesStorageClient } from "./projectFilesStorageClient";
 import { createSupabaseServiceRoleClient } from "./supabase/service-role";
 import { getSiteRoot, WORKSPACE_ROOT } from "./projectManager";
@@ -353,10 +354,9 @@ async function restoreFromSnapshotZip(
       if (!isSafeRestoreRelativePath(name)) continue;
       const data = entry.getData();
       if (!data?.length && name.length > 0) continue;
-      const localPath = path.join(projectRoot, ...name.split("/"));
-      await fs.mkdir(path.dirname(localPath), { recursive: true });
-      await fs.writeFile(localPath, data);
-      written.push(name);
+      if (await writeRestoredFileIfSafe(projectRoot, name, data)) {
+        written.push(name);
+      }
     }
 
     try {
@@ -381,11 +381,10 @@ async function restoreFromManifestBatchedDownloads(
     const storagePath = `${projectId}/${relativePath}`;
     const { data, error } = await getProjectFilesStorageClient().storage.from(BUCKET).download(storagePath);
     if (error || !data) return;
-    const localPath = path.join(projectRoot, ...relativePath.split("/"));
-    await fs.mkdir(path.dirname(localPath), { recursive: true });
     const buffer = Buffer.from(await data.arrayBuffer());
-    await fs.writeFile(localPath, buffer);
-    restored.push(relativePath);
+    if (await writeRestoredFileIfSafe(projectRoot, relativePath, buffer)) {
+      restored.push(relativePath);
+    }
   });
   restored.sort();
   return restored;
@@ -527,6 +526,63 @@ async function localHomePageMissing(projectId: string): Promise<boolean> {
   }
 }
 
+async function localHomePageIsPreparingStub(projectId: string): Promise<boolean> {
+  try {
+    const content = await fs.readFile(
+      path.join(getSiteRoot(projectId), "app", "page.tsx"),
+      "utf-8"
+    );
+    return isPreparingSiteHomePageStub(content);
+  } catch {
+    return false;
+  }
+}
+
+async function remoteHomePageIsNonStub(projectId: string): Promise<boolean> {
+  try {
+    const { data, error } = await getProjectFilesStorageClient()
+      .storage.from(BUCKET)
+      .download(`${projectId}/app/page.tsx`);
+    if (error || !data) return false;
+    const text = Buffer.from(await data.arrayBuffer()).toString("utf-8");
+    return text.trim().length > 0 && !isPreparingSiteHomePageStub(text);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Never clobber a real generated home page with the init stub from a stale/partial
+ * Storage snapshot (common right after generate, before uploadFullProject finishes).
+ */
+async function writeRestoredFileIfSafe(
+  projectRoot: string,
+  relativePath: string,
+  buffer: Buffer
+): Promise<boolean> {
+  const normalized = relativePath.replace(/\\/g, "/");
+  if (normalized === "app/page.tsx" || normalized === "app/page.jsx") {
+    const incoming = buffer.toString("utf-8");
+    if (isPreparingSiteHomePageStub(incoming)) {
+      try {
+        const local = await fs.readFile(path.join(projectRoot, normalized), "utf-8");
+        if (!isPreparingSiteHomePageStub(local)) {
+          console.warn(
+            `[storage] skip restore of stub ${normalized} over real local page`
+          );
+          return false;
+        }
+      } catch {
+        /* local missing — allow writing stub */
+      }
+    }
+  }
+  const localPath = path.join(projectRoot, ...normalized.split("/"));
+  await fs.mkdir(path.dirname(localPath), { recursive: true });
+  await fs.writeFile(localPath, buffer);
+  return true;
+}
+
 /**
  * True when local `sites/{id}` is out of date vs the last upload recorded in `projects.files_hash`.
  * Canonical generated sources live in Storage after `uploadFullProject`; preview/build must match that tree.
@@ -551,11 +607,12 @@ async function isLocalProjectOutOfSyncWithStorage(
  *
  * - No `package.json` → restore full tree from Storage (or template base).
  * - Missing `app/page.tsx` while Storage has a snapshot → restore (local wipe / failed re-init).
+ * - Local home is still the "Preparing your site…" stub → restore (post-gen sources lost / never landed).
  * - With `db`: if disk fingerprint ≠ `projects.files_hash` → restore (API disk stale vs worker upload).
  *   Callers that write locally (e.g. modify agent) must invoke `syncLocalProjectFingerprint` first so
  *   newer on-disk edits are not mistaken for stale API copies.
  *
- * Without `db`, only the missing-package / missing-home-page cases run (legacy callers).
+ * Without `db`, only the missing-package / missing-home-page / stub-home cases run (legacy callers).
  */
 export async function ensureProjectSourcesOnDisk(
   projectId: string,
@@ -563,18 +620,27 @@ export async function ensureProjectSourcesOnDisk(
 ): Promise<void> {
   const pkgExists = await projectPackageJsonExists(projectId);
   const homeMissing = pkgExists && (await localHomePageMissing(projectId));
+  const homeIsStub = pkgExists && !homeMissing && (await localHomePageIsPreparingStub(projectId));
   const outOfSync =
     pkgExists && options?.db
       ? await isLocalProjectOutOfSyncWithStorage(options.db, projectId)
       : false;
+  // Only chase Storage for a stub home when Storage actually has a real page.
+  const stubFixableFromRemote =
+    homeIsStub && (await remoteHomePageIsNonStub(projectId));
 
-  if (pkgExists && !outOfSync && !homeMissing) {
+  const needsRestore = !pkgExists || homeMissing || outOfSync || stubFixableFromRemote;
+  if (!needsRestore) {
     return;
   }
 
   if (homeMissing) {
     console.warn(
       `[storage] local app/page.tsx missing — restoring from Storage projectId=${projectId}`
+    );
+  } else if (stubFixableFromRemote) {
+    console.warn(
+      `[storage] local app/page.tsx is still the Preparing stub — restoring real page from Storage projectId=${projectId}`
     );
   }
 
@@ -675,11 +741,10 @@ async function restoreProjectFilesInner(projectId: string): Promise<string[]> {
       if (error || !data) return;
 
       const relativePath = storagePath.slice(projectId.length + 1);
-      const localPath = path.join(getSiteRoot(projectId), relativePath);
-      await fs.mkdir(path.dirname(localPath), { recursive: true });
       const buffer = Buffer.from(await data.arrayBuffer());
-      await fs.writeFile(localPath, buffer);
-      restored.push(relativePath);
+      if (await writeRestoredFileIfSafe(projectRoot, relativePath, buffer)) {
+        restored.push(relativePath);
+      }
     })
   );
 

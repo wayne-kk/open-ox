@@ -426,7 +426,7 @@ export function buildChromeCompleteTool(
           chromeForm: {
             type: "string",
             description:
-              "Short label for the chrome family (e.g. 'top-nav+footer', 'sidebar+topbar', 'minimal').",
+              "Chrome family actually written: 'top-nav+footer' | 'top-nav' | 'sidebar' | 'bottom-tabs' | 'none'. Never 'page-local'.",
           },
           ...extraProperties,
         },

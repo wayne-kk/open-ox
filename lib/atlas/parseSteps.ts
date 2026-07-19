@@ -118,7 +118,7 @@ function formatStepLabel(step: string): string {
     return `layout ${toolName}`;
   }
   if (step === "architect_scaffold_agent") {
-    return "layout pass-through";
+    return "chrome scaffold";
   }
   if (step.startsWith("chrome_optimize_agent_tool:")) {
     const parts = step.replace("chrome_optimize_agent_tool:", "").split(":");

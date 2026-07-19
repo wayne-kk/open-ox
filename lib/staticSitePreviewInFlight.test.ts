@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   resolveInFlightSyncPolicy,
+  shouldStampLocalFingerprintBeforeEnsure,
   staticExportFingerprintDrifted,
 } from "./staticSitePreviewInFlight";
 
@@ -28,5 +29,31 @@ describe("staticExportFingerprintDrifted", () => {
   it("detects stub→real page fingerprint change during build", () => {
     expect(staticExportFingerprintDrifted("stubfp0000000001", "realfp0000000002")).toBe(true);
     expect(staticExportFingerprintDrifted("samefp0000000001", "samefp0000000001")).toBe(false);
+  });
+});
+
+describe("shouldStampLocalFingerprintBeforeEnsure", () => {
+  it("never stamps a Preparing stub fingerprint before restore", () => {
+    expect(
+      shouldStampLocalFingerprintBeforeEnsure({
+        force: true,
+        localHomeIsPreparingStub: true,
+      })
+    ).toBe(false);
+  });
+
+  it("allows force stamp only when local home is already real", () => {
+    expect(
+      shouldStampLocalFingerprintBeforeEnsure({
+        force: true,
+        localHomeIsPreparingStub: false,
+      })
+    ).toBe(true);
+    expect(
+      shouldStampLocalFingerprintBeforeEnsure({
+        force: false,
+        localHomeIsPreparingStub: false,
+      })
+    ).toBe(false);
   });
 });

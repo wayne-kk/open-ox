@@ -18,6 +18,7 @@ import net from "node:net";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSiteRoot, WORKSPACE_ROOT } from "./projectManager";
 import { ensureProjectNodeModules } from "./ensureProjectNodeModules";
+import { DEFAULT_HOME_PAGE_TSX } from "./preparingSiteHomePageStub";
 import { ensureProjectSourcesOnDisk } from "./storage";
 import { syncLocalProjectFingerprint } from "./previewFingerprintDb";
 import { computeProjectFingerprint, getTemplateDepMap, readProjectPackageJson, SITES_TEMPLATE_DIR, syncProjectRuntimeVersionsFromTemplate } from "./previewShared";
@@ -702,18 +703,7 @@ async function ensureProjectDirExists(
     await fs.access(homePage);
   } catch {
     await fs.mkdir(path.dirname(homePage), { recursive: true });
-    await fs.writeFile(
-      homePage,
-      `export default function HomePage() {
-  return (
-    <main className="flex min-h-[50vh] items-center justify-center p-8 text-center text-muted-foreground">
-      <p>Preparing your site…</p>
-    </main>
-  );
-}
-`,
-      "utf-8"
-    );
+    await fs.writeFile(homePage, DEFAULT_HOME_PAGE_TSX, "utf-8");
     console.warn(`[local preview] Wrote stub app/page.tsx (was missing) projectId=${projectId}`);
   }
 

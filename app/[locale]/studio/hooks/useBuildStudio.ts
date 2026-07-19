@@ -1508,23 +1508,55 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       setPreviewError(null);
       setPreviewUrl(null);
 
+      // First auto-preview can race the last home-page write / Storage restore.
+      // Retry quietly when the server soft-skips because page.tsx is still the stub.
+      const maxAttempts = forceRebuild ? 4 : 1;
       try {
-        const method: "POST" | "PUT" = forceRebuild ? "PUT" : "POST";
-        const res = await fetch(`/api/projects/${targetProjectId}/preview`, { method });
-        if (session !== previewSessionRef.current) return;
-        if (res.ok) {
-          const data = await res.json();
+        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
           if (session !== previewSessionRef.current) return;
-          applyPreviewMeta(data);
-          setPreviewUrl(data.url);
-          setPreviewVersion((v) => v + 1);
-          setPreviewState("ready");
-          trackPreviewOpen(targetProjectId);
-        } else {
+          const method: "POST" | "PUT" = forceRebuild ? "PUT" : "POST";
+          const res = await fetch(`/api/projects/${targetProjectId}/preview`, { method });
+          if (session !== previewSessionRef.current) return;
+          if (res.ok) {
+            const data = (await res.json()) as {
+              url?: string;
+              skipped?: boolean;
+              skippedReason?: string;
+              previewBackend?: string;
+              directEditCapable?: boolean;
+            };
+            if (session !== previewSessionRef.current) return;
+            if (
+              forceRebuild &&
+              data.skipped &&
+              data.skippedReason === "preparing_stub" &&
+              attempt < maxAttempts - 1
+            ) {
+              await new Promise((r) => setTimeout(r, 1200));
+              continue;
+            }
+            applyPreviewMeta(data);
+            setPreviewUrl(data.url ?? null);
+            setPreviewVersion((v) => v + 1);
+            setPreviewState("ready");
+            trackPreviewOpen(targetProjectId);
+            return;
+          }
           const err = await res.json().catch(() => ({}));
           if (session !== previewSessionRef.current) return;
-          setPreviewError(err.error ?? `HTTP ${res.status}`);
+          // Legacy servers threw on stub; retry a couple times on first auto-preview.
+          const errMsg = typeof err.error === "string" ? err.error : "";
+          if (
+            forceRebuild &&
+            /Preparing your site|default stub/i.test(errMsg) &&
+            attempt < maxAttempts - 1
+          ) {
+            await new Promise((r) => setTimeout(r, 1200));
+            continue;
+          }
+          setPreviewError(errMsg || `HTTP ${res.status}`);
           setPreviewState("error");
+          return;
         }
       } catch (e) {
         if (session !== previewSessionRef.current) return;
