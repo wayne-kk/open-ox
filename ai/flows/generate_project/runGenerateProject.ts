@@ -43,6 +43,9 @@ import { writeSharedContractStubs } from "./shared/writeSharedContractStubs";
 import { stepGenerateProjectDesignSystem } from "./steps/generateProjectDesignSystem";
 import { stepInstallDependencies } from "./steps/installDependencies";
 import { stepInferDesignIntent, type DesignIntentResult } from "./steps/inferDesignIntent";
+import { applyConfirmedSiteOutlineToBlueprint } from "./shared/applyConfirmedSiteOutline";
+import { layoutVariantHint } from "@/lib/studio/layoutVariant";
+import { parseSiteOutline } from "@/lib/studio/siteOutline";
 import { stepPlanProject } from "./steps/planProject";
 import { runPageImplementAgent } from "./steps/pageImplementAgent";
 import { stepRepairBuild } from "./steps/repairBuild";
@@ -692,6 +695,9 @@ export interface RunGenerateProjectOptions {
   /** When set, skips LLM infer_design_intent and uses this markdown instead. */
   confirmedDesignDirectionMarkdown?: string;
   confirmedDesignDirectionKeywords?: string[];
+  /** User-confirmed home modules — seeded into blueprint before plan. */
+  confirmedSiteOutline?: import("@/lib/studio/siteOutline").SiteOutline;
+  confirmedLayoutVariantId?: string;
   enableSkills?: boolean;
   useDatabasePrompts?: boolean;
   checkpoint?: CheckpointResult;
@@ -1073,7 +1079,26 @@ async function runGenerateProjectInner(
       inferredKeywords: inferredDesignIntent?.technicalKeywords,
     });
 
+    const confirmedOutline =
+      parseSiteOutline(options.confirmedSiteOutline) ?? options.confirmedSiteOutline ?? null;
+    if (confirmedOutline) {
+      rawBlueprint = applyConfirmedSiteOutlineToBlueprint(rawBlueprint, confirmedOutline);
+      logger.logStep(
+        "analyze_project_requirement",
+        "ok",
+        `seeded ${confirmedOutline.modules.length} sections from confirmedSiteOutline`
+      );
+    }
+
     const normalizedBlueprint = normalizeBlueprint(rawBlueprint);
+    const styleGuideWithLayout = [
+      options.styleGuide?.trim(),
+      options.confirmedLayoutVariantId
+        ? layoutVariantHint(options.confirmedLayoutVariantId)
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
 
     // ── Steps: plan_project → generate_project_design_system ──
     let blueprint!: PlannedProjectBlueprint;
@@ -1117,7 +1142,7 @@ async function runGenerateProjectInner(
         logger.startStep("generate_project_design_system");
         const designPromise = stepGenerateProjectDesignSystem(
           designIntentForSystem,
-          options.styleGuide
+          styleGuideWithLayout || undefined
         );
 
         const planOutcome = await stepPlanProject(normalizedBlueprint).then((out) => {

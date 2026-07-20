@@ -4,6 +4,11 @@
  * {@link generateVibeDirections} (`/api/projects/[id]/vibe-directions`).
  */
 
+import {
+  layoutVariantIdForIndex,
+  type LayoutVariantId,
+} from "@/lib/studio/layoutVariant";
+
 export type VibeTokenPreview = {
   background: string;
   foreground: string;
@@ -27,6 +32,10 @@ export type VibeDirection = {
   /** Used as design-intent.md substitute when user confirms this vibe */
   designIntentMarkdown: string;
   technicalKeywords: string[];
+  /** Fixed React shell variant for default “see before lock” preview */
+  layoutVariantId: LayoutVariantId;
+  /** Optional HTML from vibe-layout-preview — session-only, never source of truth */
+  previewHtml?: string | null;
 };
 
 export const VIBE_DIRECTIONS: VibeDirection[] = [
@@ -60,6 +69,7 @@ export const VIBE_DIRECTIONS: VibeDirection[] = [
 - Keywords: cold, technical, precise, minimal, teal-accent, dark
 `,
     technicalKeywords: ["cold", "technical", "minimal", "dark", "teal"],
+    layoutVariantId: layoutVariantIdForIndex(0),
   },
   {
     id: "warm-editorial",
@@ -91,6 +101,7 @@ export const VIBE_DIRECTIONS: VibeDirection[] = [
 - Keywords: warm, editorial, spacious, serif, human, paper
 `,
     technicalKeywords: ["warm", "editorial", "spacious", "serif", "human"],
+    layoutVariantId: layoutVariantIdForIndex(1),
   },
   {
     id: "bold-promo",
@@ -122,6 +133,7 @@ export const VIBE_DIRECTIONS: VibeDirection[] = [
 - Keywords: bold, promotional, high-contrast, CTA, energetic, campaign
 `,
     technicalKeywords: ["bold", "promotional", "high-contrast", "cta", "campaign"],
+    layoutVariantId: layoutVariantIdForIndex(2),
   },
 ];
 

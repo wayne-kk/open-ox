@@ -14,6 +14,7 @@ import { StudioMarkdownTextarea } from "./StudioMarkdownTextarea";
 import { DiffBlock } from "./DiffPatchView";
 import { ModifyDetailsPreviewToggle } from "./ModifyDetailsPreviewToggle";
 import { VibePickerPanel } from "./VibePickerPanel";
+import { DirectionLockPanel } from "./DirectionLockPanel";
 import { SlashMenu } from "@/app/components/ui/SlashMenu";
 import { useSlashMenu } from "@/app/hooks/useSlashMenu";
 import {
@@ -34,6 +35,8 @@ import { cn } from "@/lib/utils";
 import { BoardProposeCard } from "./BoardProposeCard";
 import { BoardProgressPin } from "./BoardProgressPin";
 import { isBoardRunBlocking } from "@/lib/modify/boardRun/isBoardRunBlocking";
+import { isDirectionLockV1Enabled } from "@/lib/studio/siteOutline";
+import { createEmptySiteOutline } from "@/lib/studio/siteOutline";
 
 function formatMs(ms: number): string {
     if (ms < 1000) return `${ms}ms`;
@@ -362,6 +365,7 @@ export function BuildConversation({
     handleRun,
     handleConfirmVibe,
     handleSkipVibe,
+    handleConfirmDirection,
     vibeResolved,
     confirmedVibe,
     handleClear,
@@ -630,7 +634,16 @@ export function BuildConversation({
                         const intentKind = message.intentPayload?.kind;
                         const isEarlyClarify =
                             intentKind === "options" || intentKind === "clarify";
+                        const directionLockOn = isDirectionLockV1Enabled();
+                        const showDirectionLock =
+                            directionLockOn &&
+                            message.role === "assistant" &&
+                            message.id === latestAssistantMessageId &&
+                            intentKind === "confirm_direction" &&
+                            !loading;
+                        // Early vibe picker only when direction-lock flag is off (legacy path).
                         const showVibePicker =
+                            !directionLockOn &&
                             message.role === "assistant" &&
                             message.id === latestAssistantMessageId &&
                             !vibeResolved &&
@@ -642,6 +655,7 @@ export function BuildConversation({
                             Boolean(message.intentPayload) &&
                             message.id === latestAssistantMessageId &&
                             !showVibePicker &&
+                            !showDirectionLock &&
                             !(isEarlyClarify && vibeResolved && loading);
                         const hasQuickReplies =
                             ((message.intentPayload?.options ?? []).length > 0 ||
@@ -695,10 +709,44 @@ export function BuildConversation({
                                     />
                                 ) : null}
 
+                                {showDirectionLock ? (
+                                    <DirectionLockPanel
+                                        projectId={projectId}
+                                        briefMarkdown={
+                                            message.intentPayload?.briefDraftMarkdown ??
+                                            lastRunInput ??
+                                            undefined
+                                        }
+                                        initialOutline={
+                                            message.intentPayload?.siteOutline ??
+                                            createEmptySiteOutline()
+                                        }
+                                        disabled={loading}
+                                        onConfirm={(payload) =>
+                                            void handleConfirmDirection({
+                                                ...payload,
+                                                briefMarkdown:
+                                                    message.intentPayload?.briefDraftMarkdown ??
+                                                    lastRunInput ??
+                                                    undefined,
+                                            })
+                                        }
+                                        onBackToBrief={() =>
+                                            void handleRun("我想返回修改需求 brief。")
+                                        }
+                                        onRegenerateOutline={() =>
+                                            void handleRun(
+                                                "请重新规划首页模块结构（single_page_ia_proposal），再打开确认面板。"
+                                            )
+                                        }
+                                    />
+                                ) : null}
+
                                 {message.role === "assistant" &&
                                 message.id === latestAssistantMessageId &&
                                 confirmedVibe &&
-                                message.intentPayload?.kind === "confirm_brief" ? (
+                                (message.intentPayload?.kind === "confirm_brief" ||
+                                    message.intentPayload?.kind === "confirm_direction") ? (
                                     <div className="rounded-xl border border-border bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
                                         已选定气质：
                                         <span className="font-medium text-foreground">

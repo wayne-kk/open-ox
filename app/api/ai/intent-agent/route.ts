@@ -29,6 +29,11 @@ import {
 import { LfSpanIntent, LfTrace } from "@/lib/observability/langfuseTraceCatalog";
 import { executeWebSearch, webSearchTool } from "@/ai/tools/system/webSearchTool";
 import {
+  executeSinglePageIaProposal,
+  singlePageIaProposalTool,
+} from "@/ai/tools/system/singlePageIaProposalTool";
+import { isDirectionLockV1Enabled, parseSiteOutline } from "@/lib/studio/siteOutline";
+import {
   coerceAdditionalToolsFromJson,
   intentAgentFunctionName,
   type IntentAgentToolHandler,
@@ -62,6 +67,7 @@ function serializeIntentTurn(
           suggestedReplies: turn.yieldPayload.suggestedReplies,
           options: turn.yieldPayload.options,
           briefDraftMarkdown: turn.yieldPayload.briefDraftMarkdown,
+          siteOutline: turn.yieldPayload.siteOutline,
         }
       : undefined,
     toolCallNames: turn.toolCalls.map((t) => t.name),
@@ -110,6 +116,17 @@ export async function POST(req: Request) {
           .filter((k: unknown): k is string => typeof k === "string" && k.trim().length > 0)
           .map((k: string) => k.trim())
       : undefined;
+    const confirmedSiteOutline = parseSiteOutline(body.confirmedSiteOutline) ?? undefined;
+    const confirmedLayoutVariantId: string | undefined =
+      typeof body.confirmedLayoutVariantId === "string" && body.confirmedLayoutVariantId.trim()
+        ? body.confirmedLayoutVariantId.trim()
+        : undefined;
+    const forceDirectionLockCommit =
+      body.forceDirectionLockCommit === true && isDirectionLockV1Enabled();
+    const forceMergedBrief: string | undefined =
+      typeof body.mergedBrief === "string" && body.mergedBrief.trim()
+        ? body.mergedBrief.trim()
+        : undefined;
 
     if (!projectId || typeof projectId !== "string" || !isSafeProjectId(projectId)) {
       return NextResponse.json({ error: "Missing or invalid projectId" }, { status: 400 });
@@ -128,7 +145,11 @@ export async function POST(req: Request) {
     const storedImage = meta.referenceImageDataUrl?.trim() || null;
     const imageForTurn = clientImage || storedImage;
 
-    if (!messageText.trim() && !imageForTurn) {
+    if (
+      !messageText.trim() &&
+      !imageForTurn &&
+      !(forceDirectionLockCommit && forceMergedBrief)
+    ) {
       return NextResponse.json(
         { error: "Missing or invalid message (or paste an image)" },
         { status: 400 }
@@ -190,6 +211,78 @@ export async function POST(req: Request) {
             },
             async () => {
               await runWithSiteRoot(projectManagerGetSiteRoot(projectId), async () => {
+          if (forceDirectionLockCommit) {
+            const mergedBrief = (forceMergedBrief || messageText).trim();
+            if (!mergedBrief) {
+              throw new Error("forceDirectionLockCommit requires mergedBrief");
+            }
+            if (!confirmedSiteOutline) {
+              throw new Error("forceDirectionLockCommit requires confirmedSiteOutline");
+            }
+            let referenceForGeneration =
+              typeof imageForTurn === "string" && imageForTurn.trim() ? imageForTurn.trim() : null;
+            if (!referenceForGeneration) {
+              const row = await getProject(db, projectId);
+              referenceForGeneration = row?.referenceImageDataUrl?.trim() || null;
+            }
+            const intentRunPayload: GenerationRunPayloadBody = {
+              requestingUserId: user.id,
+              effectivePrompt: mergedBrief,
+              effectiveModel: modelOverride ?? meta.modelId ?? undefined,
+              ...(typeof body.effortTier === "string" ? { effortTier: body.effortTier } : {}),
+              effectiveGenerationMode: meta.generationMode ?? "web",
+              preCreatedProjectId: projectId,
+              resumeFromCheckpoint: false,
+              enableSkills: true,
+              enableIntentGuide: false,
+              ...(styleGuide ? { styleGuide } : {}),
+              ...(confirmedDesignDirectionMarkdown
+                ? { confirmedDesignDirectionMarkdown }
+                : {}),
+              ...(confirmedDesignDirectionKeywords?.length
+                ? { confirmedDesignDirectionKeywords }
+                : {}),
+              confirmedSiteOutline,
+              ...(confirmedLayoutVariantId ? { confirmedLayoutVariantId } : {}),
+              useDatabasePrompts: false,
+              ...(referenceForGeneration
+                ? { initialImageBase64: normalizeReferenceImageDataUrl(referenceForGeneration) }
+                : {}),
+            };
+            const activeTraceId = getLangfuseTraceId();
+            if (activeTraceId) {
+              updateLangfuseActiveTrace({
+                name: LfTrace.projectBuild,
+                tags: ["flow:project_build", "route:api_intent_agent", "phase:generation_queued"],
+                metadata: { projectId, status: "generation_queued", directionLock: true },
+              });
+              intentRunPayload.langfuseTraceId = activeTraceId;
+            }
+            const { runId, attached } = await enqueueGenerationJob({
+              db,
+              projectId,
+              ownerUserId: user.id,
+              kind: "new",
+              resumeFromCheckpoint: false,
+              payload: intentRunPayload,
+            });
+            scheduleInlineGenerationRun(runId);
+            send({
+              type: "done",
+              phase: "generation_queued",
+              result: {
+                projectId,
+                runId,
+                attached,
+                mergedBriefFromAgent: mergedBrief,
+                content:
+                  "气质与结构已确认，生成任务已进入后台队列。你可关闭页面，稍后刷新查看进度或结果。",
+                generationQueued: true,
+              },
+            });
+            return;
+          }
+
           const additionalParsed = coerceAdditionalToolsFromJson(body.additionalTools);
           const mergedExtraTools = [...additionalParsed];
           if (
@@ -198,10 +291,19 @@ export async function POST(req: Request) {
           ) {
             mergedExtraTools.unshift(webSearchTool);
           }
+          if (
+            isDirectionLockV1Enabled() &&
+            !mergedExtraTools.some((t) => intentAgentFunctionName(t) === "single_page_ia_proposal")
+          ) {
+            mergedExtraTools.push(singlePageIaProposalTool);
+          }
 
           const toolHandlers: Record<string, IntentAgentToolHandler> = {};
           if (enableIntentAgentWebSearch) {
             toolHandlers.web_search = executeWebSearch;
+          }
+          if (isDirectionLockV1Enabled()) {
+            toolHandlers.single_page_ia_proposal = executeSinglePageIaProposal;
           }
 
           const intentToolExtensions =
@@ -268,6 +370,7 @@ export async function POST(req: Request) {
                                     suggestedReplies: intentResult.yieldPayload.suggestedReplies,
                                     options: intentResult.yieldPayload.options,
                                     briefDraftMarkdown: intentResult.yieldPayload.briefDraftMarkdown,
+                                    siteOutline: intentResult.yieldPayload.siteOutline,
                                   },
                                 }
                               : {}),
@@ -344,6 +447,8 @@ export async function POST(req: Request) {
             ...(confirmedDesignDirectionKeywords?.length
               ? { confirmedDesignDirectionKeywords }
               : {}),
+            ...(confirmedSiteOutline ? { confirmedSiteOutline } : {}),
+            ...(confirmedLayoutVariantId ? { confirmedLayoutVariantId } : {}),
             ...(typeof body.langfuseSessionId === "string"
               ? { langfuseSessionId: body.langfuseSessionId }
               : {}),

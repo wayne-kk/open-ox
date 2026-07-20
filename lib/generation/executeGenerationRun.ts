@@ -244,6 +244,8 @@ export async function executeGenerationRun(args: {
                   styleGuide: payload.styleGuide,
                   confirmedDesignDirectionMarkdown: payload.confirmedDesignDirectionMarkdown,
                   confirmedDesignDirectionKeywords: payload.confirmedDesignDirectionKeywords,
+                  confirmedSiteOutline: payload.confirmedSiteOutline,
+                  confirmedLayoutVariantId: payload.confirmedLayoutVariantId,
                   enableSkills: true,
                   useDatabasePrompts,
                   checkpoint,

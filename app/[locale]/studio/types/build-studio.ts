@@ -1,8 +1,9 @@
 // Import shared types from the AI flow layer
 import type { StepLlmCall, StepTrace, BuildStep } from "@/ai/flows/generate_project/types";
 import type { IntentProgressEvent } from "@/ai/flows/generate_project/intentAgent/types";
+import type { SiteOutline } from "@/lib/studio/siteOutline";
 // Re-export for consumers
-export type { StepLlmCall, StepTrace, BuildStep, IntentProgressEvent };
+export type { StepLlmCall, StepTrace, BuildStep, IntentProgressEvent, SiteOutline };
 
 export interface PlannedProjectBlueprint {
     brief: {
@@ -69,11 +70,12 @@ export interface IntentAgentTurn {
     errorMessage?: string;
     assistantText?: string;
     yieldPayload?: {
-        kind: "capability" | "clarify" | "options" | "confirm_brief";
+        kind: "capability" | "clarify" | "options" | "confirm_brief" | "confirm_direction";
         message: string;
         suggestedReplies?: string[];
         options?: IntentAgentOption[];
         briefDraftMarkdown?: string;
+        siteOutline?: SiteOutline;
     };
     toolCallNames?: string[];
     inputProfile?: "sparse" | "substantive_brief" | "reference_site_focus";

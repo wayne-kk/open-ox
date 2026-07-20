@@ -19,6 +19,11 @@ import type {
 import { collectIntentAgentImageSourceTexts } from "./collectImageSourceTexts";
 import { buildUserVisionContent, userTurnPlainTextForClassifier } from "../shared/userVisionContent";
 import type { IntentAgentTraceStep } from "./types";
+import {
+  createEmptySiteOutline,
+  isDirectionLockV1Enabled,
+  parseSiteOutline,
+} from "@/lib/studio/siteOutline";
 
 function truncatePreview(s: string, max: number): string {
   const t = s.trim();
@@ -48,12 +53,21 @@ function serializeResultPreview(result: ToolResult | string): string {
 }
 
 function isYieldKind(k: unknown): k is IntentAgentYieldKind {
-  return k === "capability" || k === "clarify" || k === "options" || k === "confirm_brief";
+  return (
+    k === "capability" ||
+    k === "clarify" ||
+    k === "options" ||
+    k === "confirm_brief" ||
+    k === "confirm_direction"
+  );
 }
 
 /** Exported for tests */
 export function parseYieldArgs(args: Record<string, unknown>): IntentAgentYieldPayload {
-  const kind: IntentAgentYieldKind = isYieldKind(args.kind) ? args.kind : "clarify";
+  let kind: IntentAgentYieldKind = isYieldKind(args.kind) ? args.kind : "clarify";
+  if (kind === "confirm_direction" && !isDirectionLockV1Enabled()) {
+    kind = "confirm_brief";
+  }
   const message =
     typeof args.message === "string" && args.message.trim()
       ? args.message.trim()
@@ -70,7 +84,18 @@ export function parseYieldArgs(args: Record<string, unknown>): IntentAgentYieldP
     typeof args.brief_draft_markdown === "string" && args.brief_draft_markdown.trim()
       ? args.brief_draft_markdown.trim()
       : undefined;
-  return { kind, message, suggestedReplies, options: [], briefDraftMarkdown };
+  let siteOutline = parseSiteOutline(args.site_outline) ?? undefined;
+  if (kind === "confirm_direction" && !siteOutline) {
+    siteOutline = createEmptySiteOutline();
+  }
+  return {
+    kind,
+    message,
+    suggestedReplies,
+    options: [],
+    briefDraftMarkdown,
+    ...(siteOutline ? { siteOutline } : {}),
+  };
 }
 
 const DEFAULT_FORCE_YIELD_MESSAGE =
@@ -186,6 +211,43 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
       return JSON.stringify({ ok: true, halted: true, action: "yield_to_user" });
     }),
     commit_generate: wrapTimedTool("commit_generate", async (args: Record<string, unknown>) => {
+      if (isDirectionLockV1Enabled()) {
+        const outline = parseSiteOutline(args.site_outline);
+        const hadDirectionYield = messages.some((m) => {
+          if (m.role !== "assistant" || !("tool_calls" in m) || !Array.isArray(m.tool_calls)) {
+            return false;
+          }
+          return m.tool_calls.some((tc) => {
+            if (typeof tc !== "object" || !tc || !("function" in tc)) return false;
+            const fn = (tc as { function?: { name?: string; arguments?: string } }).function;
+            if (fn?.name !== "yield_to_user" || typeof fn.arguments !== "string") return false;
+            try {
+              const parsed = JSON.parse(fn.arguments) as { kind?: string };
+              return parsed.kind === "confirm_direction";
+            } catch {
+              return false;
+            }
+          });
+        });
+        if (!outline && !hadDirectionYield) {
+          box.resolution = {
+            type: "yield",
+            payload: {
+              kind: "clarify",
+              message:
+                "生成前请先确认气质与首页模块结构。请先整理 brief，再规划页面结构并打开确认面板。",
+              suggestedReplies: ["继续完善需求", "开始规划页面结构"],
+              options: [],
+            },
+          };
+          return JSON.stringify({
+            ok: false,
+            halted: true,
+            action: "yield_to_user",
+            error: "direction_lock_requires_confirm_direction",
+          });
+        }
+      }
       const raw = typeof args.merged_brief === "string" ? args.merged_brief.trim() : "";
       const substance = await classifyBriefSubstanceForCommit({
         mergedBriefRaw: raw,

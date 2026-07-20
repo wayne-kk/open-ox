@@ -3,6 +3,10 @@ import { callLLMWithMeta, extractJSON } from "@/ai/flows/generate_project/shared
 import { getModelForStep } from "@/lib/config/models";
 import { lfPlain, LfPlain } from "@/lib/observability/langfuseGenerationCatalog";
 import {
+  isLayoutVariantId,
+  layoutVariantIdForIndex,
+} from "@/lib/studio/layoutVariant";
+import {
   VIBE_DIRECTIONS,
   type VibeDirection,
   type VibeTokenPreview,
@@ -137,6 +141,10 @@ export function parseGenerateVibeDirectionsPayload(parsed: unknown): VibeDirecti
     const colorDirection = asString(item.colorDirection);
     const style = asString(item.style);
     const tokens = parseTokens(item.tokens, fallbackTokens);
+    const layoutRaw = asString(item.layoutVariantId);
+    const layoutVariantId = isLayoutVariantId(layoutRaw)
+      ? layoutRaw
+      : layoutVariantIdForIndex(i);
 
     directions.push({
       id,
@@ -163,6 +171,7 @@ export function parseGenerateVibeDirectionsPayload(parsed: unknown): VibeDirecti
         keywords.length > 0
           ? keywords.map((k) => k.toLowerCase())
           : [style || label].filter(Boolean).map((k) => k.toLowerCase()),
+      layoutVariantId,
     });
   }
 

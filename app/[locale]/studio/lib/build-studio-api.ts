@@ -294,6 +294,11 @@ export async function runBuildSite(
     styleGuide?: string;
     confirmedDesignDirectionMarkdown?: string;
     confirmedDesignDirectionKeywords?: string[];
+    confirmedSiteOutline?: unknown;
+    confirmedLayoutVariantId?: string;
+    /** Skip intent agent; enqueue generation with direction-lock payload */
+    forceDirectionLockCommit?: boolean;
+    mergedBrief?: string;
   }
 ): Promise<void> {
   const useIntentAgent = Boolean(options?.projectId && !options.retryProjectId);
@@ -324,6 +329,18 @@ export async function runBuildSite(
               ? {
                   confirmedDesignDirectionKeywords:
                     options.confirmedDesignDirectionKeywords,
+                }
+              : {}),
+            ...(options?.confirmedSiteOutline
+              ? { confirmedSiteOutline: options.confirmedSiteOutline }
+              : {}),
+            ...(options?.confirmedLayoutVariantId
+              ? { confirmedLayoutVariantId: options.confirmedLayoutVariantId }
+              : {}),
+            ...(options?.forceDirectionLockCommit
+              ? {
+                  forceDirectionLockCommit: true,
+                  ...(options.mergedBrief ? { mergedBrief: options.mergedBrief } : {}),
                 }
               : {}),
             ...(secureSession ? { clientPublicKey: secureSession.clientPublicKeySpki } : {}),

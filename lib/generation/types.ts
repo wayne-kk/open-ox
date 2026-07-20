@@ -1,3 +1,5 @@
+import type { SiteOutline } from "@/lib/studio/siteOutline";
+
 /** JSON stored in generation_runs.payload — executed only by trusted worker/API */
 export type GenerationRunPayloadBody = {
   requestingUserId: string;
@@ -20,6 +22,10 @@ export type GenerationRunPayloadBody = {
   confirmedDesignDirectionMarkdown?: string;
   /** Keywords from the confirmed vibe — merged into blueprint designIntent.keywords */
   confirmedDesignDirectionKeywords?: string[];
+  /** User-confirmed home page module list (direction lock). */
+  confirmedSiteOutline?: SiteOutline;
+  /** Opening layout preference from vibe shell / HTML preview. */
+  confirmedLayoutVariantId?: string;
   enableSkills: boolean;
   enableIntentGuide: boolean;
   langfuseSessionId?: string;

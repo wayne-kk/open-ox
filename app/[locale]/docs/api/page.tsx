@@ -97,6 +97,7 @@ const SECTIONS: { title: string; rows: { method: Method; path: string; desc: str
       { method: "GET", path: "/api/me/onboarding", desc: "读取新人引导偏好（tour / checklist）" },
       { method: "PATCH", path: "/api/me/onboarding", desc: "更新新人引导偏好" },
       { method: "POST", path: "/api/projects/[id]/vibe-directions", desc: "根据 brief 生成气质方向候选（Vibe）" },
+      { method: "POST", path: "/api/projects/[id]/vibe-layout-preview", desc: "为选中气质生成轻量 HTML 布局预览（看见再锁）" },
     ],
   },
 ];

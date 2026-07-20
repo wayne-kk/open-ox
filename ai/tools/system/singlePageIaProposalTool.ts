@@ -3,6 +3,11 @@ import type { ToolResult, ToolExecutor } from "../types";
 import { callLLMWithMeta } from "@/ai/flows/generate_project/shared/llm";
 import { getModelForStep } from "@/lib/config/models";
 import { lfPlain } from "@/lib/observability/langfuseGenerationCatalog";
+import {
+  extractJsonObject,
+  parseSiteOutline,
+  type SiteOutline,
+} from "@/lib/studio/siteOutline";
 
 const MAX_OUT = 14_000;
 
@@ -11,9 +16,9 @@ export const singlePageIaProposalTool: ChatCompletionTool = {
   function: {
     name: "single_page_ia_proposal",
     description:
-      "Propose a **single-page** information architecture (section order, purpose of each block, primary/secondary CTAs) for the user's product. " +
-      "Call when the user has stated a product goal but section structure is unclear. Output is Markdown for your reasoning only — present a clear summary to the user via `yield_to_user`. " +
-      "Respects pipeline: one `home` page only; do not promise extra routes.",
+      "Propose a **single-page** information architecture as structured SiteOutline JSON " +
+      "(section order, titles, intents). Call after the product goal is clear — typically before " +
+      "`yield_to_user(kind=confirm_direction)`. Respects pipeline: one `home` page only.",
     parameters: {
       type: "object",
       properties: {
@@ -38,24 +43,32 @@ export const singlePageIaProposalTool: ChatCompletionTool = {
 
 const SYSTEM = `You plan a **single** marketing/home page (one URL) for Next.js. The downstream builder only creates one page slug \`home\` at /.
 
-Return Markdown only, with this structure:
+Return **JSON only** (no markdown prose outside JSON) with this shape:
+{
+  "pageSlug": "home",
+  "pageGoal": "one sentence page goal",
+  "modules": [
+    {
+      "id": "mod_1",
+      "type": "hero|logo_cloud|features|how_it_works|testimonials|pricing|faq|cta|footer|custom",
+      "title": "short label for the wireframe",
+      "intent": "1-2 sentences what this block does",
+      "contentHints": "optional key elements / copy hints"
+    }
+  ]
+}
 
-## Page goal
-One sentence.
+Rules:
+- 4–8 modules typical; always include a hero near the top.
+- Do not invent product mechanics the user did not imply.
+- Match the user's language for proper nouns in titles/intents.
+- pageSlug must be "home".`;
 
-## Section order (top → bottom)
-Numbered list. Each item: **Name** — 1–2 sentences what it does + key elements (headline, bullets, CTA label idea).
-
-## Primary and secondary CTAs
-What the main conversion is; one alternate CTA.
-
-## Optional modules (pick max 3 if space tight)
-Short bullets: pricing table, FAQ, testimonials, logo wall, etc. Say which fit this product.
-
-## Open decisions
-What still needs user input.
-
-Be conservative: do not invent product mechanics the user did not imply. Match the user's language for proper nouns.`;
+export type SinglePageIaProposalSuccess = {
+  success: true;
+  output: string;
+  siteOutline: SiteOutline;
+};
 
 export const executeSinglePageIaProposal: ToolExecutor = async (
   args: Record<string, unknown>
@@ -76,19 +89,24 @@ export const executeSinglePageIaProposal: ToolExecutor = async (
 
   try {
     const model = getModelForStep("intent_ia_proposal");
-    const { content } = await callLLMWithMeta(
-      SYSTEM,
-      user,
-      0.35,
-      2_500,
-      model,
-      { langfuseName: lfPlain("intent_single_page_ia") }
-    );
+    const { content } = await callLLMWithMeta(SYSTEM, user, 0.35, 2_500, model, {
+      langfuseName: lfPlain("intent_single_page_ia"),
+    });
     const out = content.trim();
     if (!out) {
       return { success: false, error: "Empty IA proposal from model" };
     }
-    const clipped = out.length > MAX_OUT ? `${out.slice(0, MAX_OUT)}\n\n…(truncated)` : out;
+    const parsed = extractJsonObject(out);
+    const siteOutline = parseSiteOutline(parsed);
+    if (!siteOutline) {
+      return {
+        success: false,
+        error: "single_page_ia_proposal: model JSON failed SiteOutline validation",
+      };
+    }
+    const serialized = JSON.stringify(siteOutline, null, 2);
+    const clipped =
+      serialized.length > MAX_OUT ? `${serialized.slice(0, MAX_OUT)}\n\n…(truncated)` : serialized;
     return { success: true, output: clipped };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

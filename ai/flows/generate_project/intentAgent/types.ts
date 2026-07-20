@@ -1,8 +1,14 @@
 import type { AgentToolCallRecord } from "@/ai/shared/llm/types";
 import type { ToolResult } from "@/ai/tools/types";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
+import type { SiteOutline } from "@/lib/studio/siteOutline";
 
-export type IntentAgentYieldKind = "capability" | "clarify" | "options" | "confirm_brief";
+export type IntentAgentYieldKind =
+  | "capability"
+  | "clarify"
+  | "options"
+  | "confirm_brief"
+  | "confirm_direction";
 
 export interface IntentAgentOption {
   id: string;
@@ -16,6 +22,8 @@ export interface IntentAgentYieldPayload {
   suggestedReplies: string[];
   options: IntentAgentOption[];
   briefDraftMarkdown?: string;
+  /** Present when kind=confirm_direction — Studio DirectionLockPanel. */
+  siteOutline?: SiteOutline;
 }
 
 export type IntentAgentTurnStatus = "yield" | "commit_generate" | "implicit_yield" | "error";

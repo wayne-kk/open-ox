@@ -138,6 +138,11 @@ export interface BuildStudioState {
   handleConfirmVibe: (vibe: VibeDirection) => Promise<void>;
   /** Skip early vibe picker; style inferred downstream. */
   handleSkipVibe: () => Promise<void>;
+  /** Direction-lock panel: confirm vibe + SiteOutline and enqueue generate. */
+  handleConfirmDirection: (payload: {
+    vibe: VibeDirection;
+    outline: import("@/lib/studio/siteOutline").SiteOutline;
+  }) => Promise<void>;
   /** True after user selected or skipped vibe — hide the early picker. */
   vibeResolved: boolean;
   /** Locked vibe for the next commit_generate, if any. */
@@ -326,7 +331,8 @@ function yieldPayloadFromIntentBuildStep(
     kindRaw === "capability" ||
     kindRaw === "clarify" ||
     kindRaw === "options" ||
-    kindRaw === "confirm_brief"
+    kindRaw === "confirm_brief" ||
+    kindRaw === "confirm_direction"
       ? kindRaw
       : "clarify";
   const suggestedReplies = Array.isArray(payload.suggestedReplies)
@@ -348,12 +354,19 @@ function yieldPayloadFromIntentBuildStep(
     typeof payload.briefDraftMarkdown === "string" && payload.briefDraftMarkdown.trim()
       ? payload.briefDraftMarkdown.trim()
       : undefined;
+  const siteOutline =
+    payload.siteOutline && typeof payload.siteOutline === "object"
+      ? (payload.siteOutline as IntentAgentTurn["yieldPayload"] extends { siteOutline?: infer S }
+          ? S
+          : never)
+      : undefined;
   return {
     kind,
     message,
     suggestedReplies,
     options,
     ...(briefDraftMarkdown ? { briefDraftMarkdown } : {}),
+    ...(siteOutline ? { siteOutline } : {}),
   };
 }
 
@@ -1197,6 +1210,116 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     setConfirmedVibe(null);
     setVibeResolved(true);
     await handleRun("跳过气质选择，视觉方向由系统根据需求推断。");
+  }
+
+  async function handleConfirmDirection(payload: {
+    vibe: VibeDirection;
+    outline: import("@/lib/studio/siteOutline").SiteOutline;
+    briefMarkdown?: string;
+  }) {
+    const { vibe, outline, briefMarkdown } = payload;
+    setConfirmedVibe(vibe);
+    setVibeResolved(true);
+    if (!projectId || loading) return;
+
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+    stopPolling();
+    sseActiveRef.current = true;
+
+    const t0 = Date.now();
+    startedAtRef.current = t0;
+    setStartedAt(t0);
+    setElapsed(0);
+    setLoading(true);
+    setProjectStatus("generating");
+    setRightPanel("topology");
+    setPreviewUrl(null);
+    setPreviewState("idle");
+    appendConversationMessage({
+      role: "user",
+      content: `确认气质与结构并生成：${vibe.label}；${outline.modules.length} 个模块。`,
+    });
+
+    const mergedBrief =
+      (briefMarkdown && briefMarkdown.trim()) ||
+      lastRunInput?.trim() ||
+      `单页站点：${vibe.label}。模块：${outline.modules.map((m) => m.title).join("、")}。`;
+
+    try {
+      await runBuildSite(
+        "确认气质与结构并生成",
+        {
+          onStep: (step) => {
+            setResponse((prev) => ({
+              content: prev?.content ?? "",
+              buildSteps: [...(prev?.buildSteps ?? []), step],
+              generatedFiles: prev?.generatedFiles,
+            }));
+          },
+          onIntentCommit: () => {
+            appendConversationMessage({
+              role: "assistant",
+              content: "气质与结构已确认，开始生成。",
+            });
+          },
+          onDone: (result) => {
+            finishBuildLiveState();
+            setProjectStatus(
+              result.verificationStatus === "passed" ? "ready" : result.error ? "failed" : "ready"
+            );
+            setResponse((prev) => ({
+              ...prev,
+              content: result.content ?? prev?.content ?? "",
+              projectId: result.projectId ?? projectId ?? undefined,
+              verificationStatus: result.verificationStatus,
+              generatedFiles: result.generatedFiles ?? prev?.generatedFiles,
+              error: result.error,
+            }));
+            const nextProjectId = result.projectId ?? projectId ?? null;
+            if (nextProjectId) {
+              projectIdFromGenerationRef.current = nextProjectId;
+              setProjectId(nextProjectId);
+              if (autoPreviewAfterBuildRef.current && result.verificationStatus === "passed") {
+                void openPreviewAfterBuild(nextProjectId, true);
+              }
+            }
+          },
+          onNotice: (msg) => {
+            appendConversationMessage({ role: "assistant", content: msg });
+          },
+          onError: (msg) => {
+            finishBuildLiveState();
+            if (msg === "已取消" || msg === "Aborted") return;
+            setProjectStatus("failed");
+            appendConversationMessage({ role: "assistant", content: `流程出错：${msg}` });
+            setResponse({ content: "", error: msg });
+          },
+        },
+        abortRef.current.signal,
+        {
+          model: selectedModel,
+          effortTier: selectedEffortTier,
+          projectId,
+          styleGuide: vibe.styleGuide,
+          confirmedDesignDirectionMarkdown: vibe.designIntentMarkdown,
+          confirmedDesignDirectionKeywords: vibe.technicalKeywords,
+          confirmedSiteOutline: outline,
+          confirmedLayoutVariantId: vibe.layoutVariantId,
+          forceDirectionLockCommit: true,
+          mergedBrief,
+        }
+      );
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        const message = err instanceof Error ? err.message : String(err);
+        appendConversationMessage({ role: "assistant", content: `流程出错：${message}` });
+        setResponse({ content: "", error: message });
+      }
+    } finally {
+      sseActiveRef.current = false;
+      setLoading(false);
+    }
   }
 
   async function handleClear() {
@@ -2263,7 +2386,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
 
   return {
     input, setInput, loading, clearing, response, intentAgent, mergedBrief, conversationMessages, intentProgressLog, userInputScrollNonce, lastRunInput, elapsed, flowStart,
-    handleRun, handleConfirmVibe, handleSkipVibe, handleClear, handleRetry,
+    handleRun, handleConfirmVibe, handleSkipVibe, handleConfirmDirection, handleClear, handleRetry,
     vibeResolved, confirmedVibe,
     generationSeemsStuck,
     recoveryUnlocking,

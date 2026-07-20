@@ -135,14 +135,21 @@ ${blueprint.site.pages
         );
       }
 
+      const slug = asString(page.slug) ?? "";
+      const prior =
+        blueprint.site.pages.find((p) => p.slug === slug) ??
+        (slug === "home" ? blueprint.site.pages[0] : undefined);
+      const priorSections = prior?.sections?.length ? prior.sections : [];
+
       return {
         title: asString(page.title) ?? "",
-        slug: asString(page.slug) ?? "",
+        slug,
         description,
         journeyStage,
         primaryRoleIds: asStringArray(page.primaryRoleIds),
         supportingCapabilityIds: asStringArray(page.supportingCapabilityIds),
-        sections: [],
+        // Direction lock: never wipe user-confirmed sections with [].
+        sections: priorSections,
         pageDesignPlan: page.pageDesignPlan,
       };
     });
