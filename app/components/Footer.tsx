@@ -8,7 +8,7 @@ import { Link } from "@/i18n/navigation";
 const SOCIAL_LINKS = [
   { href: "https://github.com/open-ox", icon: Github, label: "GitHub" },
   { href: "https://twitter.com/open_ox", icon: Twitter, label: "Twitter" },
-  { href: "mailto:hi@open-ox.com", icon: Mail, label: "Email" },
+  { href: "mailto:782884630@qq.com", icon: Mail, label: "Email" },
 ];
 
 export function Footer() {
