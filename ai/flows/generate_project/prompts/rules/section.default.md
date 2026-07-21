@@ -46,6 +46,8 @@
 **当确实需要图像时**，**必须**使用 `generate_image` 工具：
 
 - 不要编造路径（如 `/images/xxx.png`）——**只有工具返回的路径在磁盘上真实存在**。
+- **禁止**硬编码股票图 / 占位 CDN：`unsplash.com`、`images.unsplash.com`、`picsum.photos`、`placehold.co`、`pexels.com`（及同类图床）。多卡网格也须逐张调用 `generate_image`，不得用股票 URL 凑数。
+- **唯一例外**：bootstrap / `content/user-provided.md` 列出的用户提供 https URL（须原样使用，每 URL 最多一次）。
 - **先**调用 `generate_image`，**再**写组件代码。工具返回实际可用的路径。
 - 在 `<img src="...">` 中使用工具返回的**确切路径**，不得擅自修改或猜测。
 - **工具调用参数**：
@@ -109,7 +111,8 @@
 - 禁止 `clip-path` / `polygon()` / 有机异形剪裁。
 - 禁止用户可见文案中的 emoji。
 - 除非简述明确要求，禁止默认「三等分」通用功能卡片行。
-- 禁止 `bg-[url('...')]` 占位写法（会弄坏打包）；用完整 URL、`<Image>`，或 `style.backgroundImage`。
+- 禁止 `bg-[url('...')]` 占位写法（会弄坏打包）；用 `generate_image` 返回的路径、用户提供的完整 https URL、`<Image>`，或 `style.backgroundImage`（后两者同样禁止股票 CDN）。
+- **禁止**在 `src` / `backgroundImage` / 任意字符串里写入 Unsplash、Picsum、placehold.co、Pexels 等股票/占位图 URL（用户提供列表除外）；缺图就调 `generate_image` 或不用图。
 - 禁止配图「灰阶/降饱和 + 悬停才全彩」；禁止图片 `hover:scale-*` / `group-hover:scale-*` 大范围放大。
 
 ### 审美默认（Visual Contract 可覆盖）

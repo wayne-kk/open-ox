@@ -13,7 +13,7 @@
 
 ### 审美权威（短）
 
-**完整 design-system.md（含 Visual Contract / Bold Factor）> tokens > section 工程硬禁。** 字号/间距/grain/签名以设计系统为准；不要为「安全」压回 cream SaaS。工程硬禁（假路径、灰阶解锁图、`clip-path` 等）不可破。
+完整 **`design-system.md`**（含 Visual Contract / Bold Factor）> tokens > section 工程硬禁。字号/间距/grain/签名以设计系统为准；不要为「安全」压回 cream SaaS。工程硬禁（假路径、股票 CDN 图、灰阶解锁图、`clip-path` 等）不可破。
 
 ### 硬性目标
 
@@ -29,7 +29,7 @@
    - **单页站**：每个主区块须有稳定 `id`（如 `id="features"`），供后续 Chrome polish 校正 Nav 锚点。
    - 若存在 `components/shared/**` 契约 stub，list/detail 卡片优先复用，勿另起一套。
 6. **质量习惯**：写入文件已自动 Prettier，无需手动 `format_code`；缺依赖时用 `install_package`。
-7. **用户内容与配图**：若 bootstrap 含 user-provided 内容或 URL，**必须**用这些 https URL 作远程 `src`。每张用户图 URL 最多用一次。不要用 `generate_image` 顶替用户照片。
+7. **用户内容与配图**：若 bootstrap 含 user-provided 内容或 URL，**必须**用这些 https URL 作远程 `src`。每张用户图 URL 最多用一次。不要用 `generate_image` 顶替用户照片。其余配图**必须**先 `generate_image` 再用返回路径——**禁止**硬编码 Unsplash / Picsum / placehold.co / Pexels（多卡网格也不得用股票 URL 凑数）。
 
 ### 禁止
 
@@ -38,6 +38,7 @@
 - **不要修改** `app/globals.css`、`app/layout.tsx` 或 `components/chrome/**`。
 - **不要**在页面内容区复制全局导航 / 页脚。
 - **不要调用 `format_code`**。
+- **不要**写入 `unsplash.com` / `picsum.photos` / `placehold.co` / `pexels.com` 等股票或占位图 URL（用户提供列表除外）。
 - 不要用 `page_implementation_complete` **敷衍**：调用前必须已写入 `page.tsx` 且路径可 import。
 
 ### 完成方式

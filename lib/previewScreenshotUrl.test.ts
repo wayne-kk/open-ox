@@ -47,4 +47,31 @@ describe("previewUrlAllowedForScreenshot", () => {
       else process.env.NEXT_PUBLIC_PREVIEW_ORIGIN = prevPreview;
     }
   });
+
+  it("allows http dedicated preview host (p.localhost)", () => {
+    const prevSite = process.env.NEXT_PUBLIC_SITE_URL;
+    const prevPreview = process.env.NEXT_PUBLIC_PREVIEW_ORIGIN;
+    process.env.NEXT_PUBLIC_SITE_URL = "http://localhost:3000";
+    process.env.NEXT_PUBLIC_PREVIEW_ORIGIN = "http://p.localhost:3000";
+    try {
+      const u = previewUrlAllowedForScreenshot("http://p.localhost:3000/p1");
+      expect(u.hostname).toBe("p.localhost");
+    } finally {
+      process.env.NEXT_PUBLIC_SITE_URL = prevSite;
+      if (prevPreview === undefined) delete process.env.NEXT_PUBLIC_PREVIEW_ORIGIN;
+      else process.env.NEXT_PUBLIC_PREVIEW_ORIGIN = prevPreview;
+    }
+  });
+
+  it("allows http *.localhost as loopback without PREVIEW_ORIGIN", () => {
+    const prevPreview = process.env.NEXT_PUBLIC_PREVIEW_ORIGIN;
+    delete process.env.NEXT_PUBLIC_PREVIEW_ORIGIN;
+    try {
+      const u = previewUrlAllowedForScreenshot("http://p.localhost:3000/p1");
+      expect(u.hostname).toBe("p.localhost");
+    } finally {
+      if (prevPreview === undefined) delete process.env.NEXT_PUBLIC_PREVIEW_ORIGIN;
+      else process.env.NEXT_PUBLIC_PREVIEW_ORIGIN = prevPreview;
+    }
+  });
 });

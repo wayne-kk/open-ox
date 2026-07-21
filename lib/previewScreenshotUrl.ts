@@ -60,8 +60,19 @@ export function previewUrlAllowedForScreenshot(urlString: string): URL {
   }
 
   if (protocol === "http:") {
-    if (host === "127.0.0.1" || host === "localhost") {
+    if (host === "127.0.0.1" || host === "localhost" || host.endsWith(".localhost")) {
       return u;
+    }
+    const previewOriginHttp = process.env.NEXT_PUBLIC_PREVIEW_ORIGIN?.trim();
+    if (previewOriginHttp) {
+      try {
+        const previewHost = new URL(previewOriginHttp).hostname.toLowerCase();
+        if (previewHost && host === previewHost) {
+          return u;
+        }
+      } catch {
+        /* ignore */
+      }
     }
     const rawPublic = process.env.OPEN_OX_PREVIEW_PUBLIC_HOST?.trim();
     if (rawPublic) {

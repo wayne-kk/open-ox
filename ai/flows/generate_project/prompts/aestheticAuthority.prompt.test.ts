@@ -30,4 +30,15 @@ describe("aesthetic authority prompts", () => {
     expect(text).toContain("Visual Contract / Bold Factor");
     expect(text).not.toContain("hero skill");
   });
+
+  it("bans stock image CDNs in page agent + section.default", () => {
+    const page = read("steps/pageImplementAgent.md");
+    const section = read("rules/section.default.md");
+    for (const text of [page, section]) {
+      expect(text).toMatch(/unsplash/i);
+      expect(text).toMatch(/picsum/i);
+      expect(text).toMatch(/placehold\.co/i);
+    }
+    expect(section).toMatch(/禁止.*股票|股票.*禁止|不得用股票/);
+  });
 });
