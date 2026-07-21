@@ -25,6 +25,17 @@ describe("parseYieldArgs", () => {
     expect(r.options).toEqual([]);
     expect(r.briefDraftMarkdown).toBe("## x");
   });
+
+  it("does not fabricate a direction outline when the proposal is missing", () => {
+    const r = parseYieldArgs({
+      kind: "confirm_direction",
+      message: "请确认方向",
+    });
+
+    expect(r.kind).toBe("clarify");
+    expect(r.siteOutline).toBeUndefined();
+    expect(r.message).toContain("结构规划失败");
+  });
 });
 
 describe("resolveCommitMergedBrief", () => {

@@ -38,7 +38,10 @@ import {
   guardGenerateImageExecutor,
   listUserProvidedImageUrls,
 } from "../shared/userProvidedImageEnforcement";
-import { buildPageAgentUserMessage } from "../shared/pageAgentBrief";
+import {
+  buildPageImplementPlanJson,
+  buildPageAgentUserMessage,
+} from "../shared/pageAgentBrief";
 import {
   buildPageAgentBootstrap,
   isPageAgentBootstrapEnabled,
@@ -159,17 +162,7 @@ export async function runPageImplementAgent(
   const userImageCount = userImageUrls.length;
   const hasUserContent = hasUserProvidedContent(userContent);
 
-  const planJson = JSON.stringify(
-    {
-      pageGoal: page.pageDesignPlan.pageGoal,
-      narrativeArc: page.pageDesignPlan.narrativeArc,
-      layoutStrategy: page.pageDesignPlan.layoutStrategy,
-      hierarchy: page.pageDesignPlan.hierarchy,
-      constraints: page.pageDesignPlan.constraints,
-    },
-    null,
-    2
-  );
+  const planJson = buildPageImplementPlanJson(page);
 
   const userMessage = buildPageAgentUserMessage({
     targetPath,
@@ -479,6 +472,7 @@ export async function runPageImplementAgent(
       slug: page.slug,
       targetPath,
       pageDesignPlan: page.pageDesignPlan,
+      sections: page.sections,
     },
     output: {
       completeSummary,

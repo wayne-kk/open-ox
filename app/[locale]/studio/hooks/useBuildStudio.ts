@@ -19,6 +19,7 @@ import {
   buildVibeSelectUserMessage,
   type VibeDirection,
 } from "@/lib/studio/vibeDirections";
+import type { SiteOutline } from "@/lib/studio/siteOutline";
 import {
   evaluateStudioCapabilities,
   type StudioCapabilities,
@@ -141,7 +142,8 @@ export interface BuildStudioState {
   /** Direction-lock panel: confirm vibe + SiteOutline and enqueue generate. */
   handleConfirmDirection: (payload: {
     vibe: VibeDirection;
-    outline: import("@/lib/studio/siteOutline").SiteOutline;
+    outline: SiteOutline;
+    briefMarkdown?: string;
   }) => Promise<void>;
   /** True after user selected or skipped vibe — hide the early picker. */
   vibeResolved: boolean;
@@ -983,13 +985,20 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
   }, []);
 
   // ── handleRun ──────────────────────────────────────────────────────────
-  async function handleRun(messageOverride?: string, vibe?: VibeDirection | null) {
+  async function handleRun(
+    messageOverride?: string,
+    vibe?: VibeDirection | null,
+    directionCommit?: { outline: SiteOutline; briefMarkdown?: string }
+  ) {
     abortRef.current?.abort();
     abortRef.current = new AbortController();
     stopPolling(); // kill any leftover polling from a previous page-load
     sseActiveRef.current = true;
 
     const effectiveVibe = vibe ?? confirmedVibe;
+    const directionLockDisplay = directionCommit
+      ? `确认气质与结构并生成：${effectiveVibe?.label ?? "已选方向"}；${directionCommit.outline.modules.length} 个模块。`
+      : null;
 
     const t0 = Date.now();
     startedAtRef.current = t0;
@@ -1009,9 +1018,9 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
     setPreviewUrl(null);
     setPreviewState("idle");
 
-    const capturedIntentImage = intentImage;
-    const explicitInput = (messageOverride ?? input).trim();
-    let textForApi = explicitInput;
+    const capturedIntentImage = directionCommit ? null : intentImage;
+    const explicitInput = (directionLockDisplay ?? messageOverride ?? input).trim();
+    let textForApi = directionCommit ? "确认气质与结构并生成" : explicitInput;
     let displayPrompt = explicitInput;
     if (!textForApi && !capturedIntentImage && projectId) {
       try {
@@ -1026,7 +1035,9 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         /* ignore */
       }
     }
-    setLastRunInput(displayPrompt || (capturedIntentImage ? "（参考截图）" : null));
+    if (!directionCommit) {
+      setLastRunInput(displayPrompt || (capturedIntentImage ? "（参考截图）" : null));
+    }
     if (explicitInput) {
       appendConversationMessage({
         role: "user",
@@ -1057,6 +1068,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
       // (live `intent_agent_turn` vs `done`/`onDone` hydrate). activityLog often differs
       // across those paths, so content-only dedupe in appendConversationMessage is not enough.
       let intentAssistantAppended = false;
+      let directionCommitAppended = false;
       await runBuildSite(
         textForApi,
         {
@@ -1101,9 +1113,12 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
             setMergedBrief(cleanBrief || null);
             intentProgressLogRef.current = [];
             setIntentProgressLog([]);
-            const commitLine = effectiveVibe
-              ? `需求已确认，按「${effectiveVibe.label}」气质开始生成项目...`
-              : "需求已确认，开始生成项目...";
+            const commitLine = directionCommit
+              ? "气质与结构已确认，开始生成。"
+              : effectiveVibe
+                ? `需求已确认，按「${effectiveVibe.label}」气质开始生成项目...`
+                : "需求已确认，开始生成项目...";
+            directionCommitAppended = Boolean(directionCommit);
             appendConversationMessage({
               role: "assistant",
               content: commitLine,
@@ -1134,6 +1149,13 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
                 role: "assistant",
                 content: intentAssistantContent(turn),
                 intentPayload: turn?.yieldPayload,
+              });
+            }
+            if (directionCommit && !directionCommitAppended) {
+              directionCommitAppended = true;
+              appendConversationMessage({
+                role: "assistant",
+                content: "气质与结构已确认，开始生成。",
               });
             }
             finishBuildLiveState(result.buildTotalDuration);
@@ -1184,6 +1206,19 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
                 confirmedDesignDirectionKeywords: effectiveVibe.technicalKeywords,
               }
             : {}),
+          ...(directionCommit && effectiveVibe
+            ? {
+                confirmedSiteOutline: directionCommit.outline,
+                confirmedLayoutVariantId: effectiveVibe.layoutVariantId,
+                forceDirectionLockCommit: true,
+                mergedBrief:
+                  directionCommit.briefMarkdown?.trim() ||
+                  lastRunInput?.trim() ||
+                  `单页站点：${effectiveVibe.label}。模块：${directionCommit.outline.modules
+                    .map((module) => module.title)
+                    .join("、")}。`,
+              }
+            : {}),
         }
       );
     } catch (err) {
@@ -1214,112 +1249,14 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
 
   async function handleConfirmDirection(payload: {
     vibe: VibeDirection;
-    outline: import("@/lib/studio/siteOutline").SiteOutline;
+    outline: SiteOutline;
     briefMarkdown?: string;
   }) {
     const { vibe, outline, briefMarkdown } = payload;
     setConfirmedVibe(vibe);
     setVibeResolved(true);
     if (!projectId || loading) return;
-
-    abortRef.current?.abort();
-    abortRef.current = new AbortController();
-    stopPolling();
-    sseActiveRef.current = true;
-
-    const t0 = Date.now();
-    startedAtRef.current = t0;
-    setStartedAt(t0);
-    setElapsed(0);
-    setLoading(true);
-    setProjectStatus("generating");
-    setRightPanel("topology");
-    setPreviewUrl(null);
-    setPreviewState("idle");
-    appendConversationMessage({
-      role: "user",
-      content: `确认气质与结构并生成：${vibe.label}；${outline.modules.length} 个模块。`,
-    });
-
-    const mergedBrief =
-      (briefMarkdown && briefMarkdown.trim()) ||
-      lastRunInput?.trim() ||
-      `单页站点：${vibe.label}。模块：${outline.modules.map((m) => m.title).join("、")}。`;
-
-    try {
-      await runBuildSite(
-        "确认气质与结构并生成",
-        {
-          onStep: (step) => {
-            setResponse((prev) => ({
-              content: prev?.content ?? "",
-              buildSteps: [...(prev?.buildSteps ?? []), step],
-              generatedFiles: prev?.generatedFiles,
-            }));
-          },
-          onIntentCommit: () => {
-            appendConversationMessage({
-              role: "assistant",
-              content: "气质与结构已确认，开始生成。",
-            });
-          },
-          onDone: (result) => {
-            finishBuildLiveState();
-            setProjectStatus(
-              result.verificationStatus === "passed" ? "ready" : result.error ? "failed" : "ready"
-            );
-            setResponse((prev) => ({
-              ...prev,
-              content: result.content ?? prev?.content ?? "",
-              projectId: result.projectId ?? projectId ?? undefined,
-              verificationStatus: result.verificationStatus,
-              generatedFiles: result.generatedFiles ?? prev?.generatedFiles,
-              error: result.error,
-            }));
-            const nextProjectId = result.projectId ?? projectId ?? null;
-            if (nextProjectId) {
-              projectIdFromGenerationRef.current = nextProjectId;
-              setProjectId(nextProjectId);
-              if (autoPreviewAfterBuildRef.current && result.verificationStatus === "passed") {
-                void openPreviewAfterBuild(nextProjectId, true);
-              }
-            }
-          },
-          onNotice: (msg) => {
-            appendConversationMessage({ role: "assistant", content: msg });
-          },
-          onError: (msg) => {
-            finishBuildLiveState();
-            if (msg === "已取消" || msg === "Aborted") return;
-            setProjectStatus("failed");
-            appendConversationMessage({ role: "assistant", content: `流程出错：${msg}` });
-            setResponse({ content: "", error: msg });
-          },
-        },
-        abortRef.current.signal,
-        {
-          model: selectedModel,
-          effortTier: selectedEffortTier,
-          projectId,
-          styleGuide: vibe.styleGuide,
-          confirmedDesignDirectionMarkdown: vibe.designIntentMarkdown,
-          confirmedDesignDirectionKeywords: vibe.technicalKeywords,
-          confirmedSiteOutline: outline,
-          confirmedLayoutVariantId: vibe.layoutVariantId,
-          forceDirectionLockCommit: true,
-          mergedBrief,
-        }
-      );
-    } catch (err) {
-      if ((err as Error).name !== "AbortError") {
-        const message = err instanceof Error ? err.message : String(err);
-        appendConversationMessage({ role: "assistant", content: `流程出错：${message}` });
-        setResponse({ content: "", error: message });
-      }
-    } finally {
-      sseActiveRef.current = false;
-      setLoading(false);
-    }
+    await handleRun(undefined, vibe, { outline, briefMarkdown });
   }
 
   async function handleClear() {

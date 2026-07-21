@@ -3,6 +3,8 @@
  * Workspace files are pre-loaded in a separate bootstrap message (see pageAgentBootstrap.ts).
  */
 
+import type { PlannedPageBlueprint } from "../types";
+
 export const PAGE_AGENT_DESIGN_SYSTEM_PATH = "design-system.md";
 export const PAGE_AGENT_LAYOUT_PATH = "app/layout.tsx";
 export const PAGE_AGENT_GLOBALS_PATH = "app/globals.css";
@@ -26,6 +28,24 @@ export interface BuildPageAgentUserMessageParams {
   completeToolName: string;
   /** Screenshot replicate: page owns header/footer; layout is pass-through only. */
   screenshotReplicaLayout?: boolean;
+}
+
+/** Canonical page-level plan consumed by the Page Implement Role Worker. */
+export function buildPageImplementPlanJson(
+  page: Pick<PlannedPageBlueprint, "pageDesignPlan" | "sections">
+): string {
+  return JSON.stringify(
+    {
+      pageGoal: page.pageDesignPlan.pageGoal,
+      narrativeArc: page.pageDesignPlan.narrativeArc,
+      layoutStrategy: page.pageDesignPlan.layoutStrategy,
+      hierarchy: page.pageDesignPlan.hierarchy,
+      constraints: page.pageDesignPlan.constraints,
+      sections: page.sections,
+    },
+    null,
+    2
+  );
 }
 
 function buildWorkspaceNoteBlock(params: BuildPageAgentUserMessageParams): string {
@@ -85,8 +105,10 @@ ${pageDescription}
 ## Journey stage
 ${journeyStage}
 
-## Page design plan (canonical)
+## Page design plan and section manifest (canonical)
 ${planJson}
+
+When \`sections\` is non-empty, you must implement every listed section exactly once and in array order. Do not add, remove, merge, or reorder listed sections. Preserve each section's intent and contentHints while freely choosing the visual execution and final copy.
 
 ## Workspace context
 ${buildWorkspaceNoteBlock(params)}

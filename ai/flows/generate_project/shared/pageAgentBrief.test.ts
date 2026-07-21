@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildPageImplementPlanJson,
   buildPageAgentUserMessage,
   PAGE_AGENT_HERO_SKILL_PATH,
 } from "./pageAgentBrief";
@@ -17,6 +18,47 @@ import {
 import type { ChatMessage } from "@/ai/shared/llm/types";
 
 describe("pageAgentBrief", () => {
+  it("keeps the confirmed section manifest in canonical page context", () => {
+    const plan = buildPageImplementPlanJson({
+      pageDesignPlan: {
+        pageGoal: "Convert visitors",
+        narrativeArc: "Problem to proof to action",
+        layoutStrategy: "Editorial landing page",
+        hierarchy: ["Value proposition", "Proof"],
+        constraints: ["No extra sections"],
+      },
+      sections: [
+        {
+          type: "hero",
+          intent: "Lead with the promise",
+          contentHints: "Headline and primary CTA",
+          fileName: "Hero.tsx",
+        },
+        {
+          type: "faq",
+          intent: "Resolve objections",
+          contentHints: "Five concise questions",
+          fileName: "Faq2.tsx",
+        },
+      ],
+    });
+
+    expect(JSON.parse(plan).sections).toEqual([
+      {
+        type: "hero",
+        intent: "Lead with the promise",
+        contentHints: "Headline and primary CTA",
+        fileName: "Hero.tsx",
+      },
+      {
+        type: "faq",
+        intent: "Resolve objections",
+        contentHints: "Five concise questions",
+        fileName: "Faq2.tsx",
+      },
+    ]);
+  });
+
   it("buildPageAgentUserMessage focuses on task and bootstrap note", () => {
     const msg = buildPageAgentUserMessage({
       targetPath: "app/page.tsx",
@@ -41,6 +83,8 @@ describe("pageAgentBrief", () => {
     expect(msg).toContain("chrome-first");
     expect(msg).toContain("site-wide Nav/Navbar/Header/Sidebar/Footer");
     expect(msg).toContain("bottom tab bars");
+    expect(msg).toContain("must implement every listed section exactly once");
+    expect(msg).toContain("Do not add, remove, merge, or reorder listed sections");
     expect(msg).not.toContain(PAGE_AGENT_HERO_SKILL_PATH);
     expect(msg.length).toBeLessThan(4_500);
   });

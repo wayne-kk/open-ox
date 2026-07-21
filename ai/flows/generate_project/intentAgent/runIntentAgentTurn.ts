@@ -20,7 +20,6 @@ import { collectIntentAgentImageSourceTexts } from "./collectImageSourceTexts";
 import { buildUserVisionContent, userTurnPlainTextForClassifier } from "../shared/userVisionContent";
 import type { IntentAgentTraceStep } from "./types";
 import {
-  createEmptySiteOutline,
   isDirectionLockV1Enabled,
   parseSiteOutline,
 } from "@/lib/studio/siteOutline";
@@ -68,8 +67,12 @@ export function parseYieldArgs(args: Record<string, unknown>): IntentAgentYieldP
   if (kind === "confirm_direction" && !isDirectionLockV1Enabled()) {
     kind = "confirm_brief";
   }
-  const message =
-    typeof args.message === "string" && args.message.trim()
+  const siteOutline = parseSiteOutline(args.site_outline) ?? undefined;
+  const missingDirectionOutline = kind === "confirm_direction" && !siteOutline;
+  if (missingDirectionOutline) kind = "clarify";
+  const message = missingDirectionOutline
+    ? "页面结构规划失败，尚未生成可确认的模块清单。请重试结构规划后再继续。"
+    : typeof args.message === "string" && args.message.trim()
       ? args.message.trim()
       : "请用一句话说明你希望做单页网站的**目标**与**主要内容**（面向谁、要展示/操作什么）。";
   const suggestedReplies = Array.isArray(args.suggested_replies)
@@ -84,10 +87,6 @@ export function parseYieldArgs(args: Record<string, unknown>): IntentAgentYieldP
     typeof args.brief_draft_markdown === "string" && args.brief_draft_markdown.trim()
       ? args.brief_draft_markdown.trim()
       : undefined;
-  let siteOutline = parseSiteOutline(args.site_outline) ?? undefined;
-  if (kind === "confirm_direction" && !siteOutline) {
-    siteOutline = createEmptySiteOutline();
-  }
   return {
     kind,
     message,
@@ -212,41 +211,22 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
     }),
     commit_generate: wrapTimedTool("commit_generate", async (args: Record<string, unknown>) => {
       if (isDirectionLockV1Enabled()) {
-        const outline = parseSiteOutline(args.site_outline);
-        const hadDirectionYield = messages.some((m) => {
-          if (m.role !== "assistant" || !("tool_calls" in m) || !Array.isArray(m.tool_calls)) {
-            return false;
-          }
-          return m.tool_calls.some((tc) => {
-            if (typeof tc !== "object" || !tc || !("function" in tc)) return false;
-            const fn = (tc as { function?: { name?: string; arguments?: string } }).function;
-            if (fn?.name !== "yield_to_user" || typeof fn.arguments !== "string") return false;
-            try {
-              const parsed = JSON.parse(fn.arguments) as { kind?: string };
-              return parsed.kind === "confirm_direction";
-            } catch {
-              return false;
-            }
-          });
+        box.resolution = {
+          type: "yield",
+          payload: {
+            kind: "clarify",
+            message:
+              "生成前请在 Studio 的气质与结构确认面板中完成确认，再点击“确认气质与结构并生成”。",
+            suggestedReplies: ["返回确认气质与结构"],
+            options: [],
+          },
+        };
+        return JSON.stringify({
+          ok: false,
+          halted: true,
+          action: "yield_to_user",
+          error: "direction_lock_requires_ui_confirmation",
         });
-        if (!outline && !hadDirectionYield) {
-          box.resolution = {
-            type: "yield",
-            payload: {
-              kind: "clarify",
-              message:
-                "生成前请先确认气质与首页模块结构。请先整理 brief，再规划页面结构并打开确认面板。",
-              suggestedReplies: ["继续完善需求", "开始规划页面结构"],
-              options: [],
-            },
-          };
-          return JSON.stringify({
-            ok: false,
-            halted: true,
-            action: "yield_to_user",
-            error: "direction_lock_requires_confirm_direction",
-          });
-        }
       }
       const raw = typeof args.merged_brief === "string" ? args.merged_brief.trim() : "";
       const substance = await classifyBriefSubstanceForCommit({

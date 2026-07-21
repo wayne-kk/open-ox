@@ -52,10 +52,6 @@ export function DirectionLockPanel({
   const selected = directions.find((v) => v.id === selectedId) ?? directions[0];
 
   useEffect(() => {
-    if (initialOutline) setOutline(initialOutline);
-  }, [initialOutline]);
-
-  useEffect(() => {
     if (!projectId) {
       setDirections(VIBE_DIRECTIONS);
       setSelectedId(VIBE_DIRECTIONS[0]?.id ?? "cold-tech");

@@ -36,7 +36,6 @@ import { BoardProposeCard } from "./BoardProposeCard";
 import { BoardProgressPin } from "./BoardProgressPin";
 import { isBoardRunBlocking } from "@/lib/modify/boardRun/isBoardRunBlocking";
 import { isDirectionLockV1Enabled } from "@/lib/studio/siteOutline";
-import { createEmptySiteOutline } from "@/lib/studio/siteOutline";
 
 function formatMs(ms: number): string {
     if (ms < 1000) return `${ms}ms`;
@@ -718,8 +717,7 @@ export function BuildConversation({
                                             undefined
                                         }
                                         initialOutline={
-                                            message.intentPayload?.siteOutline ??
-                                            createEmptySiteOutline()
+                                            message.intentPayload?.siteOutline ?? null
                                         }
                                         disabled={loading}
                                         onConfirm={(payload) =>

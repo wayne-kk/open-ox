@@ -33,6 +33,7 @@ import {
   singlePageIaProposalTool,
 } from "@/ai/tools/system/singlePageIaProposalTool";
 import { isDirectionLockV1Enabled, parseSiteOutline } from "@/lib/studio/siteOutline";
+import { validateDirectionLockGenerationCommit } from "@/lib/studio/directionLockCommit";
 import {
   coerceAdditionalToolsFromJson,
   intentAgentFunctionName,
@@ -121,8 +122,9 @@ export async function POST(req: Request) {
       typeof body.confirmedLayoutVariantId === "string" && body.confirmedLayoutVariantId.trim()
         ? body.confirmedLayoutVariantId.trim()
         : undefined;
+    const directionLockEnabled = isDirectionLockV1Enabled();
     const forceDirectionLockCommit =
-      body.forceDirectionLockCommit === true && isDirectionLockV1Enabled();
+      body.forceDirectionLockCommit === true && directionLockEnabled;
     const forceMergedBrief: string | undefined =
       typeof body.mergedBrief === "string" && body.mergedBrief.trim()
         ? body.mergedBrief.trim()
@@ -136,6 +138,37 @@ export async function POST(req: Request) {
     if ("error" in access) return access.error;
     const meta = access.project;
 
+    let forcedDirectionCommit: {
+      mergedBrief: string;
+      confirmedSiteOutline: NonNullable<typeof confirmedSiteOutline>;
+    } | null = null;
+    if (forceDirectionLockCommit) {
+      const validation = validateDirectionLockGenerationCommit({
+        directionLockEnabled,
+        source: "direction_lock_ui",
+        hasConfirmedSiteOutline: Boolean(confirmedSiteOutline),
+      });
+      if (!validation.ok) {
+        return NextResponse.json(
+          { error: validation.message, code: validation.code },
+          { status: 400 }
+        );
+      }
+      if (!forceMergedBrief) {
+        return NextResponse.json(
+          {
+            error: "Direction lock requires a non-empty mergedBrief.",
+            code: "MERGED_BRIEF_REQUIRED",
+          },
+          { status: 400 }
+        );
+      }
+      forcedDirectionCommit = {
+        mergedBrief: forceMergedBrief,
+        confirmedSiteOutline: confirmedSiteOutline!,
+      };
+    }
+
     const messageText = typeof message === "string" ? message : "";
     let clientImage: string | null = null;
     if (typeof imageBase64Raw === "string" && imageBase64Raw.trim()) {
@@ -148,7 +181,7 @@ export async function POST(req: Request) {
     if (
       !messageText.trim() &&
       !imageForTurn &&
-      !(forceDirectionLockCommit && forceMergedBrief)
+      !forcedDirectionCommit
     ) {
       return NextResponse.json(
         { error: "Missing or invalid message (or paste an image)" },
@@ -211,14 +244,8 @@ export async function POST(req: Request) {
             },
             async () => {
               await runWithSiteRoot(projectManagerGetSiteRoot(projectId), async () => {
-          if (forceDirectionLockCommit) {
-            const mergedBrief = (forceMergedBrief || messageText).trim();
-            if (!mergedBrief) {
-              throw new Error("forceDirectionLockCommit requires mergedBrief");
-            }
-            if (!confirmedSiteOutline) {
-              throw new Error("forceDirectionLockCommit requires confirmedSiteOutline");
-            }
+          if (forcedDirectionCommit) {
+            const { mergedBrief, confirmedSiteOutline } = forcedDirectionCommit;
             let referenceForGeneration =
               typeof imageForTurn === "string" && imageForTurn.trim() ? imageForTurn.trim() : null;
             if (!referenceForGeneration) {
@@ -292,7 +319,7 @@ export async function POST(req: Request) {
             mergedExtraTools.unshift(webSearchTool);
           }
           if (
-            isDirectionLockV1Enabled() &&
+            directionLockEnabled &&
             !mergedExtraTools.some((t) => intentAgentFunctionName(t) === "single_page_ia_proposal")
           ) {
             mergedExtraTools.push(singlePageIaProposalTool);
@@ -302,7 +329,7 @@ export async function POST(req: Request) {
           if (enableIntentAgentWebSearch) {
             toolHandlers.web_search = executeWebSearch;
           }
-          if (isDirectionLockV1Enabled()) {
+          if (directionLockEnabled) {
             toolHandlers.single_page_ia_proposal = executeSinglePageIaProposal;
           }
 
@@ -330,6 +357,17 @@ export async function POST(req: Request) {
               },
             })
           );
+
+          if (intentResult.status === "commit_generate") {
+            const validation = validateDirectionLockGenerationCommit({
+              directionLockEnabled,
+              source: "intent_agent",
+              hasConfirmedSiteOutline: Boolean(confirmedSiteOutline),
+            });
+            if (!validation.ok) {
+              throw new Error(`${validation.code}: ${validation.message}`);
+            }
+          }
 
           send({ type: "intent_agent_turn", turn: serializeIntentTurn(intentResult) });
 

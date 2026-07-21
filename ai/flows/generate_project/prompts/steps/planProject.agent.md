@@ -1,13 +1,13 @@
 ## 步骤提示词：Plan Project — Agent 实现模式（无预切片）
 
-下游将用 **多轮工具循环**（读/写/编辑文件）实现整页 UI。**本步骤定「页面级产品与体验纲要」+ chrome 形态**，不负责列出 `sections` 文件名或区块数量。
+下游将用 **多轮工具循环**（读/写/编辑文件）实现整页 UI。**本步骤定「页面级产品与体验纲要」+ chrome 形态**；已有 `sections` 是上游确认的执行清单，必须原样保留。
 
 ### 你需要产出什么
 
 1. 合法 JSON。
 2. 顶层 **`chromeForm`**（必填）与可选 **`sharedContracts`**。
 3. 每个 page 必须有完整的 `pageDesignPlan`。
-4. 每个 page 的 **`sections` 必须为 `[]`**（空数组）。
+4. 每个 page 的 `sections`：输入已有清单时逐项原样输出（字段与顺序不变）；输入为空时输出 `[]`。
 
 ## Chrome-first 契约
 
@@ -59,5 +59,5 @@
 ### 硬性要求
 
 - 顶层包含：`chromeForm`、`sharedContracts`（可空数组）、`pages`。
-- 每个 page 的 `sections` 必须是 `[]`。
+- 每个 page 的 `sections` 必须与输入一致；只有输入为空时才是 `[]`。
 - `chromeForm` 必须是你基于 brief 的判断，不是默认营销站模板。

@@ -1,9 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { buildIntentAgentTools } from "./tools";
 import { INTENT_AGENT_RESERVED_TOOL_NAMES, coerceAdditionalToolsFromJson, mergeIntentAgentTools } from "./toolSurface";
 
 describe("mergeIntentAgentTools", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("keeps builtins and appends new extension tools", () => {
     const extra: ChatCompletionTool[] = [
       {
@@ -18,6 +22,7 @@ describe("mergeIntentAgentTools", () => {
   });
 
   it("ignores extensions that collide with builtin tool names", () => {
+    vi.stubEnv("NEXT_PUBLIC_DIRECTION_LOCK_V1", "0");
     const extra: ChatCompletionTool[] = [
       {
         type: "function",
@@ -42,8 +47,17 @@ describe("mergeIntentAgentTools", () => {
   });
 
   it("exposes only yield and commit control tools", () => {
+    vi.stubEnv("NEXT_PUBLIC_DIRECTION_LOCK_V1", "0");
     const names = buildIntentAgentTools().map((t) => (t.type === "function" ? t.function.name : ""));
     expect(names).toEqual(["yield_to_user", "commit_generate"]);
+  });
+
+  it("removes agent-side commit while direction lock is enabled", () => {
+    vi.stubEnv("NEXT_PUBLIC_DIRECTION_LOCK_V1", "1");
+    const names = buildIntentAgentTools().map((t) =>
+      t.type === "function" ? t.function.name : ""
+    );
+    expect(names).toEqual(["yield_to_user"]);
   });
 
   it("reserved set is frozen control surface", () => {
