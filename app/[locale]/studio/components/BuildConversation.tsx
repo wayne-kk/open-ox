@@ -36,6 +36,7 @@ import { BoardProposeCard } from "./BoardProposeCard";
 import { BoardProgressPin } from "./BoardProgressPin";
 import { isBoardRunBlocking } from "@/lib/modify/boardRun/isBoardRunBlocking";
 import { isDirectionLockV1Enabled } from "@/lib/studio/siteOutline";
+import { resolveDirectionLockBrief } from "@/lib/studio/directionLockCommit";
 
 function formatMs(ms: number): string {
     if (ms < 1000) return `${ms}ms`;
@@ -487,6 +488,13 @@ export function BuildConversation({
         response?.error
     );
     const latestAssistantMessageId = [...conversationMessages].reverse().find((message) => message.role === "assistant")?.id;
+    const directionLockBrief = resolveDirectionLockBrief({
+        currentBriefDraft: mergedBrief,
+        priorBriefDrafts: conversationMessages.map(
+            (message) => message.intentPayload?.briefDraftMarkdown
+        ),
+        bootstrapUserPrompt: conversationMessages.find((message) => message.role === "user")?.content,
+    });
     const showThinkingBubble =
         loading &&
         !hasBuildActivity &&
@@ -696,11 +704,7 @@ export function BuildConversation({
                                 {showVibePicker ? (
                                     <VibePickerPanel
                                         projectId={projectId}
-                                        briefMarkdown={
-                                            message.intentPayload?.briefDraftMarkdown ??
-                                            lastRunInput ??
-                                            undefined
-                                        }
+                                        briefMarkdown={directionLockBrief ?? undefined}
                                         disabled={loading}
                                         mode="select"
                                         onConfirm={(vibe) => void handleConfirmVibe(vibe)}
@@ -711,11 +715,7 @@ export function BuildConversation({
                                 {showDirectionLock ? (
                                     <DirectionLockPanel
                                         projectId={projectId}
-                                        briefMarkdown={
-                                            message.intentPayload?.briefDraftMarkdown ??
-                                            lastRunInput ??
-                                            undefined
-                                        }
+                                        briefMarkdown={directionLockBrief ?? undefined}
                                         initialOutline={
                                             message.intentPayload?.siteOutline ?? null
                                         }
@@ -723,10 +723,7 @@ export function BuildConversation({
                                         onConfirm={(payload) =>
                                             void handleConfirmDirection({
                                                 ...payload,
-                                                briefMarkdown:
-                                                    message.intentPayload?.briefDraftMarkdown ??
-                                                    lastRunInput ??
-                                                    undefined,
+                                                briefMarkdown: directionLockBrief ?? undefined,
                                             })
                                         }
                                         onBackToBrief={() =>

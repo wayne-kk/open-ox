@@ -33,7 +33,10 @@ import {
   singlePageIaProposalTool,
 } from "@/ai/tools/system/singlePageIaProposalTool";
 import { isDirectionLockV1Enabled, parseSiteOutline } from "@/lib/studio/siteOutline";
-import { validateDirectionLockGenerationCommit } from "@/lib/studio/directionLockCommit";
+import {
+  buildDirectionLockGenerationPrompt,
+  validateDirectionLockGenerationCommit,
+} from "@/lib/studio/directionLockCommit";
 import {
   coerceAdditionalToolsFromJson,
   intentAgentFunctionName,
@@ -246,6 +249,11 @@ export async function POST(req: Request) {
               await runWithSiteRoot(projectManagerGetSiteRoot(projectId), async () => {
           if (forcedDirectionCommit) {
             const { mergedBrief, confirmedSiteOutline } = forcedDirectionCommit;
+            const effectivePrompt = buildDirectionLockGenerationPrompt({
+              submittedBrief: mergedBrief,
+              bootstrapUserPrompt: meta.userPrompt,
+              confirmedSiteOutline,
+            });
             let referenceForGeneration =
               typeof imageForTurn === "string" && imageForTurn.trim() ? imageForTurn.trim() : null;
             if (!referenceForGeneration) {
@@ -254,7 +262,7 @@ export async function POST(req: Request) {
             }
             const intentRunPayload: GenerationRunPayloadBody = {
               requestingUserId: user.id,
-              effectivePrompt: mergedBrief,
+              effectivePrompt,
               effectiveModel: modelOverride ?? meta.modelId ?? undefined,
               ...(typeof body.effortTier === "string" ? { effortTier: body.effortTier } : {}),
               effectiveGenerationMode: meta.generationMode ?? "web",
