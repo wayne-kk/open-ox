@@ -29,6 +29,10 @@ import {
 import { BrandMark } from "@/app/components/BrandMark";
 import { CreditsBalanceBadge } from "@/app/components/CreditsBalanceBadge";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
+import {
+  resolveStartBuildAction,
+  WORKSPACE_PROMPT_HASH,
+} from "@/lib/navigation/startBuild";
 
 const SIDEBAR_COLLAPSED_KEY = "open-ox:app-sidebar-collapsed";
 const SIDEBAR_WIDTH_KEY = "open-ox:app-sidebar-width";
@@ -36,7 +40,8 @@ const SIDEBAR_WIDTH_MIN = 200;
 const SIDEBAR_WIDTH_MAX = 360;
 const SIDEBAR_WIDTH_DEFAULT = 240;
 const SIDEBAR_WIDTH_COLLAPSED = 64;
-export const WORKSPACE_PROMPT_ID = "workspace-prompt";
+/** DOM id / hash for the workspace build composer — keep in sync with startBuild. */
+export const WORKSPACE_PROMPT_ID = WORKSPACE_PROMPT_HASH;
 
 function clampSidebarWidth(n: number) {
   return Math.min(SIDEBAR_WIDTH_MAX, Math.max(SIDEBAR_WIDTH_MIN, Math.round(n)));
@@ -167,20 +172,22 @@ function SidebarBody({
 
   const handleStartBuild = () => {
     onNavigate?.();
-    if (pathname === "/dashboard") {
+    const action = resolveStartBuildAction({ pathname, onTrashed });
+    if (action.type === "focus") {
       focusWorkspacePrompt();
       return;
     }
-    router.push(`/dashboard#${WORKSPACE_PROMPT_ID}`);
+    router.push(action.href);
   };
 
+  // After leaving recycle bin, pathname stays /dashboard — re-run when onTrashed flips.
   useEffect(() => {
-    if (pathname !== "/dashboard") return;
+    if (pathname !== "/dashboard" || onTrashed) return;
     if (typeof window === "undefined") return;
     if (window.location.hash === `#${WORKSPACE_PROMPT_ID}`) {
       focusWorkspacePrompt();
     }
-  }, [pathname]);
+  }, [pathname, onTrashed]);
 
   return (
     <div className="flex h-full flex-col overflow-x-hidden">

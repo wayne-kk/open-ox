@@ -591,7 +591,7 @@ export async function syncStaticSitePreview(
     }
   }
 
-  const promise = (async () => {
+  const promise = (async (): Promise<StaticPreviewSyncResult> => {
     const instant = await tryInstantStaticPreviewReturn(db, projectId, force);
     if (instant) {
       return instant;

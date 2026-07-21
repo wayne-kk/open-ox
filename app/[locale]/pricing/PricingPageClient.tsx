@@ -304,7 +304,7 @@ export function PricingPageClient() {
             </ul>
 
             <a
-              href="mailto:hello@open-ox.dev?subject=Open-OX%20Enterprise"
+              href="mailto:782884630@qq.com?subject=Open-OX%20Enterprise"
               className="defi-button-outline mt-8 h-11 w-full text-[13px]"
             >
               {t("contactUs")}
