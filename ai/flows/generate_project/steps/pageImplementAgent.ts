@@ -289,6 +289,7 @@ export async function runPageImplementAgent(
     tools: fullPageTools,
     temperature: 0.5,
     maxIterations,
+    completionProfile: "code",
     model,
     ...(thinking ? { thinkingLevel: thinking } : {}),
     executeToolOverrides: {

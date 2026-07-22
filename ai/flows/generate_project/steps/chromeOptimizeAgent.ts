@@ -183,6 +183,7 @@ Hard rules:
     tools: [...getSystemToolDefinitions([...CHROME_AGENT_TOOL_NAMES]), completeTool],
     temperature: 0.35,
     maxIterations,
+    completionProfile: "code",
     model,
     ...(thinking ? { thinkingLevel: thinking } : {}),
     executeToolOverrides: {

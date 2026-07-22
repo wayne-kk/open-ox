@@ -1,4 +1,4 @@
-import { getModelId } from "@/lib/config/models";
+import { getAllModels, getModelId } from "@/lib/config/models";
 import { executeSystemTool } from "@/ai/tools";
 import type { ToolResult } from "@/ai/tools";
 import { chatCompletion } from "./gateway";
@@ -8,6 +8,137 @@ import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { lfToolAgentRound } from "@/lib/observability/langfuseGenerationCatalog";
 
 export type ToolLoopToolChoice = "required" | "auto" | "none";
+export type ToolLoopCompletionProfile = "control" | "code";
+
+const TOOL_LOOP_COMPLETION_TOKENS: Record<ToolLoopCompletionProfile, number> = {
+  control: 8_192,
+  code: 16_384,
+};
+const LENGTH_RETRY_TOOL_CONTENT_MAX_CHARS = 2_000;
+const PROACTIVE_OLD_TOOL_CONTENT_MAX_CHARS = 500;
+const PROACTIVE_RECENT_TOOL_MESSAGES = 6;
+const CONTEXT_WINDOW_SAFETY_TOKENS = 1_024;
+const VISION_TOKEN_ESTIMATE = { low: 1_024, auto: 2_048, high: 4_096 } as const;
+const SOURCE_MUTATION_TOOL_NAMES = new Set(["write_file", "edit_file"]);
+const CODE_TOOL_CALL_POLICY: ChatMessage = {
+  role: "system",
+  content:
+    "[Tool-call policy] Read-only tools may be called in parallel. " +
+    "When using write_file or edit_file, make exactly one source mutation call in that response.",
+};
+
+function estimateMessageTokens(message: ChatMessage): number {
+  const { content, ...metadata } = message;
+  let estimate = JSON.stringify(metadata).length;
+  if (typeof content === "string") return estimate + content.length;
+  if (!Array.isArray(content)) return estimate;
+
+  for (const part of content) {
+    if (part.type === "text") {
+      estimate += part.text.length;
+      continue;
+    }
+    estimate += VISION_TOKEN_ESTIMATE[part.image_url.detail ?? "auto"];
+  }
+  return estimate;
+}
+
+function resolveCompletionMaxTokens(
+  profile: ToolLoopCompletionProfile | undefined,
+  model: string,
+  messages: ChatMessage[],
+  tools: ChatCompletionTool[]
+): number | undefined {
+  if (!profile) return undefined;
+  const profileTokens = TOOL_LOOP_COMPLETION_TOKENS[profile];
+  const contextWindow = getAllModels().find((candidate) => candidate.id === model)?.contextWindow;
+  if (!contextWindow) return profileTokens;
+  // Text characters are conservative for mixed ASCII/CJK prompts. Image data
+  // URLs use a fixed vision estimate because providers do not tokenize base64.
+  const estimatedPromptTokens =
+    messages.reduce((total, message) => total + estimateMessageTokens(message), 0) +
+    JSON.stringify(tools).length;
+  const availableCompletionTokens = Math.max(
+    1,
+    contextWindow - estimatedPromptTokens - CONTEXT_WINDOW_SAFETY_TOKENS
+  );
+  return Math.min(profileTokens, availableCompletionTokens);
+}
+
+function compactCompletedToolCallArguments(toolCalls: unknown[]): unknown[] {
+  return toolCalls.map((toolCall) => {
+    if (!toolCall || typeof toolCall !== "object") return toolCall;
+    const fn = (toolCall as Record<string, unknown>).function;
+    if (!fn || typeof fn !== "object") return toolCall;
+    const fnRecord = fn as Record<string, unknown>;
+    const rawArgs = fnRecord.arguments;
+    if (
+      typeof rawArgs !== "string" ||
+      rawArgs.length <= LENGTH_RETRY_TOOL_CONTENT_MAX_CHARS
+    ) {
+      return toolCall;
+    }
+
+    let path: string | undefined;
+    try {
+      const parsed = JSON.parse(rawArgs) as unknown;
+      if (parsed && typeof parsed === "object") {
+        const parsedPath = (parsed as Record<string, unknown>).path;
+        if (typeof parsedPath === "string" && parsedPath.trim()) {
+          path = parsedPath.trim();
+        }
+      }
+    } catch {
+      // The completed call no longer needs its full malformed payload on retry.
+    }
+    return {
+      ...(toolCall as Record<string, unknown>),
+      function: {
+        ...fnRecord,
+        arguments: JSON.stringify({
+          ...(path ? { path } : {}),
+          _compacted: `Completed tool arguments omitted after output truncation (${rawArgs.length} chars)`,
+        }),
+      },
+    };
+  });
+}
+
+function compactToolHistoryForRequest(
+  messages: ChatMessage[],
+  compactOlderToolResults: boolean
+): ChatMessage[] {
+  const toolMessageCount = messages.filter((message) => message.role === "tool").length;
+  let toolMessageIndex = 0;
+
+  return messages.map((message) => {
+    let requestMessage = message;
+    if (message.role === "assistant" && Array.isArray(message.tool_calls)) {
+      requestMessage = {
+        ...requestMessage,
+        tool_calls: compactCompletedToolCallArguments(message.tool_calls),
+      };
+    }
+    if (message.role !== "tool" || typeof message.content !== "string") {
+      return requestMessage;
+    }
+    const isOlderToolResult =
+      compactOlderToolResults &&
+      toolMessageIndex < toolMessageCount - PROACTIVE_RECENT_TOOL_MESSAGES;
+    toolMessageIndex += 1;
+    const maxChars = isOlderToolResult
+      ? PROACTIVE_OLD_TOOL_CONTENT_MAX_CHARS
+      : LENGTH_RETRY_TOOL_CONTENT_MAX_CHARS;
+    if (message.content.length <= maxChars) return requestMessage;
+
+    return {
+      ...requestMessage,
+      content:
+        `${message.content.slice(0, maxChars)}` +
+        "\n[Tool result compacted for the next model request]",
+    };
+  });
+}
 
 export interface FormatToolResultForModelParams {
   name: string;
@@ -172,6 +303,8 @@ export async function callLLMWithToolsFromMessages(params: {
   tools: ChatCompletionTool[];
   temperature?: number;
   maxIterations?: number;
+  /** Shared output budget tuned for control turns or source-code tool calls. */
+  completionProfile?: ToolLoopCompletionProfile;
   /** When false, the model may only call one tool per turn. */
   parallelToolCalls?: boolean;
   model?: string;
@@ -252,6 +385,11 @@ export async function callLLMWithToolsFromMessages(params: {
   let lastAssistantContent = "";
   let approachingLimitFired = false;
   const limitThreshold = Math.floor(maxIterations * 0.8);
+  const phase = resolveToolLoopPhase(
+    params.langfusePhase,
+    params.langfuseAgentLabel,
+    "tool_prompt_messages"
+  );
 
   for (let iteration = 0; iteration < maxIterations; iteration += 1) {
     params.compactMessagesBeforeRound?.({ iteration, maxIterations, messages });
@@ -274,25 +412,64 @@ export async function callLLMWithToolsFromMessages(params: {
       onApproachingLimit({ iteration, maxIterations, messages });
     }
 
-    let res;
-    try {
-      res = await chatCompletion({
+    let roundCompletionMaxTokens: number | undefined;
+    const requestRound = (lengthRetry: boolean) => {
+      const compactedMessages =
+        lengthRetry || params.completionProfile === "code"
+          ? compactToolHistoryForRequest(messages, params.completionProfile === "code")
+          : messages;
+      const requestMessages =
+        params.completionProfile === "code"
+          ? [...compactedMessages, CODE_TOOL_CALL_POLICY]
+          : compactedMessages;
+      roundCompletionMaxTokens = resolveCompletionMaxTokens(
+        params.completionProfile,
         model,
-        messages,
+        requestMessages,
+        activeTools
+      );
+      return chatCompletion({
+        model,
+        messages: requestMessages,
         temperature,
-        ...(params.parallelToolCalls === false ? { parallel_tool_calls: false } : {}),
+        ...(roundCompletionMaxTokens ? { max_tokens: roundCompletionMaxTokens } : {}),
+        ...(lengthRetry
+          ? { parallel_tool_calls: false }
+          : params.parallelToolCalls === false
+            ? { parallel_tool_calls: false }
+            : {}),
         tools: activeTools.length > 0 ? activeTools : undefined,
         tool_choice: activeTools.length > 0 ? toolChoice : undefined,
-        ...(params.thinkingLevel ? { thinking_level: params.thinkingLevel } : {}),
-        langfuseGenerationName: lfToolAgentRound(
-          resolveToolLoopPhase(params.langfusePhase, params.langfuseAgentLabel, "tool_prompt_messages"),
-          iteration
-        ),
+        ...(lengthRetry
+          ? { thinking_level: "minimal" }
+          : params.thinkingLevel
+            ? { thinking_level: params.thinkingLevel }
+            : {}),
+        langfuseGenerationName: `${lfToolAgentRound(phase, iteration)}${
+          lengthRetry ? ".length_retry_1" : ""
+        }`,
         langfuseGenerationMetadata: {
           iteration: iteration + 1,
+          lengthRetry: lengthRetry ? 1 : 0,
           ...params.langfuseGenerationMetadata,
         },
       });
+    };
+
+    let res;
+    try {
+      res = await requestRound(false);
+      if (res.choices[0]?.finish_reason === "length") {
+        const recoveryNudge: ChatMessage = {
+          role: "system",
+          content:
+            "[Output recovery] The previous response was truncated. Make one small tool call only. " +
+            "Do not repeat completed work or add explanatory prose; split large writes across later rounds.",
+        };
+        messages.push(recoveryNudge);
+        emit?.(recoveryNudge);
+        res = await requestRound(true);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const msgLower = msg.toLowerCase();
@@ -323,8 +500,15 @@ export async function callLLMWithToolsFromMessages(params: {
     if (!message) break;
 
     if (res.choices[0]?.finish_reason === "length") {
+      const usage = res.usage;
+      const reasoningTokens = usage?.completion_tokens_details?.reasoning_tokens;
       throw new Error(
-        `LLM response truncated (finish_reason=length) at iteration ${iteration}. Reduce prompt size or increase max_tokens.`
+          `LLM response truncated after one recovery attempt (finish_reason=length): ` +
+          `phase=${phase} model=${model} iteration=${iteration} ` +
+          `max_tokens=${roundCompletionMaxTokens ?? "provider-default"} ` +
+          `prompt_tokens=${usage?.prompt_tokens ?? "unknown"} ` +
+          `completion_tokens=${usage?.completion_tokens ?? "unknown"} ` +
+          `reasoning_tokens=${reasoningTokens ?? "unknown"}.`
       );
     }
 
@@ -366,6 +550,7 @@ export async function callLLMWithToolsFromMessages(params: {
       iteration,
       onToolCall: params.onToolCall,
       formatToolResultForModel: params.formatToolResultForModel,
+      maxSourceMutationCalls: params.completionProfile === "code" ? 1 : undefined,
     });
 
     if (shouldAbortAfterToolResults?.()) {
@@ -450,6 +635,7 @@ async function dispatchToolCalls(params: {
     iteration: number;
   }) => void;
   formatToolResultForModel?: (info: FormatToolResultForModelParams) => string;
+  maxSourceMutationCalls?: number;
 }): Promise<void> {
   const {
     toolCalls,
@@ -460,9 +646,26 @@ async function dispatchToolCalls(params: {
     onToolCall,
     iteration,
     formatToolResultForModel,
+    maxSourceMutationCalls,
   } = params;
   const calls = (message.tool_calls ?? []).map(parseToolCall);
   if (calls.length === 0) return;
+
+  let sourceMutationCallCount = 0;
+  const callsWithPolicy = calls.map((call) => {
+    if (!SOURCE_MUTATION_TOOL_NAMES.has(call.name)) {
+      return { call, skippedResult: undefined };
+    }
+    sourceMutationCallCount += 1;
+    if (maxSourceMutationCalls == null || sourceMutationCallCount <= maxSourceMutationCalls) {
+      return { call, skippedResult: undefined };
+    }
+    const skippedResult: ToolResult = {
+      success: false,
+      error: "Skipped: only one source mutation tool call is allowed per model response.",
+    };
+    return { call, skippedResult };
+  });
 
   const serializeForModel = (
     call: ParsedToolCall,
@@ -483,10 +686,12 @@ async function dispatchToolCalls(params: {
     calls.length === 1 || calls.some((c) => SERIAL_ONLY_TOOLS.has(c.name));
 
   if (requiresSerial) {
-    for (const call of calls) {
-      const result = await executeOne(call, executeToolOverrides);
+    for (const { call, skippedResult } of callsWithPolicy) {
+      const result = skippedResult ?? (await executeOne(call, executeToolOverrides));
       toolCalls.push({ name: call.name, args: call.args, result });
-      onToolCall?.({ name: call.name, args: call.args, result, iteration });
+      if (!skippedResult) {
+        onToolCall?.({ name: call.name, args: call.args, result, iteration });
+      }
       const toolMsg: ChatMessage = {
         role: "tool",
         tool_call_id: call.id,
@@ -502,23 +707,26 @@ async function dispatchToolCalls(params: {
   // original order so message ordering remains deterministic regardless
   // of which tool finishes first.
   const settled = await Promise.all(
-    calls.map(async (call) => {
+    callsWithPolicy.map(async ({ call, skippedResult }) => {
+      if (skippedResult) return { call, result: skippedResult, skipped: true };
       try {
         const result = await executeOne(call, executeToolOverrides);
-        return { call, result };
+        return { call, result, skipped: false };
       } catch (err) {
         const errorResult: ToolResult = {
           success: false,
           error: err instanceof Error ? err.message : String(err),
         };
-        return { call, result: errorResult };
+        return { call, result: errorResult, skipped: false };
       }
     })
   );
 
-  for (const { call, result } of settled) {
+  for (const { call, result, skipped } of settled) {
     toolCalls.push({ name: call.name, args: call.args, result });
-    onToolCall?.({ name: call.name, args: call.args, result, iteration });
+    if (!skipped) {
+      onToolCall?.({ name: call.name, args: call.args, result, iteration });
+    }
     const toolMsg: ChatMessage = {
       role: "tool",
       tool_call_id: call.id,

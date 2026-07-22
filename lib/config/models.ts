@@ -161,6 +161,29 @@ export async function loadStepModelsFromDB(): Promise<void> {
     _stepModelsLoadPromise = (async () => {
         try {
             const { supabase } = await import("@/lib/supabase");
+            const { data: customRows, error: customModelsError } = await supabase
+                .from("model_configs")
+                .select("id, display_name, context_window, supports_thinking");
+            if (customModelsError) {
+                console.warn("[loadStepModelsFromDB] Failed to load custom models:", customModelsError);
+            } else {
+                setCustomModels(
+                    (customRows ?? []).map((row) => {
+                        const model = row as {
+                            id: string;
+                            display_name: string;
+                            context_window: number;
+                            supports_thinking?: boolean;
+                        };
+                        return {
+                            id: model.id,
+                            displayName: model.display_name,
+                            contextWindow: model.context_window,
+                            supportsThinking: model.supports_thinking ?? false,
+                        };
+                    })
+                );
+            }
             const { data: rows, error } = await supabase
                 .from("step_model_configs")
                 .select("step_name, model_id, thinking_level");

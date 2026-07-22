@@ -224,6 +224,7 @@ export async function runIntentAgentTurn(params: RunIntentAgentTurnParams): Prom
     tools,
     temperature: 0.35,
     maxIterations,
+    completionProfile: "control",
     model,
     executeToolOverrides,
     onMessage,

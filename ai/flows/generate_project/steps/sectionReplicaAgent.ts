@@ -161,6 +161,7 @@ Implement this single section, then call \`${SECTION_REPLICA_COMPLETE}\`.`;
     tools,
     temperature: 0.35,
     maxIterations: 12,
+    completionProfile: "code",
     model,
     executeToolOverrides: {
       read_file: readFileExecutor,
