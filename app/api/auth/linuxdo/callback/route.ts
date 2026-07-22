@@ -10,6 +10,7 @@ import {
 } from "@/lib/auth/linuxdo-oauth";
 import { provisionOAuthUserAndSignIn } from "@/lib/auth/feishu-supabase";
 import { getPublicOrigin } from "@/lib/auth/request-origin";
+import { scheduleNewUserRegistrationNotification } from "@/lib/notifications/newUserRegistration";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 
 /**
@@ -141,6 +142,20 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(
       new URL(`/auth?error=linuxdo_auth&msg=${encodeURIComponent(result.message.slice(0, 180))}`, origin)
     );
+  }
+
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      await scheduleNewUserRegistrationNotification(user);
+    }
+  } catch {
+    console.error("[new-user-notification] Linux.do user lookup failed", {
+      provider: "linuxdo",
+      category: "auth",
+    });
   }
 
   response.cookies.delete("linuxdo_oauth_state");

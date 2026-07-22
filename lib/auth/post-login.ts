@@ -10,6 +10,7 @@ import { bindUserAcquisition } from "@/lib/analytics/bindUserAcquisition";
 import { AnalyticsEventName } from "@/lib/analytics/catalog";
 import { trackServerAnalyticsEvent } from "@/lib/analytics/serverEvents";
 import { ensureCreditAccount } from "@/lib/billing/account";
+import { scheduleNewUserRegistrationNotification } from "@/lib/notifications/newUserRegistration";
 
 export function resolveAuthAcquisitionTouch(request: NextRequest) {
   const fromCookie = parseOxAcqCookieValue(request.cookies.get(OX_ACQ_COOKIE)?.value);
@@ -55,4 +56,6 @@ export async function finalizeAuthenticatedLogin(params: {
       ...(touch ? acquisitionTouchToProperties(touch) : {}),
     },
   });
+
+  await scheduleNewUserRegistrationNotification(params.user);
 }

@@ -8,6 +8,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "check:env": "tsx scripts/check-env.ts",
+    "test:feishu-new-user": "tsx scripts/test-new-user-feishu-notification.ts",
     "generation:worker": "tsx scripts/generation-worker.ts",
     "screenshot:dev": "tsx --env-file=.env.local scripts/screenshot-service.ts",
     "lint": "eslint",
