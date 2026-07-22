@@ -27,6 +27,26 @@ import type {
 
 const catalog = createFileDesignSystemSkillCatalog();
 
+export const MATCHER_OUTPUT_MAX_TOKENS = 1024;
+
+type MatcherFailureReason =
+  | "matcher_response_truncated"
+  | "matcher_invalid_json"
+  | "matcher_request_failed";
+
+export class DesignSystemMatcherError extends Error {
+  readonly matcherFailureReason: MatcherFailureReason;
+
+  constructor(reason: MatcherFailureReason, message: string, cause?: unknown) {
+    super(message);
+    this.name = "DesignSystemMatcherError";
+    this.matcherFailureReason = reason;
+    if (cause !== undefined) {
+      this.cause = cause;
+    }
+  }
+}
+
 async function generateContractValidDesignSystem(
   request: DesignSystemResolutionRequest,
 ) {
@@ -109,9 +129,14 @@ function formatCandidate(
 function normalizeDecision(raw: unknown): DesignSystemJudgeDecision {
   const value =
     raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const rawSkillId =
+    typeof value.skillId === "string" ? value.skillId.trim() : "";
   const skillId =
-    typeof value.skillId === "string" && value.skillId.trim()
-      ? value.skillId.trim()
+    rawSkillId &&
+    !new Set(["null", "none", "no_match", "no-match", "n/a"]).has(
+      rawSkillId.toLowerCase(),
+    )
+      ? rawSkillId
       : null;
   const confidenceValue =
     typeof value.confidence === "number" ? value.confidence : 0;
@@ -130,7 +155,39 @@ function normalizeDecision(raw: unknown): DesignSystemJudgeDecision {
   };
 }
 
-async function judgeCandidates(
+export function parseDesignSystemMatcherResponse(
+  content: string,
+): DesignSystemJudgeDecision {
+  const parsed = JSON.parse(extractJSON(content));
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new TypeError("Design-system matcher response must be a JSON object");
+  }
+  return normalizeDecision(parsed);
+}
+
+function looksLikeTruncatedJson(content: string): boolean {
+  const extracted = extractJSON(content).trim();
+  return extracted.startsWith("{") && !extracted.endsWith("}");
+}
+
+function requestFailureLooksTruncated(error: unknown): boolean {
+  const messages: string[] = [];
+  let current: unknown = error;
+  for (let depth = 0; depth < 3 && current; depth += 1) {
+    if (current instanceof Error) {
+      messages.push(current.message);
+      current = current.cause;
+    } else {
+      messages.push(String(current));
+      break;
+    }
+  }
+  return /truncat|max[_ -]?tokens|finish_reason\s*=\s*length/i.test(
+    messages.join(" "),
+  );
+}
+
+export async function judgeCandidates(
   skillCatalog: DesignSystemSkillCatalog,
   request: DesignSystemResolutionRequest,
   candidates: DesignSystemCandidate[],
@@ -158,18 +215,63 @@ async function judgeCandidates(
       .join("\n\n"),
   ].join("\n");
 
-  const meta = await callLLMWithMeta(
-    systemPrompt,
-    userMessage,
-    0,
-    256,
-    getModelForStep("match_design_system_skill"),
-    { langfuseName: lfPlain(LfPlain.matchDesignSystemSkill) },
+  const model = getModelForStep("match_design_system_skill");
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const attemptMessage =
+      attempt === 0
+        ? userMessage
+        : `${userMessage}\n\n## Retry requirement\nThe previous response was invalid or truncated. Return one complete, compact JSON object only.`;
+    let meta;
+    try {
+      meta = await callLLMWithMeta(
+        systemPrompt,
+        attemptMessage,
+        0,
+        MATCHER_OUTPUT_MAX_TOKENS,
+        model,
+        {
+          langfuseName: lfPlain(LfPlain.matchDesignSystemSkill),
+          thinkingLevel: "minimal",
+        },
+      );
+    } catch (error) {
+      if (requestFailureLooksTruncated(error)) {
+        if (attempt === 0) continue;
+        throw new DesignSystemMatcherError(
+          "matcher_response_truncated",
+          "Design-system matcher exhausted its output budget twice",
+          error,
+        );
+      }
+      throw new DesignSystemMatcherError(
+        "matcher_request_failed",
+        "Design-system matcher request failed",
+        error,
+      );
+    }
+
+    try {
+      return {
+        decision: parseDesignSystemMatcherResponse(meta.content),
+        trace: stepTraceFromLlmCompletion(systemPrompt, attemptMessage, meta),
+      };
+    } catch (error) {
+      if (attempt === 0) continue;
+      const reason = looksLikeTruncatedJson(meta.content)
+        ? "matcher_response_truncated"
+        : "matcher_invalid_json";
+      throw new DesignSystemMatcherError(
+        reason,
+        `Design-system matcher returned unusable JSON after ${attempt + 1} attempts`,
+        error,
+      );
+    }
+  }
+
+  throw new DesignSystemMatcherError(
+    "matcher_invalid_json",
+    "Design-system matcher did not return a decision",
   );
-  return {
-    decision: normalizeDecision(JSON.parse(extractJSON(meta.content))),
-    trace: stepTraceFromLlmCompletion(systemPrompt, userMessage, meta),
-  };
 }
 
 const productionResolver = createDesignSystemResolver({

@@ -5,6 +5,10 @@ import { trackServerAnalyticsEventFireAndForget } from "@/lib/analytics/serverEv
 import { getProject, updateProjectStatus } from "@/lib/projectManager";
 
 import type { GenerationRunPayloadBody } from "./types";
+import {
+  createInlineGenerationLease,
+  shouldRunInlineGeneration,
+} from "./executorMode";
 
 /** Returns queued/running run id for project, if any */
 export async function getActiveQueuedOrRunningRunId(
@@ -37,18 +41,31 @@ export type EnqueueGenerationInput = {
 export async function enqueueGenerationJob(input: EnqueueGenerationInput): Promise<{
   runId: string;
   attached: boolean;
+  shouldScheduleInline: boolean;
 }> {
   const { db, projectId, ownerUserId, kind, resumeFromCheckpoint, payload } = input;
+  const runInline = shouldRunInlineGeneration();
 
   const { data: activeRows } = await db
     .from("generation_runs")
-    .select("id")
+    .select("id, status")
     .eq("project_id", projectId)
     .in("status", ["queued", "running"]);
 
   const existing = Array.isArray(activeRows) ? activeRows[0] : null;
   if (existing?.id) {
     const runId = existing.id as string;
+    let shouldScheduleInline = false;
+    if (runInline && existing.status === "queued") {
+      const { data: claimed } = await db
+        .from("generation_runs")
+        .update(createInlineGenerationLease())
+        .eq("id", runId)
+        .eq("status", "queued")
+        .select("id")
+        .maybeSingle();
+      shouldScheduleInline = Boolean(claimed?.id);
+    }
     const meta = await getProject(db, projectId);
     const intentOnly = ((meta?.buildSteps ?? []) as BuildStep[]).filter(
       (s) => s?.step === "intent_agent"
@@ -59,7 +76,7 @@ export async function enqueueGenerationJob(input: EnqueueGenerationInput): Promi
       currentGenerationRunId: runId,
       buildSteps: intentOnly,
     });
-    return { runId, attached: true };
+    return { runId, attached: true, shouldScheduleInline };
   }
 
   const { data: inserted, error: insErr } = await db
@@ -67,7 +84,9 @@ export async function enqueueGenerationJob(input: EnqueueGenerationInput): Promi
     .insert({
       project_id: projectId,
       user_id: ownerUserId,
-      status: "queued",
+      ...(runInline
+        ? createInlineGenerationLease()
+        : { status: "queued" }),
       kind,
       resume_from_checkpoint: resumeFromCheckpoint,
       payload,
@@ -100,5 +119,9 @@ export async function enqueueGenerationJob(input: EnqueueGenerationInput): Promi
     properties: { projectId, runId, kind },
   });
 
-  return { runId, attached: false };
+  return {
+    runId,
+    attached: false,
+    shouldScheduleInline: runInline,
+  };
 }

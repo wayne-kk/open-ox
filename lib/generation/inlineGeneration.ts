@@ -4,23 +4,25 @@ import { executeGenerationRun } from "@/lib/generation/executeGenerationRun";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 
 import type { GenerationRunPayloadBody, GenerationRunRow } from "./types";
+import {
+  createInlineGenerationLease,
+  generationLeaseSeconds,
+  inlineGenerationWorkerId,
+  shouldRunInlineGeneration,
+} from "./executorMode";
 
-const INLINE_WORKER_ID = "inline-next-dev";
+export {
+  createInlineGenerationLease,
+  shouldRunInlineGeneration,
+  shouldRunStandaloneGenerationWorker,
+} from "./executorMode";
+
+const INLINE_WORKER_ID = inlineGenerationWorkerId();
 
 /**
- * Run queued jobs inside the Next.js process (no separate worker). Opt-in only:
+ * Run leased jobs inside the Next.js process (no separate worker). Opt-in only:
  * set OPEN_OX_INLINE_GENERATION=1. Default is worker/queue mode.
  */
-export function shouldRunInlineGeneration(): boolean {
-  const flag = process.env.OPEN_OX_INLINE_GENERATION?.trim().toLowerCase();
-  return flag === "1" || flag === "true" || flag === "yes";
-}
-
-/** Inline and standalone executors are mutually exclusive for a given runtime. */
-export function shouldRunStandaloneGenerationWorker(): boolean {
-  return !shouldRunInlineGeneration();
-}
-
 function mapDbRunToRow(data: Record<string, unknown>): GenerationRunRow {
   return {
     id: String(data.id),
@@ -32,42 +34,49 @@ function mapDbRunToRow(data: Record<string, unknown>): GenerationRunRow {
   };
 }
 
-async function claimRunForInline(
+async function loadInlineOwnedRun(
   admin: SupabaseClient,
   runId: string
 ): Promise<GenerationRunRow | null> {
-  const leaseSeconds = Math.max(
-    60,
-    Number.parseInt(process.env.OPEN_OX_GENERATION_LEASE_SECONDS ?? "240", 10) || 240
-  );
-  const now = new Date().toISOString();
-  const until = new Date(Date.now() + leaseSeconds * 1000).toISOString();
-
   const { data, error } = await admin
     .from("generation_runs")
-    .update({
-      status: "running",
-      lease_owner: INLINE_WORKER_ID,
-      lease_until: until,
-      last_heartbeat_at: now,
-      started_at: now,
-      updated_at: now,
-    })
-    .eq("id", runId)
-    .eq("status", "queued")
     .select("*")
+    .eq("id", runId)
+    .eq("status", "running")
+    .eq("lease_owner", INLINE_WORKER_ID)
     .maybeSingle();
 
   if (error) {
-    console.error("[inline-generation] claim failed:", error.message);
+    console.error("[inline-generation] load owned run failed:", error.message);
     return null;
   }
   if (!data) return null;
   return mapDbRunToRow(data as Record<string, unknown>);
 }
 
+async function heartbeatInlineRun(
+  admin: SupabaseClient,
+  runId: string,
+): Promise<void> {
+  const lease = createInlineGenerationLease();
+  const { error } = await admin
+    .from("generation_runs")
+    .update({
+      lease_until: lease.lease_until,
+      last_heartbeat_at: lease.last_heartbeat_at,
+      updated_at: lease.updated_at,
+    })
+    .eq("id", runId)
+    .eq("status", "running")
+    .eq("lease_owner", INLINE_WORKER_ID);
+  if (error) {
+    console.warn("[inline-generation] heartbeat failed:", error.message);
+  }
+}
+
 /**
- * Fire-and-forget: claim `runId` if still queued, then execute in-process.
+ * Fire-and-forget: execute a run that enqueueGenerationJob already leased to
+ * this process. The run is never visible as queued to shared/legacy workers.
  */
 export function scheduleInlineGenerationRun(runId: string): void {
   if (!shouldRunInlineGeneration()) return;
@@ -75,19 +84,26 @@ export function scheduleInlineGenerationRun(runId: string): void {
   void (async () => {
     try {
       const admin = createSupabaseServiceRoleClient();
-      const row = await claimRunForInline(admin, runId);
+      const row = await loadInlineOwnedRun(admin, runId);
       if (!row) {
         console.info(
-          `[inline-generation] skipped run ${runId} (not queued — worker may own it)`
+          `[inline-generation] skipped run ${runId} (not leased to this process)`
         );
         return;
       }
       console.info(`[inline-generation] executing run ${runId} in Next.js process`);
-      await executeGenerationRun({
-        admin,
-        run: row,
-        workerHostname: INLINE_WORKER_ID,
-      });
+      const heartbeatTimer = setInterval(() => {
+        void heartbeatInlineRun(admin, runId);
+      }, Math.max(30_000, (generationLeaseSeconds() * 1000) / 2));
+      try {
+        await executeGenerationRun({
+          admin,
+          run: row,
+          workerHostname: INLINE_WORKER_ID,
+        });
+      } finally {
+        clearInterval(heartbeatTimer);
+      }
     } catch (err) {
       console.error(
         "[inline-generation] execute failed:",

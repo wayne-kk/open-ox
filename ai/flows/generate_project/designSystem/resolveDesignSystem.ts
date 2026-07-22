@@ -10,9 +10,26 @@ import type {
 import { validateDesignSystemSkill } from "./skillContent";
 
 const AUTO_MATCH_CONFIDENCE_THRESHOLD = 0.86;
-const AUTO_MATCH_MINIMUM_SCORE = 0.25;
-const AUTO_MATCH_SCORE_MARGIN = 0.12;
-const AUTO_MATCH_MAX_CANDIDATES = 3;
+const AUTO_MATCH_MINIMUM_SCORE = 0.12;
+const AUTO_MATCH_MAX_CANDIDATES = 10;
+
+function matcherFallbackReason(error: unknown): DesignSystemFallbackReason {
+  const reason =
+    error &&
+    typeof error === "object" &&
+    "matcherFailureReason" in error &&
+    typeof error.matcherFailureReason === "string"
+      ? error.matcherFailureReason
+      : "matcher_request_failed";
+  switch (reason) {
+    case "matcher_response_truncated":
+    case "matcher_invalid_json":
+    case "matcher_request_failed":
+      return reason;
+    default:
+      return "matcher_request_failed";
+  }
+}
 
 function inferSurfaceMode(
   projectType: string | undefined,
@@ -37,11 +54,14 @@ function inferSurfaceMode(
   return undefined;
 }
 
-function includesSignal(haystack: string, signal: string): boolean {
+function signalPattern(signal: string, global = false): RegExp | null {
   const normalizedSignal = signal.trim().toLowerCase();
-  if (!normalizedSignal) return false;
+  if (!normalizedSignal) return null;
   if (/\p{Script=Han}/u.test(normalizedSignal)) {
-    return haystack.includes(normalizedSignal);
+    return new RegExp(
+      normalizedSignal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+      global ? "giu" : "iu",
+    );
   }
   const escapedSignal = normalizedSignal.replace(
     /[.*+?^${}()|[\]\\]/g,
@@ -49,8 +69,34 @@ function includesSignal(haystack: string, signal: string): boolean {
   );
   return new RegExp(
     `(?<![\\p{L}\\p{N}])${escapedSignal}(?![\\p{L}\\p{N}])`,
-    "iu",
-  ).test(haystack);
+    global ? "giu" : "iu",
+  );
+}
+
+function occurrenceIsNegated(haystack: string, index: number): boolean {
+  const prefix = haystack.slice(Math.max(0, index - 64), index);
+  const lineStart = haystack.lastIndexOf("\n", index - 1) + 1;
+  const linePrefix = haystack.slice(lineStart, index);
+  const labelledNegativeScope =
+    /(?:forbidden|avoid|exclude(?:d|s)?|禁止|避免|不要|排除)\s*[:：]/iu;
+  const englishNegation =
+    /(?:avoid(?:ed|ing|s)?|without|no|not|never|forbid(?:den|ding|s)?|exclude(?:d|s|ing)?|do not|don't|must not)\s*(?::|：|-)?\s*(?:[\p{L}\p{N}_-]+\s+){0,3}$/iu;
+  const chineseNegation =
+    /(?:避免|不要|禁止|不得|不使用|排除|拒绝)[^，。；;\n]{0,18}(?::|：)?\s*$/u;
+  return (
+    labelledNegativeScope.test(linePrefix) ||
+    englishNegation.test(prefix) ||
+    chineseNegation.test(prefix)
+  );
+}
+
+function includesAffirmedSignal(haystack: string, signal: string): boolean {
+  const pattern = signalPattern(signal, true);
+  if (!pattern) return false;
+  for (const match of haystack.matchAll(pattern)) {
+    if (!occurrenceIsNegated(haystack, match.index ?? 0)) return true;
+  }
+  return false;
 }
 
 function buildCandidate(
@@ -71,26 +117,26 @@ function buildCandidate(
     request.projectType ?? "",
     request.legacyStyleGuide ?? "",
   ]
-    .join(" ")
+    .join("\n")
     .toLowerCase();
   const matchedSignals: string[] = [];
   const conflicts: string[] = [];
   let score = 0;
 
   for (const alias of skill.metadata.aliases) {
-    if (!includesSignal(searchableText, alias)) continue;
+    if (!includesAffirmedSignal(searchableText, alias)) continue;
     matchedSignals.push(`alias:${alias}`);
     score += 0.55;
   }
 
   for (const mood of skill.metadata.positiveSignals.moods) {
-    if (!includesSignal(searchableText, mood)) continue;
+    if (!includesAffirmedSignal(searchableText, mood)) continue;
     matchedSignals.push(`mood:${mood}`);
     score += 0.12;
   }
 
   for (const color of skill.metadata.positiveSignals.colors) {
-    if (!includesSignal(searchableText, color)) continue;
+    if (!includesAffirmedSignal(searchableText, color)) continue;
     matchedSignals.push(`color:${color}`);
     score += 0.12;
   }
@@ -101,7 +147,7 @@ function buildCandidate(
     ) {
       matchedSignals.push(`productType:${productType}`);
       score += 0.35;
-    } else if (includesSignal(searchableText, productType)) {
+    } else if (includesAffirmedSignal(searchableText, productType)) {
       matchedSignals.push(`productType:${productType}`);
       score += 0.18;
     }
@@ -111,13 +157,15 @@ function buildCandidate(
     skill.metadata.negativeSignals,
   )) {
     for (const signal of signals) {
-      if (includesSignal(searchableText, signal)) {
+      if (includesAffirmedSignal(searchableText, signal)) {
         conflicts.push(`${kind}:${signal}`);
       }
     }
   }
 
-  if (score < AUTO_MATCH_MINIMUM_SCORE && conflicts.length === 0) return null;
+  // Retrieval is recall-oriented: negative-only hits are not candidates, and
+  // the LLM judge (not this lexical score) makes the final semantic choice.
+  if (score < AUTO_MATCH_MINIMUM_SCORE) return null;
   return {
     skillId: skill.metadata.id,
     score: Math.min(1, Number(score.toFixed(3))),
@@ -265,11 +313,11 @@ export function createDesignSystemResolver(
       let judgeOutcome;
       try {
         judgeOutcome = await dependencies.judge(matchRequest, candidates);
-      } catch {
+      } catch (error) {
         return generateFallback(
           dependencies,
           request,
-          "matcher_error",
+          matcherFallbackReason(error),
           candidates,
           undefined,
           observer,
@@ -308,24 +356,7 @@ export function createDesignSystemResolver(
         return generateFallback(
           dependencies,
           request,
-          "matcher_error",
-          candidates,
-          judgeOutcome,
-          observer,
-        );
-      }
-
-      const runnerUp = candidates.find(
-        (candidate) => candidate.skillId !== selectedCandidate.skillId,
-      );
-      if (
-        runnerUp &&
-        selectedCandidate.score - runnerUp.score < AUTO_MATCH_SCORE_MARGIN
-      ) {
-        return generateFallback(
-          dependencies,
-          request,
-          "ambiguous",
+          "matcher_skill_not_in_candidates",
           candidates,
           judgeOutcome,
           observer,
@@ -337,7 +368,7 @@ export function createDesignSystemResolver(
         return generateFallback(
           dependencies,
           request,
-          "matcher_error",
+          "matcher_catalog_miss",
           candidates,
           judgeOutcome,
           observer,

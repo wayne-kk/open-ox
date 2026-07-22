@@ -616,13 +616,168 @@ describe("DesignSystemResolver", () => {
       [
         expect.objectContaining({
           skillId: "minimal-dark",
-          conflicts: ["colors:pastel"],
+          conflicts: [],
         }),
       ],
     );
   });
 
-  it("falls back when two candidates remain too close after semantic judging", async () => {
+  it("applies a Forbidden label to every item in a semicolon-separated list", async () => {
+    const candidate = skill();
+    const judge = vi.fn().mockResolvedValue({
+      decision: {
+        skillId: "minimal-dark",
+        confidence: 0.94,
+        evidence: ["minimal dark"],
+        conflicts: [],
+        reason: "The forbidden palette is compatible with this skill",
+      },
+    });
+    const resolver = createDesignSystemResolver({
+      catalog: { list: () => [candidate], get: () => candidate },
+      judge,
+      generate: vi.fn(),
+    });
+
+    await resolver.resolve({
+      userInput: "Build an immersive dark video site",
+      designIntentMarkdown: "Mood: minimal dark",
+      legacyStyleGuide:
+        "Forbidden: light-backgrounds; pastel-colors; serif-fonts",
+    });
+
+    expect(judge.mock.calls[0]?.[1]).toEqual([
+      expect.objectContaining({ skillId: "minimal-dark", conflicts: [] }),
+    ]);
+  });
+
+  it("recalls relevant skills from the failed dark-neon run and lets the LLM decide", async () => {
+    const catalog = createFileDesignSystemSkillCatalog();
+    const judge = vi.fn().mockResolvedValue({
+      decision: {
+        skillId: "cyberpunk",
+        confidence: 0.95,
+        evidence: ["cyan and magenta neon on near-black video surfaces"],
+        conflicts: [],
+        reason: "Cyberpunk best matches the confirmed dark-neon direction",
+      },
+    });
+    const resolver = createDesignSystemResolver({
+      catalog,
+      judge,
+      generate: vi
+        .fn()
+        .mockResolvedValue({ designSystem: "# unexpected fallback" }),
+    });
+
+    const result = await resolver.resolve({
+      userInput: "搭建一个抖音视频web网站",
+      designIntentMarkdown:
+        "Mood: immersive, energetic, modern. Color Direction: Deep space black background with electric cyan accents. Style: dark-mode-immersive, neon-accent, borderless-cards.",
+      projectType: "web-app",
+      legacyStyleGuide:
+        "Decoration: Minimal borders, glowing hover states, and smooth transitions. Typography: Clean sans-serif. Forbidden: light-backgrounds; pastel-colors; serif-fonts",
+    });
+
+    expect(result).toMatchObject({
+      source: "skill",
+      skillId: "cyberpunk",
+      reason: "automatic_match",
+    });
+    expect(judge.mock.calls[0]?.[1]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          skillId: "cyberpunk",
+          conflicts: [],
+        }),
+      ]),
+    );
+  });
+
+  it("preserves the matcher failure category when semantic judging fails", async () => {
+    const candidate = skill();
+    const resolver = createDesignSystemResolver({
+      catalog: { list: () => [candidate], get: () => candidate },
+      judge: vi.fn().mockRejectedValue(
+        Object.assign(new Error("response ended inside JSON"), {
+          matcherFailureReason: "matcher_response_truncated",
+        }),
+      ),
+      generate: vi
+        .fn()
+        .mockResolvedValue({ designSystem: "# Bespoke after matcher failure" }),
+    });
+
+    const result = await resolver.resolve({
+      userInput: "Build a minimal dark site",
+      designIntentMarkdown: "Style: minimal dark",
+    });
+
+    expect(result).toMatchObject({
+      source: "generated",
+      fallbackReason: "matcher_response_truncated",
+    });
+  });
+
+  it("reports when the matcher selects a skill outside the shortlist", async () => {
+    const candidate = skill();
+    const resolver = createDesignSystemResolver({
+      catalog: { list: () => [candidate], get: () => candidate },
+      judge: vi.fn().mockResolvedValue({
+        decision: {
+          skillId: "not-a-candidate",
+          confidence: 0.99,
+          evidence: [],
+          conflicts: [],
+          reason: "bad model output",
+        },
+      }),
+      generate: vi
+        .fn()
+        .mockResolvedValue({ designSystem: "# Bespoke after invalid selection" }),
+    });
+
+    const result = await resolver.resolve({
+      userInput: "Build a minimal dark site",
+      designIntentMarkdown: "Style: minimal dark",
+    });
+
+    expect(result).toMatchObject({
+      source: "generated",
+      fallbackReason: "matcher_skill_not_in_candidates",
+    });
+  });
+
+  it("reports a catalog miss separately from malformed matcher output", async () => {
+    const candidate = skill();
+    const resolver = createDesignSystemResolver({
+      catalog: { list: () => [candidate], get: () => null },
+      judge: vi.fn().mockResolvedValue({
+        decision: {
+          skillId: "minimal-dark",
+          confidence: 0.99,
+          evidence: ["minimal dark"],
+          conflicts: [],
+          reason: "strong match",
+        },
+      }),
+      generate: vi
+        .fn()
+        .mockResolvedValue({ designSystem: "# Bespoke after catalog miss" }),
+    });
+
+    const result = await resolver.resolve({
+      userInput: "Build a minimal dark site",
+      designIntentMarkdown: "Style: minimal dark",
+    });
+
+    expect(result).toMatchObject({
+      source: "generated",
+      fallbackReason: "matcher_catalog_miss",
+    });
+  });
+
+  it("trusts a high-confidence semantic judge when lexical candidates are close", async () => {
     const minimalDark = skill();
     const luxury = skill({
       metadata: {
@@ -658,10 +813,11 @@ describe("DesignSystemResolver", () => {
     });
 
     expect(result).toMatchObject({
-      source: "generated",
-      fallbackReason: "ambiguous",
+      source: "skill",
+      skillId: "minimal-dark",
+      confidence: 0.93,
     });
-    expect(generate).toHaveBeenCalledOnce();
+    expect(generate).not.toHaveBeenCalled();
   });
 
   it.each([

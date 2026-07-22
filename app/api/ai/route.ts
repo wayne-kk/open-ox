@@ -187,16 +187,19 @@ export async function POST(req: Request) {
       ...(initialImage ? { initialImageBase64: initialImage } : {}),
     };
 
-    const { runId, attached } = await enqueueGenerationJob({
-      db,
-      projectId,
-      ownerUserId: user.id,
-      kind,
-      resumeFromCheckpoint,
-      payload,
-    });
+    const { runId, attached, shouldScheduleInline } =
+      await enqueueGenerationJob({
+        db,
+        projectId,
+        ownerUserId: user.id,
+        kind,
+        resumeFromCheckpoint,
+        payload,
+      });
 
-    scheduleInlineGenerationRun(runId);
+    if (shouldScheduleInline) {
+      scheduleInlineGenerationRun(runId);
+    }
 
     return NextResponse.json({
       ok: true,

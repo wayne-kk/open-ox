@@ -374,14 +374,15 @@ export async function POST(req: Request) {
             intentRunPayload.langfuseTraceId = activeTraceId;
           }
 
-          const { runId, attached } = await enqueueGenerationJob({
-            db,
-            projectId,
-            ownerUserId: user.id,
-            kind: "new",
-            resumeFromCheckpoint: false,
-            payload: intentRunPayload,
-          });
+          const { runId, attached, shouldScheduleInline } =
+            await enqueueGenerationJob({
+              db,
+              projectId,
+              ownerUserId: user.id,
+              kind: "new",
+              resumeFromCheckpoint: false,
+              payload: intentRunPayload,
+            });
 
           if (activeTraceId) {
             updateLangfuseActiveTrace({
@@ -395,7 +396,9 @@ export async function POST(req: Request) {
             });
           }
 
-          scheduleInlineGenerationRun(runId);
+          if (shouldScheduleInline) {
+            scheduleInlineGenerationRun(runId);
+          }
 
           send({
             type: "done",

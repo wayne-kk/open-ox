@@ -78,7 +78,11 @@ export type DesignSystemFallbackReason =
   | "ambiguous"
   | "explicit_conflict"
   | "skill_invalid"
-  | "matcher_error"
+  | "matcher_response_truncated"
+  | "matcher_invalid_json"
+  | "matcher_request_failed"
+  | "matcher_skill_not_in_candidates"
+  | "matcher_catalog_miss"
   | "screenshot_replica";
 
 export type DesignSystemResolution =
