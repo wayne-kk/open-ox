@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { MessagesSquare } from "lucide-react";
@@ -156,27 +155,27 @@ export function SocialAuthSection({ compact = false }: { compact?: boolean }) {
       ) : (
         <>
           {googleOn && (
-            <Link
+            <a
               href={`/api/auth/google/start?next=${next}`}
               className={`${btnBase} ${compact ? "py-2.5" : "py-3"} border-border/60 bg-background text-foreground hover:bg-muted/50`}
             >
               <GoogleIcon className="h-4 w-4" />
               {t("google")}
-            </Link>
+            </a>
           )}
 
           {linuxdoOn && (
-            <Link
+            <a
               href={`/api/auth/linuxdo/start?next=${next}`}
               className={`${btnBase} ${compact ? "py-2.5" : "py-3"} border-orange-500/35 bg-orange-500/10 text-orange-200 hover:bg-orange-500/18`}
             >
               <LinuxDoIcon className="h-4 w-4 text-orange-400" />
               {t("linuxdo")}
-            </Link>
+            </a>
           )}
 
           {feishuOn && (
-            <Link
+            <a
               href={`/api/auth/feishu/start?next=${next}`}
               className={`${btnBase} ${compact ? "py-2.5" : "py-3"} border-[#3370ff]/30 bg-[#3370ff]/8 text-[#8eb5ff]/90 hover:bg-[#3370ff]/14`}
             >
@@ -185,7 +184,7 @@ export function SocialAuthSection({ compact = false }: { compact?: boolean }) {
               <span className="absolute right-3 rounded border border-[#3370ff]/25 bg-[#3370ff]/10 px-1.5 py-0.5 text-[10px] font-normal leading-none text-[#8eb5ff]/75">
                 {t("feishuInternal")}
               </span>
-            </Link>
+            </a>
           )}
         </>
       )}
