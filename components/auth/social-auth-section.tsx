@@ -53,6 +53,8 @@ function oauthErrorKey(error: string | null): string | null {
       return "config";
     case "auth":
       return "auth";
+    case "otp_expired":
+      return "otpExpired";
     case "google_config":
       return "googleConfig";
     case "google_start":

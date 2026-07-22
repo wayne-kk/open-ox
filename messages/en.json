@@ -102,6 +102,7 @@
       "errors": {
         "config": "Supabase is not configured on the server.",
         "auth": "Third-party sign-in failed. Please try again.",
+        "otpExpired": "Email link is invalid or expired. Please sign up again or resend verification.",
         "googleConfig": "Google sign-in is not enabled.",
         "googleStart": "Could not start Google authorization. Please try again.",
         "feishuDenied": "Feishu authorization was cancelled.",

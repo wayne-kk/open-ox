@@ -102,6 +102,7 @@
       "errors": {
         "config": "服务端未配置 Supabase。",
         "auth": "第三方登录回调失败，请重试。",
+        "otpExpired": "邮件链接无效或已过期，请重新注册或重新发送验证邮件。",
         "googleConfig": "Google 登录未启用。",
         "googleStart": "无法发起 Google 授权，请稍后重试。",
         "feishuDenied": "已取消飞书授权。",
