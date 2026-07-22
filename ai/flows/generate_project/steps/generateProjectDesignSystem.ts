@@ -1,4 +1,4 @@
-import { loadStepPrompt, writeSiteFile } from "../shared/files";
+import { loadStepPrompt } from "../shared/files";
 import { callLLMWithMeta } from "../shared/llm";
 import { lfPlain, LfPlain } from "@/lib/observability/langfuseGenerationCatalog";
 import { stepTraceFromLlmCompletion } from "../shared/llmTrace";
@@ -21,6 +21,5 @@ export async function stepGenerateProjectDesignSystem(
   });
   const trace = stepTraceFromLlmCompletion(systemPrompt, userMessage, meta);
   const designSystem = meta.content;
-  await writeSiteFile("design-system.md", designSystem);
   return { designSystem, trace };
 }

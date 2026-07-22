@@ -1,5 +1,6 @@
 import type { AiResponse, BuildStep, IntentAgentTurn } from "../types/build-studio";
 import type { IntentProgressEvent } from "@/ai/flows/generate_project/intentAgent/types";
+import type { SelectedDesignSystemSkill } from "@/lib/generation/selectedDesignSystemSkill";
 import {
   createAgentStreamClientSession,
   decodeAgentSseJsonLine,
@@ -292,6 +293,7 @@ export async function runBuildSite(
     imageBase64?: string | null;
     /** Confirmed vibe fork — passed through to generation payload on commit */
     styleGuide?: string;
+    selectedDesignSystemSkill?: SelectedDesignSystemSkill;
     confirmedDesignDirectionMarkdown?: string;
     confirmedDesignDirectionKeywords?: string[];
   }
@@ -314,6 +316,9 @@ export async function runBuildSite(
             ...(options?.effortTier ? { effortTier: options.effortTier } : {}),
             ...(options?.imageBase64 ? { imageBase64: options.imageBase64 } : {}),
             ...(options?.styleGuide ? { styleGuide: options.styleGuide } : {}),
+            ...(options?.selectedDesignSystemSkill
+              ? { selectedDesignSystemSkill: options.selectedDesignSystemSkill }
+              : {}),
             ...(options?.confirmedDesignDirectionMarkdown
               ? {
                   confirmedDesignDirectionMarkdown:
@@ -336,6 +341,10 @@ export async function runBuildSite(
             ...(options?.resumeFromCheckpoint ? { resumeFromCheckpoint: true } : {}),
             ...(options?.retryProjectId ? { retryProjectId: options.retryProjectId } : {}),
             ...(options?.projectId ? { projectId: options.projectId } : {}),
+            ...(options?.styleGuide ? { styleGuide: options.styleGuide } : {}),
+            ...(options?.selectedDesignSystemSkill
+              ? { selectedDesignSystemSkill: options.selectedDesignSystemSkill }
+              : {}),
           }
     ),
     signal,

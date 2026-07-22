@@ -97,8 +97,8 @@ export default function SkillsPage() {
 7. 前端存入 sessionStorage["styleGuide:{projectId}"]
 8. handleRun() 读取 sessionStorage，传给 /api/ai
 9. /api/ai 传给 runGenerateProject({ styleGuide })
-10. styleGuide 仅注入 generateProjectDesignSystem 步骤
-    （截断到 1200 字符）`}</Pre>
+10. styleGuide 参与 DesignSystemResolver 的候选冲突判断
+11. 未命中内置 Skill 时，styleGuide 注入动态生成步骤`}</Pre>
           <Callout type="warn">
             styleGuide 不会注入 <Code>analyzeProjectRequirement</Code> 步骤。
             完整 skill 文档 + 用户 prompt 会导致该步骤的 prompt 过大，触发 LLM 超时（实际发生过）。
@@ -106,7 +106,7 @@ export default function SkillsPage() {
         </section>
 
         <section id="routing" className="scroll-mt-24">
-          <H2>两条风格通路</H2>
+          <H2>三条风格通路</H2>
           <P>
             当前管道里与「风格」相关的逻辑分成两类，切勿混淆：
           </P>
@@ -114,7 +114,11 @@ export default function SkillsPage() {
             {[
               {
                 title: "用户 styleGuide（public/skills + / 菜单）",
-                body: "提交时写入 styleGuide，截断后主要注入 generate_project_design_system，避免撑爆 analyze prompt。",
+                body: "提交时写入 styleGuide，参与 Resolver 冲突判断；未命中内置设计系统 Skill 时作为动态生成输入。",
+              },
+              {
+                title: "内置 Design-system Skill",
+                body: "版本化 catalog 先做确定性召回和保守语义裁决；高置信命中时直接成为 design-system.md。",
               },
               {
                 title: "Page Agent 视觉输入",

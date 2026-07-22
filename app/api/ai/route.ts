@@ -14,6 +14,7 @@ import { getSessionUser } from "@/lib/auth/session";
 import { requireOwnedProject } from "@/lib/auth/projectAccess";
 import { getUserDisplayName } from "@/lib/auth/display-name";
 import type { GenerationRunPayloadBody } from "@/lib/generation/types";
+import { parseSelectedDesignSystemSkill } from "@/lib/generation/selectedDesignSystemSkill";
 import {
   enqueueGenerationJob,
   getActiveQueuedOrRunningRunId,
@@ -124,6 +125,13 @@ export async function POST(req: Request) {
       typeof body.imageBase64 === "string" && body.imageBase64.trim()
         ? body.imageBase64.trim()
         : undefined;
+    const selectedDesignSystemSkill = parseSelectedDesignSystemSkill(
+      body.selectedDesignSystemSkill
+    );
+    const styleGuide =
+      typeof body.styleGuide === "string" && body.styleGuide.trim()
+        ? body.styleGuide.trim()
+        : undefined;
 
     const payload: GenerationRunPayloadBody = {
       requestingUserId: user.id,
@@ -136,6 +144,8 @@ export async function POST(req: Request) {
       resumeFromCheckpoint,
       enableSkills: true,
       enableIntentGuide,
+      ...(styleGuide ? { styleGuide } : {}),
+      ...(selectedDesignSystemSkill ? { selectedDesignSystemSkill } : {}),
       ...(typeof body.langfuseSessionId === "string"
         ? { langfuseSessionId: body.langfuseSessionId }
         : {}),

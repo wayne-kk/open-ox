@@ -1,0 +1,14 @@
+id: luxury
+version: "2"
+contractVersion: 1
+status: active
+aliases: [quiet luxury, luxury editorial, premium hospitality]
+positiveSignals:
+  moods: [luxury, elegant, exclusive, cinematic]
+  colors: [alabaster, oxblood, gold]
+  productTypes: [fashion, hospitality, jewelry, real-estate]
+negativeSignals:
+  moods: [playful, technical, loud]
+  colors: [neon, primary colors]
+  productTypes: [developer-tool, children]
+supportedModes: [marketing]

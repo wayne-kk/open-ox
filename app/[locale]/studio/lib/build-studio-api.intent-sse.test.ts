@@ -1,6 +1,14 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { IntentAgentTurn } from "../types/build-studio";
-import { processSSEChunk, type IntentSseStreamState } from "./build-studio-api";
+import {
+  processSSEChunk,
+  runBuildSite,
+  type IntentSseStreamState,
+} from "./build-studio-api";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 function sseData(payload: unknown): string {
   return `data: ${JSON.stringify(payload)}`;
@@ -68,5 +76,39 @@ describe("processSSEChunk intent turn hydration", () => {
     expect(onIntentTurn).toHaveBeenCalledWith(turn);
     expect(onDone).toHaveBeenCalledTimes(1);
     expect(streamState.sawIntentAgentTurn).toBe(true);
+  });
+});
+
+describe("runBuildSite design-system selection propagation", () => {
+  it("forwards style inputs through the direct generation branch", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: "stop after request capture" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await runBuildSite(
+      "Build a dashboard",
+      {
+        onStep: vi.fn(),
+        onDone: vi.fn(),
+        onError: vi.fn(),
+      },
+      undefined,
+      {
+        retryProjectId: "project-1",
+        styleGuide: "Use the approved direction",
+        selectedDesignSystemSkill: { id: "minimal-dark", version: "2" },
+      },
+    );
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(String(request.body))).toMatchObject({
+      styleGuide: "Use the approved direction",
+      selectedDesignSystemSkill: { id: "minimal-dark", version: "2" },
+    });
   });
 });

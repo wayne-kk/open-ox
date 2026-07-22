@@ -37,6 +37,7 @@ import {
 } from "@/ai/flows/generate_project/intentAgent";
 import { normalizeReferenceImageDataUrl } from "@/ai/flows/generate_project/shared/userVisionContent";
 import type { GenerationRunPayloadBody } from "@/lib/generation/types";
+import { parseSelectedDesignSystemSkill } from "@/lib/generation/selectedDesignSystemSkill";
 import { enqueueGenerationJob } from "@/lib/generation/enqueueGenerationJob";
 import { scheduleInlineGenerationRun } from "@/lib/generation/inlineGeneration";
 import fs from "fs/promises";
@@ -98,6 +99,9 @@ export async function POST(req: Request) {
       typeof body.styleGuide === "string" && body.styleGuide.trim()
         ? body.styleGuide.trim()
         : undefined;
+    const selectedDesignSystemSkill = parseSelectedDesignSystemSkill(
+      body.selectedDesignSystemSkill
+    );
     const confirmedDesignDirectionMarkdown: string | undefined =
       typeof body.confirmedDesignDirectionMarkdown === "string" &&
       body.confirmedDesignDirectionMarkdown.trim()
@@ -338,6 +342,7 @@ export async function POST(req: Request) {
             enableSkills: true,
             enableIntentGuide,
             ...(styleGuide ? { styleGuide } : {}),
+            ...(selectedDesignSystemSkill ? { selectedDesignSystemSkill } : {}),
             ...(confirmedDesignDirectionMarkdown
               ? { confirmedDesignDirectionMarkdown }
               : {}),

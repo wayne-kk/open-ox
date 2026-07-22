@@ -1,0 +1,14 @@
+id: neo-brutalism
+version: "2"
+contractVersion: 1
+status: active
+aliases: [neo brutalism, neo-brutalism, hard shadow pop]
+positiveSignals:
+  moods: [playful, bold, irreverent, energetic]
+  colors: [pop colors, cream, electric yellow]
+  productTypes: [consumer-app, community, startup]
+negativeSignals:
+  moods: [luxury, calm, understated]
+  colors: [monochrome, muted]
+  productTypes: [finance, legal]
+supportedModes: [marketing, web-app]

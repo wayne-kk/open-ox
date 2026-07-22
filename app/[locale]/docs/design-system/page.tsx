@@ -48,12 +48,12 @@ export default function DesignSystemPage() {
     <div className="flex gap-10">
       <article className="min-w-0 flex-1 max-w-2xl">
         <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-primary mb-4">
-          // docs / design-system
+          {"// docs / design-system"}
         </p>
         <h1 className="text-3xl font-bold tracking-tight">设计系统生成</h1>
         <p className="mt-3 text-[15px] leading-7 text-muted-foreground">
-          每个项目都有一套 AI 生成的设计系统。它不是模板，而是根据用户 prompt 的语义
-          推导出的颜色、字体、间距和动效规范 — 并以 CSS 变量的形式注入整个站点。
+          每个项目都有一套经过解析的设计系统：高置信命中版本化 Skill 时直接复用，否则才由 AI
+          根据用户语义生成。最终颜色、字体、间距和动效规范会以 CSS 变量注入整个站点。
         </p>
 
         <section id="overview" className="scroll-mt-24">
@@ -65,12 +65,13 @@ export default function DesignSystemPage() {
           </P>
           <Pre>{`// 主路径编排（与设计系统相关的部分）
 analyze_project_requirement  ∥ infer_design_intent   // 第一层并行
-plan_project
-generate_project_design_system   // Style Reference Markdown
+plan_project ∥ resolve_design_system
+  ├─ matched skill               // 跳过设计系统生成 LLM
+  └─ fallback → LLM generation   // 无匹配时才执行
 apply_project_design_tokens      // 先于一切页面写入
 architect_scaffold_agent → page_implement_agent ×M → chrome_optimize_agent`}</Pre>
           <Callout>
-            设计系统始终由 LLM 按 <strong>Style Reference</strong> 模板生成；<Code>infer_design_intent</Code> 的技术关键词会在 plan 之后合并进 blueprint，辅助 Hero skill 路由。
+            Skill 只有在契约通过且匹配足够明确时才会命中；低置信、歧义、显式冲突和截图复刻都会回退到 LLM 生成。
           </Callout>
         </section>
 
@@ -89,7 +90,7 @@ architect_scaffold_agent → page_implement_agent ×M → chrome_optimize_agent`
   style: "modern SaaS",
   keywords: ["performance", "developer-first", "minimal"]
 }`}</Pre>
-          <P>LLM 根据这些语义信号生成完整的 <Code>design-system.md</Code>（Style Reference 格式），包含：</P>
+          <P>Resolver 返回的 Skill 或 LLM 结果都必须形成完整的 <Code>design-system.md</Code>（Style Reference 格式），包含：</P>
           <div className="mt-4 space-y-2">
             {[
               { section: "Tokens — Colors", desc: "语义化色板表格（Name / Value / Token / Role），含渐变与 accent 使用约束" },
@@ -156,29 +157,26 @@ architect_scaffold_agent → page_implement_agent ×M → chrome_optimize_agent`
         </section>
 
         <section id="skill-override" className="scroll-mt-24">
-          <H2>Skill 覆盖</H2>
+          <H2>Skill 快路径</H2>
           <P>
-            用户在 prompt 中输入 <Code>/minimal</Code>、<Code>/bold</Code> 等命令时，
-            skill 内容会作为 <Code>styleGuide</Code> 注入 <Code>generate_project_design_system</Code> 步骤：
+            新请求可传递版本化 <Code>selectedDesignSystemSkill</Code>；契约有效时无需 matcher 和设计系统生成 LLM：
           </P>
-          <Pre>{`// styleGuide 注入（截断到 1200 字符）
-const systemPrompt = [
-  basePrompt,
-  styleGuide
-    ? \`\n\n## Style Guide Override\n\${styleGuide.slice(0, 1200)}\`
-    : "",
-].join("");`}</Pre>
+          <Pre>{`selectedDesignSystemSkill: {
+  id: "minimal-dark",
+  version: "2"
+}`}</Pre>
           <P>
-            Skill 的视觉方向会影响设计系统的生成结果。例如 <Code>/glassmorphism</Code> 会让
-            LLM 生成半透明背景色和毛玻璃效果相关的 CSS 变量，而 <Code>/brutalist</Code> 会
-            生成高对比度、无圆角的 token 组合。
+            旧 <Code>styleGuide</Code> 正文仍兼容：它参与候选冲突判断，未命中时作为动态生成输入。
+            自动匹配只检查 Top 3，并要求高置信、无冲突和足够的候选分差。截图复刻会跳过自动匹配，
+            但用户显式选择的版本化 skill 仍然优先；全局 kill switch 关闭时则统一走动态生成。
           </P>
           <div className="mt-4 space-y-2">
             {[
-              { skill: "/minimal", effect: "大量留白，单色调，--radius-* 趋近于 0，--spacing-section 增大" },
-              { skill: "/bold", effect: "高对比度，--color-primary 饱和度高，--font-heading 字重 800+" },
-              { skill: "/glassmorphism", effect: "半透明 --color-surface，backdrop-blur 相关变量，柔和阴影" },
-              { skill: "/brutalist", effect: "强边框，--radius-* 为 0，黑白高对比，等宽字体主导" },
+              { skill: "minimal-dark", effect: "深色层次、克制琥珀焦点、开发工具与 SaaS" },
+              { skill: "newsprint", effect: "报刊式排版、暖纸张、编辑密度与规则线" },
+              { skill: "bauhaus", effect: "构成主义网格、原色几何与粗边框" },
+              { skill: "neo-brutalism", effect: "粗描边、硬阴影、流行色与直接交互反馈" },
+              { skill: "luxury", effect: "安静奢华、电影感媒体、编辑字体与大尺度留白" },
             ].map(({ skill, effect }) => (
               <div key={skill} className="flex items-start gap-3 rounded-lg border border-border bg-card px-4 py-3">
                 <code className="shrink-0 font-mono text-[12px] text-primary/80 w-28">{skill}</code>

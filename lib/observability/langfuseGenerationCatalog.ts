@@ -23,6 +23,7 @@ export const LfPlain = {
   inferDesignIntent: "infer_design_intent_and_keywords",
   analyzeRequirement: "analyze_requirement_blueprint_json",
   planProject: "expand_site_blueprint_and_sections",
+  matchDesignSystemSkill: "match_design_system_skill",
   generateDesignSystemMd: "author_design_system_markdown",
   heroComponentSkillPick: "pick_hero_section_component_skill",
   analyzeScreenshotLayout: "analyze_screenshot_layout_pagespec_json",

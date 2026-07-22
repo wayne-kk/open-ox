@@ -1,9 +1,12 @@
 import { existsSync, readdirSync } from "fs";
 import { join, relative } from "path";
 import { getSiteRoot as projectManagerGetSiteRoot } from "@/lib/projectManager";
+import type { SelectedDesignSystemSkill } from "@/lib/generation/selectedDesignSystemSkill";
 import { getSiteRoot, runWithSiteRoot } from "@/ai/tools/system/common";
 import { clearFileTracking } from "@/ai/tools";
 import { validateSkillFrontmatter } from "@/ai/shared/skillDiscovery";
+import { validateDesignSystemSkillCatalog } from "./designSystem/catalog";
+import { resolveDesignSystem } from "./designSystem/productionResolver";
 import { syncSiteValidationMarkers, readSiteFile, getSkillPromptsRoot, writeSiteFile } from "./shared/files";
 import {
   buildScopedTypecheckStepTrace,
@@ -40,7 +43,6 @@ import {
   resolveChromeForm,
 } from "./shared/chromeForm";
 import { writeSharedContractStubs } from "./shared/writeSharedContractStubs";
-import { stepGenerateProjectDesignSystem } from "./steps/generateProjectDesignSystem";
 import { stepInstallDependencies } from "./steps/installDependencies";
 import { stepInferDesignIntent, type DesignIntentResult } from "./steps/inferDesignIntent";
 import { stepPlanProject } from "./steps/planProject";
@@ -689,6 +691,7 @@ export interface RunGenerateProjectOptions {
   /** Required — drives sites/<projectId>/ scoping via runWithSiteRoot. */
   projectId: string;
   styleGuide?: string;
+  selectedDesignSystemSkill?: SelectedDesignSystemSkill;
   /** When set, skips LLM infer_design_intent and uses this markdown instead. */
   confirmedDesignDirectionMarkdown?: string;
   confirmedDesignDirectionKeywords?: string[];
@@ -812,8 +815,12 @@ async function runGenerateProjectInner(
     // Always validate skill files (skills are enabled by default)
     {
       const skillFrontmatterErrors = validateSkillFrontmatter(getSkillPromptsRoot());
-      if (skillFrontmatterErrors.length > 0) {
-        const detail = skillFrontmatterErrors.map((e) => `${e.fileName}: ${e.message}`).join(" | ");
+      const designSystemSkillErrors = validateDesignSystemSkillCatalog();
+      if (skillFrontmatterErrors.length > 0 || designSystemSkillErrors.length > 0) {
+        const detail = [
+          ...skillFrontmatterErrors.map((e) => `${e.fileName}: ${e.message}`),
+          ...designSystemSkillErrors,
+        ].join(" | ");
         logger.logStep("validate_skill_prompts", "error", detail);
         throw new Error(`Invalid skill prompt frontmatter: ${detail}`);
       }
@@ -1113,12 +1120,19 @@ async function runGenerateProjectInner(
           return `## Design Intent\n- Mood: ${di.mood.join(", ")}\n- Color Direction: ${di.colorDirection}\n- Style: ${di.style}\n- Keywords: ${di.keywords.join(", ")}`;
         })();
 
-        // Design system only needs design-intent markdown (+ optional style guide), not plan sections.
+        // Resolution only needs design intent (+ optional style guide), not plan sections.
         logger.startStep("generate_project_design_system");
-        const designPromise = stepGenerateProjectDesignSystem(
-          designIntentForSystem,
-          options.styleGuide
-        );
+        const designPromise = resolveDesignSystem({
+          userInput: effectiveUserInput,
+          designIntentMarkdown: designIntentForSystem,
+          projectType: normalizedBlueprint.brief.productScope.productType,
+          screenshotMode: screenshotIntentMode,
+          selectedSkill: options.selectedDesignSystemSkill,
+          legacyStyleGuide: options.styleGuide,
+          matchingEnabled:
+            options.enableSkills !== false &&
+            process.env.DESIGN_SYSTEM_SKILL_FAST_PATH !== "0",
+        });
 
         const planOutcome = await stepPlanProject(normalizedBlueprint).then((out) => {
           logger.logStep("plan_project", "ok", "page-level blueprints prepared", undefined, out.trace);
@@ -1151,14 +1165,37 @@ async function runGenerateProjectInner(
           );
         }
 
-        const dsOutcome = await designPromise;
-        designSystem = dsOutcome.designSystem;
+        const designResolution = await designPromise;
+        designSystem = designResolution.designSystem;
+        await writeSiteFile("design-system.md", designSystem);
         logger.logStep(
           "generate_project_design_system",
           "ok",
-          "design-system.md written",
-          undefined,
-          dsOutcome.trace
+          designResolution.source === "skill"
+            ? `skill:${designResolution.skillId}@${designResolution.skillVersion}`
+            : `generated:${designResolution.fallbackReason}`,
+          designResolution.source === "skill" ? designResolution.skillId : undefined,
+          designResolution.source === "skill"
+            ? designResolution.trace.judgeTrace
+            : designResolution.trace.generationTrace,
+        );
+        await persistJsonArtifact(
+          artifactLogger,
+          "generate_project_design_system",
+          "resolution",
+          {
+            source: designResolution.source,
+            ...(designResolution.source === "skill"
+              ? {
+                  skillId: designResolution.skillId,
+                  skillVersion: designResolution.skillVersion,
+                  confidence: designResolution.confidence,
+                  reason: designResolution.reason,
+                }
+              : { fallbackReason: designResolution.fallbackReason }),
+            candidates: designResolution.trace.candidates,
+            decision: designResolution.trace.decision ?? null,
+          },
         );
 
         // Keywords already applied before plan_project (confirmed > infer). Keep plan output in sync.

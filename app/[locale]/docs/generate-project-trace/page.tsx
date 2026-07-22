@@ -28,7 +28,8 @@ function Callout({ children }: { children: React.ReactNode }) {
 const PHASE_ROWS: [string, string, string][] = [
   ["analyze_project_requirement", "steps/analyzeProjectRequirement.md + outputJson", "用户 prompt / 蓝图输入"],
   ["plan_project", "steps/planProject.agent.md + outputJson", "规范化蓝图 JSON"],
-  ["generate_project_design_system", "frontend + steps/generateProjectDesignSystem.md", "蓝图 + 可选 styleGuide"],
+  ["match_design_system_skill", "steps/matchDesignSystemSkill.md + outputJson", "Top 3 设计系统候选 metadata"],
+  ["generate_project_design_system", "DesignSystemResolver / generation fallback", "infer + 可选 styleGuide"],
   ["apply_project_design_tokens", "frontend + steps/applyProjectDesignTokens.md", "globals + 设计系统"],
   ["preselect_skills（内联 selector）", "短 system", "各 section 的 skill metadata（无正文）"],
   ["generate_section", "见 §3", "见 §4"],

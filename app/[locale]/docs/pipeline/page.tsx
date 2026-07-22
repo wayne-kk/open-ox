@@ -60,8 +60,8 @@ const STEPS = [
   {
     n: "05",
     name: "generate_project_design_system",
-    type: "llm",
-    desc: "根据 infer 文本 + 可选用户 styleGuide / Vibe 方向生成 Style Reference 格式的 design-system.md。",
+    type: "skill | llm",
+    desc: "DesignSystemResolver 先尝试版本化 Skill；只有无候选、低置信、冲突或截图复刻时才根据 infer + styleGuide 生成 design-system.md。",
   },
   { n: "06", name: "apply_project_design_tokens", type: "llm", desc: "设计系统 Markdown + 当前 app/globals.css → LLM 产出完整 globals.css（保留模板结构意图）。须先于 Chrome / Page Agent。" },
   {
@@ -202,14 +202,15 @@ await runChromeOptimizeStep(...); // link polish only
         <section id="skills" className="scroll-mt-24">
           <H2>Skill 系统</H2>
           <P>
-            风格技能是 <Code>public/skills/</Code> 目录下的 Markdown 文件。每个文件描述一种视觉方向 —
-            字体规则、色彩哲学、组件风格。
+            全局设计系统 Skill 是版本化 catalog；命中后直接成为 <Code>design-system.md</Code>。
+            <Code>public/skills/</Code> 继续作为用户 styleGuide 来源，Hero 组件 Skill 则使用独立的运行时发现机制。
           </P>
-          <Pre>{`public/skills/
-├── minimal.md       # 极简：大量留白，单色调，字体主导
-├── bold.md          # 大胆：高对比度，超大字体，强烈色彩
-├── glassmorphism.md # 玻璃拟态：毛玻璃效果，半透明层次，纵深感
-└── brutalist.md     # 野兽派：原始网格，强烈对比，反精致`}</Pre>
+          <Pre>{`ai/flows/generate_project/designSystem/skills/
+├── minimal-dark/{metadata.yaml, design-system.md}
+├── newsprint/{metadata.yaml, design-system.md}
+├── bauhaus/{metadata.yaml, design-system.md}
+├── neo-brutalism/{metadata.yaml, design-system.md}
+└── luxury/{metadata.yaml, design-system.md}`}</Pre>
           <H3>运行时 Skill 发现</H3>
           <P>
             每个 section 在生成时自行发现并选择 skill（不再有全局 preselect 步骤）。

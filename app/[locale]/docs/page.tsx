@@ -86,7 +86,7 @@ const CARDS = [
     icon: Zap,
     href: "/docs/skills",
     title: "风格技能",
-    desc: "用户 /skill 注入 styleGuide；Style Reference 设计系统 LLM 生成；Hero 区运行时组件 skill 发现（菜单与正文分离）。",
+    desc: "版本化 Design-system Skill 高置信命中即复用；否则结合用户 styleGuide 动态生成 Style Reference。",
     tag: "设计",
     accent: "primary",
   },

@@ -1,3 +1,5 @@
+import type { SelectedDesignSystemSkill } from "./selectedDesignSystemSkill";
+
 /** JSON stored in generation_runs.payload — executed only by trusted worker/API */
 export type GenerationRunPayloadBody = {
   requestingUserId: string;
@@ -13,6 +15,7 @@ export type GenerationRunPayloadBody = {
   preCreatedProjectId?: string;
   resumeFromCheckpoint: boolean;
   styleGuide?: string;
+  selectedDesignSystemSkill?: SelectedDesignSystemSkill;
   /**
    * User-confirmed vibe fork (confirm_vibe). When set, generation uses this
    * markdown as design intent instead of (or ahead of) inferred design intent.
