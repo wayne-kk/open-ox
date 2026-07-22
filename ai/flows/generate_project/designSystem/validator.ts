@@ -53,7 +53,10 @@ const FORBIDDEN_PATTERNS = [
   },
   { label: "unsupported --font-label role", pattern: /--font-label\s*:/i },
   { label: "forbidden clip-path", pattern: /clip-path\s*:/i },
-  { label: "forbidden polygon()", pattern: /\bpolygon\s*\(/i },
+  {
+    label: "forbidden polygon()",
+    pattern: /\bpolygon\s*\(\s*(?=[^)\s])/i,
+  },
 ] as const;
 
 export function findForbiddenDesignSystemConstructs(

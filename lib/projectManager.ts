@@ -555,7 +555,7 @@ export async function updateProjectStatus(
   db: SupabaseClient,
   id: string,
   status: ProjectMetadata["status"],
-  extra?: Partial<ProjectMetadata>
+  extra?: Omit<Partial<ProjectMetadata>, "error"> & { error?: string | null }
 ): Promise<void> {
   const update: Record<string, unknown> = {
     status,

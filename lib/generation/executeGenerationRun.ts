@@ -28,6 +28,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { GenerationRunRow } from "./types";
 import { upsertBuildStepByName } from "./foldStepEvents";
+import { classifyGenerationRunCompletion } from "./intentGuideLifecycle";
 
 /** Pre-commit intent rounds are stored as `intent_agent` on the project row; the pipeline replaces `build_steps` at the end — preserve those steps so Studio can restore the dialogue. */
 function mergeIntentAgentStepsIntoFinal(
@@ -273,24 +274,29 @@ export async function executeGenerationRun(args: {
               })
             : await runPipeline();
 
+          const traceCompletion = classifyGenerationRunCompletion(genResult);
+          const traceSucceeded = traceCompletion.runStatus === "succeeded";
+
           updateLangfuseActiveTrace({
             tags: [
               "flow:project_build",
               "route:generation_worker",
               continueTraceId ? "source:intent_commit" : "source:generation_job",
-              genResult.success ? "status:succeeded" : "status:failed",
+              `status:${traceCompletion.runStatus}`,
             ],
             metadata: {
               projectId,
               generationRunId: generationRunUuid,
-              status: genResult.success ? "succeeded" : "failed",
+              status: traceCompletion.runStatus,
               retry: retryProjectId != null,
               ...(previousTraceId ? { previousTraceId } : {}),
-              ...(genResult.error ? { error: genResult.error } : {}),
+              ...(traceCompletion.runError
+                ? { error: traceCompletion.runError }
+                : {}),
             },
             output: {
-              success: genResult.success,
-              error: genResult.error ?? null,
+              success: traceSucceeded,
+              error: traceCompletion.runError,
               intentGuideDeferred: Boolean(genResult.intentGuideDeferred),
               verificationStatus: genResult.verificationStatus ?? null,
               totalDurationMs: genResult.totalDuration,
@@ -321,8 +327,10 @@ export async function executeGenerationRun(args: {
 
     const projectSnapshot = await getProject(admin, projectId);
 
-    if (result.success) {
-      await updateProjectStatus(admin, projectId, "ready", {
+    const completion = classifyGenerationRunCompletion(result);
+
+    if (completion.kind === "ready") {
+      await updateProjectStatus(admin, projectId, completion.projectStatus, {
         completedAt: new Date().toISOString(),
         verificationStatus: result.verificationStatus,
         blueprint: result.blueprint,
@@ -345,9 +353,9 @@ export async function executeGenerationRun(args: {
         await renameProject(admin, projectId, projectTitle.trim());
       }
       schedulePostGenerationPreviewPipeline(admin, projectId);
-    } else if (result.intentGuideDeferred && result.intentGuide) {
-      await updateProjectStatus(admin, projectId, "failed", {
-        error: `[intent_guide] ${result.intentGuide.assistantMessage.slice(0, 480)}`,
+    } else if (completion.kind === "awaiting_input") {
+      await updateProjectStatus(admin, projectId, completion.projectStatus, {
+        error: null,
         buildSteps: mergeIntentAgentStepsIntoFinal(
           projectSnapshot,
           result.steps.map(redactBuildStepForTransport)
@@ -355,8 +363,8 @@ export async function executeGenerationRun(args: {
         currentGenerationRunId: null,
       });
     } else {
-      await updateProjectStatus(admin, projectId, "failed", {
-        error: result.error ?? "Generation failed",
+      await updateProjectStatus(admin, projectId, completion.projectStatus, {
+        error: completion.runError,
         buildSteps: mergeIntentAgentStepsIntoFinal(
           projectSnapshot,
           result.steps.map(redactBuildStepForTransport)
@@ -366,8 +374,8 @@ export async function executeGenerationRun(args: {
     }
 
     await finalizeRunRecord(admin, generationRunUuid, {
-      status: result.success ? "succeeded" : "failed",
-      error: result.success ? null : result.error ?? "Generation failed",
+      status: completion.runStatus,
+      error: completion.runError,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";

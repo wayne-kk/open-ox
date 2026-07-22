@@ -7,7 +7,6 @@
  */
 import {
   createProject,
-  getProject,
   updateProjectStatus,
 } from "@/lib/projectManager";
 import { getSessionUser } from "@/lib/auth/session";
@@ -20,6 +19,11 @@ import {
   getActiveQueuedOrRunningRunId,
 } from "@/lib/generation/enqueueGenerationJob";
 import { scheduleInlineGenerationRun } from "@/lib/generation/inlineGeneration";
+import {
+  selectEffectiveGenerationPrompt,
+  selectPreviousCommittedGenerationPrompt,
+  shouldEnableIntentGuideForGeneration,
+} from "@/lib/generation/intentGuideLifecycle";
 import { canAfford } from "@/lib/billing/account";
 import { isCreditsEnabled, MIN_GENERATE_CREDITS } from "@/lib/billing/credits";
 import { NextResponse } from "next/server";
@@ -43,7 +47,13 @@ export async function POST(req: Request) {
       typeof body.resumeFromCheckpoint === "boolean" &&
       body.resumeFromCheckpoint;
     const preCreatedProjectId: string | undefined = body.projectId;
-    const enableIntentGuide: boolean = body.enableIntentGuide !== false;
+    const enableIntentGuide = shouldEnableIntentGuideForGeneration({
+      retryProjectId,
+      requested:
+        typeof body.enableIntentGuide === "boolean"
+          ? body.enableIntentGuide
+          : undefined,
+    });
     const folderId: string | null | undefined =
       typeof body.folderId === "string" ? body.folderId : body.folderId === null ? null : undefined;
     const requestGenerationMode: string | undefined = body.generationMode;
@@ -51,7 +61,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid generationMode" }, { status: 400 });
     }
 
-    let effectivePrompt = userPrompt as string | undefined;
+    let effectivePrompt: string | undefined;
     let effectiveModel = modelOverride;
     let effectiveGenerationMode = requestGenerationMode ?? "web";
     if (retryProjectId || preCreatedProjectId) {
@@ -59,9 +69,33 @@ export async function POST(req: Request) {
       const access = await requireOwnedProject(session, lookupId);
       if ("error" in access) return access.error;
       const existing = access.project;
-      if (!effectivePrompt) effectivePrompt = existing.userPrompt;
+      let previousRunPrompt: string | undefined;
+      if (retryProjectId && !(typeof userPrompt === "string" && userPrompt.trim())) {
+        const { data: previousRuns } = await db
+          .from("generation_runs")
+          .select("payload")
+          .eq("project_id", retryProjectId)
+          .contains("payload", { enableIntentGuide: false })
+          .order("created_at", { ascending: false })
+          .limit(1);
+        const previousPayloads = (previousRuns ?? []).map(
+          (run) => run.payload as Partial<GenerationRunPayloadBody>,
+        );
+        previousRunPrompt =
+          selectPreviousCommittedGenerationPrompt(previousPayloads);
+      }
+      effectivePrompt = selectEffectiveGenerationPrompt({
+        retryProjectId,
+        requestPrompt: userPrompt,
+        previousRunPrompt,
+        projectPrompt: existing.userPrompt,
+      });
       if (!effectiveModel && existing.modelId) effectiveModel = existing.modelId;
       effectiveGenerationMode = existing.generationMode ?? "web";
+    } else {
+      effectivePrompt = selectEffectiveGenerationPrompt({
+        requestPrompt: userPrompt,
+      });
     }
 
     if (!effectivePrompt || typeof effectivePrompt !== "string") {

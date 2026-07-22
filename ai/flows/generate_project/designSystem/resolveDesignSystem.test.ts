@@ -648,7 +648,20 @@ describe("DesignSystemResolver", () => {
     ["forbidden spacing token", `${VALID_DESIGN_SYSTEM}\n--spacing-xl: 4rem;`],
     ["extra font role", `${VALID_DESIGN_SYSTEM}\n--font-label: Inter;`],
     ["clip path", `${VALID_DESIGN_SYSTEM}\nclip-path: polygon(0 0, 100% 0, 100% 100%);`],
+    [
+      "polygon function",
+      `${VALID_DESIGN_SYSTEM}\nshape-outside: polygon(0 0, 100% 0, 100% 100%);`,
+    ],
   ])("rejects %s in the design-system contract", (_label, content) => {
     expect(validateDesignSystemContract(content, 1).valid).toBe(false);
+  });
+
+  it("allows prose that explicitly prohibits polygon syntax", () => {
+    const content = `${VALID_DESIGN_SYSTEM}\n\n- Never use clip-path, polygon(), or polygon( ).`;
+
+    expect(validateDesignSystemContract(content, 1)).toEqual({
+      valid: true,
+      errors: [],
+    });
   });
 });
