@@ -6,7 +6,7 @@ import type {
   DesignSystemResolverDependencies,
   DesignSystemSkill,
 } from "./types";
-import { validateDesignSystemContract } from "./validator";
+import { validateDesignSystemSkill } from "./skillContent";
 
 const AUTO_MATCH_CONFIDENCE_THRESHOLD = 0.86;
 const AUTO_MATCH_MINIMUM_SCORE = 0.25;
@@ -38,7 +38,18 @@ function inferSurfaceMode(
 
 function includesSignal(haystack: string, signal: string): boolean {
   const normalizedSignal = signal.trim().toLowerCase();
-  return normalizedSignal.length > 0 && haystack.includes(normalizedSignal);
+  if (!normalizedSignal) return false;
+  if (/\p{Script=Han}/u.test(normalizedSignal)) {
+    return haystack.includes(normalizedSignal);
+  }
+  const escapedSignal = normalizedSignal.replace(
+    /[.*+?^${}()|[\]\\]/g,
+    "\\$&",
+  );
+  return new RegExp(
+    `(?<![\\p{L}\\p{N}])${escapedSignal}(?![\\p{L}\\p{N}])`,
+    "iu",
+  ).test(haystack);
 }
 
 function buildCandidate(
@@ -170,10 +181,7 @@ export function createDesignSystemResolver(
           Boolean(requestedVersion) &&
           requestedVersion === selected.metadata.version
         ) {
-          const validation = validateDesignSystemContract(
-            selected.content,
-            selected.metadata.contractVersion,
-          );
+          const validation = validateDesignSystemSkill(selected);
           if (validation.valid) {
             return {
               source: "skill" as const,
@@ -285,10 +293,7 @@ export function createDesignSystemResolver(
           judgeOutcome,
         );
       }
-      const validation = validateDesignSystemContract(
-        selected.content,
-        selected.metadata.contractVersion,
-      );
+      const validation = validateDesignSystemSkill(selected);
       if (!validation.valid) {
         return generateFallback(
           dependencies,

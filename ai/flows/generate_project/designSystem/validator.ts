@@ -56,6 +56,14 @@ const FORBIDDEN_PATTERNS = [
   { label: "forbidden polygon()", pattern: /\bpolygon\s*\(/i },
 ] as const;
 
+export function findForbiddenDesignSystemConstructs(
+  content: string,
+): string[] {
+  return FORBIDDEN_PATTERNS.filter(({ pattern }) => pattern.test(content)).map(
+    ({ label }) => label,
+  );
+}
+
 function hasMarkdownHeading(content: string, level: number, heading: string): boolean {
   const escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(
@@ -78,6 +86,31 @@ function validHexColorToken(content: string, role: string): string | null {
 export interface DesignSystemContractValidation {
   valid: boolean;
   errors: string[];
+}
+
+export function validateDesignSystemReferenceContract(
+  content: string,
+): DesignSystemContractValidation {
+  const errors: string[] = [];
+  const normalized = content.trim();
+
+  if (normalized.length < 500) {
+    errors.push("design-system reference content is too short");
+  }
+  if (!/^#\s+\S/m.test(normalized)) {
+    errors.push("design-system reference is missing a title");
+  }
+  if (!/design philosophy/i.test(normalized)) {
+    errors.push("design-system reference is missing Design Philosophy");
+  }
+  if (!/design token system|color system|color palette/i.test(normalized)) {
+    errors.push("design-system reference is missing a token or color system");
+  }
+  if (/<\/?(?:role|design-system)>/i.test(normalized)) {
+    errors.push("design-system reference contains an agent wrapper");
+  }
+
+  return { valid: errors.length === 0, errors };
 }
 
 export function validateDesignSystemContract(
@@ -147,10 +180,8 @@ export function validateDesignSystemContract(
     }
   }
 
-  for (const forbidden of FORBIDDEN_PATTERNS) {
-    if (forbidden.pattern.test(normalized)) {
-      errors.push(`contains ${forbidden.label}`);
-    }
+  for (const label of findForbiddenDesignSystemConstructs(normalized)) {
+    errors.push(`contains ${label}`);
   }
 
   return { valid: errors.length === 0, errors };

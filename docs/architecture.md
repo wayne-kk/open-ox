@@ -191,7 +191,7 @@ plan_project 的输出为每个 section 准备 traits 化的设计约束（layou
 
 4.4 Skill 体系（设计系统 / 用户 styleGuide / Hero 运行时）
 
-1. **Design-system skill catalog**：`ai/flows/generate_project/designSystem/skills/<id>/` 下的版本化 metadata + 完整设计系统。首批只启用 `minimal-dark`、`newsprint`、`bauhaus`、`neo-brutalism`、`luxury`；启动时与 section skill 一并校验。
+1. **Design-system skill catalog**：`ai/flows/generate_project/prompts/skills/design-system/skill.yaml` 是唯一选择清单，登记 30 个版本化 skill 的文件、别名、正/负信号、产品类型与 surface mode。Catalog adapter 会验证每份 Markdown 都被清单覆盖；`reference-v1` 文件只提取 `<design-system>` 正文，再确定性补齐标准 Visual Contract / role tokens 并移除工程禁用构造，绝不把 `<role>` 指令注入生成管线。两种格式最终都必须通过同一 `open-ox-v1` 产物契约。
 2. **显式选择**：请求可携带完整的 `selectedDesignSystemSkill: { id, version }`，版本与契约均通过后直接命中，不调用 matcher 或 generator；它可以覆盖截图复刻的自动回退。全局 kill switch 仍拥有最高优先级。旧 `styleGuide` 正文继续兼容，并参与自动匹配与生成回退。
 3. **Hero 运行时组件 skill**：在特定页面 **`page_implement_agent` 启动前**调用 `discoverAndSelectSkill`，仅把正文注入该页 Agent；它与全局设计系统 catalog 是不同 seam。
 

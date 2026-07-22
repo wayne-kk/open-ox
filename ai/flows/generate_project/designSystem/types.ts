@@ -2,6 +2,7 @@ import type { StepTrace } from "../types";
 import type { SelectedDesignSystemSkill } from "@/lib/generation/selectedDesignSystemSkill";
 
 export type DesignSystemSurfaceMode = "marketing" | "web-app";
+export type DesignSystemSkillContentFormat = "open-ox-v1" | "reference-v1";
 export type DesignSystemScreenshotMode =
   | "none"
   | "extract_inspiration"
@@ -11,6 +12,7 @@ export interface DesignSystemSkillMetadata {
   id: string;
   version: string;
   contractVersion: number;
+  contentFormat: DesignSystemSkillContentFormat;
   status: "active" | "disabled";
   aliases: string[];
   positiveSignals: {

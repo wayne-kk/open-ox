@@ -116,7 +116,7 @@ export default function PipelinePage() {
     <div className="flex gap-10">
       <article className="min-w-0 flex-1 max-w-2xl">
         <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-primary mb-4">
-          // docs / pipeline
+          {"// docs / pipeline"}
         </p>
         <h1 className="text-3xl font-bold tracking-tight">AI 生成流水线</h1>
         <p className="mt-3 text-[15px] leading-7 text-muted-foreground">
@@ -205,12 +205,12 @@ await runChromeOptimizeStep(...); // link polish only
             全局设计系统 Skill 是版本化 catalog；命中后直接成为 <Code>design-system.md</Code>。
             <Code>public/skills/</Code> 继续作为用户 styleGuide 来源，Hero 组件 Skill 则使用独立的运行时发现机制。
           </P>
-          <Pre>{`ai/flows/generate_project/designSystem/skills/
-├── minimal-dark/{metadata.yaml, design-system.md}
-├── newsprint/{metadata.yaml, design-system.md}
-├── bauhaus/{metadata.yaml, design-system.md}
-├── neo-brutalism/{metadata.yaml, design-system.md}
-└── luxury/{metadata.yaml, design-system.md}`}</Pre>
+          <Pre>{`ai/flows/generate_project/prompts/skills/design-system/
+├── skill.yaml        # 选择元数据与版本
+├── Academia.md
+├── ArtDeco.md
+├── ...
+└── Vaporwave.md`}</Pre>
           <H3>运行时 Skill 发现</H3>
           <P>
             每个 section 在生成时自行发现并选择 skill（不再有全局 preselect 步骤）。

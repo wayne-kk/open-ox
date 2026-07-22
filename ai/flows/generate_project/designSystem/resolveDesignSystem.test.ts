@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { createDesignSystemResolver } from "./resolveDesignSystem";
 import { resolveDesignSystem } from "./productionResolver";
-import { createFileDesignSystemSkillCatalog } from "./catalog";
+import {
+  createFileDesignSystemSkillCatalog,
+  validateDesignSystemSkillCatalog,
+} from "./catalog";
 import { validateDesignSystemContract } from "./validator";
 import type { DesignSystemSkill } from "./types";
 
@@ -88,6 +91,7 @@ function skill(overrides: Partial<DesignSystemSkill> = {}): DesignSystemSkill {
       id: "minimal-dark",
       version: "2",
       contractVersion: 1,
+      contentFormat: "open-ox-v1",
       status: "active",
       aliases: ["minimal dark"],
       positiveSignals: {
@@ -108,34 +112,126 @@ function skill(overrides: Partial<DesignSystemSkill> = {}): DesignSystemSkill {
 }
 
 describe("DesignSystemResolver", () => {
-  it("loads exactly the five approved catalog skills", () => {
-    expect(
-      createFileDesignSystemSkillCatalog()
-        .list()
-        .map((item) => item.metadata.id)
-        .sort(),
-    ).toEqual([
-      "bauhaus",
-      "luxury",
-      "minimal-dark",
-      "neo-brutalism",
-      "newsprint",
-    ]);
+  it("loads every manifest design-system skill through one catalog interface", () => {
+    const skills = createFileDesignSystemSkillCatalog().list();
+
+    expect(skills).toHaveLength(30);
+    expect(skills.map((item) => item.metadata.id)).toEqual(
+      expect.arrayContaining([
+        "academia",
+        "art-deco",
+        "bauhaus",
+        "bold-typography",
+        "minimal-dark",
+        "neo-brutalism",
+        "newsprint",
+        "terminal",
+        "vaporwave",
+        "luxury",
+      ]),
+    );
+    expect(validateDesignSystemSkillCatalog()).toEqual([]);
   });
 
-  it.each(["minimal-dark", "newsprint", "bauhaus", "neo-brutalism", "luxury"])(
-    "ships %s as a contract-valid explicit fast-path skill",
-    async (skillId) => {
+  it("strips agent-role wrappers before exposing reference skill content", () => {
+    const academia = createFileDesignSystemSkillCatalog().get("academia");
+
+    expect(academia?.metadata.contentFormat).toBe("reference-v1");
+    expect(academia?.content).toMatch(/^# Design Style: Academia/);
+    expect(academia?.content).toContain("## Visual Contract (agent)");
+    expect(academia?.content).not.toContain("<role>");
+    expect(academia?.content).not.toContain("<design-system>");
+    expect(
+      validateDesignSystemContract(academia?.content ?? "", 1),
+    ).toEqual({ valid: true, errors: [] });
+  });
+
+  it("recalls a manifest skill from a Chinese style alias", async () => {
+    const catalog = createFileDesignSystemSkillCatalog();
+    const judge = vi.fn().mockResolvedValue({
+      decision: {
+        skillId: "academia",
+        confidence: 0.96,
+        evidence: ["用户明确要求暗黑学院风"],
+        conflicts: [],
+        reason: "The explicit style direction matches academia",
+      },
+    });
+    const resolver = createDesignSystemResolver({
+      catalog,
+      judge,
+      generate: vi.fn(),
+    });
+
+    const result = await resolver.resolve({
+      userInput: "做一个暗黑学院风的在线图书馆",
+      designIntentMarkdown: "氛围：古典、学术、庄重",
+      projectType: "education",
+    });
+
+    expect(result).toMatchObject({
+      source: "skill",
+      skillId: "academia",
+      reason: "automatic_match",
+    });
+    expect(judge.mock.calls[0]?.[1]).toContainEqual(
+      expect.objectContaining({
+        skillId: "academia",
+        matchedSignals: expect.arrayContaining(["alias:暗黑学院"]),
+      }),
+    );
+  });
+
+  it("does not match short Latin aliases inside longer words", async () => {
+    const catalog = createFileDesignSystemSkillCatalog();
+    const judge = vi.fn().mockResolvedValue({
+      decision: {
+        skillId: "minimalist-modern",
+        confidence: 0.96,
+        evidence: ["explicit minimalist modern direction"],
+        conflicts: [],
+        reason: "The requested style is explicit",
+      },
+    });
+    const resolver = createDesignSystemResolver({
+      catalog,
+      judge,
+      generate: vi
+        .fn()
+        .mockResolvedValue({ designSystem: "# Ambiguous fallback" }),
+    });
+
+    const result = await resolver.resolve({
+      userInput: "Build a minimalist modern client portal",
+      designIntentMarkdown: "clean electric blue interface",
+    });
+
+    expect(result).toMatchObject({
+      source: "skill",
+      skillId: "minimalist-modern",
+    });
+    expect(
+      judge.mock.calls[0]?.[1].map((candidate) => candidate.skillId),
+    ).not.toContain("terminal");
+  });
+
+  it.each(
+    createFileDesignSystemSkillCatalog()
+      .list()
+      .map((item) => [item.metadata.id, item.metadata.version] as const),
+  )(
+    "ships %s@%s as a contract-valid explicit fast-path skill",
+    async (skillId, version) => {
       const result = await resolveDesignSystem({
         userInput: `Use ${skillId}`,
         designIntentMarkdown: `Style: ${skillId}`,
-        selectedSkill: { id: skillId, version: "2" },
+        selectedSkill: { id: skillId, version },
       });
 
       expect(result).toMatchObject({
         source: "skill",
         skillId,
-        skillVersion: "2",
+        skillVersion: version,
         reason: "explicit_selection",
       });
     },

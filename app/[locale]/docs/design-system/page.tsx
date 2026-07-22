@@ -163,25 +163,38 @@ architect_scaffold_agent → page_implement_agent ×M → chrome_optimize_agent`
           </P>
           <Pre>{`selectedDesignSystemSkill: {
   id: "minimal-dark",
-  version: "2"
+  version: "3"
 }`}</Pre>
+          <Pre>{`# prompts/skills/design-system/skill.yaml
+skills:
+  - id: minimal-dark
+    file: SimpleDark.md
+    version: "3"
+    aliases: [minimal dark, minimalist dark, dark amber]
+    positiveSignals:
+      moods: [calm, premium, atmospheric]
+      colors: [dark, charcoal, amber]
+      productTypes: [developer-tool, saas, portfolio]
+    negativeSignals:
+      moods: [playful, maximalist]
+    supportedModes: [marketing, web-app]`}</Pre>
           <P>
             旧 <Code>styleGuide</Code> 正文仍兼容：它参与候选冲突判断，未命中时作为动态生成输入。
             自动匹配只检查 Top 3，并要求高置信、无冲突和足够的候选分差。截图复刻会跳过自动匹配，
             但用户显式选择的版本化 skill 仍然优先；全局 kill switch 关闭时则统一走动态生成。
           </P>
-          <div className="mt-4 space-y-2">
+          <div className="mt-4 flex flex-wrap gap-2">
             {[
-              { skill: "minimal-dark", effect: "深色层次、克制琥珀焦点、开发工具与 SaaS" },
-              { skill: "newsprint", effect: "报刊式排版、暖纸张、编辑密度与规则线" },
-              { skill: "bauhaus", effect: "构成主义网格、原色几何与粗边框" },
-              { skill: "neo-brutalism", effect: "粗描边、硬阴影、流行色与直接交互反馈" },
-              { skill: "luxury", effect: "安静奢华、电影感媒体、编辑字体与大尺度留白" },
-            ].map(({ skill, effect }) => (
-              <div key={skill} className="flex items-start gap-3 rounded-lg border border-border bg-card px-4 py-3">
-                <code className="shrink-0 font-mono text-[12px] text-primary/80 w-28">{skill}</code>
-                <span className="text-[12px] text-muted-foreground/70">{effect}</span>
-              </div>
+              "academia", "art-deco", "bauhaus", "bold-typography", "botanical",
+              "business-serif", "claymorphism", "corporate", "crypto", "cyberpunk",
+              "flat", "hand-drawn", "industrial", "kinetic-typography", "material-you",
+              "maximalism", "modern-dark", "monochrome", "neo-brutalism", "neumorphism",
+              "newsprint", "organic", "playful", "retro-90s", "minimalist-modern",
+              "minimal-dark", "swiss", "terminal", "vaporwave", "luxury",
+            ].map((skill) => (
+              <code key={skill} className="rounded-md border border-border bg-card px-2.5 py-1.5 font-mono text-[11px] text-primary/80">
+                {skill}
+              </code>
             ))}
           </div>
         </section>

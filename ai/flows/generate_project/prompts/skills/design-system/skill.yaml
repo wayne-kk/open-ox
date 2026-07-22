@@ -1,0 +1,387 @@
+schemaVersion: 1
+defaults:
+  version: "1"
+  contractVersion: 1
+  status: active
+  contentFormat: reference-v1
+  supportedModes: [marketing, web-app]
+
+skills:
+  - id: academia
+    file: Academia.md
+    aliases: [academia, classical, dark academia, scholarly, university library, 学院风, 古典学术, 暗黑学院]
+    positiveSignals:
+      moods: [scholarly, prestigious, timeless, intellectual, dignified]
+      colors: [mahogany, parchment, brass, crimson, dark brown]
+      productTypes: [education, university, library, museum, publishing]
+    negativeSignals:
+      moods: [playful, futuristic, casual]
+      colors: [neon, candy]
+      productTypes: [children, crypto]
+
+  - id: art-deco
+    file: ArtDeco.md
+    aliases: [art deco, gatsby, roaring twenties, geometric luxury, 装饰艺术, 盖茨比风]
+    positiveSignals:
+      moods: [opulent, theatrical, glamorous, luxurious, geometric]
+      colors: [obsidian, gold, champagne, midnight blue]
+      productTypes: [hospitality, fashion, jewelry, event, entertainment]
+    negativeSignals:
+      moods: [rustic, casual, minimalist]
+      colors: [pastel, earthy]
+      productTypes: [developer-tool, healthcare]
+    supportedModes: [marketing]
+
+  - id: bauhaus
+    file: Bauhaus.md
+    version: "3"
+    aliases: [bauhaus, constructivist, primary geometry, geometric modernism, 包豪斯, 构成主义]
+    positiveSignals:
+      moods: [bold, rational, experimental, architectural, modernist]
+      colors: [primary colors, red, yellow, blue, black]
+      productTypes: [portfolio, agency, event, architecture]
+    negativeSignals:
+      moods: [delicate, quiet luxury]
+      colors: [pastel, muted]
+      productTypes: [finance, healthcare]
+    supportedModes: [marketing]
+
+  - id: bold-typography
+    file: BoldTypography.md
+    aliases: [bold typography, type as hero, typographic poster, oversized type, 大字排版, 粗体排版, 字体海报]
+    positiveSignals:
+      moods: [editorial, assertive, expressive, high-impact]
+      colors: [black, off-white, vermillion]
+      productTypes: [portfolio, agency, magazine, event, fashion]
+    negativeSignals:
+      moods: [quiet, conservative, delicate]
+      colors: [pastel]
+      productTypes: [dashboard, enterprise]
+    supportedModes: [marketing]
+
+  - id: botanical
+    file: Botanical.md
+    aliases: [botanical, organic serif, botanical elegance, garden editorial, 植物风, 自然衬线, 植物编辑]
+    positiveSignals:
+      moods: [peaceful, artisanal, sophisticated, sustainable, natural]
+      colors: [sage, forest green, alabaster, clay]
+      productTypes: [wellness, skincare, florist, hospitality, sustainability]
+    negativeSignals:
+      moods: [technical, aggressive, futuristic]
+      colors: [neon]
+      productTypes: [developer-tool, crypto]
+    supportedModes: [marketing]
+
+  - id: business-serif
+    file: Business.md
+    aliases: [business serif, editorial business, classical business, refined serif, 商务衬线, 编辑商务]
+    positiveSignals:
+      moods: [professional, refined, trustworthy, restrained, elegant]
+      colors: [ivory, rich black, warm gray, burnished gold]
+      productTypes: [consulting, finance, legal, publishing, real-estate]
+    negativeSignals:
+      moods: [playful, loud, futuristic]
+      colors: [neon, candy]
+      productTypes: [children, gaming]
+
+  - id: claymorphism
+    file: Clay.md
+    aliases: [claymorphism, digital clay, soft 3d, toy-like ui, 黏土风, 粘土拟态, 软3d]
+    positiveSignals:
+      moods: [tactile, friendly, soft, playful, dimensional]
+      colors: [lavender, violet, pink, sky blue]
+      productTypes: [consumer-app, education, productivity, children, community]
+    negativeSignals:
+      moods: [industrial, severe, editorial]
+      colors: [monochrome]
+      productTypes: [legal, finance]
+
+  - id: corporate
+    file: Corporate.md
+    aliases: [corporate trust, enterprise, professional saas, trusted platform, 企业风, 商务可信, 企业级]
+    positiveSignals:
+      moods: [trustworthy, professional, clear, stable, polished]
+      colors: [slate, indigo, violet, cool white]
+      productTypes: [enterprise, finance, healthcare, saas, consulting]
+    negativeSignals:
+      moods: [irreverent, chaotic, nostalgic]
+      colors: [neon, hot pink]
+      productTypes: [children, art]
+
+  - id: crypto
+    file: Crypto.md
+    aliases: [crypto, bitcoin defi, web3, blockchain, decentralized finance, 加密货币, 比特币, 区块链, 去中心化金融]
+    positiveSignals:
+      moods: [technical, futuristic, high-energy, secure]
+      colors: [black, bitcoin orange, dark slate]
+      productTypes: [crypto, defi, blockchain, exchange, wallet]
+    negativeSignals:
+      moods: [botanical, delicate, traditional]
+      colors: [pastel, beige]
+      productTypes: [wellness, children]
+
+  - id: cyberpunk
+    file: Cyberpunk.md
+    aliases: [cyberpunk, glitch, hacker neon, dystopian tech, 赛博朋克, 故障艺术, 黑客霓虹]
+    positiveSignals:
+      moods: [futuristic, rebellious, technical, intense, glitchy]
+      colors: [neon green, cyan, magenta, near-black]
+      productTypes: [gaming, developer-tool, security, entertainment]
+    negativeSignals:
+      moods: [calm, traditional, luxurious]
+      colors: [pastel, warm beige]
+      productTypes: [healthcare, wedding]
+
+  - id: flat
+    file: Flat.md
+    aliases: [flat design, crisp blocks, reductive graphic, solid color ui, 扁平化, 扁平设计, 纯色界面]
+    positiveSignals:
+      moods: [clear, efficient, direct, modern, graphic]
+      colors: [white, blue, emerald, amber]
+      productTypes: [saas, productivity, dashboard, education]
+    negativeSignals:
+      moods: [ornate, luxurious, tactile]
+      colors: [metallic]
+      productTypes: [luxury, art]
+
+  - id: hand-drawn
+    file: Hand-Drawn.md
+    aliases: [hand drawn, sketch, doodle, notebook, pencil, 手绘, 涂鸦, 素描, 笔记本风]
+    positiveSignals:
+      moods: [human, informal, creative, playful, authentic]
+      colors: [paper, pencil black, correction red, ballpoint blue]
+      productTypes: [education, portfolio, workshop, children, community]
+    negativeSignals:
+      moods: [corporate, polished, futuristic]
+      colors: [neon glow]
+      productTypes: [finance, enterprise]
+    supportedModes: [marketing]
+
+  - id: industrial
+    file: Industrial.md
+    aliases: [industrial, industrial skeuomorphism, control panel, machine ui, 工业风, 工业拟物, 控制面板]
+    positiveSignals:
+      moods: [tactile, engineered, rugged, functional, mechanical]
+      colors: [industrial grey, steel, warning orange]
+      productTypes: [manufacturing, logistics, automotive, hardware, operations]
+    negativeSignals:
+      moods: [delicate, whimsical, luxurious]
+      colors: [pastel]
+      productTypes: [wedding, beauty]
+
+  - id: kinetic-typography
+    file: Kinetic.md
+    aliases: [kinetic typography, animated type, motion typography, 动态字体, 动效排版, 字体动画]
+    positiveSignals:
+      moods: [energetic, expressive, bold, dynamic, rhythmic]
+      colors: [black, off-white, acid yellow, lime]
+      productTypes: [event, music, agency, portfolio, entertainment]
+    negativeSignals:
+      moods: [calm, conservative, understated]
+      colors: [pastel]
+      productTypes: [finance, healthcare]
+    supportedModes: [marketing]
+
+  - id: material-you
+    file: Material.md
+    aliases: [material you, material design 3, md3, tonal surfaces, 材质设计, 谷歌材质, 色调表面]
+    positiveSignals:
+      moods: [friendly, personal, colorful, soft, adaptive]
+      colors: [purple, violet, tonal palette, warm white]
+      productTypes: [consumer-app, mobile-app, productivity, community]
+    negativeSignals:
+      moods: [brutal, industrial, monochrome]
+      colors: [pure black]
+      productTypes: [luxury, editorial]
+
+  - id: maximalism
+    file: Maximalism.md
+    aliases: [maximalism, dopamine design, visual excess, broken grid, 极繁主义, 多巴胺设计, 破格网格]
+    positiveSignals:
+      moods: [loud, joyful, chaotic, expressive, energetic]
+      colors: [magenta, cyan, purple, multicolor]
+      productTypes: [entertainment, music, event, youth, creative-agency]
+    negativeSignals:
+      moods: [restrained, corporate, calm]
+      colors: [monochrome, muted]
+      productTypes: [legal, healthcare]
+    supportedModes: [marketing]
+
+  - id: modern-dark
+    file: ModernDark.md
+    aliases: [modern dark, linear style, cinematic technical, dark saas, 现代暗色, 线性风, 深色saas]
+    positiveSignals:
+      moods: [cinematic, technical, precise, sophisticated, atmospheric]
+      colors: [near-black, indigo, dark violet, soft glow]
+      productTypes: [developer-tool, saas, ai, productivity, platform]
+    negativeSignals:
+      moods: [playful, rustic, traditional]
+      colors: [pastel, primary colors]
+      productTypes: [children, wedding]
+
+  - id: monochrome
+    file: Monochrome.md
+    aliases: [monochrome, black and white, minimalist monochrome, stark contrast, 黑白, 极简黑白, 单色设计]
+    positiveSignals:
+      moods: [minimal, precise, timeless, stark, restrained]
+      colors: [black, white, grayscale]
+      productTypes: [portfolio, fashion, architecture, editorial, saas]
+    negativeSignals:
+      moods: [playful, colorful, ornate]
+      colors: [rainbow, neon multicolor]
+      productTypes: [children]
+
+  - id: neo-brutalism
+    file: Neo-brutalism.md
+    version: "3"
+    aliases: [neo brutalism, neo-brutalism, hard shadow pop, brutalist ui, 新粗野主义, 硬阴影]
+    positiveSignals:
+      moods: [playful, bold, irreverent, energetic, raw]
+      colors: [cream, hot red, vivid yellow, violet, black]
+      productTypes: [consumer-app, community, startup, portfolio]
+    negativeSignals:
+      moods: [luxury, calm, understated]
+      colors: [muted, monochrome]
+      productTypes: [finance, legal]
+
+  - id: neumorphism
+    file: Neumorphism.md
+    aliases: [neumorphism, soft ui, extruded surface, cool clay, 新拟态, 软拟物, 浮雕界面]
+    positiveSignals:
+      moods: [tactile, calm, soft, modern, restrained]
+      colors: [cool grey, blue-grey, violet]
+      productTypes: [productivity, wellness, smart-home, dashboard]
+    negativeSignals:
+      moods: [flat, loud, editorial]
+      colors: [high saturation]
+      productTypes: [news, event]
+
+  - id: newsprint
+    file: Newsprint.md
+    version: "3"
+    aliases: [newsprint, newspaper, editorial layout, print publication, 报纸风, 新闻排版, 报刊编辑]
+    positiveSignals:
+      moods: [editorial, authoritative, literary, information-dense]
+      colors: [ink, off-white, editorial red]
+      productTypes: [editorial, publication, magazine, blog, news]
+    negativeSignals:
+      moods: [futuristic, playful, glossy]
+      colors: [neon, glass]
+      productTypes: [dashboard, developer-tool]
+    supportedModes: [marketing]
+
+  - id: organic
+    file: Organic.md
+    aliases: [organic, natural, sustainable, earthy, handcrafted, 有机自然, 自然风, 可持续设计]
+    positiveSignals:
+      moods: [peaceful, authentic, rooted, welcoming, sustainable]
+      colors: [rice paper, moss green, terracotta, loam]
+      productTypes: [sustainability, food, wellness, agriculture, hospitality]
+    negativeSignals:
+      moods: [technical, synthetic, aggressive]
+      colors: [neon]
+      productTypes: [crypto, developer-tool]
+    supportedModes: [marketing]
+
+  - id: playful
+    file: Playful.md
+    aliases: [playful geometric, memphis, stable grid wild decoration, fun ui, 活泼几何, 孟菲斯, 童趣]
+    positiveSignals:
+      moods: [optimistic, playful, energetic, friendly, tactile]
+      colors: [cream, violet, coral, bright colors]
+      productTypes: [education, community, consumer-app, children, startup]
+    negativeSignals:
+      moods: [formal, severe, luxurious]
+      colors: [monochrome]
+      productTypes: [legal, finance]
+
+  - id: retro-90s
+    file: Retro.md
+    aliases: [retro 90s, geocities, windows 95, early web, web nostalgia, 90年代复古, 早期互联网, 怀旧网页]
+    positiveSignals:
+      moods: [nostalgic, chaotic, playful, loud, experimental]
+      colors: [silver, pure blue, red, system gray]
+      productTypes: [portfolio, entertainment, gaming, event]
+    negativeSignals:
+      moods: [premium, polished, minimal]
+      colors: [muted luxury]
+      productTypes: [finance, healthcare]
+    supportedModes: [marketing]
+
+  - id: minimalist-modern
+    file: MinimalistModern.md
+    aliases: [minimalist modern, clean saas, electric blue, modern startup, 现代极简, 极简saas, 电光蓝]
+    positiveSignals:
+      moods: [minimal, confident, clean, precise, dynamic]
+      colors: [off-white, slate, electric blue]
+      productTypes: [saas, startup, productivity, platform, agency]
+    negativeSignals:
+      moods: [ornate, nostalgic, rustic]
+      colors: [earthy, vintage]
+      productTypes: [museum, wedding]
+
+  - id: minimal-dark
+    file: SimpleDark.md
+    version: "3"
+    aliases: [minimal dark, minimalist dark, simple dark, dark amber, 极简暗色, 暗色琥珀, 深色极简]
+    positiveSignals:
+      moods: [calm, premium, atmospheric, refined, minimal]
+      colors: [dark, charcoal, slate, amber]
+      productTypes: [developer-tool, saas, portfolio, productivity]
+    negativeSignals:
+      moods: [playful, maximalist]
+      colors: [pastel, pure white]
+      productTypes: [children, wedding]
+
+  - id: swiss
+    file: Swiss.md
+    aliases: [swiss style, international typographic style, swiss grid, objective design, 瑞士风, 国际主义排版, 瑞士网格]
+    positiveSignals:
+      moods: [objective, rational, precise, functional, disciplined]
+      colors: [white, black, swiss red]
+      productTypes: [editorial, architecture, portfolio, information, agency]
+    negativeSignals:
+      moods: [ornate, playful, emotional]
+      colors: [pastel, multicolor]
+      productTypes: [children, gaming]
+    supportedModes: [marketing]
+
+  - id: terminal
+    file: Terminal.md
+    aliases: [terminal, cli, command line, mainframe, hacker console, 终端, 命令行, 黑客控制台]
+    positiveSignals:
+      moods: [technical, functional, retro, hacker, system-level]
+      colors: [black, terminal green, amber]
+      productTypes: [developer-tool, security, infrastructure, cli, documentation]
+    negativeSignals:
+      moods: [luxurious, soft, playful]
+      colors: [pastel, pink]
+      productTypes: [wedding, beauty]
+
+  - id: vaporwave
+    file: Vaporwave.md
+    aliases: [vaporwave, outrun, synthwave, retro future, neon grid, 蒸汽波, 合成波, 霓虹网格]
+    positiveSignals:
+      moods: [nostalgic, futuristic, synthetic, cinematic, excessive]
+      colors: [magenta, cyan, purple, sunset orange, neon]
+      productTypes: [music, gaming, entertainment, event, portfolio]
+    negativeSignals:
+      moods: [corporate, natural, understated]
+      colors: [earthy, muted]
+      productTypes: [finance, healthcare]
+    supportedModes: [marketing]
+
+  - id: luxury
+    file: Luxury.md
+    version: "2"
+    contentFormat: open-ox-v1
+    aliases: [quiet luxury, luxury editorial, premium hospitality, 静奢, 奢华编辑, 高端酒店]
+    positiveSignals:
+      moods: [luxury, elegant, exclusive, cinematic]
+      colors: [alabaster, oxblood, gold]
+      productTypes: [fashion, hospitality, jewelry, real-estate]
+    negativeSignals:
+      moods: [playful, technical, loud]
+      colors: [neon, primary colors]
+      productTypes: [developer-tool, children]
+    supportedModes: [marketing]
