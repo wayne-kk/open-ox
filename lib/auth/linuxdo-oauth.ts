@@ -1,4 +1,5 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
+import { serverFetch } from "@/lib/net/serverFetch";
 
 const LINUXDO_AUTHORIZE = "https://connect.linux.do/oauth2/authorize";
 const LINUXDO_TOKEN = "https://connect.linux.do/oauth2/token";
@@ -96,13 +97,14 @@ export async function exchangeLinuxDoCode(params: {
 
   let res: Response;
   try {
-    res = await fetch(LINUXDO_TOKEN, {
+    res = await serverFetch(LINUXDO_TOKEN, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
         Accept: "application/json",
       },
       body,
+      signal: AbortSignal.timeout(15_000),
     });
   } catch (error) {
     throw new Error(`Linux.do token network error: ${networkErrorCode(error)}`);
@@ -127,11 +129,12 @@ export async function exchangeLinuxDoCode(params: {
 export async function fetchLinuxDoUserInfo(
   accessToken: string,
 ): Promise<LinuxDoUserInfo> {
-  const res = await fetch(LINUXDO_USER_INFO, {
+  const res = await serverFetch(LINUXDO_USER_INFO, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       Accept: "application/json",
     },
+    signal: AbortSignal.timeout(15_000),
   });
   const json = (await res.json()) as LinuxDoUserInfo & {
     error?: string;

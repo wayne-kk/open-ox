@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { serverFetch } from "@/lib/net/serverFetch";
 import {
   buildLinuxDoAuthorizeUrl,
   exchangeLinuxDoCode,
@@ -7,6 +8,8 @@ import {
   resolveLinuxDoAvatarUrl,
   timingSafeEqualString,
 } from "./linuxdo-oauth";
+
+vi.mock("@/lib/net/serverFetch", () => ({ serverFetch: vi.fn() }));
 
 describe("linuxdo-oauth", () => {
   afterEach(() => {
@@ -68,7 +71,7 @@ describe("linuxdo-oauth", () => {
     const cause = Object.assign(new Error("private network detail"), {
       code: "UND_ERR_CONNECT_TIMEOUT",
     });
-    vi.spyOn(globalThis, "fetch").mockRejectedValue(
+    vi.mocked(serverFetch).mockRejectedValue(
       new TypeError("fetch failed", { cause }),
     );
 
