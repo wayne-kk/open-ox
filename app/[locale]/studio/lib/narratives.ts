@@ -26,6 +26,15 @@ export function getStepNarrative(step: BuildStep): {
             note: step.detail ?? undefined,
         };
     }
+    if (s === "match_design_system_skill") {
+        return {
+            what: "从 Design System Skill catalog 召回候选，并通过语义裁决选择复用或回退生成。",
+            output: ok
+                ? step.detail ?? "Design System Skill 匹配已完成。"
+                : "Design System Skill 匹配失败，将无法确定复用或回退路径。",
+            note: step.detail ?? undefined,
+        };
+    }
     if (s === "generate_project_design_system") {
         return {
             what: "根据设计意图生成项目专属的设计系统，包括色彩、字体、间距和组件规范。",
@@ -160,6 +169,7 @@ export function getStepChapterTitle(stepName: string): string | null {
     const chapters: Record<string, string> = {
         analyze_project_requirement: "① 理解需求",
         plan_project: "② 规划站点",
+        match_design_system_skill: "③ 匹配设计 Skill",
         generate_project_design_system: "③ 设计系统",
         apply_project_design_tokens: "③ 注入设计 Token",
         clear_template: "④ 清理模板",

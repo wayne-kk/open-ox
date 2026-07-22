@@ -21,6 +21,7 @@ import type {
   DesignSystemCandidate,
   DesignSystemJudgeDecision,
   DesignSystemResolutionRequest,
+  DesignSystemResolutionObserver,
   DesignSystemSkillCatalog,
 } from "./types";
 
@@ -182,6 +183,7 @@ const productionResolver = createDesignSystemResolver({
 
 export async function resolveDesignSystem(
   request: DesignSystemResolutionRequest,
+  observer?: DesignSystemResolutionObserver,
 ) {
-  return productionResolver.resolve(request);
+  return productionResolver.resolve(request, observer);
 }

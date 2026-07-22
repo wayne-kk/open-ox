@@ -98,6 +98,26 @@ export type DesignSystemResolution =
       trace: DesignSystemResolutionTrace;
     };
 
+export type DesignSystemMatchOutcome =
+  | {
+      source: "skill";
+      skillId: string;
+      skillVersion: string;
+      confidence: number;
+      reason: "explicit_selection" | "automatic_match";
+      trace: Omit<DesignSystemResolutionTrace, "generationTrace">;
+    }
+  | {
+      source: "generated";
+      fallbackReason: DesignSystemFallbackReason;
+      trace: Omit<DesignSystemResolutionTrace, "generationTrace">;
+    };
+
+export interface DesignSystemResolutionObserver {
+  /** Fires after retrieval/judging and before any bespoke generation begins. */
+  onMatchResolved?(outcome: DesignSystemMatchOutcome): void;
+}
+
 export interface DesignSystemResolverDependencies {
   catalog: DesignSystemSkillCatalog;
   judge(
@@ -112,5 +132,6 @@ export interface DesignSystemResolverDependencies {
 export interface DesignSystemResolver {
   resolve(
     request: DesignSystemResolutionRequest,
+    observer?: DesignSystemResolutionObserver,
   ): Promise<DesignSystemResolution>;
 }

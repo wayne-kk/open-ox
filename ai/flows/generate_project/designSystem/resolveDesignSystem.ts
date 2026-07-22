@@ -1,6 +1,7 @@
 import type {
   DesignSystemCandidate,
   DesignSystemFallbackReason,
+  DesignSystemResolutionObserver,
   DesignSystemResolutionRequest,
   DesignSystemResolver,
   DesignSystemResolverDependencies,
@@ -144,11 +145,10 @@ async function generateFallback(
   fallbackReason: DesignSystemFallbackReason,
   candidates: DesignSystemCandidate[],
   judgeOutcome?: Awaited<ReturnType<DesignSystemResolverDependencies["judge"]>>,
+  observer?: DesignSystemResolutionObserver,
 ) {
-  const generated = await dependencies.generate(request);
-  return {
+  const matchOutcome = {
     source: "generated" as const,
-    designSystem: generated.designSystem,
     fallbackReason,
     trace: {
       candidates,
@@ -158,6 +158,15 @@ async function generateFallback(
             ...(judgeOutcome.trace ? { judgeTrace: judgeOutcome.trace } : {}),
           }
         : {}),
+    },
+  };
+  observer?.onMatchResolved?.(matchOutcome);
+  const generated = await dependencies.generate(request);
+  return {
+    ...matchOutcome,
+    designSystem: generated.designSystem,
+    trace: {
+      ...matchOutcome.trace,
       ...(generated.trace ? { generationTrace: generated.trace } : {}),
     },
   };
@@ -167,9 +176,19 @@ export function createDesignSystemResolver(
   dependencies: DesignSystemResolverDependencies,
 ): DesignSystemResolver {
   return {
-    async resolve(request: DesignSystemResolutionRequest) {
+    async resolve(
+      request: DesignSystemResolutionRequest,
+      observer?: DesignSystemResolutionObserver,
+    ) {
       if (request.matchingEnabled === false) {
-        return generateFallback(dependencies, request, "matching_disabled", []);
+        return generateFallback(
+          dependencies,
+          request,
+          "matching_disabled",
+          [],
+          undefined,
+          observer,
+        );
       }
 
       const selectedId = request.selectedSkill?.id.trim();
@@ -183,20 +202,35 @@ export function createDesignSystemResolver(
         ) {
           const validation = validateDesignSystemSkill(selected);
           if (validation.valid) {
-            return {
+            const outcome = {
               source: "skill" as const,
-              designSystem: selected.content,
               skillId: selected.metadata.id,
               skillVersion: selected.metadata.version,
               confidence: 1,
               reason: "explicit_selection" as const,
               trace: { candidates: [] },
             };
+            observer?.onMatchResolved?.(outcome);
+            return { ...outcome, designSystem: selected.content };
           }
 
-          return generateFallback(dependencies, request, "skill_invalid", []);
+          return generateFallback(
+            dependencies,
+            request,
+            "skill_invalid",
+            [],
+            undefined,
+            observer,
+          );
         }
-        return generateFallback(dependencies, request, "skill_invalid", []);
+        return generateFallback(
+          dependencies,
+          request,
+          "skill_invalid",
+          [],
+          undefined,
+          observer,
+        );
       }
 
       if (request.screenshotMode === "replicate_layout") {
@@ -205,6 +239,8 @@ export function createDesignSystemResolver(
           request,
           "screenshot_replica",
           [],
+          undefined,
+          observer,
         );
       }
 
@@ -216,7 +252,14 @@ export function createDesignSystemResolver(
         dependencies.catalog.list(),
       );
       if (candidates.length === 0) {
-        return generateFallback(dependencies, request, "no_candidate", candidates);
+        return generateFallback(
+          dependencies,
+          request,
+          "no_candidate",
+          candidates,
+          undefined,
+          observer,
+        );
       }
 
       let judgeOutcome;
@@ -228,6 +271,8 @@ export function createDesignSystemResolver(
           request,
           "matcher_error",
           candidates,
+          undefined,
+          observer,
         );
       }
       const { decision } = judgeOutcome;
@@ -239,6 +284,7 @@ export function createDesignSystemResolver(
           "explicit_conflict",
           candidates,
           judgeOutcome,
+          observer,
         );
       }
       if (
@@ -251,6 +297,7 @@ export function createDesignSystemResolver(
           "low_confidence",
           candidates,
           judgeOutcome,
+          observer,
         );
       }
 
@@ -264,6 +311,7 @@ export function createDesignSystemResolver(
           "matcher_error",
           candidates,
           judgeOutcome,
+          observer,
         );
       }
 
@@ -280,6 +328,7 @@ export function createDesignSystemResolver(
           "ambiguous",
           candidates,
           judgeOutcome,
+          observer,
         );
       }
 
@@ -291,6 +340,7 @@ export function createDesignSystemResolver(
           "matcher_error",
           candidates,
           judgeOutcome,
+          observer,
         );
       }
       const validation = validateDesignSystemSkill(selected);
@@ -301,12 +351,12 @@ export function createDesignSystemResolver(
           "skill_invalid",
           candidates,
           judgeOutcome,
+          observer,
         );
       }
 
-      return {
+      const outcome = {
         source: "skill" as const,
-        designSystem: selected.content,
         skillId: selected.metadata.id,
         skillVersion: selected.metadata.version,
         confidence: decision.confidence,
@@ -317,6 +367,8 @@ export function createDesignSystemResolver(
           ...(judgeOutcome.trace ? { judgeTrace: judgeOutcome.trace } : {}),
         },
       };
+      observer?.onMatchResolved?.(outcome);
+      return { ...outcome, designSystem: selected.content };
     },
   };
 }

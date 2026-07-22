@@ -112,6 +112,36 @@ function skill(overrides: Partial<DesignSystemSkill> = {}): DesignSystemSkill {
 }
 
 describe("DesignSystemResolver", () => {
+  it("reports the match outcome before bespoke generation starts", async () => {
+    const events: string[] = [];
+    const resolver = createDesignSystemResolver({
+      catalog: { list: () => [], get: () => null },
+      judge: vi.fn(),
+      generate: vi.fn().mockImplementation(async () => {
+        events.push("generation_started");
+        return { designSystem: "# Bespoke design system" };
+      }),
+    });
+
+    await resolver.resolve(
+      {
+        userInput: "Build an uncommon art project",
+        designIntentMarkdown: "Style: unclassified",
+      },
+      {
+        onMatchResolved: (outcome) => {
+          events.push(
+            outcome.source === "skill"
+              ? `matched:${outcome.skillId}`
+              : `fallback:${outcome.fallbackReason}`,
+          );
+        },
+      },
+    );
+
+    expect(events).toEqual(["fallback:no_candidate", "generation_started"]);
+  });
+
   it("loads every manifest design-system skill through one catalog interface", () => {
     const skills = createFileDesignSystemSkillCatalog().list();
 

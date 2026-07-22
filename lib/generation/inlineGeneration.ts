@@ -16,6 +16,11 @@ export function shouldRunInlineGeneration(): boolean {
   return flag === "1" || flag === "true" || flag === "yes";
 }
 
+/** Inline and standalone executors are mutually exclusive for a given runtime. */
+export function shouldRunStandaloneGenerationWorker(): boolean {
+  return !shouldRunInlineGeneration();
+}
+
 function mapDbRunToRow(data: Record<string, unknown>): GenerationRunRow {
   return {
     id: String(data.id),

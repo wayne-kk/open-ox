@@ -7,6 +7,7 @@ import { clearFileTracking } from "@/ai/tools";
 import { validateSkillFrontmatter } from "@/ai/shared/skillDiscovery";
 import { validateDesignSystemSkillCatalog } from "./designSystem/catalog";
 import { resolveDesignSystem } from "./designSystem/productionResolver";
+import type { DesignSystemMatchOutcome } from "./designSystem/types";
 import { syncSiteValidationMarkers, readSiteFile, getSkillPromptsRoot, writeSiteFile } from "./shared/files";
 import {
   buildScopedTypecheckStepTrace,
@@ -155,6 +156,20 @@ async function persistSiteFileArtifact(
 }
 
 type ProjectRuntimeContext = PageAgentProjectContext;
+
+function formatDesignSystemMatchDetail(
+  outcome: DesignSystemMatchOutcome,
+): string {
+  if (outcome.source === "skill") {
+    const prefix =
+      outcome.reason === "explicit_selection" ? "selected skill" : "matched skill";
+    return `${prefix}:${outcome.skillId}@${outcome.skillVersion} · confidence:${Math.round(outcome.confidence * 100)}%`;
+  }
+  const candidateIds = outcome.trace.candidates
+    .map((candidate) => candidate.skillId)
+    .join(",");
+  return `LLM fallback:${outcome.fallbackReason} · candidates:${candidateIds || "none"}`;
+}
 
 
 function buildProjectRuntimeContext(
@@ -1121,17 +1136,43 @@ async function runGenerateProjectInner(
         })();
 
         // Resolution only needs design intent (+ optional style guide), not plan sections.
-        logger.startStep("generate_project_design_system");
-        const designPromise = resolveDesignSystem({
-          userInput: effectiveUserInput,
-          designIntentMarkdown: designIntentForSystem,
-          projectType: normalizedBlueprint.brief.productScope.productType,
-          screenshotMode: screenshotIntentMode,
-          selectedSkill: options.selectedDesignSystemSkill,
-          legacyStyleGuide: options.styleGuide,
-          matchingEnabled:
-            options.enableSkills !== false &&
-            process.env.DESIGN_SYSTEM_SKILL_FAST_PATH !== "0",
+        // Expose matching separately so Studio can show retrieval/judging before reuse/fallback.
+        logger.startStep("match_design_system_skill");
+        let matchResolved = false;
+        const designPromise = resolveDesignSystem(
+          {
+            userInput: effectiveUserInput,
+            designIntentMarkdown: designIntentForSystem,
+            projectType: normalizedBlueprint.brief.productScope.productType,
+            screenshotMode: screenshotIntentMode,
+            selectedSkill: options.selectedDesignSystemSkill,
+            legacyStyleGuide: options.styleGuide,
+            matchingEnabled:
+              options.enableSkills !== false &&
+              process.env.DESIGN_SYSTEM_SKILL_FAST_PATH !== "0",
+          },
+          {
+            onMatchResolved: (outcome) => {
+              matchResolved = true;
+              logger.logStep(
+                "match_design_system_skill",
+                "ok",
+                formatDesignSystemMatchDetail(outcome),
+                outcome.source === "skill" ? outcome.skillId : undefined,
+                outcome.trace.judgeTrace,
+              );
+              logger.startStep("generate_project_design_system");
+            },
+          },
+        ).catch((error) => {
+          logger.logStep(
+            matchResolved
+              ? "generate_project_design_system"
+              : "match_design_system_skill",
+            "error",
+            error instanceof Error ? error.message : String(error),
+          );
+          throw error;
         });
 
         const planOutcome = await stepPlanProject(normalizedBlueprint).then((out) => {
@@ -1172,8 +1213,8 @@ async function runGenerateProjectInner(
           "generate_project_design_system",
           "ok",
           designResolution.source === "skill"
-            ? `skill:${designResolution.skillId}@${designResolution.skillVersion}`
-            : `generated:${designResolution.fallbackReason}`,
+            ? `reused skill:${designResolution.skillId}@${designResolution.skillVersion}`
+            : `LLM generated · reason:${designResolution.fallbackReason}`,
           designResolution.source === "skill" ? designResolution.skillId : undefined,
           designResolution.source === "skill"
             ? designResolution.trace.judgeTrace

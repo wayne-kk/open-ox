@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 import { createResilientFetch } from "@/lib/supabase/resilientFetch";
 import { executeGenerationRun } from "@/lib/generation/executeGenerationRun";
-import { shouldRunInlineGeneration } from "@/lib/generation/inlineGeneration";
+import { shouldRunStandaloneGenerationWorker } from "@/lib/generation/inlineGeneration";
 import type { GenerationRunRow } from "@/lib/generation/types";
 
 /**
@@ -127,19 +127,19 @@ async function heartbeat(
 }
 
 export async function runWorkerLoop(signal: AbortSignal): Promise<void> {
+  if (!shouldRunStandaloneGenerationWorker()) {
+    console.warn(
+      "[generation-worker] disabled because OPEN_OX_INLINE_GENERATION is enabled"
+    );
+    return;
+  }
+
   const admin = createSupabaseServiceRoleClient({
     global: { fetch: createResilientFetch(3) },
   });
   console.info(
     `[generation-worker] started id=${WORKER_ID} lease=${LEASE_SECONDS}s poll=${POLL_MS}ms supabase=${supabaseHost()}`
   );
-
-  if (shouldRunInlineGeneration()) {
-    console.warn(
-      "[generation-worker] OPEN_OX_INLINE_GENERATION=1 — Next.js may claim queued runs first. " +
-        "Unset it to use this worker exclusively."
-    );
-  }
 
   const reachable = await verifySupabaseReachable(admin);
   if (!reachable) {
