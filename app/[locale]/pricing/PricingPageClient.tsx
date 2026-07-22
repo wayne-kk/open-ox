@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Check, ChevronDown, Loader2 } from "lucide-react";
+import { Check, ChevronDown, Loader2, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link } from "@/i18n/navigation";
 
@@ -26,6 +26,8 @@ type CreditsSnap = {
   plan?: string;
   proTier?: string | null;
 };
+
+const ENTERPRISE_EMAIL = "782884630@qq.com";
 
 function FaqItem({ q, a }: { q: string; a: string }) {
   const [open, setOpen] = useState(false);
@@ -303,12 +305,20 @@ export function PricingPageClient() {
               <Feature>{t("entFeat4")}</Feature>
             </ul>
 
-            <a
-              href="mailto:782884630@qq.com?subject=Open-OX%20Enterprise"
-              className="defi-button-outline mt-8 h-11 w-full text-[13px]"
-            >
-              {t("contactUs")}
-            </a>
+            <details className="group mt-8">
+              <summary className="defi-button-outline h-11 w-full cursor-pointer list-none gap-2 text-[13px] [&::-webkit-details-marker]:hidden">
+                <Mail className="h-3.5 w-3.5" aria-hidden />
+                {t("contactUs")}
+              </summary>
+              <div className="mt-3 rounded-lg border border-border bg-muted/25 px-4 py-3 text-center">
+                <a
+                  href={`mailto:${ENTERPRISE_EMAIL}?subject=Open-OX%20Enterprise`}
+                  className="text-[13px] font-medium text-foreground underline-offset-4 hover:underline"
+                >
+                  {ENTERPRISE_EMAIL}
+                </a>
+              </div>
+            </details>
           </article>
         </section>
 

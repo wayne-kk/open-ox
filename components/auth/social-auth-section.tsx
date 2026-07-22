@@ -88,7 +88,7 @@ function oauthErrorKey(error: string | null): string | null {
 /**
  * Unified third-party login stack. Fetches /api/auth/config once. 需在 Suspense 内使用。
  */
-export function SocialAuthSection() {
+export function SocialAuthSection({ compact = false }: { compact?: boolean }) {
   const t = useTranslations("auth.oauth");
   const searchParams = useSearchParams();
   const redirect = searchParams.get("redirect") ?? "/dashboard";
@@ -137,7 +137,7 @@ export function SocialAuthSection() {
   }
 
   return (
-    <div className="mt-6 space-y-2.5">
+    <div className={compact ? "mt-4 space-y-2" : "mt-6 space-y-2.5"}>
       {errorCopy && (
         <p className="text-center text-sm text-red-400">
           {errorCopy}
@@ -148,7 +148,9 @@ export function SocialAuthSection() {
       )}
 
       {loading ? (
-        <div className="flex w-full justify-center rounded-xl border border-border bg-muted/40 py-3 text-xs text-muted-foreground">
+        <div
+          className={`flex w-full justify-center rounded-xl border border-border bg-muted/40 ${compact ? "py-2.5" : "py-3"} text-xs text-muted-foreground`}
+        >
           {t("checking")}
         </div>
       ) : (
@@ -156,7 +158,7 @@ export function SocialAuthSection() {
           {googleOn && (
             <Link
               href={`/api/auth/google/start?next=${next}`}
-              className={`${btnBase} border-border/60 bg-background text-foreground hover:bg-muted/50`}
+              className={`${btnBase} ${compact ? "py-2.5" : "py-3"} border-border/60 bg-background text-foreground hover:bg-muted/50`}
             >
               <GoogleIcon className="h-4 w-4" />
               {t("google")}
@@ -166,7 +168,7 @@ export function SocialAuthSection() {
           {linuxdoOn && (
             <Link
               href={`/api/auth/linuxdo/start?next=${next}`}
-              className={`${btnBase} border-orange-500/35 bg-orange-500/10 text-orange-200 hover:bg-orange-500/18`}
+              className={`${btnBase} ${compact ? "py-2.5" : "py-3"} border-orange-500/35 bg-orange-500/10 text-orange-200 hover:bg-orange-500/18`}
             >
               <LinuxDoIcon className="h-4 w-4 text-orange-400" />
               {t("linuxdo")}
@@ -176,7 +178,7 @@ export function SocialAuthSection() {
           {feishuOn && (
             <Link
               href={`/api/auth/feishu/start?next=${next}`}
-              className={`${btnBase} border-[#3370ff]/30 bg-[#3370ff]/8 text-[#8eb5ff]/90 hover:bg-[#3370ff]/14`}
+              className={`${btnBase} ${compact ? "py-2.5" : "py-3"} border-[#3370ff]/30 bg-[#3370ff]/8 text-[#8eb5ff]/90 hover:bg-[#3370ff]/14`}
             >
               <MessagesSquare className="h-4 w-4 text-[#3370ff]" />
               {t("feishu")}

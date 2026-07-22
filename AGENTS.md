@@ -18,10 +18,18 @@ Use risk-based, incremental verification. Do not run the entire test suite after
 
 - During implementation, run only the tests directly related to the changed module or reproduced bug.
 - For an isolated module change, run its focused tests and TypeScript checks when relevant.
-- Run the full test suite only once before final delivery when changes affect shared infrastructure, core generation flows, queues, cross-cutting behavior, or when the user explicitly requests it.
+- Do not run the full test suite by default, including before final delivery. Run it only when the user explicitly requests it or the change is genuinely high risk (for example shared infrastructure, core generation flows, queues, or cross-cutting behavior); explain the reason to the user before starting it.
 - For documentation, copy, configuration-only, or narrowly scoped visual changes, do not run the full test suite unless there is a concrete regression risk.
 - Avoid repeating a full test run if an equivalent run already passed and no relevant code changed afterward.
 - Report focused and full-suite verification separately so the user can see what was actually exercised.
+
+## Git workflow
+
+- Work on the current branch by default. Do not create or switch branches unless the user explicitly asks.
+
+## Communication
+
+- Keep updates and final responses concise and action-oriented. Report only material findings, changes, blockers, and verification; avoid narrating obvious steps or repeating context.
 
 <!-- BEGIN:nextjs-agent-rules -->
 # This is NOT the Next.js you know

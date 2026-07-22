@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowLeft, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, MailCheck } from "lucide-react";
 import { SocialAuthSection } from "@/components/auth/social-auth-section";
 import { AuthSessionRedirect } from "@/components/auth/auth-session-redirect";
 import {
@@ -223,6 +223,7 @@ function AuthPage() {
   const anyPasswordVisible =
     mode === "login" ? showPassword : showPassword || showConfirmPassword;
   const redirect = safeRedirectTarget(searchParams.get("redirect") ?? "/dashboard");
+  const compactAuth = mode === "register";
 
   useEffect(() => {
     setMode(modeFromSearchParams(searchParams));
@@ -432,8 +433,11 @@ function AuthPage() {
     setIsLoading(false);
   };
 
+  const noticeTitle = pendingVerificationEmail ? t("verificationNoticeTitle") : t("noticeTitle");
+  const noticeDescription = pendingVerificationEmail ? t("verificationNoticeDescription") : notice;
+
   return (
-    <div className="relative min-h-screen">
+    <div className="relative h-dvh overflow-hidden">
       <AuthSessionRedirect />
       <div className="absolute left-4 top-4 z-50 lg:left-8 lg:top-8">
         <Button
@@ -448,7 +452,7 @@ function AuthPage() {
         </Button>
       </div>
 
-      <div className="min-h-screen grid lg:grid-cols-2">
+      <div className="grid h-dvh overflow-hidden lg:grid-cols-2">
       <div className="relative hidden lg:flex flex-col justify-center bg-gradient-to-br from-primary/90 via-primary to-primary/80 p-12 pt-20 text-primary-foreground">
         <div className="relative z-20 flex items-end justify-center h-[500px]">
           <div className="relative" style={{ width: "550px", height: "400px" }}>
@@ -758,10 +762,10 @@ function AuthPage() {
         <div className="absolute bottom-1/4 left-1/4 size-96 bg-primary-foreground/5 rounded-full blur-3xl" />
       </div>
 
-      <div className="flex items-center justify-center p-8 pt-16 bg-background">
+      <div className="relative flex h-dvh items-center justify-center overflow-hidden bg-background px-5 py-5 pt-16 sm:px-8 sm:py-6 sm:pt-16 lg:p-8">
         <div className="w-full max-w-[420px]">
-          <div className="text-center mb-10">
-            <h1 className="text-3xl font-bold tracking-tight mb-2">
+          <div className={compactAuth ? "mb-5 text-center" : "text-center mb-10"}>
+            <h1 className={compactAuth ? "mb-1.5 text-2xl font-bold tracking-tight" : "text-3xl font-bold tracking-tight mb-2"}>
               {mode === "login"
                 ? t("welcomeTitle")
                 : mode === "register"
@@ -777,9 +781,9 @@ function AuthPage() {
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className={compactAuth ? "space-y-3" : "space-y-5"}>
             {mode === "register" && (
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="name" className="text-sm font-medium">
                   {t("name")}{" "}
                   <span className="text-muted-foreground font-normal">{t("nameOptional")}</span>
@@ -793,13 +797,13 @@ function AuthPage() {
                   onChange={(e) => setName(e.target.value)}
                   onFocus={() => setIsTyping(true)}
                   onBlur={() => setIsTyping(false)}
-                  className="h-12 bg-background border-border/60 focus-visible:border-primary"
+                  className="h-11 bg-background border-border/60 focus-visible:border-primary"
                 />
               </div>
             )}
 
             {mode !== "reset" && (
-            <div className="space-y-2">
+            <div className={compactAuth ? "space-y-1.5" : "space-y-2"}>
               <Label htmlFor="email" className="text-sm font-medium">
                 {t("email")}
               </Label>
@@ -813,12 +817,12 @@ function AuthPage() {
                 onFocus={() => setIsTyping(true)}
                 onBlur={() => setIsTyping(false)}
                 required
-                className="h-12 bg-background border-border/60 focus-visible:border-primary"
+                className={compactAuth ? "h-11 bg-background border-border/60 focus-visible:border-primary" : "h-12 bg-background border-border/60 focus-visible:border-primary"}
               />
             </div>
             )}
 
-            <div className="space-y-2">
+            <div className={compactAuth ? "space-y-1.5" : "space-y-2"}>
               <Label htmlFor="password" className="text-sm font-medium">
                 {t("password")}
               </Label>
@@ -833,7 +837,7 @@ function AuthPage() {
                   onBlur={() => setIsTyping(false)}
                   required
                   autoComplete={mode === "login" ? "current-password" : "new-password"}
-                  className="h-12 pr-10 bg-background border-border/60 focus-visible:border-primary"
+                  className={compactAuth ? "h-11 pr-10 bg-background border-border/60 focus-visible:border-primary" : "h-12 pr-10 bg-background border-border/60 focus-visible:border-primary"}
                 />
                 <button
                   type="button"
@@ -850,7 +854,7 @@ function AuthPage() {
             </div>
 
             {mode !== "login" && (
-              <div className="space-y-2">
+              <div className={compactAuth ? "space-y-1.5" : "space-y-2"}>
                 <Label htmlFor="confirm-password" className="text-sm font-medium">
                   {t("confirmPassword")}
                 </Label>
@@ -865,7 +869,7 @@ function AuthPage() {
                     onBlur={() => setIsTyping(false)}
                     required
                     autoComplete="new-password"
-                    className="h-12 pr-10 bg-background border-border/60 focus-visible:border-primary"
+                    className={compactAuth ? "h-11 pr-10 bg-background border-border/60 focus-visible:border-primary" : "h-12 pr-10 bg-background border-border/60 focus-visible:border-primary"}
                   />
                   <button
                     type="button"
@@ -902,7 +906,7 @@ function AuthPage() {
             )}
 
             {mode === "register" && (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-[11px] leading-4 text-muted-foreground">
                 {t("registerTerms")}
               </p>
             )}
@@ -923,25 +927,9 @@ function AuthPage() {
               </div>
             )}
 
-            {notice && (
-              <div className="space-y-2 rounded-lg border border-emerald-900/30 bg-emerald-950/20 p-3 text-sm text-emerald-300">
-                <p>{notice}</p>
-                {pendingVerificationEmail ? (
-                  <button
-                    type="button"
-                    onClick={() => void handleResendVerification()}
-                    disabled={isLoading}
-                    className="font-medium text-emerald-100 hover:underline disabled:opacity-60"
-                  >
-                    {t("resendVerification")}
-                  </button>
-                ) : null}
-              </div>
-            )}
-
             <Button
               type="submit"
-              className="w-full h-12 text-base font-medium"
+              className={compactAuth ? "h-11 w-full text-base font-medium" : "w-full h-12 text-base font-medium"}
               size="lg"
               disabled={isLoading}
             >
@@ -954,13 +942,51 @@ function AuthPage() {
                 : mode === "login"
                   ? t("logIn")
                   : mode === "register"
-                    ? t("signUp")
-                    : t("resetPassword")}
+                  ? t("signUp")
+                  : t("resetPassword")}
             </Button>
+
+            {notice && (
+              <div
+                aria-live="polite"
+                className="flex animate-in fade-in-0 zoom-in-95 items-start gap-3 rounded-lg border border-border/70 bg-card/95 p-3 text-left shadow-lg shadow-black/20 ring-1 ring-foreground/5 backdrop-blur duration-200"
+              >
+                <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400">
+                  <MailCheck className="size-4" strokeWidth={1.8} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium leading-5 text-card-foreground">
+                        {noticeTitle}
+                      </p>
+                      <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
+                        {noticeDescription}
+                      </p>
+                      {pendingVerificationEmail ? (
+                        <p className="mt-1 truncate text-xs font-medium leading-4 text-card-foreground/85">
+                          {pendingVerificationEmail}
+                        </p>
+                      ) : null}
+                    </div>
+                    {pendingVerificationEmail ? (
+                      <button
+                        type="button"
+                        onClick={() => void handleResendVerification()}
+                        disabled={isLoading}
+                        className="shrink-0 self-start rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-60"
+                      >
+                        {t("resendVerification")}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            )}
           </form>
 
-          {mode !== "reset" && (
-          <div className="relative mt-6">
+          {mode !== "reset" && !notice && (
+          <div className={compactAuth ? "relative mt-4" : "relative mt-6"}>
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t border-border/60" />
             </div>
@@ -970,9 +996,9 @@ function AuthPage() {
           </div>
           )}
 
-          {mode !== "reset" ? <SocialAuthSection /> : null}
+          {mode !== "reset" && !notice ? <SocialAuthSection compact={compactAuth} /> : null}
 
-          <div className="text-center text-sm text-muted-foreground mt-8">
+          <div className={compactAuth ? "mt-5 text-center text-sm text-muted-foreground" : "text-center text-sm text-muted-foreground mt-8"}>
             {mode === "login" ? (
               <>
                 {t("noAccount")}{" "}
