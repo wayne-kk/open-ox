@@ -1,5 +1,5 @@
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
-import { listAllAuthUsers } from "@/lib/admin/analytics/authUsers";
+import { loadAnalyticsAudience } from "@/lib/admin/analytics/dataLoader";
 import {
   computeKpiSnapshot,
   emptySeries,
@@ -25,7 +25,6 @@ import type {
   OverviewResponse,
   QueueHealthResponse,
 } from "@/lib/admin/analytics/types";
-import { filterExternalUsers } from "@/lib/admin/analytics/internalAccounts";
 
 interface ProjectRow {
   id: string;
@@ -54,7 +53,10 @@ interface AnalyticsEventRow {
   client_ts: string;
 }
 
-function durationMinutes(startedAt: string | null, finishedAt: string | null): number | null {
+function durationMinutes(
+  startedAt: string | null,
+  finishedAt: string | null,
+): number | null {
   if (!startedAt || !finishedAt) return null;
   const start = new Date(startedAt).getTime();
   const end = new Date(finishedAt).getTime();
@@ -83,38 +85,21 @@ export async function fetchAdminOverview(params: {
 
   const service = createSupabaseServiceRoleClient();
 
-  const [adminRoles, manualInternal] = await Promise.all([
-    service.from("user_roles").select("user_id").eq("role", "admin"),
-    service.from("analytics_internal_accounts").select("user_id"),
-  ]);
-  const adminUserIds = new Set(
-    (adminRoles.data ?? []).map((row) => (row as { user_id: string }).user_id)
-  );
-  const manualInternalIds = new Set(
-    manualInternal.error
-      ? []
-      : (manualInternal.data ?? []).map((row) => (row as { user_id: string }).user_id)
-  );
-
-  let events: AnalyticsEventRow[] = [];
-  const eventsQuery = await service
-    .from("analytics_events")
-    .select("event_name, user_id, client_ts")
-    .gte("client_ts", range.from.toISOString())
-    .lte("client_ts", rangeEnd);
-  if (!eventsQuery.error) {
-    events = (eventsQuery.data ?? []) as AnalyticsEventRow[];
-  }
-
   const [
-    users,
+    audience,
+    eventsQuery,
     projectsResult,
     runsCreatedResult,
     runsFinishedResult,
     allProjectsForFirst,
     readyProjectsResult,
   ] = await Promise.all([
-    listAllAuthUsers(),
+    loadAnalyticsAudience({ excludeInternal }),
+    service
+      .from("analytics_events")
+      .select("event_name, user_id, client_ts")
+      .gte("client_ts", range.from.toISOString())
+      .lte("client_ts", rangeEnd),
     service
       .from("projects")
       .select("id, user_id, status, created_at, completed_at, total_duration")
@@ -122,16 +107,23 @@ export async function fetchAdminOverview(params: {
       .lte("created_at", rangeEnd),
     service
       .from("generation_runs")
-      .select("id, project_id, user_id, status, kind, created_at, started_at, finished_at, error")
+      .select(
+        "id, project_id, user_id, status, kind, created_at, started_at, finished_at, error",
+      )
       .gte("created_at", range.from.toISOString())
       .lte("created_at", rangeEnd),
     service
       .from("generation_runs")
-      .select("id, project_id, user_id, status, kind, created_at, started_at, finished_at, error")
+      .select(
+        "id, project_id, user_id, status, kind, created_at, started_at, finished_at, error",
+      )
       .in("status", ["succeeded", "failed"])
       .gte("finished_at", range.from.toISOString())
       .lte("finished_at", rangeEnd),
-    service.from("projects").select("user_id, created_at").not("user_id", "is", null),
+    service
+      .from("projects")
+      .select("user_id, created_at")
+      .not("user_id", "is", null),
     service
       .from("projects")
       .select("user_id, completed_at, created_at, status")
@@ -141,8 +133,14 @@ export async function fetchAdminOverview(params: {
 
   if (projectsResult.error) throw new Error(projectsResult.error.message);
   if (runsCreatedResult.error) throw new Error(runsCreatedResult.error.message);
-  if (runsFinishedResult.error) throw new Error(runsFinishedResult.error.message);
-  if (allProjectsForFirst.error) throw new Error(allProjectsForFirst.error.message);
+  if (runsFinishedResult.error)
+    throw new Error(runsFinishedResult.error.message);
+  if (allProjectsForFirst.error)
+    throw new Error(allProjectsForFirst.error.message);
+
+  const events = eventsQuery.error
+    ? []
+    : ((eventsQuery.data ?? []) as AnalyticsEventRow[]);
 
   const projects = (projectsResult.data ?? []) as ProjectRow[];
   const runsById = new Map<string, GenerationRunRow>();
@@ -154,15 +152,20 @@ export async function fetchAdminOverview(params: {
   }
   const runs = [...runsById.values()];
 
-  const allUsersRaw = users;
-  const allUsers = excludeInternal
-    ? filterExternalUsers(allUsersRaw, { adminUserIds, manualInternalIds })
-    : allUsersRaw;
+  const allUsers = audience.users;
   const allowedUserIds = new Set(allUsers.map((user) => user.id));
   const registrationSeries = emptySeries(keys, ["registrations"]);
   const projectSeries = emptySeries(keys, ["created", "ready", "failed"]);
-  const durationSeries = emptySeries(keys, ["p50Minutes", "avgMinutes", "sampleCount"]);
-  const activationSeries = emptySeries(keys, ["registered", "firstProject", "firstReady"]);
+  const durationSeries = emptySeries(keys, [
+    "p50Minutes",
+    "avgMinutes",
+    "sampleCount",
+  ]);
+  const activationSeries = emptySeries(keys, [
+    "registered",
+    "firstProject",
+    "firstReady",
+  ]);
 
   for (const user of allUsers) {
     const key = dateKeyFromIso(user.created_at);
@@ -178,7 +181,7 @@ export async function fetchAdminOverview(params: {
     if (!allowedUserIds.has(userId)) continue;
     const readyKey = dateKeyFromIso(
       (row as { completed_at: string | null }).completed_at ??
-        (row as { created_at: string }).created_at
+        (row as { created_at: string }).created_at,
     );
     if (!readyKey) continue;
     const existing = firstReadyByUser.get(userId);
@@ -194,7 +197,10 @@ export async function fetchAdminOverview(params: {
   }
 
   const firstProjectByUser = computeFirstProjectDateByUser(
-    (allProjectsForFirst.data ?? []) as Array<{ user_id: string | null; created_at: string }>
+    (allProjectsForFirst.data ?? []) as Array<{
+      user_id: string | null;
+      created_at: string;
+    }>,
   );
   const firstProjectCounts = countMilestonesByDate({
     keys,
@@ -214,7 +220,9 @@ export async function fetchAdminOverview(params: {
       incrementSeries(projectSeries, createdKey, "created");
     }
     if (project.status === "ready") {
-      const readyKey = dateKeyFromIso(project.completed_at ?? project.created_at);
+      const readyKey = dateKeyFromIso(
+        project.completed_at ?? project.created_at,
+      );
       if (readyKey && projectSeries[readyKey]) {
         incrementSeries(projectSeries, readyKey, "ready");
       }
@@ -237,7 +245,9 @@ export async function fetchAdminOverview(params: {
   for (const run of runs) {
     if (run.user_id && !allowedUserIds.has(run.user_id)) continue;
     const minutes = durationMinutes(run.started_at, run.finished_at);
-    const key = dateKeyFromIso(run.finished_at ?? run.started_at ?? run.created_at);
+    const key = dateKeyFromIso(
+      run.finished_at ?? run.started_at ?? run.created_at,
+    );
     if (minutes != null && key) {
       const bucket = durationsByDate.get(key) ?? [];
       bucket.push(minutes);
@@ -255,8 +265,12 @@ export async function fetchAdminOverview(params: {
     durationSeries[key].sampleCount = values.length;
   }
 
-  const registrationMap = new Map(keys.map((key) => [key, registrationSeries[key]?.registrations ?? 0]));
-  const projectCreatedMap = new Map(keys.map((key) => [key, projectSeries[key]?.created ?? 0]));
+  const registrationMap = new Map(
+    keys.map((key) => [key, registrationSeries[key]?.registrations ?? 0]),
+  );
+  const projectCreatedMap = new Map(
+    keys.map((key) => [key, projectSeries[key]?.created ?? 0]),
+  );
   const firstReadyMap = buildMaps(keys);
   for (const [, readyKey] of firstReadyByUser) {
     if (firstReadyMap.has(readyKey)) {
@@ -265,18 +279,24 @@ export async function fetchAdminOverview(params: {
   }
 
   const filteredRunsForSuccess = runs.filter(
-    (run) => !run.user_id || allowedUserIds.has(run.user_id)
+    (run) => !run.user_id || allowedUserIds.has(run.user_id),
   );
 
   const yesterday = new Date(`${todayKey}T00:00:00.000Z`);
   yesterday.setUTCDate(yesterday.getUTCDate() - 1);
   const yesterdayKey = formatDateKey(yesterday);
 
-  const successRateToday = computeSuccessRatePercent(filteredRunsForSuccess, todayKey);
-  const successRateYesterday = computeSuccessRatePercent(filteredRunsForSuccess, yesterdayKey);
+  const successRateToday = computeSuccessRatePercent(
+    filteredRunsForSuccess,
+    todayKey,
+  );
+  const successRateYesterday = computeSuccessRatePercent(
+    filteredRunsForSuccess,
+    yesterdayKey,
+  );
   const avgSuccess7d = averageDailySuccessRatePercent(
     filteredRunsForSuccess,
-    keys.slice(-7)
+    keys.slice(-7),
   );
 
   const avgGenToday = durationSeries[todayKey]?.avgMinutes ?? 0;
@@ -290,9 +310,9 @@ export async function fetchAdminOverview(params: {
             registrations: registrationSeries[key]?.registrations ?? 0,
             dau: dauByDate.get(key) ?? 0,
           },
-        ])
+        ]),
       ),
-      keys
+      keys,
     ),
     projectProduction: seriesToPoints(projectSeries, keys),
     generationDuration: seriesToPoints(durationSeries, keys),
@@ -314,9 +334,14 @@ export async function fetchAdminOverview(params: {
       yesterday: durationSeries[yesterdayKey]?.avgMinutes ?? 0,
       avg7d:
         Math.round(
-          (keys.slice(-7).reduce((sum, key) => sum + (durationSeries[key]?.avgMinutes ?? 0), 0) /
+          (keys
+            .slice(-7)
+            .reduce(
+              (sum, key) => sum + (durationSeries[key]?.avgMinutes ?? 0),
+              0,
+            ) /
             7) *
-            10
+            10,
         ) / 10,
     },
   };
@@ -347,8 +372,14 @@ export async function fetchQueueHealth(): Promise<QueueHealthResponse> {
     recentResult,
     failedDetailsResult,
   ] = await Promise.all([
-    service.from("generation_runs").select("id", { count: "exact", head: true }).eq("status", "queued"),
-    service.from("generation_runs").select("id", { count: "exact", head: true }).eq("status", "running"),
+    service
+      .from("generation_runs")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "queued"),
+    service
+      .from("generation_runs")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "running"),
     service
       .from("generation_runs")
       .select("id", { count: "exact", head: true })
@@ -361,7 +392,9 @@ export async function fetchQueueHealth(): Promise<QueueHealthResponse> {
       .gte("finished_at", failedFilter.finishedSince),
     service
       .from("generation_runs")
-      .select("id, project_id, user_id, status, kind, created_at, started_at, finished_at, error")
+      .select(
+        "id, project_id, user_id, status, kind, created_at, started_at, finished_at, error",
+      )
       .in("status", ["queued", "running", "succeeded", "failed"])
       .order("created_at", { ascending: false })
       .limit(30),
@@ -375,7 +408,8 @@ export async function fetchQueueHealth(): Promise<QueueHealthResponse> {
   ]);
 
   if (recentResult.error) throw new Error(recentResult.error.message);
-  if (succeeded24hResult.error) throw new Error(succeeded24hResult.error.message);
+  if (succeeded24hResult.error)
+    throw new Error(succeeded24hResult.error.message);
   if (failed24hResult.error) throw new Error(failed24hResult.error.message);
 
   const recentRuns = (recentResult.data ?? []) as GenerationRunRow[];
@@ -383,7 +417,9 @@ export async function fetchQueueHealth(): Promise<QueueHealthResponse> {
     .map((run) => {
       if (!run.started_at) return null;
       const waitSeconds = Math.round(
-        (new Date(run.started_at).getTime() - new Date(run.created_at).getTime()) / 1000
+        (new Date(run.started_at).getTime() -
+          new Date(run.created_at).getTime()) /
+          1000,
       );
       return waitSeconds >= 0 ? waitSeconds : null;
     })
@@ -398,7 +434,10 @@ export async function fetchQueueHealth(): Promise<QueueHealthResponse> {
     },
     avgWaitSeconds:
       waitSamples.length > 0
-        ? Math.round(waitSamples.reduce((sum, value) => sum + value, 0) / waitSamples.length)
+        ? Math.round(
+            waitSamples.reduce((sum, value) => sum + value, 0) /
+              waitSamples.length,
+          )
         : null,
     recentRuns: recentRuns.slice(0, 15).map((run) => ({
       id: run.id,
@@ -413,8 +452,10 @@ export async function fetchQueueHealth(): Promise<QueueHealthResponse> {
           ? Math.max(
               0,
               Math.round(
-                (new Date(run.started_at).getTime() - new Date(run.created_at).getTime()) / 1000
-              )
+                (new Date(run.started_at).getTime() -
+                  new Date(run.created_at).getTime()) /
+                  1000,
+              ),
             )
           : null,
     })),

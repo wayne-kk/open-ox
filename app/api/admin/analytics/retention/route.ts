@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { requireAdmin } from "@/lib/admin/requireAdmin";
 import { apiError, apiSuccess } from "@/lib/admin/apiResponse";
 import { parseAnalyticsQuery } from "@/lib/admin/analytics/queryParams";
-import { fetchRetentionMatrix } from "@/lib/admin/analytics/retention";
+import { fetchCachedRetention } from "@/lib/admin/analytics/cachedQueries";
 
 export async function GET(req: NextRequest) {
   const auth = await requireAdmin();
@@ -10,7 +10,12 @@ export async function GET(req: NextRequest) {
 
   const query = parseAnalyticsQuery(req);
   try {
-    const data = await fetchRetentionMatrix(query);
+    const data = await fetchCachedRetention(
+      query.from,
+      query.to,
+      query.excludeInternal,
+      query.anchor,
+    );
     return apiSuccess(data, {
       range: data.range,
       excludeInternal: data.excludeInternal,

@@ -1,4 +1,7 @@
-import { deriveAcquisitionChannel, isExternalReferrer } from "@/lib/analytics/acquisition";
+import {
+  deriveAcquisitionChannel,
+  isExternalReferrer,
+} from "@/lib/analytics/acquisition";
 import type { AcquisitionChannel } from "@/lib/analytics/catalog";
 import {
   emptySeries,
@@ -9,8 +12,8 @@ import {
   seriesToPoints,
   startOfUtcDay,
 } from "@/lib/admin/analytics/dateRange";
-import { listAllAuthUsers } from "@/lib/admin/analytics/authUsers";
-import { filterExternalUsers, getInternalEmailDomains } from "@/lib/admin/analytics/internalAccounts";
+import { loadAnalyticsAudience } from "@/lib/admin/analytics/dataLoader";
+import { getInternalEmailDomains } from "@/lib/admin/analytics/internalAccounts";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 
 export type UserAcquisitionRow = {
@@ -66,7 +69,10 @@ function bump(map: Map<string, number>, key: string) {
   map.set(key, (map.get(key) ?? 0) + 1);
 }
 
-function topEntries(map: Map<string, number>, limit = 10): AcquisitionCountRow[] {
+function topEntries(
+  map: Map<string, number>,
+  limit = 10,
+): AcquisitionCountRow[] {
   return [...map.entries()]
     .map(([key, count]) => ({ key, count }))
     .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key))
@@ -75,7 +81,7 @@ function topEntries(map: Map<string, number>, limit = 10): AcquisitionCountRow[]
 
 export function resolveRegistrationChannel(
   row: UserAcquisitionRow | undefined,
-  pageOrigin?: string | null
+  pageOrigin?: string | null,
 ): AcquisitionReportChannel {
   if (!row) return "unknown";
   return deriveAcquisitionChannel(row, pageOrigin);
@@ -86,17 +92,21 @@ export function aggregateAcquisitionReport(params: {
   acquisitions: UserAcquisitionRow[];
   keys: string[];
   pageOrigin?: string | null;
-}): Omit<
-  AcquisitionResponse,
-  "range" | "excludeInternal" | "internalFilter"
-> {
-  const acqByUser = new Map(params.acquisitions.map((row) => [row.user_id, row]));
+}): Omit<AcquisitionResponse, "range" | "excludeInternal" | "internalFilter"> {
+  const acqByUser = new Map(
+    params.acquisitions.map((row) => [row.user_id, row]),
+  );
   const channelCounts = new Map<AcquisitionReportChannel, number>();
   const sourceCounts = new Map<string, number>();
   const mediumCounts = new Map<string, number>();
   const campaignCounts = new Map<string, number>();
   const referrerCounts = new Map<string, number>();
-  const trend = emptySeries(params.keys, ["utm", "referral", "direct", "unknown"]);
+  const trend = emptySeries(params.keys, [
+    "utm",
+    "referral",
+    "direct",
+    "unknown",
+  ]);
 
   let totalRegistrations = 0;
   let withAcquisition = 0;
@@ -123,7 +133,12 @@ export function aggregateAcquisitionReport(params: {
     }
   }
 
-  const channelOrder: AcquisitionReportChannel[] = ["utm", "referral", "direct", "unknown"];
+  const channelOrder: AcquisitionReportChannel[] = [
+    "utm",
+    "referral",
+    "direct",
+    "unknown",
+  ];
   const channelShare = channelOrder.map((channel) => ({
     channel,
     count: channelCounts.get(channel) ?? 0,
@@ -151,14 +166,12 @@ export async function fetchAcquisition(params: {
   const excludeInternal = params.excludeInternal !== false;
   const service = createSupabaseServiceRoleClient();
 
-  const [users, adminRoles, manualInternal, acquisitionsResult] = await Promise.all([
-    listAllAuthUsers(),
-    service.from("user_roles").select("user_id").eq("role", "admin"),
-    service.from("analytics_internal_accounts").select("user_id"),
+  const [audience, acquisitionsResult] = await Promise.all([
+    loadAnalyticsAudience({ excludeInternal }),
     service
       .from("user_acquisition")
       .select(
-        "user_id, utm_source, utm_medium, utm_campaign, utm_content, utm_term, referrer, landing_path"
+        "user_id, utm_source, utm_medium, utm_campaign, utm_content, utm_term, referrer, landing_path",
       ),
   ]);
 
@@ -166,26 +179,13 @@ export async function fetchAcquisition(params: {
     throw new Error(acquisitionsResult.error.message);
   }
 
-  const adminUserIds = new Set(
-    (adminRoles.data ?? []).map((row) => (row as { user_id: string }).user_id)
-  );
-  const manualInternalIds = new Set(
-    manualInternal.error
-      ? []
-      : (manualInternal.data ?? []).map((row) => (row as { user_id: string }).user_id)
-  );
-
-  const filteredUsers = excludeInternal
-    ? filterExternalUsers(users, { adminUserIds, manualInternalIds })
-    : users;
-
-  const allowed = new Set(filteredUsers.map((user) => user.id));
-  const acquisitions = ((acquisitionsResult.data ?? []) as UserAcquisitionRow[]).filter((row) =>
-    allowed.has(row.user_id)
-  );
+  const allowed = new Set(audience.users.map((user) => user.id));
+  const acquisitions = (
+    (acquisitionsResult.data ?? []) as UserAcquisitionRow[]
+  ).filter((row) => allowed.has(row.user_id));
 
   const aggregated = aggregateAcquisitionReport({
-    users: filteredUsers,
+    users: audience.users,
     acquisitions,
     keys,
   });
@@ -199,8 +199,8 @@ export async function fetchAcquisition(params: {
     },
     excludeInternal,
     internalFilter: {
-      excludedAdminCount: adminUserIds.size,
-      excludedManualCount: manualInternalIds.size,
+      excludedAdminCount: audience.adminUserIds.size,
+      excludedManualCount: audience.manualInternalIds.size,
       internalDomains: getInternalEmailDomains(),
     },
   };

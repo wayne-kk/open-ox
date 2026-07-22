@@ -24,14 +24,44 @@ export async function evaluateAdminAlerts(): Promise<{
     maxQueueDepth: number;
     maxAvgWaitSeconds: number;
   };
+}>;
+export async function evaluateAdminAlerts(dependencies: {
+  fetchOverview: typeof fetchAdminOverview;
+  fetchQueue: typeof fetchQueueHealth;
+}): Promise<{
+  alerts: AdminAlert[];
+  thresholds: {
+    minSuccessRate: number;
+    maxQueueDepth: number;
+    maxAvgWaitSeconds: number;
+  };
+}>;
+export async function evaluateAdminAlerts(
+  dependencies: {
+    fetchOverview: typeof fetchAdminOverview;
+    fetchQueue: typeof fetchQueueHealth;
+  } = {
+    fetchOverview: fetchAdminOverview,
+    fetchQueue: fetchQueueHealth,
+  },
+): Promise<{
+  alerts: AdminAlert[];
+  thresholds: {
+    minSuccessRate: number;
+    maxQueueDepth: number;
+    maxAvgWaitSeconds: number;
+  };
 }> {
   const minSuccessRate = readThreshold("ANALYTICS_ALERT_MIN_SUCCESS_RATE", 80);
   const maxQueueDepth = readThreshold("ANALYTICS_ALERT_MAX_QUEUE_DEPTH", 10);
-  const maxAvgWaitSeconds = readThreshold("ANALYTICS_ALERT_MAX_AVG_WAIT_SECONDS", 300);
+  const maxAvgWaitSeconds = readThreshold(
+    "ANALYTICS_ALERT_MAX_AVG_WAIT_SECONDS",
+    300,
+  );
 
   const [overview, queue] = await Promise.all([
-    fetchAdminOverview({ excludeInternal: true }),
-    fetchQueueHealth(),
+    dependencies.fetchOverview({ excludeInternal: true }),
+    dependencies.fetchQueue(),
   ]);
 
   const alerts: AdminAlert[] = [];
@@ -60,7 +90,10 @@ export async function evaluateAdminAlerts(): Promise<{
     });
   }
 
-  if (queue.avgWaitSeconds != null && queue.avgWaitSeconds > maxAvgWaitSeconds) {
+  if (
+    queue.avgWaitSeconds != null &&
+    queue.avgWaitSeconds > maxAvgWaitSeconds
+  ) {
     alerts.push({
       id: "high-wait-time",
       severity: "warning",

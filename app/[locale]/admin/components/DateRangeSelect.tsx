@@ -24,17 +24,21 @@ type DateRangeSelectProps = {
 
 export function DateRangeSelect({ days, onChange }: DateRangeSelectProps) {
   return (
-    <div className="flex flex-wrap gap-2">
+    <div
+      className="inline-flex rounded-md border border-border bg-muted/70 p-0.5"
+      aria-label="时间范围"
+    >
       {OPTIONS.map((option) => (
         <button
           key={option.days}
           type="button"
           onClick={() => onChange(option.days)}
-          className={`rounded-md border px-3 py-1.5 text-xs transition-colors ${
+          className={`rounded-[4px] px-3 py-1.5 text-xs transition-colors ${
             days === option.days
-              ? "border-primary/35 bg-primary/15 text-primary"
-              : "border-border bg-muted text-muted-foreground hover:text-foreground"
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
           }`}
+          aria-pressed={days === option.days}
         >
           {option.label}
         </button>

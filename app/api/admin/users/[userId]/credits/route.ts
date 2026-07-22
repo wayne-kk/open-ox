@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { revalidateTag } from "next/cache";
 import { requireAdmin } from "@/lib/admin/requireAdmin";
 import { apiError, apiSuccess } from "@/lib/admin/apiResponse";
 import { writeAdminAuditLog } from "@/lib/admin/analytics/auditLog";
@@ -27,7 +28,8 @@ export async function POST(req: NextRequest, { params }: Params) {
     return apiError("Invalid JSON body", 400);
   }
 
-  const amountRaw = typeof body.amount === "number" ? body.amount : Number(body.amount);
+  const amountRaw =
+    typeof body.amount === "number" ? body.amount : Number(body.amount);
   if (!Number.isFinite(amountRaw) || amountRaw <= 0) {
     return apiError("amount must be a positive number", 400);
   }
@@ -72,6 +74,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       reason,
     },
   });
+  revalidateTag("admin-user-directory", { expire: 0 });
 
   return apiSuccess({
     granted: result.granted,

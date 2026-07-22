@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { requireAdmin } from "@/lib/admin/requireAdmin";
 import { apiError, apiSuccess } from "@/lib/admin/apiResponse";
-import { fetchAdminOverview } from "@/lib/admin/analytics/queries";
+import { fetchCachedAdminOverview } from "@/lib/admin/analytics/cachedQueries";
 
 export async function GET(req: NextRequest) {
   const auth = await requireAdmin();
@@ -13,8 +13,11 @@ export async function GET(req: NextRequest) {
   const excludeInternal = searchParams.get("excludeInternal") !== "false";
 
   try {
-    const data = await fetchAdminOverview({ from, to, excludeInternal });
-    return apiSuccess(data, { range: data.range, excludeInternal: data.excludeInternal });
+    const data = await fetchCachedAdminOverview(from, to, excludeInternal);
+    return apiSuccess(data, {
+      range: data.range,
+      excludeInternal: data.excludeInternal,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return apiError(message, 500);
