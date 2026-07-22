@@ -147,6 +147,21 @@ describe("new-user registration notification", () => {
     expect(harness.store.markFailed).not.toHaveBeenCalled();
   });
 
+  it("sends an unsigned card when the bot has no signing secret", async () => {
+    const harness = makeHarness({
+      config: { webhookUrl: "https://example.test/hook" },
+    });
+
+    await scheduleNewUserRegistrationNotification(makeUser(), harness.runtime);
+    await runDeferred(harness);
+
+    const body = requestBody(harness);
+    expect(body.timestamp).toBeUndefined();
+    expect(body.sign).toBeUndefined();
+    expect(body.msg_type).toBe("interactive");
+    expect(harness.store.markSent).toHaveBeenCalledTimes(1);
+  });
+
   it("allows the command-line sender to label a card as a test", async () => {
     const harness = makeHarness({
       candidate: makeCandidate({ provider: "email" }),
@@ -390,9 +405,9 @@ describe("new-user registration notification", () => {
     );
   });
 
-  it("skips before claiming when webhook configuration is incomplete", async () => {
+  it("skips before claiming when the webhook URL is missing", async () => {
     const harness = makeHarness({
-      config: { webhookUrl: "https://example.test/hook" },
+      config: {},
     });
 
     const result = await scheduleNewUserRegistrationNotification(

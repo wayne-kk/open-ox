@@ -230,7 +230,7 @@ export async function scheduleNewUserRegistrationNotification(
       };
 
   const config = runtime?.config ?? productionConfig;
-  if (!config?.webhookUrl || !config.webhookSecret) {
+  if (!config?.webhookUrl) {
     (runtime?.logger ?? console).warn("[new-user-notification] disabled", {
       userId: user.id,
       provider: providerHint(user),
@@ -301,21 +301,28 @@ export async function scheduleNewUserRegistrationNotification(
       };
 
       const { webhookUrl, webhookSecret } = activeRuntime.config;
-      if (!webhookUrl || !webhookSecret) {
+      if (!webhookUrl) {
         await failDelivery("configuration");
         return;
       }
-      const timestamp = String(
-        Math.floor(activeRuntime.now().getTime() / 1000),
-      );
+      const authentication = webhookSecret
+        ? (() => {
+            const timestamp = String(
+              Math.floor(activeRuntime.now().getTime() / 1000),
+            );
+            return {
+              timestamp,
+              sign: createFeishuWebhookSignature(timestamp, webhookSecret),
+            };
+          })()
+        : {};
       let response: Response;
       try {
         response = await activeRuntime.fetch(webhookUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            timestamp,
-            sign: createFeishuWebhookSignature(timestamp, webhookSecret),
+            ...authentication,
             msg_type: "interactive",
             card: buildCard(user, candidate, activeRuntime.config.cardTitle),
           }),
