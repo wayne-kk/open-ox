@@ -16,3 +16,13 @@ export function supabaseAuthErrorRedirectSearch(params: URLSearchParams): string
   if (redirect) out.set("redirect", safeRedirectTarget(redirect));
   return `?${out.toString()}`;
 }
+
+export function supabaseAuthCodeRedirectSearch(params: URLSearchParams): string | null {
+  const code = params.get("code")?.trim();
+  if (!code) return null;
+
+  const out = new URLSearchParams({ code });
+  const next = params.get("next") ?? params.get("redirect");
+  if (next) out.set("next", safeRedirectTarget(next));
+  return `?${out.toString()}`;
+}

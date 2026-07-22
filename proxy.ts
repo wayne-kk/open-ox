@@ -3,7 +3,10 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { hasSupabaseAuthCookie } from "@/lib/auth/hasSupabaseAuthCookie";
 import { safeRedirectTarget } from "@/lib/auth/safe-redirect";
-import { supabaseAuthErrorRedirectSearch } from "@/lib/auth/supabaseAuthErrorRedirect";
+import {
+  supabaseAuthCodeRedirectSearch,
+  supabaseAuthErrorRedirectSearch,
+} from "@/lib/auth/supabaseAuthErrorRedirect";
 import {
   localeFromPathname,
   stripLocalePrefix,
@@ -154,9 +157,17 @@ export async function proxy(request: NextRequest) {
   const stripped = stripLocalePrefix(pathname);
   const locale = localeFromPathname(pathname);
 
-  // Supabase redirects invalid/expired email links to the project Site URL.
-  // Pull those root-level auth errors back into the login screen.
+  // Supabase can redirect email links to the project Site URL. Pull root-level
+  // auth codes/errors back into the app routes that know how to handle them.
   if (stripped === "/") {
+    const authCodeSearch = supabaseAuthCodeRedirectSearch(request.nextUrl.searchParams);
+    if (authCodeSearch) {
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = "/auth/callback";
+      redirectUrl.search = authCodeSearch;
+      return NextResponse.redirect(redirectUrl);
+    }
+
     const authErrorSearch = supabaseAuthErrorRedirectSearch(request.nextUrl.searchParams);
     if (authErrorSearch) {
       const redirectUrl = request.nextUrl.clone();
