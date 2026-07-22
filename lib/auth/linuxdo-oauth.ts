@@ -4,6 +4,14 @@ const LINUXDO_AUTHORIZE = "https://connect.linux.do/oauth2/authorize";
 const LINUXDO_TOKEN = "https://connect.linux.do/oauth2/token";
 const LINUXDO_USER_INFO = "https://connect.linux.do/api/user";
 
+function networkErrorCode(error: unknown): string {
+  const cause = error instanceof Error ? error.cause : undefined;
+  if (!cause || typeof cause !== "object" || !("code" in cause))
+    return "UNKNOWN";
+  const code = String(cause.code);
+  return /^[A-Z0-9_]+$/.test(code) ? code : "UNKNOWN";
+}
+
 export interface LinuxDoUserInfo {
   id: number | string;
   username: string;
@@ -37,14 +45,21 @@ export function linuxdoDerivedPassword(linuxdoId: string): string {
   if (!secret || secret.length < 16) {
     throw new Error("LINUXDO_OAUTH_HMAC_SECRET must be set (min 16 chars)");
   }
-  return createHmac("sha256", secret).update(linuxdoId).digest("base64url").slice(0, 72);
+  return createHmac("sha256", secret)
+    .update(linuxdoId)
+    .digest("base64url")
+    .slice(0, 72);
 }
 
 /** Resolve Discourse-style avatar_template to a concrete avatar URL. */
-export function resolveLinuxDoAvatarUrl(avatarTemplate: string | undefined, size = 120): string | undefined {
+export function resolveLinuxDoAvatarUrl(
+  avatarTemplate: string | undefined,
+  size = 120,
+): string | undefined {
   if (!avatarTemplate?.trim()) return undefined;
   const withSize = avatarTemplate.replace(/\{size\}/g, String(size));
-  if (withSize.startsWith("http://") || withSize.startsWith("https://")) return withSize;
+  if (withSize.startsWith("http://") || withSize.startsWith("https://"))
+    return withSize;
   if (withSize.startsWith("//")) return `https:${withSize}`;
   if (withSize.startsWith("/")) return `https://linux.do${withSize}`;
   return `https://linux.do/${withSize}`;
@@ -79,14 +94,19 @@ export async function exchangeLinuxDoCode(params: {
     redirect_uri: params.redirectUri,
   });
 
-  const res = await fetch(LINUXDO_TOKEN, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Accept: "application/json",
-    },
-    body,
-  });
+  let res: Response;
+  try {
+    res = await fetch(LINUXDO_TOKEN, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body,
+    });
+  } catch (error) {
+    throw new Error(`Linux.do token network error: ${networkErrorCode(error)}`);
+  }
 
   const json = (await res.json()) as {
     access_token?: string;
@@ -96,15 +116,22 @@ export async function exchangeLinuxDoCode(params: {
 
   if (!res.ok || !json.access_token) {
     throw new Error(
-      json.error_description ?? json.error ?? `Linux.do token error: HTTP ${res.status}`
+      json.error_description ??
+        json.error ??
+        `Linux.do token error: HTTP ${res.status}`,
     );
   }
   return { access_token: json.access_token };
 }
 
-export async function fetchLinuxDoUserInfo(accessToken: string): Promise<LinuxDoUserInfo> {
+export async function fetchLinuxDoUserInfo(
+  accessToken: string,
+): Promise<LinuxDoUserInfo> {
   const res = await fetch(LINUXDO_USER_INFO, {
-    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/json",
+    },
   });
   const json = (await res.json()) as LinuxDoUserInfo & {
     error?: string;
@@ -112,7 +139,9 @@ export async function fetchLinuxDoUserInfo(accessToken: string): Promise<LinuxDo
   };
   if (!res.ok) {
     throw new Error(
-      json.error_description ?? json.error ?? `Linux.do user_info error: HTTP ${res.status}`
+      json.error_description ??
+        json.error ??
+        `Linux.do user_info error: HTTP ${res.status}`,
     );
   }
   if (json.id === undefined || json.id === null || !json.username) {
