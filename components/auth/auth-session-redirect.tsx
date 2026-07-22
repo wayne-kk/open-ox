@@ -10,13 +10,15 @@ export function AuthSessionRedirect() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = safeRedirectTarget(searchParams.get("redirect") ?? "/dashboard");
+  const skipRedirect = searchParams.get("mode") === "reset";
 
   useEffect(() => {
+    if (skipRedirect) return;
     const supabase = createSupabaseBrowserClient();
     void supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) router.replace(redirect);
     });
-  }, [redirect, router]);
+  }, [redirect, router, skipRedirect]);
 
   return null;
 }

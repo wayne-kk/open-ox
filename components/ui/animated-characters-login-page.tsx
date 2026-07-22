@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,15 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { SocialAuthSection } from "@/components/auth/social-auth-section";
 import { AuthSessionRedirect } from "@/components/auth/auth-session-redirect";
+import {
+  loginWithEmail,
+  registerWithEmail,
+  requestPasswordResetEmail,
+  resendVerificationEmail,
+  updatePasswordFromRecovery,
+  type EmailAuthErrorCode,
+} from "@/lib/auth/email-auth";
+import { safeRedirectTarget } from "@/lib/auth/safe-redirect";
 
 interface PupilProps {
   size?: number;
@@ -175,14 +184,19 @@ const EyeBall = ({
   );
 };
 
-type AuthMode = "login" | "register";
+type AuthMode = "login" | "register" | "reset";
+
+function modeFromSearchParams(searchParams: ReturnType<typeof useSearchParams>): AuthMode {
+  const raw = searchParams.get("mode");
+  if (raw === "register" || raw === "reset") return raw;
+  return "login";
+}
 
 function AuthPage() {
   const t = useTranslations("auth");
   const searchParams = useSearchParams();
-  const [mode, setMode] = useState<AuthMode>(
-    searchParams.get("mode") === "register" ? "register" : "login"
-  );
+  const router = useRouter();
+  const [mode, setMode] = useState<AuthMode>(modeFromSearchParams(searchParams));
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [name, setName] = useState("");
@@ -190,6 +204,8 @@ function AuthPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [pendingVerificationEmail, setPendingVerificationEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [mouseX, setMouseX] = useState<number>(0);
   const [mouseY, setMouseY] = useState<number>(0);
@@ -206,9 +222,10 @@ function AuthPage() {
   const secretFieldFocused = isTyping;
   const anyPasswordVisible =
     mode === "login" ? showPassword : showPassword || showConfirmPassword;
+  const redirect = safeRedirectTarget(searchParams.get("redirect") ?? "/dashboard");
 
   useEffect(() => {
-    setMode(searchParams.get("mode") === "register" ? "register" : "login");
+    setMode(modeFromSearchParams(searchParams));
   }, [searchParams]);
 
   useEffect(() => {
@@ -313,43 +330,105 @@ function AuthPage() {
   const orangePos = calculatePosition(orangeRef);
   /* eslint-enable react-hooks/refs */
 
-  const passwordHiddenLean =
-    password.length > 0 && !anyPasswordVisible && mode === "login";
+  const passwordHiddenLean = password.length > 0 && !anyPasswordVisible;
+
+  function authErrorMessage(code: EmailAuthErrorCode): string {
+    switch (code) {
+      case "invalidEmail":
+        return t("errorInvalidEmail");
+      case "passwordShort":
+        return t("errorPasswordShort");
+      case "passwordMismatch":
+        return t("errorPasswordMismatch");
+      case "invalidCredentials":
+        return t("errorInvalidCredentials");
+      case "emailNotConfirmed":
+        return t("errorEmailNotConfirmed");
+      case "rateLimited":
+        return t("errorRateLimited");
+      case "config":
+        return t("errorConfig");
+      default:
+        return t("errorUnknown");
+    }
+  }
+
+  function clearFormFeedback() {
+    setError("");
+    setNotice("");
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
+    clearFormFeedback();
+    setPendingVerificationEmail("");
     setIsLoading(true);
 
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    const result =
+      mode === "register"
+        ? await registerWithEmail({
+            name,
+            email,
+            password,
+            confirmPassword,
+            next: redirect,
+          })
+        : mode === "reset"
+          ? await updatePasswordFromRecovery({ password, confirmPassword })
+          : await loginWithEmail({ email, password });
 
-    if (mode === "register") {
-      if (password !== confirmPassword) {
-        setError(t("errorPasswordMismatch"));
-        setIsLoading(false);
-        return;
+    if (!result.ok) {
+      setError(authErrorMessage(result.code));
+      if (result.code === "emailNotConfirmed") {
+        setPendingVerificationEmail(email);
       }
-      if (password.length < 6) {
-        setError(t("errorPasswordShort"));
-        setIsLoading(false);
-        return;
-      }
-      // Mock sign-up
-      const accountLabel = name ? `${email} (${name})` : email;
-      window.alert(t("alertAccountCreated", { email: accountLabel }));
-      setMode("login");
-      setConfirmPassword("");
-      setPassword("");
       setIsLoading(false);
       return;
     }
 
-    if (email === "erik@gmail.com" && password === "1234") {
-      window.alert(t("alertLoginSuccess"));
-    } else {
-      setError(t("errorInvalidCredentials"));
+    if ("email" in result) {
+      setPendingVerificationEmail(result.email);
+      setNotice(t("verificationEmailSent", { email: result.email }));
+      setPassword("");
+      setConfirmPassword("");
+      setIsLoading(false);
+      return;
     }
 
+    if (mode === "reset") {
+      router.replace("/dashboard");
+    } else {
+      router.replace(redirect);
+    }
+    setIsLoading(false);
+  };
+
+  const handlePasswordResetRequest = async () => {
+    clearFormFeedback();
+    setPendingVerificationEmail("");
+    setIsLoading(true);
+    const result = await requestPasswordResetEmail({ email });
+    if (!result.ok) {
+      setError(authErrorMessage(result.code));
+    } else {
+      setNotice(t("passwordResetEmailSent"));
+    }
+    setIsLoading(false);
+  };
+
+  const handleResendVerification = async () => {
+    const targetEmail = pendingVerificationEmail || email;
+    clearFormFeedback();
+    setIsLoading(true);
+    const result = await resendVerificationEmail({ email: targetEmail, next: redirect });
+    if (!result.ok) {
+      setError(authErrorMessage(result.code));
+    } else if ("email" in result) {
+      setPendingVerificationEmail(result.email);
+      setNotice(t("verificationEmailResent", { email: result.email }));
+    } else {
+      setNotice(t("verificationEmailResent", { email: targetEmail }));
+    }
     setIsLoading(false);
   };
 
@@ -683,10 +762,18 @@ function AuthPage() {
         <div className="w-full max-w-[420px]">
           <div className="text-center mb-10">
             <h1 className="text-3xl font-bold tracking-tight mb-2">
-              {mode === "login" ? t("welcomeTitle") : t("registerTitle")}
+              {mode === "login"
+                ? t("welcomeTitle")
+                : mode === "register"
+                  ? t("registerTitle")
+                  : t("resetTitle")}
             </h1>
             <p className="text-muted-foreground text-sm">
-              {mode === "login" ? t("welcomeSubtitle") : t("registerSubtitle")}
+              {mode === "login"
+                ? t("welcomeSubtitle")
+                : mode === "register"
+                  ? t("registerSubtitle")
+                  : t("resetSubtitle")}
             </p>
           </div>
 
@@ -711,6 +798,7 @@ function AuthPage() {
               </div>
             )}
 
+            {mode !== "reset" && (
             <div className="space-y-2">
               <Label htmlFor="email" className="text-sm font-medium">
                 {t("email")}
@@ -728,6 +816,7 @@ function AuthPage() {
                 className="h-12 bg-background border-border/60 focus-visible:border-primary"
               />
             </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="password" className="text-sm font-medium">
@@ -760,7 +849,7 @@ function AuthPage() {
               </div>
             </div>
 
-            {mode === "register" && (
+            {mode !== "login" && (
               <div className="space-y-2">
                 <Label htmlFor="confirm-password" className="text-sm font-medium">
                   {t("confirmPassword")}
@@ -801,12 +890,14 @@ function AuthPage() {
                     {t("remember")}
                   </Label>
                 </div>
-                <a
-                  href="#"
+                <button
+                  type="button"
+                  onClick={() => void handlePasswordResetRequest()}
+                  disabled={isLoading}
                   className="text-sm text-primary hover:underline font-medium"
                 >
                   {t("forgotPassword")}
-                </a>
+                </button>
               </div>
             )}
 
@@ -817,8 +908,34 @@ function AuthPage() {
             )}
 
             {error && (
-              <div className="p-3 text-sm text-red-400 bg-red-950/20 border border-red-900/30 rounded-lg">
-                {error}
+              <div className="space-y-2 rounded-lg border border-red-900/30 bg-red-950/20 p-3 text-sm text-red-400">
+                <p>{error}</p>
+                {pendingVerificationEmail ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleResendVerification()}
+                    disabled={isLoading}
+                    className="font-medium text-red-100 hover:underline disabled:opacity-60"
+                  >
+                    {t("resendVerification")}
+                  </button>
+                ) : null}
+              </div>
+            )}
+
+            {notice && (
+              <div className="space-y-2 rounded-lg border border-emerald-900/30 bg-emerald-950/20 p-3 text-sm text-emerald-300">
+                <p>{notice}</p>
+                {pendingVerificationEmail ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleResendVerification()}
+                    disabled={isLoading}
+                    className="font-medium text-emerald-100 hover:underline disabled:opacity-60"
+                  >
+                    {t("resendVerification")}
+                  </button>
+                ) : null}
               </div>
             )}
 
@@ -831,13 +948,18 @@ function AuthPage() {
               {isLoading
                 ? mode === "login"
                   ? t("signingIn")
-                  : t("creatingAccount")
+                  : mode === "register"
+                    ? t("creatingAccount")
+                    : t("resettingPassword")
                 : mode === "login"
                   ? t("logIn")
-                  : t("signUp")}
+                  : mode === "register"
+                    ? t("signUp")
+                    : t("resetPassword")}
             </Button>
           </form>
 
+          {mode !== "reset" && (
           <div className="relative mt-6">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t border-border/60" />
@@ -846,8 +968,9 @@ function AuthPage() {
               <span className="bg-background px-2 text-muted-foreground">{t("or")}</span>
             </div>
           </div>
+          )}
 
-          <SocialAuthSection />
+          {mode !== "reset" ? <SocialAuthSection /> : null}
 
           <div className="text-center text-sm text-muted-foreground mt-8">
             {mode === "login" ? (
@@ -858,7 +981,8 @@ function AuthPage() {
                   className="text-foreground font-medium hover:underline"
                   onClick={() => {
                     setMode("register");
-                    setError("");
+                    clearFormFeedback();
+                    setPendingVerificationEmail("");
                   }}
                 >
                   {t("signUp")}
@@ -866,14 +990,16 @@ function AuthPage() {
               </>
             ) : (
               <>
-                {t("hasAccount")}{" "}
+                {mode === "register" ? t("hasAccount") : t("rememberPassword")}{" "}
                 <button
                   type="button"
                   className="text-foreground font-medium hover:underline"
                   onClick={() => {
                     setMode("login");
-                    setError("");
+                    clearFormFeedback();
+                    setPendingVerificationEmail("");
                     setConfirmPassword("");
+                    setPassword("");
                   }}
                 >
                   {t("logIn")}
