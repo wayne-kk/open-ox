@@ -19,7 +19,7 @@
 
 1. `**page.tsx` 必须存在**：路径由用户消息给出（`home` → `app/page.tsx`）。
 2. **导出默认 React Server or Client Component**；需要交互时用 `"use client"`。
-3. **自行拆文件**：页面组件放 `components/` 自定子树；勿对齐不存在的 section 清单。
+3. **自行拆文件**：页面组件只能放在用户消息指定的 **Page component root** 下；勿对齐不存在的 section 清单，也不要写入其他页面的组件目录。
 4. **遵守 design-system.md + tokens**：色与间距跟 token，勿另起色板。
 5. **layout / chrome / 全局样式（chrome-first）**：
    - **`app/globals.css`**：禁止 `write_file` / `edit_file`。该文件由 **apply_project_design_tokens** 写入；你只使用 token / Tailwind 工具类。

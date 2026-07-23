@@ -20,15 +20,6 @@ function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function asString(value: unknown): string | undefined {
-  return typeof value === "string" ? value : undefined;
-}
-
-function asStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((x): x is string => typeof x === "string");
-}
-
 function isPageDesignPlan(value: unknown): value is PageDesignPlan {
   if (!isObjectRecord(value)) return false;
   return (
@@ -71,6 +62,7 @@ ${blueprint.brief.projectDescription}
 >
 > 可选形态：\`top-nav+footer\` | \`top-nav\` | \`sidebar\` | \`bottom-tabs\` | \`none\`（极简壳，仍由 Chrome 拥有）。**不要**使用已删除的 \`page-local\`。
 > **不要**套用死板产品类型配方；**不要**在 keywords 为空时脑补 SaaS 气质词（clean / professional / modern 等）。
+> 页面清单已经锁定。必须原样返回每个 slug，不能新增、删除、重命名或合并路由；只为每页补充 \`pageDesignPlan\`。
 
 请输出 JSON，结构如下：
 \`\`\`json
@@ -95,7 +87,7 @@ ${pageListHeading}
 ${blueprint.site.pages
     .map(
       (page) =>
-        `### ${page.title} (/${page.slug}) — ${page.journeyStage}
+        `### ${page.title} (${page.slug === "home" ? "/" : `/${page.slug}`}) — ${page.journeyStage}
 - 描述：${page.description}`
     )
     .join("\n\n")}
@@ -110,8 +102,6 @@ ${blueprint.site.pages
   const trace = stepTraceFromLlmCompletion(systemPrompt, userMessage, meta);
   const parsed = JSON.parse(extractJSON(raw)) as unknown;
 
-  await writeSiteFile("project-plan.json", JSON.stringify(parsed, null, 2));
-
   const parsedPages =
     isObjectRecord(parsed) && Array.isArray(parsed.pages)
       ? parsed.pages
@@ -123,29 +113,43 @@ ${blueprint.site.pages
     throw new Error("plan_project: invalid JSON — missing pages or empty pages array");
   }
 
-  const pages: PlannedPageBlueprint[] = parsedPages
-    .filter((candidate): candidate is Record<string, unknown> => isObjectRecord(candidate))
-    .map((page, pageIndex) => {
-      const description = asString(page.description) ?? "";
-      const journeyStage = asString(page.journeyStage) ?? "";
+  if (parsedPages.length !== blueprint.site.pages.length) {
+    throw new Error(
+      `plan_project: route count changed from ${blueprint.site.pages.length} to ${parsedPages.length}`
+    );
+  }
 
-      if (!isPageDesignPlan(page.pageDesignPlan)) {
-        throw new Error(
-          `plan_project: page at index ${pageIndex} (${asString(page.slug) ?? "?"}) has missing or invalid pageDesignPlan`
-        );
-      }
+  const plansBySlug = new Map<string, PageDesignPlan>();
+  parsedPages.forEach((candidate, pageIndex) => {
+    if (!isObjectRecord(candidate)) {
+      throw new Error(`plan_project: page at index ${pageIndex} is not an object`);
+    }
+    const slug = typeof candidate.slug === "string" ? candidate.slug : "";
+    if (!slug) {
+      throw new Error(`plan_project: page at index ${pageIndex} is missing slug`);
+    }
+    if (plansBySlug.has(slug)) {
+      throw new Error(`plan_project: duplicate route slug ${slug}`);
+    }
+    if (!isPageDesignPlan(candidate.pageDesignPlan)) {
+      throw new Error(
+        `plan_project: page at index ${pageIndex} (${slug}) has missing or invalid pageDesignPlan`
+      );
+    }
+    plansBySlug.set(slug, candidate.pageDesignPlan);
+  });
 
-      return {
-        title: asString(page.title) ?? "",
-        slug: asString(page.slug) ?? "",
-        description,
-        journeyStage,
-        primaryRoleIds: asStringArray(page.primaryRoleIds),
-        supportingCapabilityIds: asStringArray(page.supportingCapabilityIds),
-        sections: [],
-        pageDesignPlan: page.pageDesignPlan,
-      };
-    });
+  const pages: PlannedPageBlueprint[] = blueprint.site.pages.map((page) => {
+    const pageDesignPlan = plansBySlug.get(page.slug);
+    if (!pageDesignPlan) {
+      throw new Error(`plan_project: canonical route ${page.slug} is missing from planned pages`);
+    }
+    return {
+      ...page,
+      sections: [],
+      pageDesignPlan,
+    };
+  });
 
   const chromeForm = resolveChromeForm({
     chromeForm:
@@ -179,6 +183,11 @@ ${blueprint.site.pages
     },
     ...(blueprint.userProvidedContent ? { userProvidedContent: blueprint.userProvidedContent } : {}),
   };
+
+  await writeSiteFile(
+    "project-plan.json",
+    JSON.stringify({ chromeForm, sharedContracts, pages }, null, 2)
+  );
 
   return {
     blueprint: mergedBlueprint,

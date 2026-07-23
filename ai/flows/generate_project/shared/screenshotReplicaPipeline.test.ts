@@ -2,6 +2,7 @@ import { describe, expect, it, afterEach } from "vitest";
 import {
   isScreenshotReplicaPipelineEnabled,
   isScreenshotReplicateIntent,
+  resolvePageGenerationScreenshotMode,
   shouldBlockSkillsForScreenshotReplicate,
   shouldScanPromptForUserImageUrls,
   shouldSkipChromeScaffoldForScreenshotReplicate,
@@ -60,6 +61,11 @@ describe("screenshotReplicaPipeline", () => {
         referenceScreenshotDataUrl: "data:image/png;base64,abc",
       })
     ).toBe(false);
+  });
+
+  it("treats one screenshot as inspiration when generating multiple routes", () => {
+    expect(resolvePageGenerationScreenshotMode("replicate_layout", 3)).toBe("extract_inspiration");
+    expect(resolvePageGenerationScreenshotMode("replicate_layout", 1)).toBe("replicate_layout");
   });
 
   it("isScreenshotReplicaPipelineEnabled respects env", () => {

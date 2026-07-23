@@ -1,3 +1,5 @@
+import { slugToPageComponentRoot } from "./paths";
+
 /**
  * Page Agent opening user message — task context only.
  * Workspace files are pre-loaded in a separate bootstrap message (see pageAgentBootstrap.ts).
@@ -55,16 +57,17 @@ export function buildPageAgentUserMessage(params: BuildPageAgentUserMessageParam
     completeToolName,
     screenshotReplicaLayout,
   } = params;
+  const componentRoot = slugToPageComponentRoot(slug);
 
   const layoutContractBlock = screenshotReplicaLayout
     ? `## Layout contract (screenshot replicate)
 \`${PAGE_AGENT_LAYOUT_PATH}\` is **pass-through only** (\`{children}\` — no global Nav/Footer).
-**Do not** create \`components/chrome/**\`. Reproduce header/nav/footer from the reference **inside** \`${targetPath}\` or \`components/**\` section files.
+**Do not** create \`components/chrome/**\`. Reproduce header/nav/footer from the reference **inside** \`${targetPath}\` or \`${componentRoot}/**\`.
 `
     : `## Layout contract (chrome-first — shell already mounted)
 \`${PAGE_AGENT_LAYOUT_PATH}\` already mounts global chrome from Chrome Scaffold (\`components/chrome/**\`: Nav / Sidebar / Footer / tabs).
 **Do not** create \`components/chrome/**\`, and **do not** implement site-wide Nav/Navbar/Header/Sidebar/Footer, **bottom tab bars**, or **app shell** frames in \`${targetPath}\` or page section components — the shell is always owned by Chrome.
-Fill page **sections** / main content only (e.g. feed viewport, hero). Single-page sites: stable section \`id\` attributes (e.g. \`id="features"\`).
+Fill page **sections** / main content only (e.g. feed viewport, hero). Put extracted components only under \`${componentRoot}/**\`. Single-page sites: stable section \`id\` attributes (e.g. \`id="features"\`).
 Reuse \`components/shared/**\` stubs when present for list/detail cards.
 `;
 
@@ -76,6 +79,7 @@ Reuse \`components/shared/**\` stubs when present for list/detail cards.
   return `## Implement this Next.js route (App Router)
 
 **Target page file**: \`${targetPath}\`
+**Page component root**: \`${componentRoot}/**\`
 **Slug**: ${slug}
 **Page title**: ${pageTitle}
 
@@ -100,7 +104,7 @@ ${layoutContractBlock}
 ${userProvidedFileHint}${userProvidedImagesBlock}
 
 ## Instructions
-1. **Implement first**: After the bootstrap message, \`write_file\` / \`edit_file\` for \`${targetPath}\` and page-local \`components/**\`. Prefer **one turn with parallel \`write_file\`** for the page and its components.
+1. **Implement first**: After the bootstrap message, \`write_file\` / \`edit_file\` for \`${targetPath}\` and page-local \`${componentRoot}/**\`. Prefer **one turn with parallel \`write_file\`** for the page and its components.
 2. **User images**: Use listed https URLs as remote \`src\`; each URL at most once.${
     userImageCount > 0
       ? ` ${userImageCount} user URL(s) — assign all before \`generate_image\` for extras.`
@@ -110,7 +114,7 @@ ${userProvidedFileHint}${userProvidedImagesBlock}
 
 ⚠️ \`${completeToolName}\` is mandatory.
 
-Do not invent extra top-level routes beyond this page.`;
+Do not write another route or any component outside \`${componentRoot}/**\`.`;
 }
 
 /** @deprecated Use {@link buildPageAgentUserMessage} */

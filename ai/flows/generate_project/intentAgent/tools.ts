@@ -3,7 +3,7 @@ import type { ChatCompletionTool } from "openai/resources/chat/completions";
 /** Inlined in intent-agent system prompt — not a separate tool (avoids an extra LLM round). */
 export const PIPELINE_CONSTRAINTS_TEXT = `## open-ox 生成流水线（硬约束）
 
-- 产出为 Next.js **web** profile；MVP 约束为**单首页**：站点只有 **一个顶层页面**，slug 必须为 \`home\`（路由 \`/\`）。
+- 产出为 Next.js **web** profile；默认生成单首页 \`home\`（路由 \`/\`）。用户明确要求多页、独立路由或给出页面清单时，必须把这些路由保留进完整建站说明，不得压回首页区块；单次生成最多 8 个静态路由，更多页面应先请用户缩小首批范围。
 - 布局形态（是否有顶 nav、是否有 sidebar、是否有 footer、是否使用 nested layout 等）由下游实现 Agent 根据产品形态决定，**不在需求分析阶段表态**。
 - 忠实用户已述需求：不擅自添加未提及的产品机制。
 - **视觉气质**由 Studio 在早期 \`options\`/\`clarify\` 轮展示气质选择器一次选定；**不要**在 \`confirm_brief\` 后再问风格，也不要用快捷选项问外观。`;

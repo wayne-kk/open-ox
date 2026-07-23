@@ -18,7 +18,7 @@ import { getSystemToolDefinitions } from "@/ai/tools/systemToolCatalog";
 import { createImageExecutor } from "@/ai/tools/system/generateImageTool";
 import type { PendingImage } from "@/ai/tools/system/generateImageTool";
 import { getModelForStep, getThinkingLevelForStep } from "@/lib/config/models";
-import { slugToPagePath } from "../shared/paths";
+import { slugToPageComponentRoot, slugToPagePath } from "../shared/paths";
 import type { PlannedPageBlueprint, StepTrace, PageAgentProjectContext, BuildStep } from "../types";
 import { resolvePageImplementAgentRuleIds } from "../shared/agentRuleBundles";
 import { buildUserVisionContent } from "../shared/userVisionContent";
@@ -54,6 +54,7 @@ import {
   filterPageAgentToolsForPhase,
   formatPageAgentToolResultForModel,
   isPageAgentBatchFirstRoundEnabled,
+  PAGE_AGENT_TOOL_NAMES,
   pageAgentCompactFromIteration,
   recordPageAgentToolCall,
   resolvePageAgentMaxIterations,
@@ -61,21 +62,6 @@ import {
 } from "../shared/pageAgentToolLoop";
 
 export const PAGE_IMPLEMENTATION_COMPLETE = "page_implementation_complete";
-
-/** S3 — format_code removed; write/edit auto-format on save. */
-const TOOL_NAMES = [
-  "read_file",
-  "write_file",
-  "edit_file",
-  "list_dir",
-  "search_code",
-  "read_lints",
-  "think",
-  "generate_image",
-  "exec_shell",
-  "install_package",
-  "revert_file",
-] as const;
 
 const completeTool: ChatCompletionTool = {
   type: "function",
@@ -112,7 +98,7 @@ function assertDefaultExportPage(tsx: string, path: string): void {
 }
 
 /** Tools whose execution should be surfaced as individual sub-steps in the build conversation. */
-const VISIBLE_TOOL_NAMES = new Set(["write_file", "edit_file", "install_package"]);
+const VISIBLE_TOOL_NAMES = new Set(["write_file", "edit_file"]);
 
 export interface RunPageImplementAgentParams {
   page: PlannedPageBlueprint;
@@ -143,6 +129,7 @@ export async function runPageImplementAgent(
     onStep,
   } = params;
   const targetPath = slugToPagePath(page.slug);
+  const componentRoot = slugToPageComponentRoot(page.slug);
   const model = getModelForStep("page_implement_agent");
   const thinking = getThinkingLevelForStep("page_implement_agent");
   const agentStepName = `page_implement_agent:${page.slug}`;
@@ -158,6 +145,14 @@ export async function runPageImplementAgent(
   const userImageUrls = listUserProvidedImageUrls(userContent, imageUrlFallbackText);
   const userImageCount = userImageUrls.length;
   const hasUserContent = hasUserProvidedContent(userContent);
+  const refShot = projectContext.referenceScreenshotDataUrl ?? null;
+  const replicateLayout =
+    projectContext.pages.length === 1 &&
+    shouldBlockSkillsForScreenshotReplicate(
+      projectContext.screenshotIntentMode ?? "none",
+      Boolean(refShot?.trim()),
+      projectContext.rawUserInput
+    );
 
   const planJson = JSON.stringify(
     {
@@ -186,22 +181,12 @@ export async function runPageImplementAgent(
     userProvidedImagesBlock: userProvidedContentImagesBlock(userContent),
     userImageCount,
     completeToolName: PAGE_IMPLEMENTATION_COMPLETE,
-    screenshotReplicaLayout: shouldBlockSkillsForScreenshotReplicate(
-      projectContext.screenshotIntentMode ?? "none",
-      Boolean(projectContext.referenceScreenshotDataUrl?.trim()),
-      projectContext.rawUserInput
-    ),
+    screenshotReplicaLayout: replicateLayout,
   });
 
-  const refShot = projectContext.referenceScreenshotDataUrl ?? null;
   const refGuardId = screenshotGuardrailIdFromContext(
     projectContext.screenshotIntentMode,
     Boolean(refShot?.trim())
-  );
-  const replicateLayout = shouldBlockSkillsForScreenshotReplicate(
-    projectContext.screenshotIntentMode ?? "none",
-    Boolean(refShot?.trim()),
-    projectContext.rawUserInput
   );
   const systemPrompt = composePromptBlocks([
     loadSystem("frontend"),
@@ -247,15 +232,16 @@ export async function runPageImplementAgent(
     : executePageAgentListDir;
   const chromeDeferredWrites = !replicateLayout;
   const writeFileExecutor = chromeDeferredWrites
-    ? createPageAgentChromeDeferredWriteExecutor("write_file")
+    ? createPageAgentChromeDeferredWriteExecutor("write_file", { targetPath, componentRoot })
     : undefined;
   const editFileExecutor = chromeDeferredWrites
-    ? createPageAgentChromeDeferredWriteExecutor("edit_file")
+    ? createPageAgentChromeDeferredWriteExecutor("edit_file", { targetPath, componentRoot })
     : undefined;
 
-  const { executor: baseImageExecutor, pendingImages } = createImageExecutor(
-    `page-${page.slug.replace(/[^a-zA-Z0-9_-]+/g, "-")}`
-  );
+  const pageImageScope = `page-${componentRoot.slice("components/pages/".length)}`;
+  const { executor: baseImageExecutor, pendingImages } = createImageExecutor(pageImageScope, {
+    filenamePrefix: pageImageScope,
+  });
   const imageExecutor = guardGenerateImageExecutor(baseImageExecutor, userImageUrls);
 
   const imageTool =
@@ -265,7 +251,7 @@ export async function runPageImplementAgent(
 
   const fullPageTools: ChatCompletionTool[] = [
     ...getSystemToolDefinitions(
-      TOOL_NAMES.filter((name) => name !== "generate_image")
+      PAGE_AGENT_TOOL_NAMES.filter((name) => name !== "generate_image")
     ),
     ...(imageTool ? [imageTool] : []),
     completeTool,
@@ -400,9 +386,7 @@ export async function runPageImplementAgent(
           ? `reading ${String(args.path ?? "").split("/").pop() || "..."}`
           : name === "write_file" || name === "edit_file"
             ? `writing ${String(args.path ?? "").split("/").pop() || "..."}`
-            : name === "install_package"
-              ? `installing ${String(args.package_name ?? args.packageName ?? "")}`
-              : undefined;
+            : undefined;
       if (detail) {
         onStep({
           step: agentStepName,

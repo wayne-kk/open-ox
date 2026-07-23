@@ -57,7 +57,7 @@ export function parseYieldArgs(args: Record<string, unknown>): IntentAgentYieldP
   const message =
     typeof args.message === "string" && args.message.trim()
       ? args.message.trim()
-      : "请用一句话说明你希望做单页网站的**目标**与**主要内容**（面向谁、要展示/操作什么）。";
+      : "请用一句话说明你希望做的网站的**目标**与**主要内容**（面向谁、要展示/操作什么）。";
   const suggestedReplies = Array.isArray(args.suggested_replies)
     ? args.suggested_replies
         .filter((x): x is string => typeof x === "string")
@@ -74,7 +74,7 @@ export function parseYieldArgs(args: Record<string, unknown>): IntentAgentYieldP
 }
 
 const DEFAULT_FORCE_YIELD_MESSAGE =
-  "先把方向定清楚再生成会更稳。请用一两句话说明：这个单页主要给谁用、在首页上要完成什么、以及你希望的大致视觉气质。";
+  "先把方向定清楚再生成会更稳。请用一两句话说明：这个网站主要给谁用、要完成什么、是否需要独立页面，以及你希望的大致视觉气质。";
 
 export interface RunIntentAgentTurnParams {
   projectId: string;

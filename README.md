@@ -228,7 +228,7 @@ Browser · Studio UI
 2. **Transparent beats black-box** — evaluate Open-OX by reading Studio traces.  
 3. **Modification is first-class** — generation ignites; Modify + Design Mode cruise.  
 4. **You own the artifact** — export the source; production lives on your Vercel.  
-5. **Constraint buys quality** — high-fidelity single-home profile first; multi-page expands when gates hold.
+5. **Constraint buys quality** — single-page by default; explicit multi-page IA stays minimal and build-gated.
 
 ---
 

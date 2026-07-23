@@ -73,6 +73,7 @@ import {
   runResearchSubagent,
 } from "@/ai/shared/subagent";
 import { listReferenceSiteCandidateUrls } from "@/lib/reference/referenceSiteUrls";
+import { mapWithConcurrency } from "@/lib/async/mapWithConcurrency";
 import { getModelForStep } from "@/lib/config/models";
 import type {
   BuildStep,
@@ -93,6 +94,7 @@ import {
 import { prepareReplicaSiteLayout } from "./shared/applyMinimalReplicaRootLayout";
 import {
   isScreenshotReplicaPipelineEnabled,
+  resolvePageGenerationScreenshotMode,
   shouldBlockSkillsForScreenshotReplicate,
   shouldUseScreenshotReplicaPipeline,
 } from "./shared/screenshotReplicaPipeline";
@@ -107,6 +109,8 @@ import {
   tryLoadPageSpecFromSite,
   type PageSpec,
 } from "./schema/pageSpec";
+
+const PAGE_IMPLEMENT_CONCURRENCY = 3;
 
 function getFileExtension(path: string, fallback = "txt"): string {
   const match = path.match(/\.([a-zA-Z0-9]+)$/);
@@ -486,8 +490,10 @@ async function generatePages(params: {
   const collectedPendingImages: PendingImage[] = [];
   const collectedPageSummaries: PageImplementSummary[] = [];
 
-  const pageOutcomes = await Promise.all(
-    blueprint.site.pages.map(async (page) => {
+  const pageOutcomes = await mapWithConcurrency(
+    blueprint.site.pages,
+    PAGE_IMPLEMENT_CONCURRENCY,
+    async (page) => {
       const agentStepName = getPageImplementAgentStepName(page.slug);
       const pagePath = slugToPagePath(page.slug);
       if (skipImplementedPages?.has(page.slug)) {
@@ -543,7 +549,7 @@ async function generatePages(params: {
           pagePath: outcome.pagePath,
         },
       };
-    }),
+    }
   );
 
   for (const { files, pendingImages, pageSummary } of pageOutcomes) {
@@ -1096,6 +1102,13 @@ async function runGenerateProjectInner(
     });
 
     const normalizedBlueprint = normalizeBlueprint(rawBlueprint);
+    const pageGenerationScreenshotMode = resolvePageGenerationScreenshotMode(
+      screenshotIntentMode,
+      normalizedBlueprint.site.pages.length
+    );
+    const pageGenerationScreenshotGuardrailId = screenshotGuardrailIdForMode(
+      pageGenerationScreenshotMode
+    );
 
     // ── Steps: plan_project → generate_project_design_system ──
     let blueprint!: PlannedProjectBlueprint;
@@ -1104,7 +1117,7 @@ async function runGenerateProjectInner(
 
     const replicaPipelineEligible =
       isScreenshotReplicaPipelineEnabled() &&
-      screenshotIntentMode === "replicate_layout" &&
+      pageGenerationScreenshotMode === "replicate_layout" &&
       Boolean(referenceScreenshot);
 
     if (cp?.skipPlanAndDesign && cp.cachedBlueprint && cp.cachedDesignSystem) {
@@ -1144,7 +1157,7 @@ async function runGenerateProjectInner(
             userInput: effectiveUserInput,
             designIntentMarkdown: designIntentForSystem,
             projectType: normalizedBlueprint.brief.productScope.productType,
-            screenshotMode: screenshotIntentMode,
+            screenshotMode: pageGenerationScreenshotMode,
             selectedSkill: options.selectedDesignSystemSkill,
             legacyStyleGuide: options.styleGuide,
             matchingEnabled:
@@ -1275,7 +1288,7 @@ async function runGenerateProjectInner(
     result.blueprint = blueprint;
     const runtimeContext = buildProjectRuntimeContext(blueprint);
     runtimeContext.rawUserInput = effectiveUserInput;
-    runtimeContext.screenshotIntentMode = screenshotIntentMode;
+    runtimeContext.screenshotIntentMode = pageGenerationScreenshotMode;
     if (referenceScreenshot) {
       runtimeContext.referenceScreenshotDataUrl = referenceScreenshot;
     }
@@ -1332,7 +1345,8 @@ async function runGenerateProjectInner(
     // ── Chrome-first: real shell → shared stubs → parallel pages → link polish ─
     let scaffoldSummary = "";
     let scaffoldChromeForm = "unspecified";
-    const skipChromeScaffold = blockSkillsForScreenshotReplicate;
+    const skipChromeScaffold =
+      blockSkillsForScreenshotReplicate && blueprint.site.pages.length === 1;
     // Agent-chosen chromeForm only — never invent from productType heuristics.
     const plannedChromeForm = resolveChromeForm({
       chromeForm: blueprint.site.informationArchitecture.chromeForm,
@@ -1375,7 +1389,7 @@ async function runGenerateProjectInner(
           logger,
           onStep,
           referenceScreenshotDataUrl: referenceScreenshot,
-          screenshotGuardrailId,
+          screenshotGuardrailId: pageGenerationScreenshotGuardrailId,
         })
       );
       appendGeneratedFiles(result, scaffoldResult.files);
@@ -1448,7 +1462,7 @@ async function runGenerateProjectInner(
             logger,
             onStep,
             referenceScreenshotDataUrl: referenceScreenshot,
-            screenshotGuardrailId,
+            screenshotGuardrailId: pageGenerationScreenshotGuardrailId,
           })
         );
         appendGeneratedFiles(result, optimizeResult.files);

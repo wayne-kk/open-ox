@@ -6,6 +6,7 @@
  */
 
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
+import { createHash } from "crypto";
 import type { ToolResult, ToolExecutor } from "../types";
 import {
   generateProjectImage,
@@ -98,12 +99,33 @@ export interface PendingImage {
   success: boolean;
 }
 
-/**
- * @param scopeLabel — log / collision disambiguation only. **Not** prefixed onto
- * the public path: models nearly always write `<img src>` from the `filename`
- * argument they passed, so a `page-home-…` prefix caused systematic broken images.
- */
-export function createImageExecutor(scopeLabel: string): {
+export interface ImageExecutorOptions {
+  /** Prefix output filenames when multiple agents can generate assets concurrently. */
+  filenamePrefix?: string;
+}
+
+function prefixImageFilename(prefix: string, filename: string): string {
+  const safePrefix = sanitizeFilename(prefix);
+  const compactPrefix =
+    prefix.length <= 32 && safePrefix.length <= 32
+      ? safePrefix
+      : `${safePrefix.slice(0, 23)}-${createHash("sha256").update(prefix).digest("hex").slice(0, 8)}`;
+  const safeFilename = sanitizeFilename(filename);
+  const filenameBudget = Math.max(1, 80 - compactPrefix.length - 1);
+  return `${compactPrefix}-${safeFilename.slice(0, filenameBudget)}`;
+}
+
+function appendImageFilenameSuffix(filename: string, suffixParts: string[]): string {
+  const suffix = suffixParts.map(sanitizeFilename).filter(Boolean).join("-");
+  const filenameBudget = Math.max(1, 80 - suffix.length - 1);
+  return sanitizeFilename(`${filename.slice(0, filenameBudget)}-${suffix}`);
+}
+
+/** The returned path is authoritative; callers must use it instead of reconstructing a filename. */
+export function createImageExecutor(
+  scopeLabel: string,
+  options: ImageExecutorOptions = {}
+): {
   executor: ToolExecutor;
   pendingImages: PendingImage[];
 } {
@@ -114,14 +136,18 @@ export function createImageExecutor(scopeLabel: string): {
     args: Record<string, unknown>
   ): Promise<ToolResult> => {
     const rawName = String(args.filename ?? "image");
-    let filename = sanitizeFilename(rawName);
+    const prefix = options.filenamePrefix?.trim() ?? "";
+    const baseFilename = prefix
+      ? prefixImageFilename(prefix, rawName)
+      : sanitizeFilename(rawName);
+    let filename = baseFilename;
     if (usedFilenames.has(filename)) {
       // Rare same-scope collision — keep the caller's basename readable, append a short suffix.
       const suffix = sanitizeFilename(scopeLabel).slice(0, 24) || "img";
-      filename = sanitizeFilename(`${filename}-${suffix}`);
+      filename = appendImageFilenameSuffix(baseFilename, [suffix]);
       let n = 2;
       while (usedFilenames.has(filename)) {
-        filename = sanitizeFilename(`${sanitizeFilename(rawName)}-${suffix}-${n}`);
+        filename = appendImageFilenameSuffix(baseFilename, [suffix, String(n)]);
         n += 1;
       }
     }

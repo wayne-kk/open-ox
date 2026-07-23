@@ -10,7 +10,8 @@ import type { ChatCompletionTool } from "openai/resources/chat/completions";
 export const PAGE_AGENT_DEFAULT_MAX_ITERATIONS = 36;
 
 /** Read-only tools available only after bootstrap or when lint/debug needs them. */
-export const PAGE_AGENT_OBSERVE_TOOL_NAMES = new Set(["read_file", "list_dir", "search_code"]);
+export const PAGE_AGENT_OBSERVE_TOOL_NAME_LIST = ["read_file", "list_dir", "search_code"] as const;
+export const PAGE_AGENT_OBSERVE_TOOL_NAMES = new Set<string>(PAGE_AGENT_OBSERVE_TOOL_NAME_LIST);
 
 export const PAGE_AGENT_ACT_TOOL_NAMES = [
   "write_file",
@@ -18,9 +19,11 @@ export const PAGE_AGENT_ACT_TOOL_NAMES = [
   "read_lints",
   "think",
   "generate_image",
-  "exec_shell",
-  "install_package",
-  "revert_file",
+] as const;
+
+export const PAGE_AGENT_TOOL_NAMES = [
+  ...PAGE_AGENT_OBSERVE_TOOL_NAME_LIST,
+  ...PAGE_AGENT_ACT_TOOL_NAMES,
 ] as const;
 
 export function normalizeAgentRelativePath(raw: unknown): string {
@@ -260,8 +263,36 @@ export function isPageAgentForbiddenWritePath(relativePath: string): boolean {
   return false;
 }
 
+export interface PageAgentWriteOwnership {
+  targetPath: string;
+  componentRoot: string;
+}
+
+export function isPageAgentOwnedWritePath(
+  relativePath: string,
+  ownership: PageAgentWriteOwnership
+): boolean {
+  const path = normalizeAgentRelativePath(relativePath);
+  const targetPath = normalizeAgentRelativePath(ownership.targetPath);
+  const componentRoot = normalizeAgentRelativePath(ownership.componentRoot);
+  const isCanonicalRelativePath = (candidate: string): boolean =>
+    Boolean(candidate) &&
+    !candidate.startsWith("/") &&
+    candidate.split("/").every((segment) => Boolean(segment) && segment !== "." && segment !== "..");
+
+  if (
+    !isCanonicalRelativePath(path) ||
+    !isCanonicalRelativePath(targetPath) ||
+    !isCanonicalRelativePath(componentRoot)
+  ) {
+    return false;
+  }
+  return path === targetPath || path.startsWith(`${componentRoot}/`);
+}
+
 export function createPageAgentChromeDeferredWriteExecutor(
-  toolName: "write_file" | "edit_file"
+  toolName: "write_file" | "edit_file",
+  ownership: PageAgentWriteOwnership
 ): (args: Record<string, unknown>) => Promise<ToolResult | string> {
   return async (args: Record<string, unknown>) => {
     const path = normalizeAgentRelativePath(args.path);
@@ -272,6 +303,15 @@ export function createPageAgentChromeDeferredWriteExecutor(
           `Blocked: page agents must not write \`${path}\`. ` +
           `Global chrome lives in \`components/chrome/**\` (owned by Chrome Scaffold). ` +
           `Write only the target page and page-local section components.`,
+      };
+    }
+    if (!isPageAgentOwnedWritePath(path, ownership)) {
+      return {
+        success: false,
+        error:
+          `Blocked: this page worker does not own \`${path}\`. ` +
+          `Write only \`${ownership.targetPath}\` or files under ` +
+          `\`${ownership.componentRoot}/**\`.`,
       };
     }
     return executeSystemTool(toolName, args);

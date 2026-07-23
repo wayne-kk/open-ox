@@ -16,6 +16,9 @@ import { clampProjectListName } from "@/lib/projectDisplayName";
 import { isStringArray } from "../shared/typeGuards";
 import { normalizeUserProvidedContent } from "./normalizeUserProvidedContent";
 import { normalizeSharedContracts, resolveChromeForm } from "../shared/chromeForm";
+import { normalizeStaticRouteSlug } from "../shared/paths";
+
+export const MAX_GENERATED_PAGES = 8;
 
 function isSectionSpecArray(value: unknown): value is SectionSpec[] {
   return Array.isArray(value);
@@ -241,10 +244,13 @@ function normalizeSectionSpec(value: unknown, index: number): SectionSpec {
 function normalizePageBlueprint(value: unknown, index: number): PageBlueprint {
   const candidate = (value && typeof value === "object" ? value : {}) as Partial<PageBlueprint>;
   const title = typeof candidate.title === "string" ? candidate.title : `Page ${index + 1}`;
+  const fallbackSlug = index === 0 ? "home" : `page-${index + 1}`;
   return {
     title,
-    slug:
-      typeof candidate.slug === "string" ? candidate.slug : index === 0 ? "home" : `page-${index + 1}`,
+    slug: normalizeStaticRouteSlug(
+      typeof candidate.slug === "string" ? candidate.slug : fallbackSlug,
+      fallbackSlug
+    ),
     description:
       typeof candidate.description === "string"
         ? candidate.description
@@ -259,11 +265,7 @@ function normalizePageBlueprint(value: unknown, index: number): PageBlueprint {
   };
 }
 
-function uniqueStrings(values: string[]): string[] {
-  return Array.from(new Set(values.filter(Boolean)));
-}
-
-function enforceSingleHomePage(pages: PageBlueprint[]): PageBlueprint[] {
+function normalizePages(pages: PageBlueprint[]): PageBlueprint[] {
   if (pages.length === 0) {
     return [
       {
@@ -278,39 +280,29 @@ function enforceSingleHomePage(pages: PageBlueprint[]): PageBlueprint[] {
     ];
   }
 
-  if (pages.length === 1) {
-    const only = pages[0];
-    return [
-      {
-        ...only,
-        slug: "home",
-        title: only.title?.trim() ? only.title : "Home",
-      },
-    ];
+  const hasHome = pages.some((page) => page.slug === "home");
+  if (!hasHome && pages.length > 1) {
+    throw new Error("analyze_project_requirement: multi-page site must include a home route");
   }
+  const withHome = hasHome ? pages : [{ ...pages[0], slug: "home" }];
+  const seen = new Set<string>();
 
-  const homeIdx = pages.findIndex((p) => p.slug === "home");
-  const base = homeIdx >= 0 ? pages[homeIdx] : pages[0];
-  const mergedDescription = uniqueStrings(pages.map((p) => p.description).filter(Boolean)).join(" ");
-  const primaryRoleIds = uniqueStrings(pages.flatMap((p) => p.primaryRoleIds));
-  const supportingCapabilityIds = uniqueStrings(pages.flatMap((p) => p.supportingCapabilityIds));
+  return withHome.map((page) => {
+    const baseSlug = page.slug;
+    let slug = baseSlug;
+    let suffix = 2;
+    while (seen.has(slug)) {
+      slug = `${baseSlug}-${suffix}`;
+      suffix += 1;
+    }
+    seen.add(slug);
 
-  return [
-    {
-      ...base,
-      slug: "home",
-      title: base.title?.trim() ? base.title : "Home",
-      description:
-        mergedDescription.length > 24
-          ? mergedDescription.slice(0, 800)
-          : base.description || mergedDescription || "Single-page brand site.",
-      journeyStage: base.journeyStage || "entry",
-      primaryRoleIds: primaryRoleIds.length > 0 ? primaryRoleIds : base.primaryRoleIds,
-      supportingCapabilityIds:
-        supportingCapabilityIds.length > 0 ? supportingCapabilityIds : base.supportingCapabilityIds,
-      sections: [],
-    },
-  ];
+    return {
+      ...page,
+      slug,
+      title: page.title?.trim() ? page.title : slug === "home" ? "Home" : "Page",
+    };
+  });
 }
 
 function normalizeBrief(value: unknown): ProjectBrief {
@@ -403,10 +395,14 @@ function normalizeSite(value: unknown): ProjectSiteBlueprint {
   if (!Array.isArray(candidate.pages)) {
     throw new Error("analyze_project_requirement: site must include pages");
   }
+  if (candidate.pages.length > MAX_GENERATED_PAGES) {
+    throw new Error(
+      `analyze_project_requirement: site.pages supports at most ${MAX_GENERATED_PAGES} routes`
+    );
+  }
 
   const pagesRaw = candidate.pages.map((page, index) => normalizePageBlueprint(page, index));
-  const mergedFromMultiple = pagesRaw.length > 1;
-  const pages = enforceSingleHomePage(pagesRaw);
+  const pages = normalizePages(pagesRaw);
 
   const baseIa = normalizeInformationArchitecture(
     candidate.informationArchitecture,
@@ -425,9 +421,7 @@ function normalizeSite(value: unknown): ProjectSiteBlueprint {
     informationArchitecture: {
       ...baseIa,
       pageMap,
-      navigationModel: mergedFromMultiple
-        ? "Single-page site: all content on `/` (home). Primary navigation MUST use in-page anchor links (#section-id), not separate routes."
-        : baseIa.navigationModel,
+      navigationModel: baseIa.navigationModel,
     },
     pages,
   };
