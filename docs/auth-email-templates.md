@@ -10,9 +10,9 @@ Paste the HTML files from `supabase/email-templates/` into the matching Supabase
 
 Set these before testing email links:
 
-- Site URL: `https://wayne.xin`
+- Site URL: `https://open-ox.tech`
 - Redirect URLs:
-  - `https://wayne.xin/auth/callback`
+  - `https://open-ox.tech/auth/callback`
   - `http://localhost:3000/auth/callback`
 
 The app also has proxy fallbacks for root-level `?code=...` and `otp_expired`, but the Dashboard should still point users directly at `/auth/callback`.
@@ -45,6 +45,6 @@ Reference: https://supabase.com/docs/guides/auth/auth-email-templates
 1. Update Site URL and Redirect URLs in Supabase.
 2. Paste the `Confirm sign up` template and subject.
 3. Register a new email address in Open-OX.
-4. Confirm the link points to Supabase Auth and includes `redirect_to=https://wayne.xin/auth/callback...`.
+4. Confirm the link points to Supabase Auth and includes `redirect_to=https://open-ox.tech/auth/callback...`.
 5. Click it once and confirm the browser ends on `/dashboard`.
 6. Try an old email link and confirm it lands on `/auth?error=otp_expired`.

@@ -30,7 +30,7 @@ export const metadata: Metadata = {
   },
   verification: {
     other: {
-      "baidu-site-verification": "codeva-qy473uOH92",
+      "baidu-site-verification": "codeva-EvYxD6iL9T",
     },
   },
 };
