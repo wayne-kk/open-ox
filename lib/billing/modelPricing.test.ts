@@ -2,11 +2,48 @@ import { describe, expect, it } from "vitest";
 import { resolveModelPrice, tokensToUsd } from "./modelPricing";
 import { runWithUsageAccounting, recordLlmUsage } from "./usageContext";
 import { usdToCredits } from "./credits";
+import { setCustomModels } from "@/lib/config/models";
 
 describe("modelPricing", () => {
   it("resolves known model prefixes", () => {
     expect(resolveModelPrice("gemini-3-flash-preview").inputPerMTok).toBe(0.15);
     expect(resolveModelPrice("gpt-5.2").outputPerMTok).toBe(14);
+  });
+
+  it("resolves token pricing from the model configuration", () => {
+    setCustomModels([
+      {
+        id: "custom-priced-model",
+        displayName: "Custom priced model",
+        contextWindow: 128_000,
+        tokenPrice: { inputPerMTok: 2, outputPerMTok: 8 },
+      },
+    ]);
+
+    expect(resolveModelPrice("custom-priced-model")).toEqual({
+      inputPerMTok: 2,
+      outputPerMTok: 8,
+    });
+
+    setCustomModels([]);
+  });
+
+  it("lets persisted model configuration override built-in pricing", () => {
+    setCustomModels([
+      {
+        id: "gemini-3-flash-preview",
+        displayName: "Gemini 3 Flash",
+        contextWindow: 128_000,
+        tokenPrice: { inputPerMTok: 1, outputPerMTok: 4 },
+      },
+    ]);
+
+    expect(resolveModelPrice("gemini-3-flash-preview")).toEqual({
+      inputPerMTok: 1,
+      outputPerMTok: 4,
+    });
+
+    setCustomModels([]);
   });
 
   it("falls back for unknown models", () => {

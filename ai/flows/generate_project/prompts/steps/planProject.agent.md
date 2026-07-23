@@ -8,6 +8,7 @@
 2. 顶层 **`chromeForm`**（必填）与可选 **`sharedContracts`**。
 3. 每个 page 必须有完整的 `pageDesignPlan`。
 4. 每个 page 的 **`sections` 必须为 `[]`**（空数组）。
+5. 输入页面清单是规范事实：不得增删页面、改 slug、改顺序或改写页面元数据，只为每个既有 slug 补充 `pageDesignPlan`。
 
 ## Chrome-first 契约
 
@@ -59,5 +60,6 @@
 ### 硬性要求
 
 - 顶层包含：`chromeForm`、`sharedContracts`（可空数组）、`pages`。
+- `pages` 必须与用户消息中的页面清单一一对应，slug 和数量完全一致。
 - 每个 page 的 `sections` 必须是 `[]`。
 - `chromeForm` 必须是你基于 brief 的判断，不是默认营销站模板。

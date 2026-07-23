@@ -9,7 +9,7 @@ import {
   getSiteRoot as projectManagerGetSiteRoot,
   updateProjectStatus,
 } from "@/lib/projectManager";
-import { setRuntimeModelId, type ModelId } from "@/lib/config/models";
+import { beginModelRuntimeContext, setRuntimeModelId, type ModelId } from "@/lib/config/models";
 import { loadStepModelsFromDB } from "@/lib/config/models";
 import { SSE_RESPONSE_HEADERS } from "@/lib/sse-headers";
 import { createAgentSseSender } from "@/lib/transport/agentStreamSse";
@@ -139,6 +139,7 @@ export async function POST(req: Request) {
       );
     }
 
+    beginModelRuntimeContext();
     if (modelOverride) {
       setRuntimeModelId(modelOverride as ModelId);
     }

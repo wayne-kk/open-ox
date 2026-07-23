@@ -9,7 +9,18 @@ export type AdminSession = {
 export async function requireAdmin(): Promise<
   AdminSession | { error: NextResponse }
 > {
-  const session = await getSessionUser();
+  let session: Awaited<ReturnType<typeof getSessionUser>>;
+  try {
+    session = await getSessionUser();
+  } catch (error) {
+    console.error("[requireAdmin] Supabase session lookup failed:", error);
+    return {
+      error: NextResponse.json(
+        { success: false, error: "Authentication service unavailable", code: "AUTH_UNAVAILABLE", data: null },
+        { status: 503 }
+      ),
+    };
+  }
   if (!session) {
     return {
       error: NextResponse.json(
@@ -18,10 +29,22 @@ export async function requireAdmin(): Promise<
       ),
     };
   }
-  const canAccess = await isAdminUser({
-    supabase: session.supabase,
-    userId: session.user.id,
-  });
+  let canAccess: boolean;
+  try {
+    canAccess = await isAdminUser({
+      supabase: session.supabase,
+      userId: session.user.id,
+      throwOnError: true,
+    });
+  } catch (error) {
+    console.error("[requireAdmin] Supabase role lookup failed:", error);
+    return {
+      error: NextResponse.json(
+        { success: false, error: "Authorization service unavailable", code: "AUTH_UNAVAILABLE", data: null },
+        { status: 503 }
+      ),
+    };
+  }
   if (!canAccess) {
     return {
       error: NextResponse.json(

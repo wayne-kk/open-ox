@@ -19,6 +19,13 @@ export function isScreenshotReplicateIntent(
   return hasReferenceScreenshot && mode === "replicate_layout";
 }
 
+export function resolvePageGenerationScreenshotMode(
+  mode: ScreenshotIntentMode,
+  pageCount: number
+): ScreenshotIntentMode {
+  return mode === "replicate_layout" && pageCount > 1 ? "extract_inspiration" : mode;
+}
+
 /**
  * Replicate-from-screenshot must not use built-in hero/component skills.
  * Applies for layout-fidelity mode, strong replicate wording, or pasted screenshot

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
-import { buildIntentAgentTools } from "./tools";
+import { buildIntentAgentTools, PIPELINE_CONSTRAINTS_TEXT } from "./tools";
 import { INTENT_AGENT_RESERVED_TOOL_NAMES, coerceAdditionalToolsFromJson, mergeIntentAgentTools } from "./toolSurface";
 
 describe("mergeIntentAgentTools", () => {
@@ -49,6 +49,11 @@ describe("mergeIntentAgentTools", () => {
   it("reserved set is frozen control surface", () => {
     expect(INTENT_AGENT_RESERVED_TOOL_NAMES.has("commit_generate")).toBe(true);
     expect(INTENT_AGENT_RESERVED_TOOL_NAMES.has("yield_to_user")).toBe(true);
+  });
+
+  it("preserves explicit multi-page requests in the generation brief", () => {
+    expect(PIPELINE_CONSTRAINTS_TEXT).toContain("明确要求多页");
+    expect(PIPELINE_CONSTRAINTS_TEXT).not.toContain("只有 **一个顶层页面**");
   });
 });
 

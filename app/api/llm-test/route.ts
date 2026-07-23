@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
+import { DEFAULT_MODEL } from "@/lib/config/models";
 
 export async function POST(req: Request) {
     const { prompt, model, maxTokens, useSDK, thinking_level } = await req.json();
 
     const apiKey = process.env.OPENAI_API_KEY;
     const baseURL = process.env.OPENAI_API_URL;
-    const resolvedModel = model || process.env.OPENAI_MODEL || "gpt-5.2";
+    const resolvedModel = model || process.env.OPENAI_MODEL || DEFAULT_MODEL;
 
     if (!apiKey) {
         return NextResponse.json({ error: "OPENAI_API_KEY not set" }, { status: 500 });

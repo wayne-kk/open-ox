@@ -6,7 +6,7 @@
 
 - **忠于用户原话**（不发明用户没提的产品功能）
 - **`brief`、`site`、`productScope` 内部一致**
-- **单首页路由**约束
+- **最小充分路由**约束：默认单首页；明确的多页面需求保留为多路由
 
 ### 输出契约（不可协商）
 
@@ -73,6 +73,11 @@
       "title": "Home",
       "slug": "home",
       "description": "一句话：`/` 在 MVP 下提供什么，且忠于用户文本"
+    },
+    {
+      "title": "About",
+      "slug": "about",
+      "description": "仅当用户明确要求独立 About 页面时输出"
     }
   ]
 }
@@ -80,15 +85,18 @@
 
 ### 流水线硬约束
 
-- `site.pages` **只能**有一个元素；`slug` 必须是 `"home"`。
-- 用户提到的 about / features / contact 等应是 **home 内锚点**，不是新顶层路由（除非用户明确要求多路由，极少见）。
+- `site.pages` 必须有 **1–8** 个元素，且**恰好一个**页面的 `slug` 是 `"home"`（对应 `/`）。
+- 默认保持单页：仅提到 about / features / contact 等内容块时，把它们视为 home 内锚点。
+- 用户明确要求“多页 / 多路由 / 独立页面”，明确列出页面或 URL，或不同页面承担不可合并的独立任务时，输出对应的多个 page；不要把明确路由压回首页区块。
+- 每个 `slug` 必须唯一，使用小写 ASCII kebab-case 静态路径，不带首尾 `/`。允许嵌套静态路径（如 `docs/getting-started`）；禁止 `[id]`、`[...slug]` 等动态段。
+- 页面数量保持完成 MVP 所需的最小值，且不得超过 8；不要为了“网站完整”擅自补 About、Pricing、Blog、Contact 等页面。
 
 ## 推断规则（按顺序）
 
 ### 1) 显式意图与防幻觉
 
 在内心整理事实表（不要输出）：类别关键词、用户明确要求的功能、明确不要的内容。  
-**只要用户没有明确提到某功能，就不要**在 `projectDescription`、`mvpDefinition`、`inScope`、`outOfScope`、`site.pages[0].description` 里为了「完整」而捏造。  
+**只要用户没有明确提到某功能，就不要**在 `projectDescription`、`mvpDefinition`、`inScope`、`outOfScope`、`site.pages[].description` 里为了「完整」而捏造。
 不要把含糊需求升格成具体机制（如擅自加 feed、私信、排行榜）。
 
 ### 2) `productType`
@@ -97,7 +105,7 @@
 
 ### 3) `page.description`
 
-一句话；目标用户 + home 的承诺；与用户抽象层级一致。
+一句话；目标用户 + 当前路由的承诺；与用户抽象层级一致。
 
 ### 4) `userProvidedContent`
 

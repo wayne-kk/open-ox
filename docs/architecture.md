@@ -178,11 +178,11 @@ ProjectBlueprint {
 }
 ```
 
-Blueprint 的容错设计：`asProjectBlueprint()` 函数支持三种 LLM 输出格式（嵌套结构、扁平结构、单页结构），并对每个字段做 normalize，确保即使 LLM 输出不完整也能得到合法的 Blueprint。
+Blueprint 的容错设计：`asProjectBlueprint()` 函数支持三种 LLM 输出格式（嵌套结构、扁平结构、单页结构），并对每个字段做 normalize，确保即使 LLM 输出不完整也能得到合法的 Blueprint。页面 IA 默认只有 `home`；用户明确要求独立页面时保留最多 8 个静态路由。Normalizer 保证恰好一个 `home`、slug 唯一且可映射到 `app/**/page.tsx`，并根据规范化后的页面重建 `pageMap`；动态段不属于当前生成契约。
 
 4.3 plan_project + resolve_design_system
 
-- **plan_project** 扩展 `PlannedProjectBlueprint`（`pageDesignPlan`、sections 等）。
+- **plan_project** 扩展 `PlannedProjectBlueprint`（`pageDesignPlan`、sections 等）。Analyze 后的页面数量、顺序、slug 与元数据在此处锁定；Plan 只能按 slug 补充设计计划，不能增删或改写路由。
 - 与它并行的 **DesignSystemResolver** 先加载内置 catalog，用确定性信号召回 Top 3，再由低成本 LLM 做保守裁决。显式选择或高置信自动命中时直接使用契约合格的 skill；无候选、低置信、歧义、冲突、自动匹配下的截图复刻或 matcher 异常时，才调用 **generate_project_design_system**。截图复刻仅跳过自动匹配；显式选择的版本化 skill 仍优先。
 - Resolver 的唯一结果是 `DesignSystemResolution`。编排层根据结果唯一写入一次 `design-system.md`，并保存 `generate_project_design_system/resolution.json`（source、skill 版本、置信度、候选和回退原因）。动态生成结果会执行契约校验，失败时带错误重试一次。
 - Skill fast path 可用 `DESIGN_SYSTEM_SKILL_FAST_PATH=0` 关闭；checkpoint 仍以最终 `design-system.md` 为恢复事实。
@@ -200,6 +200,8 @@ plan_project 的输出为每个 section 准备 traits 化的设计约束（layou
 4.5 Architect + Page Implement Agent（版面与页面落地）
 
 **Chrome-first**：Plan 选定 `chromeForm` 后，由 **Architect Scaffold** 先落盘真实壳（`app/layout.tsx`、`components/chrome/**`），可选串行写入 `sharedContracts` stub；随后各 **Page Implement Agent** 在只读 chrome 契约下编写 `page.tsx` 及页面组件。`chrome_optimize_agent` 仅做链接 polish。详见 `docs/product/chrome-first-generate-pipeline-architecture.md` 与 ADR-0005。
+
+多页项目中，各 Page Implement Agent 按规范化后的静态 slug 以最多 3 路并发运行；写入守卫把每个 worker 限定在自己的 `app/**/page.tsx` 与 `components/pages/<slug>/**` 命名空间，最后由 Chrome Optimize 根据磁盘上的真实 routes 修正导航。单张参考截图的整页 replica 专用路径仅用于单页；多页时该截图降级为全站视觉参考，继续使用共享 Chrome 与普通多页实现流程。
 
 页面 Agent 的 system 由 `frontend`、`steps/pageImplementAgent.md` 以及 `shared/agentRuleBundles.ts` 定义的 **有序 `loadGuardrail(id)` 列表** 叠加（`tailwindMappingGuide`、`section.default`、`skillIntegrationContract`、`project.*`、`outputTsx`、`framerMotionVariants` 等）。Architect Agent 使用另一组规则 id（含 `section.navigation`）。可选通过环境变量 `PAGE_IMPLEMENT_AGENT_EXTRA_RULES` / `ARCHITECT_AGENT_EXTRA_RULES` 追加规则 id。
 

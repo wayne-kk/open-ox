@@ -13,7 +13,7 @@ export const singlePageIaProposalTool: ChatCompletionTool = {
     description:
       "Propose a **single-page** information architecture (section order, purpose of each block, primary/secondary CTAs) for the user's product. " +
       "Call when the user has stated a product goal but section structure is unclear. Output is Markdown for your reasoning only — present a clear summary to the user via `yield_to_user`. " +
-      "Respects pipeline: one `home` page only; do not promise extra routes.",
+      "Use only when the user wants a one-page site or has not requested independent routes; do not use it to collapse an explicit multi-page request.",
     parameters: {
       type: "object",
       properties: {
@@ -36,7 +36,7 @@ export const singlePageIaProposalTool: ChatCompletionTool = {
   },
 };
 
-const SYSTEM = `You plan a **single** marketing/home page (one URL) for Next.js. The downstream builder only creates one page slug \`home\` at /.
+const SYSTEM = `You plan a **single** marketing/home page (one URL) for Next.js. This tool intentionally covers the one-page option; the downstream builder can also build multiple routes when the user requests them.
 
 Return Markdown only, with this structure:
 

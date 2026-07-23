@@ -12,7 +12,7 @@ import {
 } from "@/lib/projectManager";
 import { schedulePostGenerationPreviewPipeline } from "@/lib/postGenerationPreviewPipeline";
 import { setRuntimeModelId, type ModelId } from "@/lib/config/models";
-import { loadStepModelsFromDB } from "@/lib/config/models";
+import { beginModelRuntimeContext, loadStepModelsFromDB } from "@/lib/config/models";
 import { applyEffortTier, normalizeEffortTier } from "@/lib/config/effortTiers";
 import {
   normalizePromptProfile,
@@ -130,6 +130,7 @@ export async function executeGenerationRun(args: {
       }
     }
 
+    beginModelRuntimeContext();
     if (payload.effectiveModel) {
       setRuntimeModelId(payload.effectiveModel as ModelId);
     }

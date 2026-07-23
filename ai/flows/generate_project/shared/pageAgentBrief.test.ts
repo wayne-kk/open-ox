@@ -10,7 +10,10 @@ import {
   filterPageAgentToolsForPhase,
   formatPageAgentToolResultForModel,
   isPageAgentForbiddenWritePath,
+  isPageAgentOwnedWritePath,
   normalizeAgentRelativePath,
+  PAGE_AGENT_ACT_TOOL_NAMES,
+  PAGE_AGENT_TOOL_NAMES,
   resolvePageAgentMaxIterations,
   shouldRunPageAgentCompaction,
 } from "./pageAgentToolLoop";
@@ -103,10 +106,42 @@ describe("pageAgentToolLoop", () => {
     expect(isPageAgentForbiddenWritePath("app/page.tsx")).toBe(false);
   });
 
-  it("resolvePageAgentMaxIterations defaults to 36", () => {
+  it("limits a page worker to its route and component namespace", () => {
+    const ownership = {
+      targetPath: "app/about/page.tsx",
+      componentRoot: "components/pages/about",
+    };
+    expect(isPageAgentOwnedWritePath("app/about/page.tsx", ownership)).toBe(true);
+    expect(isPageAgentOwnedWritePath("components/pages/about/Hero.tsx", ownership)).toBe(true);
+    expect(isPageAgentOwnedWritePath("app/page.tsx", ownership)).toBe(false);
+    expect(isPageAgentOwnedWritePath("components/pages/home/Hero.tsx", ownership)).toBe(false);
+    expect(isPageAgentOwnedWritePath("components/Hero.tsx", ownership)).toBe(false);
+    expect(isPageAgentOwnedWritePath("components/pages/about/../home/Hero.tsx", ownership)).toBe(
+      false
+    );
+    expect(isPageAgentOwnedWritePath("components/pages/about/../../chrome/Nav.tsx", ownership)).toBe(
+      false
+    );
+    expect(isPageAgentOwnedWritePath("/components/pages/about/Hero.tsx", ownership)).toBe(false);
+    expect(isPageAgentOwnedWritePath("", ownership)).toBe(false);
+  });
+
+  it("does not expose mutation tools that bypass page ownership", () => {
+    expect(PAGE_AGENT_TOOL_NAMES).toEqual(
+      expect.arrayContaining(["read_file", "write_file", "edit_file", "generate_image"])
+    );
+    expect(PAGE_AGENT_TOOL_NAMES).not.toContain("exec_shell");
+    expect(PAGE_AGENT_TOOL_NAMES).not.toContain("install_package");
+    expect(PAGE_AGENT_TOOL_NAMES).not.toContain("revert_file");
+    expect(PAGE_AGENT_ACT_TOOL_NAMES.every((name) => PAGE_AGENT_TOOL_NAMES.includes(name))).toBe(
+      true
+    );
+  });
+
+  it("resolvePageAgentMaxIterations defaults to 96", () => {
     const prev = process.env.PAGE_IMPLEMENT_AGENT_MAX_ITERATIONS;
     delete process.env.PAGE_IMPLEMENT_AGENT_MAX_ITERATIONS;
-    expect(resolvePageAgentMaxIterations()).toBe(36);
+    expect(resolvePageAgentMaxIterations()).toBe(96);
     if (prev !== undefined) process.env.PAGE_IMPLEMENT_AGENT_MAX_ITERATIONS = prev;
   });
 

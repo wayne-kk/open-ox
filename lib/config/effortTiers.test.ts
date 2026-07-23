@@ -8,6 +8,7 @@ import {
   clearStepModels,
   getModelForStep,
   getThinkingLevelForStep,
+  setConfiguredStepModel,
 } from "./models";
 
 describe("effortTiers", () => {
@@ -31,6 +32,12 @@ describe("effortTiers", () => {
     applyEffortTier("deep");
     expect(getModelForStep("architect_scaffold_agent")).not.toContain("flash");
     expect(getThinkingLevelForStep("plan_project")).toBe("high");
+  });
+
+  it("does not replace an explicitly configured step model", () => {
+    setConfiguredStepModel("page_implement_agent", "gemini-3.5-flash");
+    applyEffortTier("fast");
+    expect(getModelForStep("page_implement_agent")).toBe("gemini-3.5-flash");
   });
 
   it("balanced leaves step map empty (DB defaults)", () => {

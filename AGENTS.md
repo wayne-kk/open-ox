@@ -23,13 +23,9 @@ Use risk-based, incremental verification. Do not run the entire test suite after
 - Avoid repeating a full test run if an equivalent run already passed and no relevant code changed afterward.
 - Report focused and full-suite verification separately so the user can see what was actually exercised.
 
-## Git workflow
+## Git branch policy
 
-- Work on the current branch by default. Do not create or switch branches unless the user explicitly asks.
-
-## Communication
-
-- Keep updates and final responses concise and action-oriented. Report only material findings, changes, blockers, and verification; avoid narrating obvious steps or repeating context.
+Stay on the current Git branch. Do not create, switch, rename, or otherwise change branches unless the user explicitly requests that branch operation.
 
 <!-- BEGIN:nextjs-agent-rules -->
 # This is NOT the Next.js you know

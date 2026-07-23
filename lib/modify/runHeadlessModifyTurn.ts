@@ -13,7 +13,6 @@ import { canAfford } from "@/lib/billing/account";
 import { chargeUsageForRun } from "@/lib/billing/chargeRun";
 import { isCreditsEnabled, MIN_MODIFY_CREDITS } from "@/lib/billing/credits";
 import { runWithUsageAccounting, type AccumulatedUsage } from "@/lib/billing/usageContext";
-import { MODIFY_DEFAULT_MODEL } from "@/lib/config/models";
 import { getProject } from "@/lib/projectManager";
 import {
   releaseModifyInFlight,
@@ -74,7 +73,6 @@ export type HeadlessModifyTurnDeps = {
     min: number
   ) => Promise<{ ok: boolean; balance: number }>;
   minModifyCredits: number;
-  defaultModel: string;
   getProject: typeof getProject;
   runModify: typeof runModifyProject;
   runWithUsage: typeof runWithUsageAccounting;
@@ -87,7 +85,6 @@ const defaultDeps: HeadlessModifyTurnDeps = {
   creditsEnabled: isCreditsEnabled,
   canAfford,
   minModifyCredits: MIN_MODIFY_CREDITS,
-  defaultModel: MODIFY_DEFAULT_MODEL,
   getProject,
   runModify: runModifyProject,
   runWithUsage: runWithUsageAccounting,
@@ -130,7 +127,7 @@ export async function runHeadlessModifyTurn(
 ): Promise<HeadlessModifyResult> {
   const { userId, projectId, instruction } = input;
   const clearContext = input.clearContext === true;
-  const modelOverride = input.modelOverride ?? deps.defaultModel;
+  const modelOverride = input.modelOverride;
 
   if (!deps.tryAcquire(projectId)) {
     return {
