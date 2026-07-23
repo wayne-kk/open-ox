@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { pageImplementationIncompleteReason } from "./pageImplementAgent";
+import {
+  pageImplementationIncompleteReason,
+  pageImplementationRequiresToolCall,
+  shouldAcceptImplicitPageImplementation,
+} from "./pageImplementAgent";
 
 describe("pageImplementationIncompleteReason", () => {
   const path = "app/page.tsx";
@@ -25,5 +29,23 @@ describe("pageImplementationIncompleteReason", () => {
     }`;
 
     expect(pageImplementationIncompleteReason(source, path)).toBeNull();
+  });
+
+  it("does not implicitly complete while the scaffold stub is still present", () => {
+    const source = `export default function Home() {
+      return <main>Preparing your site…</main>;
+    }`;
+
+    expect(shouldAcceptImplicitPageImplementation(source, path)).toBe(false);
+    expect(pageImplementationRequiresToolCall(source, path)).toBe(true);
+  });
+
+  it("allows a final response only after the page has been implemented", () => {
+    const source = `export default function Home() {
+      return <main>Welcome</main>;
+    }`;
+
+    expect(shouldAcceptImplicitPageImplementation(source, path)).toBe(true);
+    expect(pageImplementationRequiresToolCall(source, path)).toBe(false);
   });
 });

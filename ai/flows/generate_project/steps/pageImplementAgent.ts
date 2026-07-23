@@ -108,6 +108,14 @@ export function pageImplementationIncompleteReason(tsx: string, path: string): s
   return null;
 }
 
+export function shouldAcceptImplicitPageImplementation(tsx: string, path: string): boolean {
+  return pageImplementationIncompleteReason(tsx, path) === null;
+}
+
+export function pageImplementationRequiresToolCall(tsx: string, path: string): boolean {
+  return !shouldAcceptImplicitPageImplementation(tsx, path);
+}
+
 /** Tools whose execution should be surfaced as individual sub-steps in the build conversation. */
 const VISIBLE_TOOL_NAMES = new Set(["write_file", "edit_file"]);
 
@@ -373,6 +381,12 @@ export async function runPageImplementAgent(
       return toolsForRound;
     },
     resolveToolChoiceForIteration: (iteration, toolsForRound) => {
+      if (
+        toolsForRound.length > 0 &&
+        pageImplementationRequiresToolCall(readSiteFile(targetPath), targetPath)
+      ) {
+        return "required";
+      }
       if (batchFirstRound && iteration === 0 && toolsForRound.length > 0) {
         return "required";
       }
@@ -443,12 +457,9 @@ export async function runPageImplementAgent(
 
   if (!implementationComplete) {
     const implicitTsx = readSiteFile(targetPath);
-    const hasDefaultExport =
-      implicitTsx.length > 0 &&
-      (/export\s+default\s+function\b/.test(implicitTsx) ||
-        /export\s+default\s+\w+/.test(implicitTsx));
+    const incompleteReason = pageImplementationIncompleteReason(implicitTsx, targetPath);
 
-    if (hasDefaultExport) {
+    if (!incompleteReason) {
       console.warn(
         `[page_implement_agent:${page.slug}] Agent did not call ${PAGE_IMPLEMENTATION_COMPLETE} ` +
           `but ${targetPath} exists with a valid default export — accepting implicit completion. ` +
@@ -460,7 +471,7 @@ export async function runPageImplementAgent(
     } else {
       throw new Error(
         `page_implement_agent:${page.slug}: agent exhausted ${maxIterations} iterations ` +
-          `without producing ${targetPath} with a default export or calling ` +
+          `without completing ${targetPath}: ${incompleteReason}. Expected the agent to call ` +
           `${PAGE_IMPLEMENTATION_COMPLETE}. Model: ${model}, tool calls: ${toolCalls.length}. ` +
           `Last message: ${(content || "(empty)").slice(0, 300)}`
       );
