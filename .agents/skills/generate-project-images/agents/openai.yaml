@@ -1,0 +1,4 @@
+interface:
+  display_name: "Generate Project Images"
+  short_description: "Generate visual assets while building interfaces"
+  default_prompt: "Use $generate-project-images to replace temporary image placeholders with generated project assets."

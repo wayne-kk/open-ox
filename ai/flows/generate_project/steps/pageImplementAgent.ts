@@ -97,6 +97,17 @@ function assertDefaultExportPage(tsx: string, path: string): void {
   }
 }
 
+export function pageImplementationIncompleteReason(tsx: string, path: string): string | null {
+  if (!tsx.trim()) return `${path} is empty or missing`;
+  if (!/export\s+default\s+function\b/.test(tsx) && !/export\s+default\s+\w+/.test(tsx)) {
+    return `${path} must include a default export`;
+  }
+  if (tsx.includes("Preparing your site")) {
+    return `${path} is still the default stub (\"Preparing your site…\")`;
+  }
+  return null;
+}
+
 /** Tools whose execution should be surfaced as individual sub-steps in the build conversation. */
 const VISIBLE_TOOL_NAMES = new Set(["write_file", "edit_file"]);
 
@@ -286,6 +297,18 @@ export async function runPageImplementAgent(
       [PAGE_IMPLEMENTATION_COMPLETE]: async (
         args: Record<string, unknown>
       ): Promise<ToolResult> => {
+        const incompleteReason = pageImplementationIncompleteReason(
+          readSiteFile(targetPath),
+          targetPath
+        );
+        if (incompleteReason) {
+          return {
+            success: false,
+            error:
+              `Cannot complete page implementation: ${incompleteReason}. ` +
+              `Write the target page successfully, then call ${PAGE_IMPLEMENTATION_COMPLETE} again.`,
+          };
+        }
         implementationComplete = true;
         completeSummary = typeof args.summary === "string" ? args.summary.trim() : "";
         return { success: true, output: "page_implementation_complete acknowledged" };
@@ -341,6 +364,11 @@ export async function runPageImplementAgent(
 
       if (batchFirstRound && iteration === 0) {
         toolsForRound = filterPageAgentToolsForPhase(batchWriteTools, allowObserve);
+      }
+      if (pageImplementationIncompleteReason(readSiteFile(targetPath), targetPath)) {
+        toolsForRound = toolsForRound.filter(
+          (tool) => tool.function?.name !== PAGE_IMPLEMENTATION_COMPLETE
+        );
       }
       return toolsForRound;
     },
