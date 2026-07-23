@@ -25,7 +25,9 @@ export type WorkspaceTourCopy = {
 };
 
 /** Workspace first-login tour. Targets: `[data-ox-tour="<id>"]`. */
-export function buildWorkspaceOnboardingSteps(copy: WorkspaceTourCopy): ProductTourStep[] {
+export function buildWorkspaceOnboardingSteps(
+  copy: WorkspaceTourCopy,
+): ProductTourStep[] {
   return [
     {
       id: "workspace-welcome",
@@ -34,6 +36,10 @@ export function buildWorkspaceOnboardingSteps(copy: WorkspaceTourCopy): ProductT
       eyebrow: copy.welcomeEyebrow,
       title: copy.welcomeTitle,
       description: copy.welcomeBody,
+      media: {
+        src: "/onboarding/studio-tour-welcome.png",
+        alt: "Open-OX Studio workspace preview",
+      },
     },
     {
       id: "workspace-prompt",
