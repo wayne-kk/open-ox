@@ -104,13 +104,14 @@ ${layoutContractBlock}
 ${userProvidedFileHint}${userProvidedImagesBlock}
 
 ## Instructions
-1. **Implement first**: After the bootstrap message, \`write_file\` / \`edit_file\` for \`${targetPath}\` and page-local \`${componentRoot}/**\`. Prefer **one turn with parallel \`write_file\`** for the page and its components.
-2. **User images**: Use listed https URLs as remote \`src\`; each URL at most once.${
+1. **Implement this route only**: Other routes are handled by separate Page Agents. The tool runtime permits exactly one \`write_file\` or \`edit_file\` call per response.
+2. **Write each file once**: Write page-local components under \`${componentRoot}/**\` first. After each successful write, continue to the next required file instead of rewriting that path. Write \`${targetPath}\` last and only once, after its imports are known.
+3. **User images**: Use listed https URLs as remote \`src\`; each URL at most once.${
     userImageCount > 0
       ? ` ${userImageCount} user URL(s) — assign all before \`generate_image\` for extras.`
       : " Use \`generate_image\` only when you need visuals without user URLs."
   }
-3. **Fix & finish**: \`read_lints\` if needed (then \`read_file\` only for paths **not** in bootstrap); \`${completeToolName}\` with a brief summary. Do not call \`format_code\` — write/edit auto-formats.
+4. **Fix & finish**: Run \`read_lints\` after the files are written. When a diagnostic names a written file, use \`edit_file\` only for the smallest required fix; do not replace the whole file with \`write_file\`. Then call \`${completeToolName}\` with a brief summary. Do not call \`format_code\` — write/edit auto-formats.
 
 ⚠️ \`${completeToolName}\` is mandatory.
 

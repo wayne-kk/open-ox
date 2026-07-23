@@ -40,10 +40,15 @@ describe("pageAgentBrief", () => {
     expect(msg).toContain("Workspace context");
     expect(msg).toContain("design-system.md");
     expect(msg).toContain("do not re-read");
-    expect(msg).toContain("Implement first");
+    expect(msg).toContain("Implement this route only");
     expect(msg).toContain("chrome-first");
     expect(msg).toContain("site-wide Nav/Navbar/Header/Sidebar/Footer");
     expect(msg).toContain("bottom tab bars");
+    expect(msg).toContain("exactly one `write_file` or `edit_file` call per response");
+    expect(msg).toContain("Write page-local components under");
+    expect(msg).toContain("Write `app/page.tsx` last and only once");
+    expect(msg).toContain("use `edit_file` only for the smallest required fix");
+    expect(msg).not.toContain("parallel `write_file`");
     expect(msg).not.toContain(PAGE_AGENT_HERO_SKILL_PATH);
     expect(msg.length).toBeLessThan(4_500);
   });
