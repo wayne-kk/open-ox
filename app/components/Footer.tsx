@@ -11,6 +11,17 @@ const SOCIAL_LINKS = [
   { href: "mailto:782884630@qq.com", icon: Mail, label: "Email" },
 ];
 
+const ICP_FILING_NUMBER = "京ICP备2025130143号";
+const PUBLIC_SECURITY_FILING_NUMBER =
+  process.env.NEXT_PUBLIC_PUBLIC_SECURITY_FILING_NUMBER?.trim();
+
+function publicSecurityFilingUrl(filingNumber: string): string {
+  const recordCode = filingNumber.match(/\d{10,}/)?.[0];
+  return recordCode
+    ? `https://www.beian.gov.cn/portal/registerSystemInfo?recordcode=${recordCode}`
+    : "https://www.beian.gov.cn/";
+}
+
 export function Footer() {
   const t = useTranslations("footer");
 
@@ -116,11 +127,37 @@ export function Footer() {
           </div>
         </div>
 
-        <div className="flex flex-col items-center justify-between gap-4 border-t border-border/60 py-6 sm:flex-row">
+        <div className="grid items-center gap-4 border-t border-border/60 py-6 text-center sm:grid-cols-[1fr_auto_1fr] sm:text-left">
           <p className="text-[12px] text-muted-foreground">
             © {new Date().getFullYear()} Open-OX Studio. {t("rights")}
           </p>
-          <div className="flex items-center gap-1.5">
+          {ICP_FILING_NUMBER || PUBLIC_SECURITY_FILING_NUMBER ? (
+            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[12px] text-muted-foreground">
+              {PUBLIC_SECURITY_FILING_NUMBER ? (
+                <a
+                  href={publicSecurityFilingUrl(PUBLIC_SECURITY_FILING_NUMBER)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="whitespace-nowrap transition-colors hover:text-foreground hover:underline"
+                >
+                  {PUBLIC_SECURITY_FILING_NUMBER}
+                </a>
+              ) : null}
+              {ICP_FILING_NUMBER ? (
+                <a
+                  href="https://beian.miit.gov.cn/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="whitespace-nowrap transition-colors hover:text-foreground hover:underline"
+                >
+                  {ICP_FILING_NUMBER}
+                </a>
+              ) : null}
+            </div>
+          ) : (
+            <span aria-hidden="true" />
+          )}
+          <div className="flex items-center justify-center gap-1.5 sm:justify-end">
             <span className="h-1.5 w-1.5 rounded-full bg-brand-signal" />
             <span className="text-[11px] text-muted-foreground">All systems operational</span>
           </div>

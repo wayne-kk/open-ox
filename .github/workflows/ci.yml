@@ -69,6 +69,8 @@ jobs:
       - name: Generate .env.production
         env:
           NEXT_PUBLIC_SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
+          NEXT_PUBLIC_ICP_FILING_NUMBER: ${{ secrets.NEXT_PUBLIC_ICP_FILING_NUMBER }}
+          NEXT_PUBLIC_PUBLIC_SECURITY_FILING_NUMBER: ${{ secrets.NEXT_PUBLIC_PUBLIC_SECURITY_FILING_NUMBER }}
           # Dedicated preview host (Form 1). Falls back to https://p.<site-host> when unset.
           NEXT_PUBLIC_PREVIEW_ORIGIN: ${{ secrets.NEXT_PUBLIC_PREVIEW_ORIGIN }}
         run: |
@@ -89,6 +91,8 @@ jobs:
             echo "NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}"
             echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY }}"
             echo "NEXT_PUBLIC_SITE_URL=${SITE_URL}"
+            echo "NEXT_PUBLIC_ICP_FILING_NUMBER=${NEXT_PUBLIC_ICP_FILING_NUMBER}"
+            echo "NEXT_PUBLIC_PUBLIC_SECURITY_FILING_NUMBER=${NEXT_PUBLIC_PUBLIC_SECURITY_FILING_NUMBER}"
             echo "NEXT_PUBLIC_PREVIEW_ORIGIN=${PREVIEW_ORIGIN}"
             echo "OPEN_OX_PREVIEW_BACKEND=${{ secrets.OPEN_OX_PREVIEW_BACKEND }}"
             echo "OPEN_OX_PREVIEW_CAPTURE_SECRET=${{ secrets.OPEN_OX_PREVIEW_CAPTURE_SECRET }}"
