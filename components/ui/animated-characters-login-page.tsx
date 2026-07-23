@@ -20,6 +20,12 @@ import {
   type EmailAuthErrorCode,
 } from "@/lib/auth/email-auth";
 import { safeRedirectTarget } from "@/lib/auth/safe-redirect";
+import {
+  readVerificationResendState,
+  VERIFICATION_RESEND_COOLDOWN_SECONDS,
+  verificationResendSecondsRemaining,
+  writeVerificationResendState,
+} from "@/lib/auth/verification-resend-cooldown";
 
 interface PupilProps {
   size?: number;
@@ -206,6 +212,8 @@ function AuthPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [pendingVerificationEmail, setPendingVerificationEmail] = useState("");
+  const [resendAvailableAt, setResendAvailableAt] = useState(0);
+  const [countdownNow, setCountdownNow] = useState(() => Date.now());
   const [isLoading, setIsLoading] = useState(false);
   const [mouseX, setMouseX] = useState<number>(0);
   const [mouseY, setMouseY] = useState<number>(0);
@@ -228,6 +236,37 @@ function AuthPage() {
   useEffect(() => {
     setMode(modeFromSearchParams(searchParams));
   }, [searchParams]);
+
+  useEffect(() => {
+    const saved = readVerificationResendState(window.localStorage);
+    if (!saved) return;
+    setPendingVerificationEmail(saved.email);
+    setResendAvailableAt(saved.resendAvailableAt);
+    setCountdownNow(Date.now());
+    setNotice(t("verificationEmailSent", { email: saved.email }));
+  }, [t]);
+
+  const resendSecondsRemaining = verificationResendSecondsRemaining(
+    resendAvailableAt,
+    countdownNow
+  );
+
+  useEffect(() => {
+    if (!pendingVerificationEmail || resendSecondsRemaining === 0) return;
+    const timer = window.setInterval(() => setCountdownNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [pendingVerificationEmail, resendSecondsRemaining]);
+
+  function startVerificationResendCooldown(targetEmail: string, seconds: number): void {
+    const nextAvailableAt = Date.now() + seconds * 1_000;
+    setPendingVerificationEmail(targetEmail);
+    setResendAvailableAt(nextAvailableAt);
+    setCountdownNow(Date.now());
+    writeVerificationResendState(window.localStorage, {
+      email: targetEmail,
+      resendAvailableAt: nextAvailableAt,
+    });
+  }
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -341,6 +380,8 @@ function AuthPage() {
         return t("errorPasswordShort");
       case "passwordMismatch":
         return t("errorPasswordMismatch");
+      case "emailAlreadyRegistered":
+        return t("errorEmailAlreadyRegistered");
       case "invalidCredentials":
         return t("errorInvalidCredentials");
       case "emailNotConfirmed":
@@ -388,7 +429,7 @@ function AuthPage() {
     }
 
     if ("email" in result) {
-      setPendingVerificationEmail(result.email);
+      startVerificationResendCooldown(result.email, VERIFICATION_RESEND_COOLDOWN_SECONDS);
       setNotice(t("verificationEmailSent", { email: result.email }));
       setPassword("");
       setConfirmPassword("");
@@ -419,13 +460,17 @@ function AuthPage() {
 
   const handleResendVerification = async () => {
     const targetEmail = pendingVerificationEmail || email;
+    if (resendSecondsRemaining > 0) return;
     clearFormFeedback();
     setIsLoading(true);
     const result = await resendVerificationEmail({ email: targetEmail, next: redirect });
     if (!result.ok) {
       setError(authErrorMessage(result.code));
+      if (result.retryAfterSec) {
+        startVerificationResendCooldown(targetEmail, result.retryAfterSec);
+      }
     } else if ("email" in result) {
-      setPendingVerificationEmail(result.email);
+      startVerificationResendCooldown(result.email, VERIFICATION_RESEND_COOLDOWN_SECONDS);
       setNotice(t("verificationEmailResent", { email: result.email }));
     } else {
       setNotice(t("verificationEmailResent", { email: targetEmail }));
@@ -435,6 +480,10 @@ function AuthPage() {
 
   const noticeTitle = pendingVerificationEmail ? t("verificationNoticeTitle") : t("noticeTitle");
   const noticeDescription = pendingVerificationEmail ? t("verificationNoticeDescription") : notice;
+  const resendLabel =
+    resendSecondsRemaining > 0
+      ? t("resendVerificationCountdown", { seconds: resendSecondsRemaining })
+      : t("resendVerification");
 
   return (
     <div className="relative h-dvh overflow-hidden">
@@ -918,10 +967,10 @@ function AuthPage() {
                   <button
                     type="button"
                     onClick={() => void handleResendVerification()}
-                    disabled={isLoading}
-                    className="font-medium text-red-100 hover:underline disabled:opacity-60"
+                    disabled={isLoading || resendSecondsRemaining > 0}
+                    className="font-medium text-red-100 hover:underline disabled:cursor-not-allowed disabled:text-red-200/55 disabled:no-underline"
                   >
-                    {t("resendVerification")}
+                    {resendLabel}
                   </button>
                 ) : null}
               </div>
@@ -973,10 +1022,10 @@ function AuthPage() {
                       <button
                         type="button"
                         onClick={() => void handleResendVerification()}
-                        disabled={isLoading}
-                        className="shrink-0 self-start rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-60"
+                        disabled={isLoading || resendSecondsRemaining > 0}
+                        className="min-w-24 shrink-0 self-start rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:text-muted-foreground"
                       >
-                        {t("resendVerification")}
+                        {resendLabel}
                       </button>
                     ) : null}
                   </div>

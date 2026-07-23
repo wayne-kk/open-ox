@@ -41,6 +41,10 @@ describe("email auth helpers", () => {
   });
 
   it("maps Supabase auth errors into product codes", () => {
+    expect(normalizeSupabaseAuthError({ message: "User already registered" })).toMatchObject({
+      ok: false,
+      code: "emailAlreadyRegistered",
+    });
     expect(normalizeSupabaseAuthError({ message: "Invalid login credentials" })).toMatchObject({
       ok: false,
       code: "invalidCredentials",

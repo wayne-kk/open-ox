@@ -37,7 +37,12 @@ export async function POST(request: NextRequest) {
   });
   if (!limited.ok) {
     return json(
-      { ok: false, code: "rateLimited", message: "Too many attempts" },
+      {
+        ok: false,
+        code: "rateLimited",
+        message: "Too many attempts",
+        retryAfterSec: limited.retryAfterSec,
+      },
       { status: 429, headers: { "Retry-After": String(limited.retryAfterSec) } }
     );
   }

@@ -4,6 +4,7 @@ export type EmailAuthErrorCode =
   | "invalidEmail"
   | "passwordShort"
   | "passwordMismatch"
+  | "emailAlreadyRegistered"
   | "invalidCredentials"
   | "emailNotConfirmed"
   | "rateLimited"
@@ -13,7 +14,7 @@ export type EmailAuthErrorCode =
 export type EmailAuthResult =
   | { ok: true; needsEmailConfirmation?: false }
   | { ok: true; needsEmailConfirmation: true; email: string }
-  | { ok: false; code: EmailAuthErrorCode; message: string };
+  | { ok: false; code: EmailAuthErrorCode; message: string; retryAfterSec?: number };
 
 export function normalizeEmail(raw: string): string {
   return raw.trim().toLowerCase();
@@ -58,6 +59,15 @@ export function normalizeSupabaseAuthError(error: {
 }): EmailAuthResult {
   const message = (error.message ?? "").toLowerCase();
   const code = (error.code ?? "").toLowerCase();
+
+  if (
+    code.includes("user_already_exists") ||
+    code.includes("email_exists") ||
+    message.includes("already registered") ||
+    message.includes("already exists")
+  ) {
+    return { ok: false, code: "emailAlreadyRegistered", message: error.message ?? "" };
+  }
 
   if (
     code.includes("invalid_credentials") ||

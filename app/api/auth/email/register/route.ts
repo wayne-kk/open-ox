@@ -61,6 +61,19 @@ export async function POST(request: NextRequest) {
 
   if (error) return json(normalizeSupabaseAuthError(error), { status: error.status ?? 400 });
 
+  // With email confirmation enabled, Supabase obscures duplicate sign-ups as a successful
+  // response whose user has no identities. Surface the product's requested duplicate warning.
+  if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+    return json(
+      {
+        ok: false,
+        code: "emailAlreadyRegistered",
+        message: "Email is already registered",
+      },
+      { status: 409 }
+    );
+  }
+
   if (data.session && data.user) {
     await finalizeAuthenticatedLogin({ request, supabase, user: data.user, provider: "email" });
     return json({ ok: true });
