@@ -97,6 +97,8 @@ function ModelManagement() {
             }
             setNewId(""); setNewName(""); setNewCtx(128000); setNewThinking(false);
             await fetchModels();
+        } catch (error) {
+            alert(`添加失败：${error instanceof Error ? error.message : "网络连接失败"}`);
         } finally {
             setAdding(false);
         }
@@ -117,6 +119,8 @@ function ModelManagement() {
                 return;
             }
             await fetchModels();
+        } catch (error) {
+            alert(`删除失败：${error instanceof Error ? error.message : "网络连接失败"}`);
         } finally {
             setDeletingModel(null);
         }
