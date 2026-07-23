@@ -138,10 +138,10 @@ describe("pageAgentToolLoop", () => {
     );
   });
 
-  it("resolvePageAgentMaxIterations defaults to 36", () => {
+  it("resolvePageAgentMaxIterations defaults to 96", () => {
     const prev = process.env.PAGE_IMPLEMENT_AGENT_MAX_ITERATIONS;
     delete process.env.PAGE_IMPLEMENT_AGENT_MAX_ITERATIONS;
-    expect(resolvePageAgentMaxIterations()).toBe(36);
+    expect(resolvePageAgentMaxIterations()).toBe(96);
     if (prev !== undefined) process.env.PAGE_IMPLEMENT_AGENT_MAX_ITERATIONS = prev;
   });
 

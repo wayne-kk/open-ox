@@ -7,7 +7,7 @@ import type { ToolResult } from "@/ai/tools";
 import type { ChatMessage } from "@/ai/shared/llm/types";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 
-export const PAGE_AGENT_DEFAULT_MAX_ITERATIONS = 36;
+export const PAGE_AGENT_DEFAULT_MAX_ITERATIONS = 96;
 
 /** Read-only tools available only after bootstrap or when lint/debug needs them. */
 export const PAGE_AGENT_OBSERVE_TOOL_NAME_LIST = ["read_file", "list_dir", "search_code"] as const;
