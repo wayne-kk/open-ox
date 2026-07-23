@@ -69,10 +69,18 @@ export function setCustomModels(models: ModelConfig[]): void {
     _customModels = models;
 }
 
+export function upsertCustomModel(model: ModelConfig): void {
+    _customModels = [..._customModels.filter((existing) => existing.id !== model.id), model];
+}
+
 export function getAllModels(): ModelConfig[] {
     const modelsById = new Map(BUILTIN_MODELS.map((model) => [model.id, model]));
     for (const model of _customModels) modelsById.set(model.id, model);
     return [...modelsById.values()];
+}
+
+export function getBuiltInModels(): ModelConfig[] {
+    return [...BUILTIN_MODELS];
 }
 
 export type ModelId = string;

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  getAllModels,
+  getBuiltInModels,
   DEFAULT_MODEL,
   GENERATION_STEPS,
   setConfiguredStepModel,
@@ -9,6 +9,7 @@ import {
   isStepThinkingLevel,
   modelConfigFromRow,
   removeModelConfig,
+  upsertCustomModel,
   type ModelConfig,
   type ModelConfigRow,
   type StepThinkingLevel,
@@ -80,10 +81,13 @@ export async function GET() {
     }
   }
 
-  const allModels = [...getAllModels(), ...customModels];
-  // Deduplicate by id
-  const seen = new Set<string>();
-  const models = allModels.filter((m) => { if (seen.has(m.id)) return false; seen.add(m.id); return true; });
+  const builtInCatalog = getBuiltInModels();
+  const builtInModels = builtInCatalog.filter(
+    (model) => !customModels.some((customModel) => customModel.id === model.id),
+  );
+  const builtInIds = new Set(builtInCatalog.map((model) => model.id));
+  const customIds = new Set(customModels.map((model) => model.id));
+  const models = [...builtInModels, ...customModels];
 
   return NextResponse.json({
     models: models.map((m) => ({
@@ -92,6 +96,9 @@ export async function GET() {
       contextWindow: m.contextWindow,
       supportsThinking: m.supportsThinking ?? false,
       tokenPrice: m.tokenPrice ?? null,
+      isBuiltIn: builtInIds.has(m.id),
+      hasCustomOverride: builtInIds.has(m.id) && customIds.has(m.id),
+      isDefault: m.id === DEFAULT_MODEL,
     })),
     default: DEFAULT_MODEL,
     steps: GENERATION_STEPS,
@@ -142,6 +149,14 @@ export async function POST(req: NextRequest) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  upsertCustomModel({
+    id: id.trim(),
+    displayName: displayName.trim(),
+    contextWindow: resolvedContextWindow,
+    supportsThinking: supportsThinking === true,
+    tokenPrice: { inputPerMTok: resolvedInputPrice, outputPerMTok: resolvedOutputPrice },
+  });
 
   return NextResponse.json({ ok: true });
 }

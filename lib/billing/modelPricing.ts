@@ -8,11 +8,15 @@ import {
 
 export type TokenPrice = ModelTokenPrice;
 
+const HISTORICAL_MODEL_PRICES: Record<string, TokenPrice> = {
+  "gpt-5.2": { inputPerMTok: 1.75, outputPerMTok: 14 },
+};
+
 export function resolveModelPrice(modelId: string): TokenPrice {
   const id = modelId.trim().toLowerCase();
   if (!id) return DEFAULT_MODEL_TOKEN_PRICE;
   const model = getAllModels().find((candidate) => candidate.id.trim().toLowerCase() === id);
-  return model?.tokenPrice ?? DEFAULT_MODEL_TOKEN_PRICE;
+  return model?.tokenPrice ?? HISTORICAL_MODEL_PRICES[id] ?? DEFAULT_MODEL_TOKEN_PRICE;
 }
 
 export function tokensToUsd(params: {

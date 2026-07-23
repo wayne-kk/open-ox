@@ -1,8 +1,18 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Play, Loader2, Plus, Trash2, Settings, Zap } from "lucide-react";
+import { Bot, Database, Loader2, Pencil, Play, Plus, Settings, ShieldCheck, Trash2, Zap } from "lucide-react";
 import { HamsterLoader } from "@/components/ui/hamster-loader";
+import { Button } from "@/components/ui/button";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 
 interface TestResult {
     success: boolean;
@@ -26,7 +36,28 @@ interface ModelInfo {
     contextWindow: number;
     supportsThinking: boolean;
     tokenPrice: { inputPerMTok: number; outputPerMTok: number } | null;
+    isBuiltIn: boolean;
+    hasCustomOverride: boolean;
+    isDefault: boolean;
 }
+
+type ModelDraft = {
+    id: string;
+    displayName: string;
+    contextWindow: number;
+    supportsThinking: boolean;
+    inputPerMTok: number;
+    outputPerMTok: number;
+};
+
+const EMPTY_MODEL_DRAFT: ModelDraft = {
+    id: "",
+    displayName: "",
+    contextWindow: 128_000,
+    supportsThinking: false,
+    inputPerMTok: 0.5,
+    outputPerMTok: 3,
+};
 
 interface StepInfo {
     id: string;
@@ -56,14 +87,10 @@ function ModelManagement() {
     const [stepThinkingLevels, setStepThinkingLevels] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(true);
 
-    // New model form
-    const [newId, setNewId] = useState("");
-    const [newName, setNewName] = useState("");
-    const [newCtx, setNewCtx] = useState(128000);
-    const [newThinking, setNewThinking] = useState(false);
-    const [newInputPrice, setNewInputPrice] = useState(0.5);
-    const [newOutputPrice, setNewOutputPrice] = useState(3);
-    const [adding, setAdding] = useState(false);
+    const [editingModel, setEditingModel] = useState<ModelInfo | null>(null);
+    const [modelDialogOpen, setModelDialogOpen] = useState(false);
+    const [modelDraft, setModelDraft] = useState<ModelDraft>(EMPTY_MODEL_DRAFT);
+    const [savingModel, setSavingModel] = useState(false);
     const [deletingModel, setDeletingModel] = useState<string | null>(null);
     const [savingStep, setSavingStep] = useState<string | null>(null);
 
@@ -84,38 +111,61 @@ function ModelManagement() {
 
     useEffect(() => { fetchModels(); }, [fetchModels]);
 
-    const handleAdd = async () => {
-        if (!newId.trim() || !newName.trim()) return;
-        setAdding(true);
+    const openCreateModel = () => {
+        setEditingModel(null);
+        setModelDraft(EMPTY_MODEL_DRAFT);
+        setModelDialogOpen(true);
+    };
+
+    const openEditModel = (model: ModelInfo) => {
+        setEditingModel(model);
+        setModelDraft({
+            id: model.id,
+            displayName: model.displayName,
+            contextWindow: model.contextWindow,
+            supportsThinking: model.supportsThinking,
+            inputPerMTok: model.tokenPrice?.inputPerMTok ?? 0.5,
+            outputPerMTok: model.tokenPrice?.outputPerMTok ?? 3,
+        });
+        setModelDialogOpen(true);
+    };
+
+    const handleSaveModel = async () => {
+        if (!modelDraft.id.trim() || !modelDraft.displayName.trim()) return;
+        setSavingModel(true);
         try {
             const res = await fetch("/api/models", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    id: newId.trim(),
-                    displayName: newName.trim(),
-                    contextWindow: newCtx,
-                    supportsThinking: newThinking,
-                    tokenPrice: { inputPerMTok: newInputPrice, outputPerMTok: newOutputPrice },
+                    id: modelDraft.id.trim(),
+                    displayName: modelDraft.displayName.trim(),
+                    contextWindow: modelDraft.contextWindow,
+                    supportsThinking: modelDraft.supportsThinking,
+                    tokenPrice: {
+                        inputPerMTok: modelDraft.inputPerMTok,
+                        outputPerMTok: modelDraft.outputPerMTok,
+                    },
                 }),
             });
             if (!res.ok) {
                 const data = await res.json().catch(() => ({ error: "添加模型失败" }));
-                alert(`添加失败：${data.error ?? "未知错误"}`);
+                alert(`保存失败：${data.error ?? "未知错误"}`);
                 return;
             }
-            setNewId(""); setNewName(""); setNewCtx(128000); setNewThinking(false);
-            setNewInputPrice(0.5); setNewOutputPrice(3);
+            setModelDialogOpen(false);
             await fetchModels();
         } catch (error) {
-            alert(`添加失败：${error instanceof Error ? error.message : "网络连接失败"}`);
+            alert(`保存失败：${error instanceof Error ? error.message : "网络连接失败"}`);
         } finally {
-            setAdding(false);
+            setSavingModel(false);
         }
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm(`删除模型 ${id}？`)) return;
+        const model = models.find((candidate) => candidate.id === id);
+        const action = model?.hasCustomOverride ? "恢复该模型的系统配置" : "删除模型及其步骤绑定";
+        if (!confirm(`${action} ${id}？`)) return;
         setDeletingModel(id);
         try {
             const res = await fetch("/api/models", {
@@ -195,131 +245,121 @@ function ModelManagement() {
     if (loading) return <div className="flex justify-center py-12"><HamsterLoader size="sm" /></div>;
 
     return (
-        <div className="space-y-8">
-            {/* Model list */}
-            <div>
-                <h3 className="font-mono text-[10px] uppercase tracking-[0.3em] text-primary mb-4">可用模型</h3>
-                <div className="space-y-2">
-                    {models.map((m) => (
-                        <div key={m.id} className="flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3">
-                            <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-mono text-[12px] font-semibold text-white">{m.displayName}</span>
-                                <span className="font-mono text-[10px] text-muted-foreground/70">{m.id}</span>
-                                <span className="font-mono text-[10px] text-muted-foreground/60">{(m.contextWindow / 1000).toFixed(0)}K ctx</span>
-                                <span className="font-mono text-[10px] text-muted-foreground/60">
-                                    ${m.tokenPrice?.inputPerMTok ?? "—"} / ${m.tokenPrice?.outputPerMTok ?? "—"} per 1M in/out
-                                </span>
-                                {m.supportsThinking && (
-                                    <span className="font-mono text-[9px] text-purple-400/80 border border-purple-400/20 bg-purple-400/5 px-1.5 py-0.5 rounded">Thinking</span>
-                                )}
-                            </div>
-                            <button
-                                onClick={() => handleDelete(m.id)}
-                                disabled={deletingModel === m.id}
-                                className="rounded-lg p-1.5 text-muted-foreground/60 hover:text-red-400 hover:bg-red-400/10 transition-colors"
-                                title="删除"
-                            >
-                                {deletingModel === m.id
-                                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                    : <Trash2 className="h-3.5 w-3.5" />}
-                            </button>
+        <div className="space-y-10">
+            <section aria-labelledby="model-catalog-title">
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                        <div className="mb-1 flex items-center gap-2 text-muted-foreground">
+                            <Database className="size-4" />
+                            <span className="text-xs font-medium">模型目录</span>
                         </div>
-                    ))}
+                        <h2 id="model-catalog-title" className="text-xl font-semibold text-foreground">可用模型</h2>
+                        <p className="mt-1 text-sm text-muted-foreground">{models.length} 个模型，可按模型单独维护参数与计费。</p>
+                    </div>
+                    <Button onClick={openCreateModel} className="w-full sm:w-auto">
+                        <Plus data-icon="inline-start" />
+                        新增模型
+                    </Button>
                 </div>
 
-                {/* Add model form */}
-                <div className="mt-4 rounded-xl border border-dashed border-border p-4">
-                    <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70 mb-3">添加或更新模型配置</div>
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
-                        <input
-                            value={newId}
-                            onChange={(e) => setNewId(e.target.value)}
-                            placeholder="model-id (如 claude-4)"
-                            className="rounded-lg border border-border bg-muted px-3 py-2 font-mono text-[11px] text-foreground placeholder:text-muted-foreground/30 focus:border-primary/50 outline-none"
-                        />
-                        <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={newInputPrice}
-                            onChange={(e) => setNewInputPrice(Number(e.target.value))}
-                            placeholder="输入价 USD / 1M"
-                            title="每 100 万输入 token 的美元成本"
-                            className="rounded-lg border border-border bg-muted px-3 py-2 font-mono text-[11px] text-foreground focus:border-primary/50 outline-none"
-                        />
-                        <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={newOutputPrice}
-                            onChange={(e) => setNewOutputPrice(Number(e.target.value))}
-                            placeholder="输出价 USD / 1M"
-                            title="每 100 万输出 token 的美元成本"
-                            className="rounded-lg border border-border bg-muted px-3 py-2 font-mono text-[11px] text-foreground focus:border-primary/50 outline-none"
-                        />
-                        <input
-                            value={newName}
-                            onChange={(e) => setNewName(e.target.value)}
-                            placeholder="显示名称"
-                            className="rounded-lg border border-border bg-muted px-3 py-2 font-mono text-[11px] text-foreground placeholder:text-muted-foreground/30 focus:border-primary/50 outline-none"
-                        />
-                        <div className="flex gap-2">
-                            <input
-                                type="number"
-                                value={newCtx}
-                                onChange={(e) => setNewCtx(parseInt(e.target.value) || 128000)}
-                                placeholder="Context"
-                                className="flex-1 rounded-lg border border-border bg-muted px-3 py-2 font-mono text-[11px] text-foreground focus:border-primary/50 outline-none"
-                            />
-                            <button
-                                onClick={() => setNewThinking((v) => !v)}
-                                className={`shrink-0 rounded-lg border px-3 py-2 font-mono text-[10px] transition-colors ${newThinking ? "border-purple-400/40 bg-purple-400/10 text-purple-400" : "border-border text-muted-foreground/50 hover:text-foreground"}`}
-                                title="支持 Thinking 模式"
-                            >
-                                {newThinking ? "🧠 Thinking" : "🧠"}
-                            </button>
-                            <button
-                                onClick={handleAdd}
-                                disabled={adding || !newId.trim() || !newName.trim()}
-                                className="flex items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/10 px-4 py-2 font-mono text-[10px] text-primary hover:bg-primary/20 transition-colors disabled:opacity-30"
-                            >
-                                {adding ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-                                添加
-                            </button>
-                        </div>
+                <div className="overflow-hidden rounded-lg border border-border bg-card/40">
+                    <div className="hidden grid-cols-[minmax(220px,1.5fr)_110px_160px_120px_88px] gap-4 border-b border-border bg-muted/30 px-4 py-2.5 text-xs font-medium text-muted-foreground md:grid">
+                        <span>模型</span><span>上下文</span><span>单价 / 1M tokens</span><span>能力</span><span className="text-right">操作</span>
                     </div>
+                    {models.map((model) => {
+                        const canDelete = !model.isBuiltIn || model.hasCustomOverride;
+                        return (
+                            <div key={model.id} className="grid gap-3 border-b border-border/70 px-4 py-4 last:border-b-0 hover:bg-muted/20 md:grid-cols-[minmax(220px,1.5fr)_110px_160px_120px_88px] md:items-center md:gap-4">
+                                <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span className="truncate text-sm font-medium text-foreground">{model.displayName}</span>
+                                        {model.isDefault && <span className="rounded border border-emerald-500/25 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">默认</span>}
+                                        {model.isBuiltIn && <span className="rounded border border-border bg-muted/50 px-1.5 py-0.5 text-[10px] text-muted-foreground">系统</span>}
+                                    </div>
+                                    <p className="mt-1 truncate font-mono text-xs text-muted-foreground" title={model.id}>{model.id}</p>
+                                </div>
+                                <div className="text-sm text-foreground md:text-xs">
+                                    <span className="mr-2 text-xs text-muted-foreground md:hidden">上下文</span>{(model.contextWindow / 1000).toFixed(0)}K
+                                </div>
+                                <div className="font-mono text-xs text-foreground">
+                                    <span className="mr-2 font-sans text-xs text-muted-foreground md:hidden">输入 / 输出</span>
+                                    ${model.tokenPrice?.inputPerMTok ?? "-"} / ${model.tokenPrice?.outputPerMTok ?? "-"}
+                                </div>
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                    {model.supportsThinking ? <><Bot className="size-3.5 text-violet-400" /><span>Thinking</span></> : <span>Standard</span>}
+                                </div>
+                                <div className="flex justify-end gap-1">
+                                    <Button variant="ghost" size="icon-sm" onClick={() => openEditModel(model)} title={`编辑 ${model.displayName}`}>
+                                        <Pencil /><span className="sr-only">编辑</span>
+                                    </Button>
+                                    {canDelete ? (
+                                        <Button variant="ghost" size="icon-sm" onClick={() => handleDelete(model.id)} disabled={deletingModel === model.id} className="text-muted-foreground hover:text-destructive" title={model.hasCustomOverride ? "恢复系统配置" : "删除模型"}>
+                                            {deletingModel === model.id ? <Loader2 className="animate-spin" /> : <Trash2 />}
+                                            <span className="sr-only">{model.hasCustomOverride ? "恢复系统配置" : "删除"}</span>
+                                        </Button>
+                                    ) : (
+                                        <span className="flex size-7 items-center justify-center text-muted-foreground/60" title="系统兜底不可删除"><ShieldCheck className="size-4" /></span>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
-            </div>
+            </section>
+
+            <Dialog open={modelDialogOpen} onOpenChange={setModelDialogOpen}>
+                <DialogContent className="sm:max-w-xl">
+                    <DialogHeader>
+                        <DialogTitle>{editingModel ? "编辑模型" : "新增模型"}</DialogTitle>
+                        <DialogDescription>{editingModel?.isBuiltIn ? "保存后会创建数据库覆盖，系统原始配置仍可恢复。" : "配置运行时标识、上下文能力和成本信息。"}</DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-2 sm:grid-cols-2">
+                        <label className="grid gap-1.5 sm:col-span-2"><span className="text-xs font-medium text-muted-foreground">模型 ID</span><Input value={modelDraft.id} disabled={!!editingModel} onChange={(event) => setModelDraft((draft) => ({ ...draft, id: event.target.value }))} placeholder="gemini-3.5-flash" className="font-mono" /></label>
+                        <label className="grid gap-1.5 sm:col-span-2"><span className="text-xs font-medium text-muted-foreground">显示名称</span><Input value={modelDraft.displayName} onChange={(event) => setModelDraft((draft) => ({ ...draft, displayName: event.target.value }))} placeholder="Gemini 3.5 Flash" /></label>
+                        <label className="grid gap-1.5"><span className="text-xs font-medium text-muted-foreground">上下文窗口</span><Input type="number" min={1} value={modelDraft.contextWindow} onChange={(event) => setModelDraft((draft) => ({ ...draft, contextWindow: Number(event.target.value) }))} /></label>
+                        <div className="grid gap-1.5"><span className="text-xs font-medium text-muted-foreground">推理能力</span><button type="button" aria-pressed={modelDraft.supportsThinking} onClick={() => setModelDraft((draft) => ({ ...draft, supportsThinking: !draft.supportsThinking }))} className={`flex h-8 items-center justify-between rounded-lg border px-2.5 text-sm outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 ${modelDraft.supportsThinking ? "border-violet-400/40 bg-violet-400/10 text-violet-300" : "border-input bg-transparent text-muted-foreground"}`}><span>Thinking</span><span className={`h-4 w-7 rounded-full p-0.5 transition-colors ${modelDraft.supportsThinking ? "bg-violet-400" : "bg-muted"}`}><span className={`block size-3 rounded-full bg-white transition-transform ${modelDraft.supportsThinking ? "translate-x-3" : ""}`} /></span></button></div>
+                        <label className="grid gap-1.5"><span className="text-xs font-medium text-muted-foreground">输入单价（USD / 1M）</span><Input type="number" min={0} step="0.01" value={modelDraft.inputPerMTok} onChange={(event) => setModelDraft((draft) => ({ ...draft, inputPerMTok: Number(event.target.value) }))} /></label>
+                        <label className="grid gap-1.5"><span className="text-xs font-medium text-muted-foreground">输出单价（USD / 1M）</span><Input type="number" min={0} step="0.01" value={modelDraft.outputPerMTok} onChange={(event) => setModelDraft((draft) => ({ ...draft, outputPerMTok: Number(event.target.value) }))} /></label>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setModelDialogOpen(false)}>取消</Button>
+                        <Button onClick={handleSaveModel} disabled={savingModel || !modelDraft.id.trim() || !modelDraft.displayName.trim()}>
+                            {savingModel && <Loader2 data-icon="inline-start" className="animate-spin" />}
+                            保存模型
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {/* Step model assignment */}
-            <div>
-                <h3 className="font-mono text-[10px] uppercase tracking-[0.3em] text-primary mb-4">步骤模型配置</h3>
-                <p className="font-mono text-[10px] text-muted-foreground/70 mb-4">
-                    为不同的生成步骤指定模型。留空则使用项目默认模型。当步骤分配的是 Gemini 模型时，可以额外设置{" "}
-                    <code className="text-muted-foreground/80">thinking_level</code>（minimal / low / medium / high，会随 LLM 请求透传）。
-                </p>
-                <div className="space-y-2">
+            <section aria-labelledby="step-model-title">
+                <div className="mb-4">
+                    <div className="mb-1 flex items-center gap-2 text-muted-foreground"><Zap className="size-4" /><span className="text-xs font-medium">运行时路由</span></div>
+                    <h2 id="step-model-title" className="text-xl font-semibold text-foreground">步骤模型配置</h2>
+                    <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">未单独配置的步骤使用系统默认模型。Gemini 模型可按步骤设置 thinking level。</p>
+                </div>
+                <div className="overflow-hidden rounded-lg border border-border bg-card/40">
                     {steps.map((step) => (
                         (() => {
                             const selectedModelId = stepModels[step.id] ?? "";
                             const showThinkingLevel =
                                 !!selectedModelId && isGeminiModelId(selectedModelId);
                             return (
-                        <div key={step.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3">
+                        <div key={step.id} className="flex flex-col gap-3 border-b border-border/70 px-4 py-3 last:border-b-0 hover:bg-muted/20 sm:flex-row sm:items-center sm:justify-between">
                             <div className="flex items-center gap-3">
                                 <Zap className="h-3.5 w-3.5 text-primary/40" />
                                 <div>
-                                    <span className="font-mono text-[11px] text-white">{step.label}</span>
-                                    <span className="ml-2 font-mono text-[10px] text-muted-foreground/60">{step.id}</span>
+                                    <span className="text-sm font-medium text-foreground">{step.label}</span>
+                                    <span className="ml-2 font-mono text-xs text-muted-foreground">{step.id}</span>
                                 </div>
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
                                 <select
                                     value={stepModels[step.id] ?? ""}
                                     onChange={(e) => handleStepModelChange(step.id, e.target.value)}
-                                    className="appearance-none rounded-lg border border-border bg-muted px-3 py-1.5 pr-8 font-mono text-[10px] text-muted-foreground outline-none cursor-pointer hover:border-primary/30 transition-colors"
+                                    className="h-8 min-w-44 appearance-none rounded-lg border border-input bg-background px-3 pr-8 text-xs text-foreground outline-none transition-colors hover:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                                 >
-                                    <option value="">默认</option>
+                                    <option value="">系统默认</option>
                                     {models.map((m) => (
                                         <option key={m.id} value={m.id}>{m.displayName}</option>
                                     ))}
@@ -330,7 +370,7 @@ function ModelManagement() {
                                         onChange={(e) => handleStepThinkingChange(step.id, e.target.value)}
                                         disabled={!selectedModelId}
                                         title={!selectedModelId ? "请先为该步骤选择 Gemini 模型" : "thinking_level"}
-                                        className="appearance-none rounded-lg border border-border bg-muted px-3 py-1.5 pr-8 font-mono text-[10px] text-muted-foreground outline-none cursor-pointer hover:border-primary/30 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                                        className="h-8 appearance-none rounded-lg border border-input bg-background px-3 pr-8 text-xs text-foreground outline-none transition-colors hover:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-40"
                                     >
                                         <option value="">thinking 默认</option>
                                         <option value="minimal">minimal</option>
@@ -346,7 +386,7 @@ function ModelManagement() {
                         })()
                     ))}
                 </div>
-            </div>
+            </section>
         </div>
     );
 }
@@ -521,27 +561,27 @@ export default function LLMTestPage() {
 
     return (
         <div className="relative bg-background">
-            <div className="relative z-1 mx-auto max-w-4xl py-2">
-                <div className="flex items-center justify-between mb-8">
+            <div className="relative z-1 mx-auto max-w-6xl py-2">
+                <div className="mb-10 flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-4">
                         <div>
-                            <div className="font-mono text-[11px] uppercase tracking-[0.3em] text-primary">Diagnostics</div>
-                            <h1 className="text-lg font-semibold text-foreground">LLM 控制台</h1>
+                            <div className="mb-1 text-xs font-medium text-muted-foreground">AI 基础设施</div>
+                            <h1 className="text-2xl font-semibold text-foreground">模型控制台</h1>
                         </div>
                     </div>
 
                     {/* Tab switcher */}
-                    <div className="flex items-center rounded-xl border border-border overflow-hidden">
+                    <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-border bg-muted/20 p-1">
                         <button
                             onClick={() => setTab("test")}
-                            className={`flex items-center gap-1.5 px-4 py-2 font-mono text-[10px] uppercase tracking-widest transition-colors ${tab === "test" ? "bg-primary/10 text-primary" : "text-muted-foreground/70 hover:text-foreground"}`}
+                            className={`flex h-8 items-center justify-center gap-2 rounded-md px-4 text-sm font-medium transition-colors ${tab === "test" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
                         >
                             <Play className="h-3 w-3" />
                             测试
                         </button>
                         <button
                             onClick={() => setTab("models")}
-                            className={`flex items-center gap-1.5 px-4 py-2 font-mono text-[10px] uppercase tracking-widest transition-colors ${tab === "models" ? "bg-primary/10 text-primary" : "text-muted-foreground/70 hover:text-foreground"}`}
+                            className={`flex h-8 items-center justify-center gap-2 rounded-md px-4 text-sm font-medium transition-colors ${tab === "models" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
                         >
                             <Settings className="h-3 w-3" />
                             模型管理
