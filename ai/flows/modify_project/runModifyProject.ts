@@ -1,5 +1,6 @@
 import path from "path";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { getStepModel, loadStepModelsFromDB } from "@/lib/config/models";
 import { runWithSiteRoot } from "@/ai/tools/system/common";
 import { getProject, getSiteRoot as pmGetSiteRoot, updateProjectStatus } from "@/lib/projectManager";
 import { syncLocalProjectFingerprint } from "@/lib/previewFingerprintDb";
@@ -121,6 +122,7 @@ export async function runModifyProject(
   forceFreshInstruction = false,
   boardOptions?: RunModifyProjectBoardOptions
 ): Promise<void> {
+  await loadStepModelsFromDB();
   const artifactLogger = createArtifactLogger("modify_project");
   await artifactLogger.writeJson("run", "input", { projectId, userInstruction });
 
@@ -162,6 +164,7 @@ async function runModifyProjectInner(
 ): Promise<void> {
   const projectDir = pmGetSiteRoot(projectId);
   const enableSubagents = boardOptions?.enableSubagents !== false;
+  const effectiveModelOverride = modelOverride ?? getStepModel("modify_agent") ?? undefined;
   onEvent({ type: "step", name: "resolve_project", status: "done" });
 
   onEvent({ type: "step", name: "read_context", status: "running" });
@@ -444,7 +447,7 @@ async function runModifyProjectInner(
           tracker,
           collectingOnEvent as (event: { type: "step" | "plan" | "diff" | "tool_call" | "thinking" | "done" | "error";[key: string]: unknown }) => void,
           effectiveInstruction,
-          modelOverride,
+          effectiveModelOverride,
           modifyStopMode,
           {
             profile,
@@ -482,7 +485,7 @@ async function runModifyProjectInner(
         ].join("\n"),
         touchedFiles: loopState.touchedFiles,
         extraContext: finalVerify.buildOutput.slice(0, 2500),
-        model: modelOverride || profile.modelId,
+        model: effectiveModelOverride || profile.modelId,
       });
       if (verifierResult) {
         onEvent({

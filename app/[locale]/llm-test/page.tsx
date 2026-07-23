@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
-import { ArrowLeft, Play, Loader2, Plus, Trash2, Settings, Zap } from "lucide-react";
+import { Play, Loader2, Plus, Trash2, Settings, Zap } from "lucide-react";
 import { HamsterLoader } from "@/components/ui/hamster-loader";
 
 interface TestResult {
@@ -62,6 +61,7 @@ function ModelManagement() {
     const [newCtx, setNewCtx] = useState(128000);
     const [newThinking, setNewThinking] = useState(false);
     const [adding, setAdding] = useState(false);
+    const [deletingModel, setDeletingModel] = useState<string | null>(null);
     const [savingStep, setSavingStep] = useState<string | null>(null);
 
     const fetchModels = useCallback(async () => {
@@ -84,24 +84,42 @@ function ModelManagement() {
     const handleAdd = async () => {
         if (!newId.trim() || !newName.trim()) return;
         setAdding(true);
-        await fetch("/api/models", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id: newId.trim(), displayName: newName.trim(), contextWindow: newCtx, supportsThinking: newThinking }),
-        });
-        setNewId(""); setNewName(""); setNewCtx(128000); setNewThinking(false);
-        setAdding(false);
-        fetchModels();
+        try {
+            const res = await fetch("/api/models", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id: newId.trim(), displayName: newName.trim(), contextWindow: newCtx, supportsThinking: newThinking }),
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({ error: "添加模型失败" }));
+                alert(`添加失败：${data.error ?? "未知错误"}`);
+                return;
+            }
+            setNewId(""); setNewName(""); setNewCtx(128000); setNewThinking(false);
+            await fetchModels();
+        } finally {
+            setAdding(false);
+        }
     };
 
     const handleDelete = async (id: string) => {
         if (!confirm(`删除模型 ${id}？`)) return;
-        await fetch("/api/models", {
-            method: "DELETE",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id }),
-        });
-        fetchModels();
+        setDeletingModel(id);
+        try {
+            const res = await fetch("/api/models", {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id }),
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({ error: "删除模型失败" }));
+                alert(`删除失败：${data.error ?? "未知错误"}`);
+                return;
+            }
+            await fetchModels();
+        } finally {
+            setDeletingModel(null);
+        }
     };
 
     const handleStepModelChange = async (stepName: string, modelId: string) => {
@@ -180,10 +198,13 @@ function ModelManagement() {
                             </div>
                             <button
                                 onClick={() => handleDelete(m.id)}
+                                disabled={deletingModel === m.id}
                                 className="rounded-lg p-1.5 text-muted-foreground/60 hover:text-red-400 hover:bg-red-400/10 transition-colors"
                                 title="删除"
                             >
-                                <Trash2 className="h-3.5 w-3.5" />
+                                {deletingModel === m.id
+                                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    : <Trash2 className="h-3.5 w-3.5" />}
                             </button>
                         </div>
                     ))}
@@ -459,17 +480,13 @@ function LLMTestPanel() {
    Main Page with Tabs
    ═══════════════════════════════════════════════════ */
 export default function LLMTestPage() {
-    const [tab, setTab] = useState<Tab>("test");
+    const [tab, setTab] = useState<Tab>("models");
 
     return (
-        <main className="relative min-h-screen bg-background ">
-
-            <div className="relative z-1 mx-auto max-w-4xl px-6 py-8">
+        <div className="relative bg-background">
+            <div className="relative z-1 mx-auto max-w-4xl py-2">
                 <div className="flex items-center justify-between mb-8">
                     <div className="flex items-center gap-4">
-                        <Link href="/" className="defi-button-outline px-3 py-2 text-[11px] font-medium">
-                            <ArrowLeft className="h-3.5 w-3.5" />
-                        </Link>
                         <div>
                             <div className="font-mono text-[11px] uppercase tracking-[0.3em] text-primary">Diagnostics</div>
                             <h1 className="text-lg font-semibold text-foreground">LLM 控制台</h1>
@@ -497,6 +514,6 @@ export default function LLMTestPage() {
 
                 {tab === "test" ? <LLMTestPanel /> : <ModelManagement />}
             </div>
-      </main>
+      </div>
   );
 }

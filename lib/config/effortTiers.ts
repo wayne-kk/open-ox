@@ -4,6 +4,7 @@
  */
 
 import {
+  isStepModelConfigured,
   setStepModel,
   setStepThinkingLevel,
   type ModelId,
@@ -39,6 +40,7 @@ function applySteps(
   thinking: StepThinkingLevel | null
 ): void {
   for (const step of steps) {
+    if (isStepModelConfigured(step)) continue;
     setStepModel(step, model);
     setStepThinkingLevel(step, thinking);
   }

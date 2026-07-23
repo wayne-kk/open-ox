@@ -29,7 +29,6 @@ function makeDeps(overrides: Partial<HeadlessModifyTurnDeps> = {}): HeadlessModi
     creditsEnabled: () => true,
     canAfford: async () => ({ ok: true, balance: 12 }),
     minModifyCredits: 0.5,
-    defaultModel: "gemini-3-flash-preview",
     getProject: async () =>
       ({
         id: "p1",
@@ -74,7 +73,7 @@ describe("runHeadlessModifyTurn", () => {
     vi.clearAllMocks();
   });
 
-  it("completes a turn with DB history persistence shape and default model", async () => {
+  it("leaves the model unset so the configured Modify model can apply", async () => {
     const runModify = vi.fn(
       async (
         _db: SupabaseClient,
@@ -89,7 +88,7 @@ describe("runHeadlessModifyTurn", () => {
         expect(history).toBeUndefined();
         expect(clearContext).toBe(false);
         expect(image).toBeUndefined();
-        expect(model).toBe("gemini-3-flash-preview");
+        expect(model).toBeUndefined();
         onEvent({
           type: "plan",
           intentCategory: "code_change",

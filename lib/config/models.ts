@@ -1,10 +1,28 @@
 // lib/config/models.ts
 
+import { AsyncLocalStorage } from "node:async_hooks";
+
 export interface ModelConfig {
     id: string;
     displayName: string;
     contextWindow: number;
     supportsThinking?: boolean;
+}
+
+export type ModelConfigRow = {
+    id: string;
+    display_name: string;
+    context_window: number;
+    supports_thinking?: boolean;
+};
+
+export function modelConfigFromRow(row: ModelConfigRow): ModelConfig {
+    return {
+        id: row.id,
+        displayName: row.display_name,
+        contextWindow: row.context_window,
+        supportsThinking: row.supports_thinking ?? false,
+    };
 }
 
 // Built-in models — always available
@@ -36,15 +54,44 @@ export function isStepThinkingLevel(v: string): v is StepThinkingLevel {
     return (STEP_THINKING_LEVELS as readonly string[]).includes(v);
 }
 
-/** Runtime override — set by API route per-request */
-let _runtimeModelId: ModelId | null = null;
+type RuntimeModelContext = {
+    modelId: ModelId | null;
+    stepModels: Map<string, ModelId>;
+    stepThinkingLevels: Map<string, StepThinkingLevel>;
+};
+
+const _runtimeModelContext = new AsyncLocalStorage<RuntimeModelContext>();
+
+export function beginModelRuntimeContext(): void {
+    _runtimeModelContext.enterWith({
+        modelId: null,
+        stepModels: new Map(),
+        stepThinkingLevels: new Map(),
+    });
+}
+
+function getOrCreateRuntimeContext(): RuntimeModelContext {
+    const current = _runtimeModelContext.getStore();
+    if (current) return current;
+
+    const context: RuntimeModelContext = {
+        modelId: null,
+        stepModels: new Map(),
+        stepThinkingLevels: new Map(),
+    };
+    _runtimeModelContext.enterWith(context);
+    return context;
+}
+
+/** Runtime override — isolated to the current async request/run. */
 
 export function setRuntimeModelId(id: ModelId | null): void {
-    _runtimeModelId = id;
+    getOrCreateRuntimeContext().modelId = id;
 }
 
 export function getModelId(): ModelId {
-    if (_runtimeModelId) return _runtimeModelId;
+    const runtimeModelId = _runtimeModelContext.getStore()?.modelId;
+    if (runtimeModelId) return runtimeModelId;
     return process.env.OPENAI_MODEL || DEFAULT_MODEL;
 }
 
@@ -56,34 +103,64 @@ export const MODIFY_COMPLEX_MODEL: ModelId =
   (process.env.MODIFY_COMPLEX_MODEL?.trim() as ModelId) || "gemini-3.1-pro-preview";
 
 export function getModifyModelId(): ModelId {
-    if (_runtimeModelId) return _runtimeModelId;
+    const runtimeModelId = _runtimeModelContext.getStore()?.modelId;
+    if (runtimeModelId) return runtimeModelId;
     return process.env.MODIFY_MODEL || MODIFY_DEFAULT_MODEL;
 }
 
 /** Step-level model overrides */
-const _stepModelMap = new Map<string, ModelId>();
-const _stepThinkingLevelMap = new Map<string, StepThinkingLevel>();
+const _configuredStepModelMap = new Map<string, ModelId>();
+const _configuredStepThinkingLevelMap = new Map<string, StepThinkingLevel>();
 
 export function setStepModel(stepName: string, modelId: ModelId): void {
-    _stepModelMap.set(stepName, modelId);
+    getOrCreateRuntimeContext().stepModels.set(stepName, modelId);
+}
+
+export function setConfiguredStepModel(stepName: string, modelId: ModelId): void {
+    _configuredStepModelMap.set(stepName, modelId);
+}
+
+export function isStepModelConfigured(stepName: string): boolean {
+    return _configuredStepModelMap.has(stepName);
 }
 
 export function setStepThinkingLevel(stepName: string, level: StepThinkingLevel | null): void {
+    const levels = getOrCreateRuntimeContext().stepThinkingLevels;
     if (level == null) {
-        _stepThinkingLevelMap.delete(stepName);
+        levels.delete(stepName);
     } else {
-        _stepThinkingLevelMap.set(stepName, level);
+        levels.set(stepName, level);
+    }
+}
+
+export function setConfiguredStepThinkingLevel(
+    stepName: string,
+    level: StepThinkingLevel | null
+): void {
+    if (level == null) {
+        _configuredStepThinkingLevelMap.delete(stepName);
+    } else {
+        _configuredStepThinkingLevelMap.set(stepName, level);
     }
 }
 
 export function clearStepModels(): void {
-    _stepModelMap.clear();
-    _stepThinkingLevelMap.clear();
+    const current = _runtimeModelContext.getStore();
+    if (current) {
+        current.modelId = null;
+        current.stepModels.clear();
+        current.stepThinkingLevels.clear();
+    }
+    beginModelRuntimeContext();
+    _configuredStepModelMap.clear();
+    _configuredStepThinkingLevelMap.clear();
     _stepModelsLoadedAt = 0;
 }
 
 export function getStepModel(stepName: string): ModelId | null {
-    return _stepModelMap.get(stepName) ?? null;
+    return _runtimeModelContext.getStore()?.stepModels.get(stepName)
+        ?? _configuredStepModelMap.get(stepName)
+        ?? null;
 }
 
 export function getModelForStep(stepName: string): ModelId {
@@ -91,12 +168,33 @@ export function getModelForStep(stepName: string): ModelId {
 }
 
 export function getThinkingLevelForStep(stepName: string): StepThinkingLevel | undefined {
-    return _stepThinkingLevelMap.get(stepName);
+    return _runtimeModelContext.getStore()?.stepThinkingLevels.get(stepName)
+        ?? _configuredStepThinkingLevelMap.get(stepName);
 }
 
 export function clearStepConfig(stepName: string): void {
-    _stepModelMap.delete(stepName);
-    _stepThinkingLevelMap.delete(stepName);
+    _runtimeModelContext.getStore()?.stepModels.delete(stepName);
+    _runtimeModelContext.getStore()?.stepThinkingLevels.delete(stepName);
+    _configuredStepModelMap.delete(stepName);
+    _configuredStepThinkingLevelMap.delete(stepName);
+}
+
+export function removeModelConfig(modelId: ModelId): void {
+    _customModels = _customModels.filter((model) => model.id !== modelId);
+    const runtime = _runtimeModelContext.getStore();
+    for (const [stepName, configuredModelId] of _configuredStepModelMap) {
+        if (configuredModelId !== modelId) continue;
+        _configuredStepModelMap.delete(stepName);
+        _configuredStepThinkingLevelMap.delete(stepName);
+    }
+    if (runtime) {
+        for (const [stepName, runtimeModelId] of runtime.stepModels) {
+            if (runtimeModelId !== modelId) continue;
+            runtime.stepModels.delete(stepName);
+            runtime.stepThinkingLevels.delete(stepName);
+        }
+    }
+    _stepModelsLoadedAt = 0;
 }
 
 /** Available generation steps that can have model overrides */
@@ -111,6 +209,7 @@ export const GENERATION_STEPS = [
     { id: "modify_intent_router", label: "修改入口意图分类" },
     { id: "modify_board_planner", label: "修改·任务板拆解" },
     { id: "modify_plan", label: "修改·广域变更规划" },
+    { id: "modify_agent", label: "修改·主 Agent" },
     { id: "modify_summary", label: "修改·完成总结" },
     { id: "commit_merged_brief_classifier", label: "确认生成·需求文本实质性（LLM）" },
     { id: "generate_vibe_directions", label: "气质方向三选一（LLM）" },
@@ -160,31 +259,17 @@ export async function loadStepModelsFromDB(): Promise<void> {
 
     _stepModelsLoadPromise = (async () => {
         try {
-            const { supabase } = await import("@/lib/supabase");
-            const { data: customRows, error: customModelsError } = await supabase
+            const { createSupabaseServiceRoleClient } = await import("@/lib/supabase/service-role");
+            const database = createSupabaseServiceRoleClient();
+            const { data: customRows, error: customModelsError } = await database
                 .from("model_configs")
                 .select("id, display_name, context_window, supports_thinking");
             if (customModelsError) {
                 console.warn("[loadStepModelsFromDB] Failed to load custom models:", customModelsError);
             } else {
-                setCustomModels(
-                    (customRows ?? []).map((row) => {
-                        const model = row as {
-                            id: string;
-                            display_name: string;
-                            context_window: number;
-                            supports_thinking?: boolean;
-                        };
-                        return {
-                            id: model.id,
-                            displayName: model.display_name,
-                            contextWindow: model.context_window,
-                            supportsThinking: model.supports_thinking ?? false,
-                        };
-                    })
-                );
+                setCustomModels((customRows ?? []).map((row) => modelConfigFromRow(row as ModelConfigRow)));
             }
-            const { data: rows, error } = await supabase
+            const { data: rows, error } = await database
                 .from("step_model_configs")
                 .select("step_name, model_id, thinking_level");
 
@@ -193,20 +278,22 @@ export async function loadStepModelsFromDB(): Promise<void> {
             if (error) {
                 const needsFallback = error.message?.toLowerCase().includes("thinking_level");
                 if (!needsFallback) throw error;
-                const { data: legacyRows, error: legacyError } = await supabase
+                const { data: legacyRows, error: legacyError } = await database
                     .from("step_model_configs")
                     .select("step_name, model_id");
                 if (legacyError) throw legacyError;
-                clearStepModels();
+                _configuredStepModelMap.clear();
+                _configuredStepThinkingLevelMap.clear();
                 for (const row of legacyRows ?? []) {
                     const { step_name, model_id } = row as { step_name: string; model_id: string };
-                    _stepModelMap.set(step_name, model_id);
+                    _configuredStepModelMap.set(step_name, model_id);
                 }
                 _stepModelsLoadedAt = Date.now();
                 return;
             }
 
-            clearStepModels();
+            _configuredStepModelMap.clear();
+            _configuredStepThinkingLevelMap.clear();
             if (rows) {
                 for (const row of rows) {
                     const { step_name, model_id, thinking_level } = row as {
@@ -214,9 +301,9 @@ export async function loadStepModelsFromDB(): Promise<void> {
                         model_id: string;
                         thinking_level?: string | null;
                     };
-                    _stepModelMap.set(step_name, model_id);
+                    _configuredStepModelMap.set(step_name, model_id);
                     if (thinking_level && isStepThinkingLevel(thinking_level)) {
-                        _stepThinkingLevelMap.set(step_name, thinking_level);
+                        _configuredStepThinkingLevelMap.set(step_name, thinking_level);
                     }
                 }
             }
