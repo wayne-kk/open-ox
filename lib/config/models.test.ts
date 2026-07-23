@@ -32,6 +32,8 @@ describe("loadStepModelsFromDB", () => {
         display_name: "Gemini 3.5 Flash",
         context_window: 128_000,
         supports_thinking: true,
+        input_price_per_mtok: "0.2",
+        output_price_per_mtok: "0.8",
       },
     ];
     const stepModels = [
@@ -55,7 +57,11 @@ describe("loadStepModelsFromDB", () => {
     expect(getStepModel("page_implement_agent")).toBe("gemini-3.5-flash");
     expect(getModelForStep("page_implement_agent")).toBe("gemini-3.5-flash");
     expect(getAllModels()).toContainEqual(
-      expect.objectContaining({ id: "gemini-3.5-flash", supportsThinking: true }),
+      expect.objectContaining({
+        id: "gemini-3.5-flash",
+        supportsThinking: true,
+        tokenPrice: { inputPerMTok: 0.2, outputPerMTok: 0.8 },
+      }),
     );
 
     // Cached loads leave the current run's transient override intact.

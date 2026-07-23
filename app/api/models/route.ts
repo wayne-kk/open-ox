@@ -86,7 +86,13 @@ export async function GET() {
   const models = allModels.filter((m) => { if (seen.has(m.id)) return false; seen.add(m.id); return true; });
 
   return NextResponse.json({
-    models: models.map((m) => ({ id: m.id, displayName: m.displayName, contextWindow: m.contextWindow, supportsThinking: m.supportsThinking ?? false })),
+    models: models.map((m) => ({
+      id: m.id,
+      displayName: m.displayName,
+      contextWindow: m.contextWindow,
+      supportsThinking: m.supportsThinking ?? false,
+      tokenPrice: m.tokenPrice ?? null,
+    })),
     default: DEFAULT_MODEL,
     steps: GENERATION_STEPS,
     stepModels,
@@ -105,7 +111,7 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
-  const { id, displayName, contextWindow, supportsThinking } = body;
+  const { id, displayName, contextWindow, supportsThinking, tokenPrice } = body;
 
   if (typeof id !== "string" || !id.trim() || typeof displayName !== "string" || !displayName.trim()) {
     return NextResponse.json({ error: "id and displayName are required" }, { status: 400 });
@@ -114,12 +120,22 @@ export async function POST(req: NextRequest) {
   if (!Number.isInteger(resolvedContextWindow) || resolvedContextWindow <= 0) {
     return NextResponse.json({ error: "contextWindow must be a positive integer" }, { status: 400 });
   }
+  const pricing = tokenPrice && typeof tokenPrice === "object"
+    ? tokenPrice as Record<string, unknown>
+    : {};
+  const resolvedInputPrice = Number(pricing.inputPerMTok);
+  const resolvedOutputPrice = Number(pricing.outputPerMTok);
+  if (!Number.isFinite(resolvedInputPrice) || resolvedInputPrice < 0 || !Number.isFinite(resolvedOutputPrice) || resolvedOutputPrice < 0) {
+    return NextResponse.json({ error: "inputPricePerMTok and outputPricePerMTok must be non-negative numbers" }, { status: 400 });
+  }
 
   const { error } = await admin.db.from("model_configs").upsert({
     id: id.trim(),
     display_name: displayName.trim(),
     context_window: resolvedContextWindow,
     supports_thinking: supportsThinking === true,
+    input_price_per_mtok: resolvedInputPrice,
+    output_price_per_mtok: resolvedOutputPrice,
     created_at: new Date().toISOString(),
   });
 

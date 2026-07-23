@@ -90,6 +90,7 @@ describe("POST /api/models", () => {
           displayName: "Test model",
           contextWindow: 128_000,
           supportsThinking: true,
+          tokenPrice: { inputPerMTok: 2, outputPerMTok: 8 },
         }),
         headers: { "content-type": "application/json" },
       }),
@@ -103,6 +104,8 @@ describe("POST /api/models", () => {
         display_name: "Test model",
         context_window: 128_000,
         supports_thinking: true,
+        input_price_per_mtok: 2,
+        output_price_per_mtok: 8,
       }),
     );
   });

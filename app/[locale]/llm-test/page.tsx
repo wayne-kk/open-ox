@@ -25,6 +25,7 @@ interface ModelInfo {
     displayName: string;
     contextWindow: number;
     supportsThinking: boolean;
+    tokenPrice: { inputPerMTok: number; outputPerMTok: number } | null;
 }
 
 interface StepInfo {
@@ -60,6 +61,8 @@ function ModelManagement() {
     const [newName, setNewName] = useState("");
     const [newCtx, setNewCtx] = useState(128000);
     const [newThinking, setNewThinking] = useState(false);
+    const [newInputPrice, setNewInputPrice] = useState(0.5);
+    const [newOutputPrice, setNewOutputPrice] = useState(3);
     const [adding, setAdding] = useState(false);
     const [deletingModel, setDeletingModel] = useState<string | null>(null);
     const [savingStep, setSavingStep] = useState<string | null>(null);
@@ -88,7 +91,13 @@ function ModelManagement() {
             const res = await fetch("/api/models", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ id: newId.trim(), displayName: newName.trim(), contextWindow: newCtx, supportsThinking: newThinking }),
+                body: JSON.stringify({
+                    id: newId.trim(),
+                    displayName: newName.trim(),
+                    contextWindow: newCtx,
+                    supportsThinking: newThinking,
+                    tokenPrice: { inputPerMTok: newInputPrice, outputPerMTok: newOutputPrice },
+                }),
             });
             if (!res.ok) {
                 const data = await res.json().catch(() => ({ error: "添加模型失败" }));
@@ -96,6 +105,7 @@ function ModelManagement() {
                 return;
             }
             setNewId(""); setNewName(""); setNewCtx(128000); setNewThinking(false);
+            setNewInputPrice(0.5); setNewOutputPrice(3);
             await fetchModels();
         } catch (error) {
             alert(`添加失败：${error instanceof Error ? error.message : "网络连接失败"}`);
@@ -196,6 +206,9 @@ function ModelManagement() {
                                 <span className="font-mono text-[12px] font-semibold text-white">{m.displayName}</span>
                                 <span className="font-mono text-[10px] text-muted-foreground/70">{m.id}</span>
                                 <span className="font-mono text-[10px] text-muted-foreground/60">{(m.contextWindow / 1000).toFixed(0)}K ctx</span>
+                                <span className="font-mono text-[10px] text-muted-foreground/60">
+                                    ${m.tokenPrice?.inputPerMTok ?? "—"} / ${m.tokenPrice?.outputPerMTok ?? "—"} per 1M in/out
+                                </span>
                                 {m.supportsThinking && (
                                     <span className="font-mono text-[9px] text-purple-400/80 border border-purple-400/20 bg-purple-400/5 px-1.5 py-0.5 rounded">Thinking</span>
                                 )}
@@ -216,13 +229,33 @@ function ModelManagement() {
 
                 {/* Add model form */}
                 <div className="mt-4 rounded-xl border border-dashed border-border p-4">
-                    <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70 mb-3">添加自定义模型</div>
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70 mb-3">添加或更新模型配置</div>
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
                         <input
                             value={newId}
                             onChange={(e) => setNewId(e.target.value)}
                             placeholder="model-id (如 claude-4)"
                             className="rounded-lg border border-border bg-muted px-3 py-2 font-mono text-[11px] text-foreground placeholder:text-muted-foreground/30 focus:border-primary/50 outline-none"
+                        />
+                        <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={newInputPrice}
+                            onChange={(e) => setNewInputPrice(Number(e.target.value))}
+                            placeholder="输入价 USD / 1M"
+                            title="每 100 万输入 token 的美元成本"
+                            className="rounded-lg border border-border bg-muted px-3 py-2 font-mono text-[11px] text-foreground focus:border-primary/50 outline-none"
+                        />
+                        <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={newOutputPrice}
+                            onChange={(e) => setNewOutputPrice(Number(e.target.value))}
+                            placeholder="输出价 USD / 1M"
+                            title="每 100 万输出 token 的美元成本"
+                            className="rounded-lg border border-border bg-muted px-3 py-2 font-mono text-[11px] text-foreground focus:border-primary/50 outline-none"
                         />
                         <input
                             value={newName}

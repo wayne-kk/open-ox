@@ -7,13 +7,29 @@ export interface ModelConfig {
     displayName: string;
     contextWindow: number;
     supportsThinking?: boolean;
+    tokenPrice?: ModelTokenPrice;
 }
+
+export type ModelTokenPrice = {
+    /** Public model cost in USD per one million input tokens. */
+    inputPerMTok: number;
+    /** Public model cost in USD per one million output tokens. */
+    outputPerMTok: number;
+};
+
+/** Configurable fallback for unregistered model IDs. */
+export const DEFAULT_MODEL_TOKEN_PRICE: ModelTokenPrice = {
+    inputPerMTok: 0.5,
+    outputPerMTok: 3,
+};
 
 export type ModelConfigRow = {
     id: string;
     display_name: string;
     context_window: number;
     supports_thinking?: boolean;
+    input_price_per_mtok?: number | string | null;
+    output_price_per_mtok?: number | string | null;
 };
 
 export function modelConfigFromRow(row: ModelConfigRow): ModelConfig {
@@ -22,14 +38,28 @@ export function modelConfigFromRow(row: ModelConfigRow): ModelConfig {
         displayName: row.display_name,
         contextWindow: row.context_window,
         supportsThinking: row.supports_thinking ?? false,
+        tokenPrice: tokenPriceFromRow(row),
     };
+}
+
+function optionalNonNegativeNumber(value: number | string | null | undefined): number | undefined {
+    if (value == null || value === "") return undefined;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+function tokenPriceFromRow(row: ModelConfigRow): ModelTokenPrice | undefined {
+    const inputPerMTok = optionalNonNegativeNumber(row.input_price_per_mtok);
+    const outputPerMTok = optionalNonNegativeNumber(row.output_price_per_mtok);
+    return inputPerMTok != null && outputPerMTok != null
+        ? { inputPerMTok, outputPerMTok }
+        : undefined;
 }
 
 // Built-in models — always available
 const BUILTIN_MODELS: ModelConfig[] = [
-    { id: "gemini-3-flash-preview", displayName: "Gemini 3 Flash", contextWindow: 128_000, supportsThinking: false },
-    { id: "gemini-3.1-pro-preview", displayName: "Gemini 3.1 Pro", contextWindow: 128_000, supportsThinking: false },
-    { id: "gpt-5.2", displayName: "GPT-5.2", contextWindow: 128_000, supportsThinking: false },
+    { id: "gemini-3-flash-preview", displayName: "Gemini 3 Flash", contextWindow: 128_000, supportsThinking: false, tokenPrice: { inputPerMTok: 0.15, outputPerMTok: 0.6 } },
+    { id: "gemini-3.1-pro-preview", displayName: "Gemini 3.1 Pro", contextWindow: 128_000, supportsThinking: false, tokenPrice: { inputPerMTok: 1.25, outputPerMTok: 5 } },
 ];
 
 // User-added models (loaded from DB at runtime)
@@ -40,7 +70,9 @@ export function setCustomModels(models: ModelConfig[]): void {
 }
 
 export function getAllModels(): ModelConfig[] {
-    return [...BUILTIN_MODELS, ..._customModels];
+    const modelsById = new Map(BUILTIN_MODELS.map((model) => [model.id, model]));
+    for (const model of _customModels) modelsById.set(model.id, model);
+    return [...modelsById.values()];
 }
 
 export type ModelId = string;
@@ -263,7 +295,7 @@ export async function loadStepModelsFromDB(): Promise<void> {
             const database = createSupabaseServiceRoleClient();
             const { data: customRows, error: customModelsError } = await database
                 .from("model_configs")
-                .select("id, display_name, context_window, supports_thinking");
+                .select("id, display_name, context_window, supports_thinking, input_price_per_mtok, output_price_per_mtok");
             if (customModelsError) {
                 console.warn("[loadStepModelsFromDB] Failed to load custom models:", customModelsError);
             } else {
