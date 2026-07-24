@@ -79,42 +79,123 @@ function resolveCompletionMaxTokens(
   return Math.min(profileTokens, availableCompletionTokens);
 }
 
-function compactCompletedToolCallArguments(toolCalls: unknown[]): unknown[] {
-  return toolCalls.map((toolCall) => {
-    if (!toolCall || typeof toolCall !== "object") return toolCall;
-    const fn = (toolCall as Record<string, unknown>).function;
-    if (!fn || typeof fn !== "object") return toolCall;
-    const fnRecord = fn as Record<string, unknown>;
-    const rawArgs = fnRecord.arguments;
+interface ToolHistoryCallSummary {
+  id: string;
+  name: string;
+  path?: string;
+  argumentLength: number;
+}
+
+function parseToolHistoryCall(value: unknown): ToolHistoryCallSummary | null {
+  if (!value || typeof value !== "object") return null;
+  const call = value as Record<string, unknown>;
+  const fn = call.function;
+  if (typeof call.id !== "string" || !fn || typeof fn !== "object") return null;
+  const fnRecord = fn as Record<string, unknown>;
+  if (typeof fnRecord.name !== "string" || typeof fnRecord.arguments !== "string") {
+    return null;
+  }
+  let path: string | undefined;
+  try {
+    const parsed = JSON.parse(fnRecord.arguments) as unknown;
+    if (parsed && typeof parsed === "object") {
+      const parsedPath = (parsed as Record<string, unknown>).path;
+      if (typeof parsedPath === "string" && parsedPath.trim()) {
+        path = parsedPath.trim();
+      }
+    }
+  } catch {
+    // Malformed calls remain untouched so the model can see the failed input.
+  }
+  return {
+    id: call.id,
+    name: fnRecord.name,
+    path,
+    argumentLength: fnRecord.arguments.length,
+  };
+}
+
+function parseJsonValue(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return value;
+  }
+}
+
+function hasDiagnostics(value: unknown): boolean {
+  const parsed = parseJsonValue(value);
+  if (!parsed || typeof parsed !== "object") return false;
+  const record = parsed as Record<string, unknown>;
+  if (Array.isArray(record.diagnostics) && record.diagnostics.length > 0) {
+    return true;
+  }
+  return record.output !== undefined && hasDiagnostics(record.output);
+}
+
+function toolResultCanBeSummarized(content: unknown): boolean {
+  let value = content;
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value) as unknown;
+    } catch {
+      return false;
+    }
+  }
+  if (!value || typeof value !== "object") return false;
+  const success = (value as Record<string, unknown>).success;
+  return success === true && !hasDiagnostics(value);
+}
+
+function summarizeSuccessfulOversizedToolPairs(messages: ChatMessage[]): ChatMessage[] {
+  const summarizableResultsByCallId = new Map<string, boolean>();
+  for (const message of messages) {
+    if (message.role !== "tool" || typeof message.tool_call_id !== "string") continue;
+    summarizableResultsByCallId.set(
+      message.tool_call_id,
+      toolResultCanBeSummarized(message.content),
+    );
+  }
+
+  const summariesByAssistantIndex = new Map<number, string>();
+  const collapsedCallIds = new Set<string>();
+  messages.forEach((message, index) => {
+    if (message.role !== "assistant" || !Array.isArray(message.tool_calls)) return;
+    const calls = message.tool_calls.map(parseToolHistoryCall);
+    if (calls.some((call) => call === null)) return;
+    const validCalls = calls.filter((call): call is ToolHistoryCallSummary => call !== null);
     if (
-      typeof rawArgs !== "string" ||
-      rawArgs.length <= LENGTH_RETRY_TOOL_CONTENT_MAX_CHARS
+      validCalls.length === 0 ||
+      !validCalls.some(
+        (call) => call.argumentLength > LENGTH_RETRY_TOOL_CONTENT_MAX_CHARS,
+      ) ||
+      !validCalls.every((call) => summarizableResultsByCallId.get(call.id) === true)
     ) {
-      return toolCall;
+      return;
     }
 
-    let path: string | undefined;
-    try {
-      const parsed = JSON.parse(rawArgs) as unknown;
-      if (parsed && typeof parsed === "object") {
-        const parsedPath = (parsed as Record<string, unknown>).path;
-        if (typeof parsedPath === "string" && parsedPath.trim()) {
-          path = parsedPath.trim();
-        }
-      }
-    } catch {
-      // The completed call no longer needs its full malformed payload on retry.
+    for (const call of validCalls) collapsedCallIds.add(call.id);
+    const operations = validCalls
+      .map((call) => `${call.name}${call.path ? ` ${call.path}` : ""}: succeeded`)
+      .join("; ");
+    summariesByAssistantIndex.set(
+      index,
+      `[Historical tool operations] ${operations}. Source arguments omitted.`,
+    );
+  });
+
+  return messages.flatMap((message, index) => {
+    const summary = summariesByAssistantIndex.get(index);
+    if (summary) return [{ role: "system", content: summary } satisfies ChatMessage];
+    if (
+      message.role === "tool" &&
+      typeof message.tool_call_id === "string" &&
+      collapsedCallIds.has(message.tool_call_id)
+    ) {
+      return [];
     }
-    return {
-      ...(toolCall as Record<string, unknown>),
-      function: {
-        ...fnRecord,
-        arguments: JSON.stringify({
-          ...(path ? { path } : {}),
-          _compacted: `Completed tool arguments omitted after output truncation (${rawArgs.length} chars)`,
-        }),
-      },
-    };
+    return [message];
   });
 }
 
@@ -122,21 +203,15 @@ function compactToolHistoryForRequest(
   messages: ChatMessage[],
   compactOlderToolResults: boolean,
 ): ChatMessage[] {
-  const toolMessageCount = messages.filter(
+  const summarizedMessages = summarizeSuccessfulOversizedToolPairs(messages);
+  const toolMessageCount = summarizedMessages.filter(
     (message) => message.role === "tool",
   ).length;
   let toolMessageIndex = 0;
 
-  return messages.map((message) => {
-    let requestMessage = message;
-    if (message.role === "assistant" && Array.isArray(message.tool_calls)) {
-      requestMessage = {
-        ...requestMessage,
-        tool_calls: compactCompletedToolCallArguments(message.tool_calls),
-      };
-    }
+  return summarizedMessages.map((message) => {
     if (message.role !== "tool" || typeof message.content !== "string") {
-      return requestMessage;
+      return message;
     }
     const isOlderToolResult =
       compactOlderToolResults &&
@@ -145,10 +220,10 @@ function compactToolHistoryForRequest(
     const maxChars = isOlderToolResult
       ? PROACTIVE_OLD_TOOL_CONTENT_MAX_CHARS
       : LENGTH_RETRY_TOOL_CONTENT_MAX_CHARS;
-    if (message.content.length <= maxChars) return requestMessage;
+    if (message.content.length <= maxChars) return message;
 
     return {
-      ...requestMessage,
+      ...message,
       content:
         `${message.content.slice(0, maxChars)}` +
         "\n[Tool result compacted for the next model request]",

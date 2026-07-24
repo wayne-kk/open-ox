@@ -22,12 +22,12 @@ const llmDispatcher = new Agent({
 
 /** Langfuse-serializable snapshot of chat messages (full content, no redaction). */
 function messagesForObservation(messages: ChatCompletionParams["messages"]): unknown[] {
-  return messages.map((m) => ({
+  return structuredClone(messages.map((m) => ({
     role: m.role,
     content: m.content,
     ...(m.tool_calls !== undefined ? { tool_calls: m.tool_calls } : {}),
     ...(m.tool_call_id !== undefined ? { tool_call_id: m.tool_call_id } : {}),
-  }));
+  })));
 }
 
 function getApiConfig() {
@@ -172,7 +172,7 @@ export async function chatCompletion(params: ChatCompletionParams): Promise<Chat
           }
         : undefined;
     lfGen?.end({
-      output: choice ?? parsed,
+      output: structuredClone(choice ?? parsed),
       usage: lfUsage,
       metadata: { finishReason: parsed.choices[0]?.finish_reason, attempt },
     });

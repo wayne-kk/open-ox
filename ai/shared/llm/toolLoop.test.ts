@@ -444,7 +444,7 @@ describe("callLLMWithToolsFromMessages", () => {
     expect(messages[3]?.content).toBe(fullToolResult);
   });
 
-  it("compacts oversized arguments from completed tool calls before retrying", async () => {
+  it("summarizes successful oversized tool calls without emitting schema-invalid history", async () => {
     const fullToolArguments = JSON.stringify({
       path: "app/page.tsx",
       content: "x".repeat(20_000),
@@ -458,32 +458,54 @@ describe("callLLMWithToolsFromMessages", () => {
           {
             id: "large-write",
             function: {
-              name: "probe",
+              name: "create_file",
               arguments: fullToolArguments,
             },
           },
         ],
       },
-      { role: "tool", tool_call_id: "large-write", content: "written" },
+      {
+        role: "tool",
+        tool_call_id: "large-write",
+        content: JSON.stringify({ success: true, output: "written" }),
+      },
     ];
     gateway.chatCompletion
       .mockResolvedValueOnce(
         response({ finishReason: "length", content: null }),
       )
       .mockImplementationOnce(async (params: ChatCompletionParams) => {
-        const assistant = params.messages.find(
+        const retainedAssistant = params.messages.find(
           (message) =>
-            message.role === "assistant" && Array.isArray(message.tool_calls),
+            message.role === "assistant" &&
+            Array.isArray(message.tool_calls) &&
+            message.tool_calls.some(
+              (call) =>
+                typeof call === "object" &&
+                call !== null &&
+                (call as { id?: string }).id === "large-write",
+            ),
         );
-        const toolCall = assistant?.tool_calls?.[0] as
-          | { function?: { arguments?: string } }
-          | undefined;
-        const compacted =
-          (toolCall?.function?.arguments?.length ?? Infinity) <= 2_100;
-        return compacted
+        const retainedToolResult = params.messages.find(
+          (message) =>
+            message.role === "tool" && message.tool_call_id === "large-write",
+        );
+        const summary = params.messages.find(
+          (message) =>
+            message.role === "system" &&
+            typeof message.content === "string" &&
+            message.content.includes("create_file app/page.tsx") &&
+            message.content.includes("succeeded"),
+        );
+        const protocolSafe =
+          !retainedAssistant &&
+          !retainedToolResult &&
+          Boolean(summary) &&
+          !JSON.stringify(params.messages).includes("_compacted");
+        return protocolSafe
           ? response({
               finishReason: "stop",
-              content: "recovered after argument compaction",
+              content: "recovered after protocol-safe compaction",
             })
           : response({ finishReason: "length", content: null });
       });
@@ -497,12 +519,121 @@ describe("callLLMWithToolsFromMessages", () => {
         completionProfile: "code",
       }),
     ).resolves.toEqual({
-      content: "recovered after argument compaction",
+      content: "recovered after protocol-safe compaction",
       toolCalls: [],
     });
     const retainedToolCall = messages[2]?.tool_calls?.[0] as
       | { function?: { arguments?: string } }
       | undefined;
     expect(retainedToolCall?.function?.arguments).toBe(fullToolArguments);
+  });
+
+  it("preserves oversized failed tool calls for model recovery", async () => {
+    const fullToolArguments = JSON.stringify({
+      path: "components/pages/home/SpotlightPlayers.tsx",
+      content: "x".repeat(13_000),
+    });
+    const messages: ChatMessage[] = [
+      ...initialMessages(),
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [{
+          id: "failed-write",
+          function: { name: "create_file", arguments: fullToolArguments },
+        }],
+      },
+      {
+        role: "tool",
+        tool_call_id: "failed-write",
+        content: JSON.stringify({
+          success: false,
+          error: "INVALID_ARGUMENT: create_file.content must be a string",
+        }),
+      },
+    ];
+    gateway.chatCompletion.mockImplementationOnce(async (params: ChatCompletionParams) => {
+      const assistant = params.messages.find(
+        (message) =>
+          message.role === "assistant" &&
+          Array.isArray(message.tool_calls) &&
+          message.tool_calls.some(
+            (call) =>
+              typeof call === "object" &&
+              call !== null &&
+              (call as { id?: string }).id === "failed-write",
+          ),
+      );
+      const call = assistant?.tool_calls?.[0] as
+        | { function?: { arguments?: string } }
+        | undefined;
+      const preserved = call?.function?.arguments === fullToolArguments;
+      return response({
+        finishReason: "stop",
+        content: preserved ? "failure context preserved" : "failure context corrupted",
+      });
+    });
+
+    await expect(
+      callLLMWithToolsFromMessages({
+        messages,
+        tools: [],
+        model: "probe-model",
+        maxIterations: 1,
+        completionProfile: "code",
+      }),
+    ).resolves.toMatchObject({ content: "failure context preserved" });
+  });
+
+  it("preserves successful oversized tool calls that still have diagnostics", async () => {
+    const fullToolArguments = JSON.stringify({
+      path: "app/page.tsx",
+      content: "x".repeat(13_000),
+    });
+    const messages: ChatMessage[] = [
+      ...initialMessages(),
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [{
+          id: "write-with-diagnostics",
+          function: { name: "create_file", arguments: fullToolArguments },
+        }],
+      },
+      {
+        role: "tool",
+        tool_call_id: "write-with-diagnostics",
+        content: JSON.stringify({
+          success: true,
+          output: JSON.stringify({
+            success: true,
+            diagnostics: [{ code: "TS2613", message: "No default export" }],
+          }),
+        }),
+      },
+    ];
+    gateway.chatCompletion.mockImplementationOnce(async (params: ChatCompletionParams) => {
+      const preserved = params.messages.some(
+        (message) =>
+          message.role === "tool" &&
+          message.tool_call_id === "write-with-diagnostics" &&
+          typeof message.content === "string" &&
+          message.content.includes("TS2613"),
+      );
+      return response({
+        finishReason: "stop",
+        content: preserved ? "diagnostics preserved" : "diagnostics lost",
+      });
+    });
+
+    await expect(
+      callLLMWithToolsFromMessages({
+        messages,
+        tools: [],
+        model: "probe-model",
+        maxIterations: 1,
+        completionProfile: "code",
+      }),
+    ).resolves.toMatchObject({ content: "diagnostics preserved" });
   });
 });
