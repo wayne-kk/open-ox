@@ -249,7 +249,7 @@ describe("callLLMWithToolsFromMessages", () => {
       onAssistantStop: ({ message, messages }) => {
         if (message.content) return false;
         messages.push({
-          role: "system",
+          role: "user",
           content: "Call the required write tool now.",
         });
         return true;
@@ -635,5 +635,45 @@ describe("callLLMWithToolsFromMessages", () => {
         completionProfile: "code",
       }),
     ).resolves.toMatchObject({ content: "diagnostics preserved" });
+  });
+
+  it("rejects history whose last conversational turn is assistant", async () => {
+    gateway.chatCompletion.mockResolvedValue(
+      response({ finishReason: "stop", content: "should not run" }),
+    );
+
+    await expect(
+      callLLMWithToolsFromMessages({
+        messages: [
+          ...initialMessages(),
+          { role: "assistant", content: "I stopped before finishing." },
+          { role: "system", content: "Continue working." },
+        ],
+        tools: [probeTool()],
+        model: "gemini-probe-model",
+        maxIterations: 1,
+        requireTools: true,
+      }),
+    ).rejects.toThrow(/ends with an assistant\/model turn/i);
+    expect(gateway.chatCompletion).not.toHaveBeenCalled();
+  });
+
+  it("reports Gemini model-turn errors as invalid history, not missing tool support", async () => {
+    gateway.chatCompletion.mockRejectedValue(
+      new Error(
+        'LLM HTTP 400: {"error":{"message":"Provider API error: Requests ending with a model turn are not supported."}}',
+      ),
+    );
+
+    const result = callLLMWithToolsFromMessages({
+      messages: initialMessages(),
+      tools: [probeTool()],
+      model: "gemini-probe-model",
+      maxIterations: 1,
+      requireTools: true,
+    });
+
+    await expect(result).rejects.toThrow(/invalid conversation history/i);
+    await expect(result).rejects.not.toThrow(/verify the model is compatible/i);
   });
 });

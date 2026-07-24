@@ -35,6 +35,7 @@ export async function POST(req: Request, { params }: Params) {
     data: {
       directions: result.directions,
       source: result.source,
+      fallbackReason: result.fallbackReason,
     },
   });
 }

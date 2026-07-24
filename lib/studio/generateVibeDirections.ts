@@ -11,6 +11,8 @@ import { normalizeVibeTokensForContrast } from "@/lib/studio/vibeTokenContrast";
 
 const INPUT_CLIP = 6000;
 const OUTPUT_MAX_TOKENS = 4096;
+const REVIEW_OUTPUT_MAX_TOKENS = 1200;
+const MAX_ATTEMPTS = 2;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -172,7 +174,67 @@ export function parseGenerateVibeDirectionsPayload(parsed: unknown): VibeDirecti
 export type GenerateVibeDirectionsResult = {
   directions: VibeDirection[];
   source: "llm" | "fallback";
+  fallbackReason?: VibeDirectionsFallbackReason;
 };
+
+export type VibeDirectionsFallbackReason =
+  | "empty_brief"
+  | "generation_failed"
+  | "invalid_output"
+  | "alignment_rejected"
+  | "validation_failed";
+
+type AlignmentReview = {
+  aligned: boolean;
+  issues: string[];
+  retryInstruction: string;
+};
+
+function parseAlignmentReview(content: string): AlignmentReview | null {
+  try {
+    const parsed = JSON.parse(extractJSON(content)) as unknown;
+    if (!isRecord(parsed) || typeof parsed.aligned !== "boolean") return null;
+    return {
+      aligned: parsed.aligned,
+      issues: asStringList(parsed.issues, 6),
+      retryInstruction: asString(parsed.retryInstruction),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function reviewVibeDirections(params: {
+  brief: string;
+  directions: VibeDirection[];
+  model: string;
+}): Promise<AlignmentReview> {
+  const systemPrompt = composePromptBlocks([
+    loadStepPrompt("reviewVibeDirections"),
+    loadGuardrail("outputJson"),
+  ]);
+  const userPayload = JSON.stringify({
+    brief_markdown: clipForPrompt(params.brief),
+    directions: params.directions.map((direction) => ({
+      label: direction.label,
+      tagline: direction.tagline,
+      moods: direction.moods,
+      styleGuide: direction.styleGuide,
+      designIntent: direction.designIntentMarkdown,
+    })),
+  });
+  const meta = await callLLMWithMeta(
+    systemPrompt,
+    userPayload,
+    0.1,
+    REVIEW_OUTPUT_MAX_TOKENS,
+    params.model,
+    { langfuseName: lfPlain(LfPlain.reviewVibeDirections) },
+  );
+  const review = parseAlignmentReview(meta.content);
+  if (!review) throw new Error("invalid alignment review JSON");
+  return review;
+}
 
 /**
  * Brief-sensitive vibe forks. Falls back to {@link VIBE_DIRECTIONS} on LLM/parse failure.
@@ -182,33 +244,78 @@ export async function generateVibeDirections(
 ): Promise<GenerateVibeDirectionsResult> {
   const brief = briefMarkdown.trim();
   if (!brief) {
-    return { directions: VIBE_DIRECTIONS, source: "fallback" };
+    return {
+      directions: VIBE_DIRECTIONS,
+      source: "fallback",
+      fallbackReason: "empty_brief",
+    };
   }
 
-  try {
-    const model = getModelForStep("generate_vibe_directions");
-    const systemPrompt = composePromptBlocks([
-      loadStepPrompt("generateVibeDirections"),
-      loadGuardrail("outputJson"),
-    ]);
+  const model = getModelForStep("generate_vibe_directions");
+  const systemPrompt = composePromptBlocks([
+    loadStepPrompt("generateVibeDirections"),
+    loadGuardrail("outputJson"),
+  ]);
+  let fallbackReason: VibeDirectionsFallbackReason = "generation_failed";
+  let retryInstruction = "";
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
     const userPayload = JSON.stringify({
       brief_markdown: clipForPrompt(brief),
       count: 3,
       instruction:
         "Produce three brief-specific visual directions. Do not always reuse cold-tech / warm-editorial / bold-promo.",
+      ...(retryInstruction
+        ? {
+            previous_attempt_rejected: true,
+            reviewer_feedback: retryInstruction,
+          }
+        : {}),
     });
 
-    const meta = await callLLMWithMeta(systemPrompt, userPayload, 0.45, OUTPUT_MAX_TOKENS, model, {
-      langfuseName: lfPlain(LfPlain.generateVibeDirections),
-    });
+    try {
+      const meta = await callLLMWithMeta(systemPrompt, userPayload, 0.3, OUTPUT_MAX_TOKENS, model, {
+        langfuseName: lfPlain(LfPlain.generateVibeDirections),
+      });
 
-    const parsed = JSON.parse(extractJSON(meta.content));
-    const directions = parseGenerateVibeDirectionsPayload(parsed);
-    if (!directions) {
-      return { directions: VIBE_DIRECTIONS, source: "fallback" };
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(extractJSON(meta.content));
+      } catch {
+        fallbackReason = "invalid_output";
+        console.warn(`[generateVibeDirections] invalid output attempt=${attempt + 1}`);
+        continue;
+      }
+      const directions = parseGenerateVibeDirectionsPayload(parsed);
+      if (!directions) {
+        fallbackReason = "invalid_output";
+        console.warn(`[generateVibeDirections] unusable directions attempt=${attempt + 1}`);
+        continue;
+      }
+
+      try {
+        const review = await reviewVibeDirections({ brief, directions, model });
+        if (review.aligned) return { directions, source: "llm" };
+
+        fallbackReason = "alignment_rejected";
+        retryInstruction =
+          review.retryInstruction || review.issues.join("; ") || "Regenerate closer to the brief.";
+        console.warn(
+          `[generateVibeDirections] alignment rejected attempt=${attempt + 1}: ${review.issues.join("; ")}`,
+        );
+      } catch (error) {
+        fallbackReason = "validation_failed";
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(
+          `[generateVibeDirections] alignment review failed attempt=${attempt + 1}: ${message}`,
+        );
+      }
+    } catch (error) {
+      fallbackReason = "generation_failed";
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[generateVibeDirections] generation failed attempt=${attempt + 1}: ${message}`);
     }
-    return { directions, source: "llm" };
-  } catch {
-    return { directions: VIBE_DIRECTIONS, source: "fallback" };
   }
+
+  return { directions: VIBE_DIRECTIONS, source: "fallback", fallbackReason };
 }

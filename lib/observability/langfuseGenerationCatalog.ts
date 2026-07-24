@@ -20,6 +20,7 @@ export const LfPlain = {
   modifyCompletionSummary: "modify_completion_summary",
   commitMergedBriefSubstance: "commit_merged_brief_substance_classify",
   generateVibeDirections: "generate_vibe_directions_json",
+  reviewVibeDirections: "review_vibe_directions_alignment",
   inferDesignIntent: "infer_design_intent_and_keywords",
   analyzeRequirement: "analyze_requirement_blueprint_json",
   planProject: "expand_site_blueprint_and_sections",

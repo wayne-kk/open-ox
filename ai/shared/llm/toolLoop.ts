@@ -259,6 +259,18 @@ function resolveToolLoopPhase(
   );
 }
 
+function assertRequestEndsWithValidTurn(messages: ChatMessage[]): void {
+  const lastConversationalMessage = messages.findLast(
+    (message) => message.role !== "system",
+  );
+  if (lastConversationalMessage?.role !== "assistant") return;
+
+  throw new Error(
+    "Invalid conversation history: the request ends with an assistant/model turn. " +
+      "Append a user instruction or the matching tool result before requesting another completion.",
+  );
+}
+
 export async function callLLMWithTools(params: {
   systemPrompt: string;
   userMessage: string;
@@ -548,6 +560,7 @@ export async function callLLMWithToolsFromMessages(params: {
         params.completionProfile === "code"
           ? [...compactedMessages, CODE_TOOL_CALL_POLICY]
           : compactedMessages;
+      assertRequestEndsWithValidTurn(requestMessages);
       roundCompletionMaxTokens = resolveCompletionMaxTokens(
         params.completionProfile,
         model,
@@ -601,6 +614,16 @@ export async function callLLMWithToolsFromMessages(params: {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const msgLower = msg.toLowerCase();
+      if (msgLower.includes("invalid conversation history")) {
+        throw err;
+      }
+      if (msgLower.includes("requests ending with a model turn")) {
+        throw new Error(
+          `Invalid conversation history for model "${model}": the provider rejected a request ` +
+            `ending with an assistant/model turn. Append a user instruction or the matching ` +
+            `tool result before retrying. Detail: ${msg.slice(0, 300)}`,
+        );
+      }
       const shouldDisableTools =
         activeTools.length > 0 &&
         (msg.includes("LLM HTTP 400") ||

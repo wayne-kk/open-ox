@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { RefreshCw } from "lucide-react";
 import {
   VIBE_DIRECTIONS,
   type VibeDirection,
@@ -113,6 +114,8 @@ export function VibePickerPanel({
   const [directions, setDirections] = useState<VibeDirection[]>(VIBE_DIRECTIONS);
   const [loadingDirections, setLoadingDirections] = useState(Boolean(projectId));
   const [selectedId, setSelectedId] = useState<string>(VIBE_DIRECTIONS[0]?.id ?? "cold-tech");
+  const [directionsError, setDirectionsError] = useState<string | null>(null);
+  const [retryNonce, setRetryNonce] = useState(0);
   const title = extractBriefTitle(briefMarkdown);
   const selected = directions.find((v) => v.id === selectedId) ?? directions[0];
 
@@ -120,12 +123,14 @@ export function VibePickerPanel({
     if (!projectId) {
       setDirections(VIBE_DIRECTIONS);
       setSelectedId(VIBE_DIRECTIONS[0]?.id ?? "cold-tech");
+      setDirectionsError(null);
       setLoadingDirections(false);
       return;
     }
 
     const controller = new AbortController();
     setLoadingDirections(true);
+    setDirectionsError(null);
 
     void (async () => {
       try {
@@ -137,8 +142,15 @@ export function VibePickerPanel({
         });
         if (!res.ok) throw new Error(`vibe-directions ${res.status}`);
         const json = (await res.json()) as {
-          data?: { directions?: VibeDirection[] };
+          data?: {
+            directions?: VibeDirection[];
+            source?: "llm" | "fallback";
+            fallbackReason?: string;
+          };
         };
+        if (json.data?.source !== "llm") {
+          throw new Error(json.data?.fallbackReason || "custom directions unavailable");
+        }
         const next = json.data?.directions;
         if (!Array.isArray(next) || next.length < 3) throw new Error("invalid directions");
         if (controller.signal.aborted) return;
@@ -146,15 +158,16 @@ export function VibePickerPanel({
         setSelectedId(next[0]!.id);
       } catch {
         if (controller.signal.aborted) return;
-        setDirections(VIBE_DIRECTIONS);
-        setSelectedId(VIBE_DIRECTIONS[0]?.id ?? "cold-tech");
+        setDirections([]);
+        setSelectedId("");
+        setDirectionsError("暂时无法按当前需求生成合适的气质方向，请重试。");
       } finally {
         if (!controller.signal.aborted) setLoadingDirections(false);
       }
     })();
 
     return () => controller.abort();
-  }, [projectId, briefMarkdown]);
+  }, [projectId, briefMarkdown, retryNonce]);
 
   return (
     <div className="space-y-3 rounded-2xl border border-border bg-card/40 p-3">
@@ -169,6 +182,22 @@ export function VibePickerPanel({
       <div className="flex gap-2 overflow-x-auto pb-1 md:grid md:grid-cols-3 md:overflow-visible">
         {loadingDirections
           ? [0, 1, 2].map((key) => <VibeCardSkeleton key={key} />)
+          : directionsError
+            ? (
+                <div className="col-span-3 flex min-h-32 w-full flex-col items-center justify-center gap-3 border border-dashed border-border bg-muted/30 px-4 py-6 text-center">
+                  <p className="text-[12px] text-muted-foreground">{directionsError}</p>
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => setRetryNonce((value) => value + 1)}
+                    className="inline-flex items-center gap-1.5 border border-border bg-background px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+                    title="重新生成气质方向"
+                  >
+                    <RefreshCw className="size-3.5" aria-hidden="true" />
+                    重新生成
+                  </button>
+                </div>
+              )
           : directions.map((vibe) => {
               const isSelected = vibe.id === selectedId;
               return (

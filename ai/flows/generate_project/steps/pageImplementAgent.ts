@@ -361,7 +361,7 @@ export async function runPageImplementAgent(
       if (decision.kind === "complete" || emptyStopRecoveries >= 2) return false;
       emptyStopRecoveries += 1;
       const nudge: ChatMessage = {
-        role: "system",
+        role: "user",
         content:
           `[File session recovery ${emptyStopRecoveries}/2] ${decision.kind === "continue" ? decision.reason : decision.error}. ` +
           `Use create_file for a missing path, or read_file_snapshot then apply_file_patch for an existing path.`,
