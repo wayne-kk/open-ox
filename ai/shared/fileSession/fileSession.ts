@@ -233,7 +233,6 @@ export function createFileSession(options: FileSessionOptions): FileSession {
 
     const path = "path" in call.args ? call.args.path : undefined;
     if (path && !options.ownsPath(path)) {
-      terminalError = `${options.owner} does not own ${path}`;
       return {
         success: false,
         kind: "error",
@@ -241,7 +240,7 @@ export function createFileSession(options: FileSessionOptions): FileSession {
         code: "PATH_NOT_OWNED",
         path,
         error: `${options.owner} does not own ${path}`,
-        retryable: false,
+        retryable: true,
       };
     }
 
@@ -324,15 +323,14 @@ export function createFileSession(options: FileSessionOptions): FileSession {
       const paths = call.args.paths ?? [...records.keys()];
       const unownedPath = paths.find((verifiedPath) => !options.ownsPath(verifiedPath));
       if (unownedPath) {
-        terminalError = `${options.owner} does not own ${unownedPath}`;
         return {
           success: false,
           kind: "error",
           cached: false,
           path: unownedPath,
           code: "PATH_NOT_OWNED",
-          error: terminalError,
-          retryable: false,
+          error: `${options.owner} does not own ${unownedPath}`,
+          retryable: true,
         };
       }
       const verified = await options.workspace.verify(paths);

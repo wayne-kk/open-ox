@@ -366,14 +366,55 @@ describe("FileSession", () => {
     expect(session.stopDecision()).toEqual({ kind: "complete" });
   });
 
-  it("rejects verification outside the session ownership boundary", async () => {
+  it("rejects an unowned path without poisoning an otherwise complete session", async () => {
     const { session } = createSession();
+    await session.execute({
+      name: "create_file",
+      args: {
+        path: "app/page.tsx",
+        content: "export default function Home() { return <main>Ready</main>; }",
+      },
+    });
     const result = await session.execute({
       name: "verify_files",
       args: { paths: ["app/layout.tsx"] },
     });
 
-    expect(result).toMatchObject({ success: false, code: "PATH_NOT_OWNED" });
-    expect(session.stopDecision()).toMatchObject({ kind: "failed" });
+    expect(result).toMatchObject({
+      success: false,
+      code: "PATH_NOT_OWNED",
+      retryable: true,
+    });
+    expect(session.stopDecision()).toEqual({ kind: "complete" });
+  });
+
+  it("stops after repeated writes outside the ownership boundary", async () => {
+    const { session } = createSession();
+    const call = {
+      name: "create_file",
+      args: {
+        path: "components/shared/MatchCard.tsx",
+        content: "export function MatchCard() { return null; }",
+      },
+    };
+
+    const first = await session.execute(call);
+    const second = await session.execute(call);
+
+    expect(first).toMatchObject({
+      success: false,
+      code: "PATH_NOT_OWNED",
+      retryable: true,
+    });
+    expect(second).toMatchObject({
+      success: false,
+      code: "PATH_NOT_OWNED",
+      retryable: false,
+    });
+    expect(session.stopDecision()).toEqual({
+      kind: "failed",
+      error:
+        "components/shared/MatchCard.tsx failed 2 consecutive file command(s): PATH_NOT_OWNED: page:home does not own components/shared/MatchCard.tsx; retryable=false",
+    });
   });
 });

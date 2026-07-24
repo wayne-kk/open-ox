@@ -74,6 +74,45 @@ describe("pageImplementationIncompleteReason", () => {
     expect(session.stopDecision()).toEqual({ kind: "complete" });
   });
 
+  it("keeps a valid page complete when a shared contract rewrite is rejected", async () => {
+    const workspace = new InMemoryFileSessionWorkspace({
+      "app/page.tsx": "export default function Home() { return <main>Preparing your site…</main>; }",
+      "components/shared/MatchCard.tsx":
+        "export function MatchCard() { return <article>Match</article>; }",
+    });
+    const session = createPageFileSession({
+      slug: "home",
+      targetPath: "app/page.tsx",
+      componentRoot: "components/pages/home",
+      workspace,
+    });
+
+    await session.execute({
+      name: "create_file",
+      args: {
+        path: "app/page.tsx",
+        content: "export default function Home() { return <main>Ready</main>; }",
+      },
+    });
+    const rejected = await session.execute({
+      name: "create_file",
+      args: {
+        path: "components/shared/MatchCard.tsx",
+        content: "export function MatchCard() { return <article>Changed</article>; }",
+      },
+    });
+
+    expect(rejected).toMatchObject({
+      success: false,
+      code: "PATH_NOT_OWNED",
+      retryable: true,
+    });
+    expect(session.stopDecision()).toEqual({ kind: "complete" });
+    expect((await workspace.read("components/shared/MatchCard.tsx")).content).toContain(
+      "Match</article>",
+    );
+  });
+
   it("keeps image completion inside the file session and binds it to current revisions", async () => {
     const workspace = new InMemoryFileSessionWorkspace({
       "app/page.tsx": "export default function Home() { return <main>Preparing your site…</main>; }",
