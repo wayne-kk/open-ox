@@ -6,7 +6,10 @@ import {
 import { callLLMWithMeta, extractJSON } from "../shared/llm";
 import { stepTraceFromLlmCompletion } from "../shared/llmTrace";
 import { stepGenerateProjectDesignSystem } from "../steps/generateProjectDesignSystem";
-import { getModelForStep } from "@/lib/config/models";
+import {
+  getModelForStep,
+  getThinkingLevelForStep,
+} from "@/lib/config/models";
 import {
   lfPlain,
   LfPlain,
@@ -23,6 +26,7 @@ import type {
   DesignSystemResolutionRequest,
   DesignSystemResolutionObserver,
   DesignSystemSkillCatalog,
+  DesignSystemMatcherFailureDetail,
 } from "./types";
 
 const catalog = createFileDesignSystemSkillCatalog();
@@ -36,15 +40,27 @@ type MatcherFailureReason =
 
 export class DesignSystemMatcherError extends Error {
   readonly matcherFailureReason: MatcherFailureReason;
+  readonly matcherFailureDetail: DesignSystemMatcherFailureDetail;
 
-  constructor(reason: MatcherFailureReason, message: string, cause?: unknown) {
+  constructor(
+    reason: MatcherFailureReason,
+    message: string,
+    detail: DesignSystemMatcherFailureDetail,
+    cause?: unknown,
+  ) {
     super(message);
     this.name = "DesignSystemMatcherError";
     this.matcherFailureReason = reason;
+    this.matcherFailureDetail = detail;
     if (cause !== undefined) {
       this.cause = cause;
     }
   }
+}
+
+function matcherFailureMessage(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  return raw.replace(/\s+/g, " ").trim().slice(0, 500) || "Unknown matcher failure";
 }
 
 async function generateContractValidDesignSystem(
@@ -216,6 +232,8 @@ export async function judgeCandidates(
   ].join("\n");
 
   const model = getModelForStep("match_design_system_skill");
+  const thinkingLevel =
+    getThinkingLevelForStep("match_design_system_skill") ?? "minimal";
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const attemptMessage =
       attempt === 0
@@ -231,7 +249,7 @@ export async function judgeCandidates(
         model,
         {
           langfuseName: lfPlain(LfPlain.matchDesignSystemSkill),
-          thinkingLevel: "minimal",
+          thinkingLevel,
         },
       );
     } catch (error) {
@@ -240,12 +258,14 @@ export async function judgeCandidates(
         throw new DesignSystemMatcherError(
           "matcher_response_truncated",
           "Design-system matcher exhausted its output budget twice",
+          { model, message: matcherFailureMessage(error) },
           error,
         );
       }
       throw new DesignSystemMatcherError(
         "matcher_request_failed",
         "Design-system matcher request failed",
+        { model, message: matcherFailureMessage(error) },
         error,
       );
     }
@@ -263,6 +283,7 @@ export async function judgeCandidates(
       throw new DesignSystemMatcherError(
         reason,
         `Design-system matcher returned unusable JSON after ${attempt + 1} attempts`,
+        { model, message: matcherFailureMessage(error) },
         error,
       );
     }
@@ -271,6 +292,7 @@ export async function judgeCandidates(
   throw new DesignSystemMatcherError(
     "matcher_invalid_json",
     "Design-system matcher did not return a decision",
+    { model, message: "Matcher loop ended without a decision" },
   );
 }
 

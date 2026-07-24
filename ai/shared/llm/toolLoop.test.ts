@@ -7,7 +7,11 @@ const gateway = vi.hoisted(() => ({
 vi.mock("./gateway", () => ({ chatCompletion: gateway.chatCompletion }));
 
 import { callLLMWithToolsFromMessages } from "./toolLoop";
-import type { ChatCompletionParams, ChatCompletionResponse, ChatMessage } from "./types";
+import type {
+  ChatCompletionParams,
+  ChatCompletionResponse,
+  ChatMessage,
+} from "./types";
 import { setCustomModels } from "@/lib/config/models";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 
@@ -53,10 +57,11 @@ describe("callLLMWithToolsFromMessages", () => {
   });
 
   it("gives code-writing rounds a sufficient completion budget", async () => {
-    gateway.chatCompletion.mockImplementation(async (params: ChatCompletionParams) =>
-      (params.max_tokens ?? 0) >= 16_384
-        ? response({ finishReason: "stop", content: "done" })
-        : response({ finishReason: "length", content: null })
+    gateway.chatCompletion.mockImplementation(
+      async (params: ChatCompletionParams) =>
+        (params.max_tokens ?? 0) >= 16_384
+          ? response({ finishReason: "stop", content: "done" })
+          : response({ finishReason: "length", content: null }),
     );
 
     await expect(
@@ -66,7 +71,7 @@ describe("callLLMWithToolsFromMessages", () => {
         model: "probe-model",
         maxIterations: 1,
         completionProfile: "code",
-      })
+      }),
     ).resolves.toEqual({ content: "done", toolCalls: [] });
   });
 
@@ -78,7 +83,9 @@ describe("callLLMWithToolsFromMessages", () => {
         contextWindow: 12_000,
       },
     ]);
-    gateway.chatCompletion.mockResolvedValue(response({ finishReason: "stop", content: "done" }));
+    gateway.chatCompletion.mockResolvedValue(
+      response({ finishReason: "stop", content: "done" }),
+    );
 
     await callLLMWithToolsFromMessages({
       messages: initialMessages(),
@@ -99,8 +106,12 @@ describe("callLLMWithToolsFromMessages", () => {
     });
 
     expect(gateway.chatCompletion.mock.calls[0]?.[0].max_tokens).toBe(8_192);
-    expect(gateway.chatCompletion.mock.calls[1]?.[0].max_tokens).toBeGreaterThan(0);
-    expect(gateway.chatCompletion.mock.calls[1]?.[0].max_tokens).toBeLessThan(2_000);
+    expect(
+      gateway.chatCompletion.mock.calls[1]?.[0].max_tokens,
+    ).toBeGreaterThan(0);
+    expect(gateway.chatCompletion.mock.calls[1]?.[0].max_tokens).toBeLessThan(
+      2_000,
+    );
   });
 
   it("estimates vision input without counting base64 image bytes as text tokens", async () => {
@@ -111,7 +122,9 @@ describe("callLLMWithToolsFromMessages", () => {
         contextWindow: 12_000,
       },
     ]);
-    gateway.chatCompletion.mockResolvedValue(response({ finishReason: "stop", content: "done" }));
+    gateway.chatCompletion.mockResolvedValue(
+      response({ finishReason: "stop", content: "done" }),
+    );
 
     await callLLMWithToolsFromMessages({
       messages: [
@@ -136,7 +149,9 @@ describe("callLLMWithToolsFromMessages", () => {
       completionProfile: "code",
     });
 
-    expect(gateway.chatCompletion.mock.calls[0]?.[0].max_tokens).toBeGreaterThan(4_000);
+    expect(
+      gateway.chatCompletion.mock.calls[0]?.[0].max_tokens,
+    ).toBeGreaterThan(4_000);
   });
 
   it("allows parallel reads but executes only one source mutation per code response", async () => {
@@ -152,14 +167,22 @@ describe("callLLMWithToolsFromMessages", () => {
               role: "assistant",
               content: null,
               tool_calls: [
-                { id: "write-one", function: { name: "write_file", arguments: "{}" } },
-                { id: "write-two", function: { name: "write_file", arguments: "{}" } },
+                {
+                  id: "write-one",
+                  function: { name: "write_file", arguments: "{}" },
+                },
+                {
+                  id: "write-two",
+                  function: { name: "write_file", arguments: "{}" },
+                },
               ],
             },
           },
         ],
       })
-      .mockResolvedValueOnce(response({ finishReason: "stop", content: "done" }));
+      .mockResolvedValueOnce(
+        response({ finishReason: "stop", content: "done" }),
+      );
 
     const result = await callLLMWithToolsFromMessages({
       messages: initialMessages(),
@@ -181,13 +204,64 @@ describe("callLLMWithToolsFromMessages", () => {
       },
     });
 
-    expect(gateway.chatCompletion.mock.calls[0]?.[0].parallel_tool_calls).toBeUndefined();
-    expect(gateway.chatCompletion.mock.calls[0]?.[0].messages.at(-1)?.content).toContain(
-      "Read-only tools may be called in parallel"
-    );
+    expect(
+      gateway.chatCompletion.mock.calls[0]?.[0].parallel_tool_calls,
+    ).toBeUndefined();
+    expect(
+      gateway.chatCompletion.mock.calls[0]?.[0].messages.at(-1)?.content,
+    ).toContain("Read-only tools may be called in parallel");
     expect(writeExecutions).toBe(1);
     expect(result.toolCalls).toHaveLength(2);
     expect(result.toolCalls[1]?.result).toMatchObject({ success: false });
+  });
+
+  it("allows a caller to recover an empty assistant stop and require another round", async () => {
+    gateway.chatCompletion
+      .mockResolvedValueOnce(response({ finishReason: "stop", content: null }))
+      .mockResolvedValueOnce({
+        ...response({ finishReason: "tool_calls", content: null }),
+        choices: [
+          {
+            index: 0,
+            finish_reason: "tool_calls",
+            message: {
+              role: "assistant",
+              content: null,
+              tool_calls: [
+                {
+                  id: "forced-write",
+                  function: { name: "probe", arguments: "{}" },
+                },
+              ],
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce(
+        response({ finishReason: "stop", content: "done" }),
+      );
+
+    const result = await callLLMWithToolsFromMessages({
+      messages: initialMessages(),
+      tools: [probeTool()],
+      model: "probe-model",
+      maxIterations: 3,
+      onAssistantStop: ({ message, messages }) => {
+        if (message.content) return false;
+        messages.push({
+          role: "system",
+          content: "Call the required write tool now.",
+        });
+        return true;
+      },
+      executeToolOverrides: { probe: async () => "written" },
+    });
+
+    expect(gateway.chatCompletion).toHaveBeenCalledTimes(3);
+    expect(result).toEqual({
+      content: "done",
+      toolCalls: [{ name: "probe", args: {}, result: "written" }],
+    });
   });
 
   it("recovers a truncated round without executing its partial tool calls", async () => {
@@ -216,7 +290,7 @@ describe("callLLMWithToolsFromMessages", () => {
         const hasRetryNudge = params.messages.some(
           (message) =>
             typeof message.content === "string" &&
-            message.content.includes("one small tool call")
+            message.content.includes("one small tool call"),
         );
         const retryIsConstrained =
           params.parallel_tool_calls === false &&
@@ -241,7 +315,7 @@ describe("callLLMWithToolsFromMessages", () => {
             return "executed";
           },
         },
-      })
+      }),
     ).resolves.toEqual({ content: "recovered", toolCalls: [] });
     expect(toolExecutions).toBe(0);
   });
@@ -249,7 +323,9 @@ describe("callLLMWithToolsFromMessages", () => {
   it("executes one valid tool call returned by the constrained recovery", async () => {
     let toolExecutions = 0;
     gateway.chatCompletion
-      .mockResolvedValueOnce(response({ finishReason: "length", content: null }))
+      .mockResolvedValueOnce(
+        response({ finishReason: "length", content: null }),
+      )
       .mockResolvedValueOnce({
         ...response({ finishReason: "tool_calls", content: null }),
         choices: [
@@ -260,13 +336,18 @@ describe("callLLMWithToolsFromMessages", () => {
               role: "assistant",
               content: null,
               tool_calls: [
-                { id: "recovered-call", function: { name: "probe", arguments: "{}" } },
+                {
+                  id: "recovered-call",
+                  function: { name: "probe", arguments: "{}" },
+                },
               ],
             },
           },
         ],
       })
-      .mockResolvedValueOnce(response({ finishReason: "stop", content: "complete" }));
+      .mockResolvedValueOnce(
+        response({ finishReason: "stop", content: "complete" }),
+      );
 
     await expect(
       callLLMWithToolsFromMessages({
@@ -281,7 +362,7 @@ describe("callLLMWithToolsFromMessages", () => {
             return "executed";
           },
         },
-      })
+      }),
     ).resolves.toEqual({
       content: "complete",
       toolCalls: [{ name: "probe", args: {}, result: "executed" }],
@@ -309,9 +390,9 @@ describe("callLLMWithToolsFromMessages", () => {
         maxIterations: 1,
         completionProfile: "code",
         langfusePhase: "page_implement.test",
-      })
+      }),
     ).rejects.toThrow(
-      /phase=page_implement\.test.*model=probe-model.*iteration=0.*max_tokens=16384.*prompt_tokens=12000.*completion_tokens=16384.*reasoning_tokens=7000/
+      /phase=page_implement\.test.*model=probe-model.*iteration=0.*max_tokens=16384.*prompt_tokens=12000.*completion_tokens=16384.*reasoning_tokens=7000/,
     );
     expect(gateway.chatCompletion).toHaveBeenCalledTimes(2);
   });
@@ -330,13 +411,21 @@ describe("callLLMWithToolsFromMessages", () => {
       { role: "tool", tool_call_id: "large-read", content: fullToolResult },
     ];
     gateway.chatCompletion
-      .mockResolvedValueOnce(response({ finishReason: "length", content: null }))
+      .mockResolvedValueOnce(
+        response({ finishReason: "length", content: null }),
+      )
       .mockImplementationOnce(async (params: ChatCompletionParams) => {
-        const toolMessage = params.messages.find((message) => message.role === "tool");
+        const toolMessage = params.messages.find(
+          (message) => message.role === "tool",
+        );
         const compacted =
-          typeof toolMessage?.content === "string" && toolMessage.content.length <= 2_100;
+          typeof toolMessage?.content === "string" &&
+          toolMessage.content.length <= 2_100;
         return compacted
-          ? response({ finishReason: "stop", content: "recovered after compaction" })
+          ? response({
+              finishReason: "stop",
+              content: "recovered after compaction",
+            })
           : response({ finishReason: "length", content: null });
       });
 
@@ -347,8 +436,11 @@ describe("callLLMWithToolsFromMessages", () => {
         model: "probe-model",
         maxIterations: 1,
         completionProfile: "code",
-      })
-    ).resolves.toEqual({ content: "recovered after compaction", toolCalls: [] });
+      }),
+    ).resolves.toEqual({
+      content: "recovered after compaction",
+      toolCalls: [],
+    });
     expect(messages[3]?.content).toBe(fullToolResult);
   });
 
@@ -375,17 +467,24 @@ describe("callLLMWithToolsFromMessages", () => {
       { role: "tool", tool_call_id: "large-write", content: "written" },
     ];
     gateway.chatCompletion
-      .mockResolvedValueOnce(response({ finishReason: "length", content: null }))
+      .mockResolvedValueOnce(
+        response({ finishReason: "length", content: null }),
+      )
       .mockImplementationOnce(async (params: ChatCompletionParams) => {
         const assistant = params.messages.find(
-          (message) => message.role === "assistant" && Array.isArray(message.tool_calls)
+          (message) =>
+            message.role === "assistant" && Array.isArray(message.tool_calls),
         );
         const toolCall = assistant?.tool_calls?.[0] as
           | { function?: { arguments?: string } }
           | undefined;
-        const compacted = (toolCall?.function?.arguments?.length ?? Infinity) <= 2_100;
+        const compacted =
+          (toolCall?.function?.arguments?.length ?? Infinity) <= 2_100;
         return compacted
-          ? response({ finishReason: "stop", content: "recovered after argument compaction" })
+          ? response({
+              finishReason: "stop",
+              content: "recovered after argument compaction",
+            })
           : response({ finishReason: "length", content: null });
       });
 
@@ -396,7 +495,7 @@ describe("callLLMWithToolsFromMessages", () => {
         model: "probe-model",
         maxIterations: 1,
         completionProfile: "code",
-      })
+      }),
     ).resolves.toEqual({
       content: "recovered after argument compaction",
       toolCalls: [],

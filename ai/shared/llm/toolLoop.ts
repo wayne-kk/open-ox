@@ -3,7 +3,12 @@ import { executeSystemTool } from "@/ai/tools";
 import type { ToolResult } from "@/ai/tools";
 import { chatCompletion } from "./gateway";
 import { throwClassifiedLLMError } from "./errorClassifier";
-import type { AgentToolCallRecord, ChatMessage, ChatMessageContent } from "./types";
+import type {
+  AgentToolCallRecord,
+  ChatCompletionResponse,
+  ChatMessage,
+  ChatMessageContent,
+} from "./types";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { lfToolAgentRound } from "@/lib/observability/langfuseGenerationCatalog";
 
@@ -47,20 +52,24 @@ function resolveCompletionMaxTokens(
   profile: ToolLoopCompletionProfile | undefined,
   model: string,
   messages: ChatMessage[],
-  tools: ChatCompletionTool[]
+  tools: ChatCompletionTool[],
 ): number | undefined {
   if (!profile) return undefined;
   const profileTokens = TOOL_LOOP_COMPLETION_TOKENS[profile];
-  const contextWindow = getAllModels().find((candidate) => candidate.id === model)?.contextWindow;
+  const contextWindow = getAllModels().find(
+    (candidate) => candidate.id === model,
+  )?.contextWindow;
   if (!contextWindow) return profileTokens;
   // Text characters are conservative for mixed ASCII/CJK prompts. Image data
   // URLs use a fixed vision estimate because providers do not tokenize base64.
   const estimatedPromptTokens =
-    messages.reduce((total, message) => total + estimateMessageTokens(message), 0) +
-    JSON.stringify(tools).length;
+    messages.reduce(
+      (total, message) => total + estimateMessageTokens(message),
+      0,
+    ) + JSON.stringify(tools).length;
   const availableCompletionTokens = Math.max(
     1,
-    contextWindow - estimatedPromptTokens - CONTEXT_WINDOW_SAFETY_TOKENS
+    contextWindow - estimatedPromptTokens - CONTEXT_WINDOW_SAFETY_TOKENS,
   );
   return Math.min(profileTokens, availableCompletionTokens);
 }
@@ -106,9 +115,11 @@ function compactCompletedToolCallArguments(toolCalls: unknown[]): unknown[] {
 
 function compactToolHistoryForRequest(
   messages: ChatMessage[],
-  compactOlderToolResults: boolean
+  compactOlderToolResults: boolean,
 ): ChatMessage[] {
-  const toolMessageCount = messages.filter((message) => message.role === "tool").length;
+  const toolMessageCount = messages.filter(
+    (message) => message.role === "tool",
+  ).length;
   let toolMessageIndex = 0;
 
   return messages.map((message) => {
@@ -160,10 +171,12 @@ function extractReasoningFromAssistantMessage(msg: unknown): string | null {
 function resolveToolLoopPhase(
   explicit: string | undefined,
   legacyLabel: string | undefined,
-  defaultSlug: string
+  defaultSlug: string,
 ): string {
   const raw = explicit ?? legacyLabel ?? defaultSlug;
-  return raw.replace(/[^a-zA-Z0-9_.-]+/g, "_").replace(/^_+|_+$/g, "") || defaultSlug;
+  return (
+    raw.replace(/[^a-zA-Z0-9_.-]+/g, "_").replace(/^_+|_+$/g, "") || defaultSlug
+  );
 }
 
 export async function callLLMWithTools(params: {
@@ -180,7 +193,10 @@ export async function callLLMWithTools(params: {
   parallelToolCalls?: boolean;
   model?: string;
   thinkingLevel?: string;
-  executeToolOverrides?: Record<string, (args: Record<string, unknown>) => Promise<ToolResult | string>>;
+  executeToolOverrides?: Record<
+    string,
+    (args: Record<string, unknown>) => Promise<ToolResult | string>
+  >;
   /** Optional: called for every message added to the conversation history. */
   onMessage?: (msg: ChatMessage) => void;
   /** Called after each tool execution completes. */
@@ -210,14 +226,18 @@ export async function callLLMWithTools(params: {
   } = params;
   const model = params.model || getModelId();
   let activeTools = tools;
-  const firstUserContent = userContent !== undefined ? userContent : userMessage;
+  const firstUserContent =
+    userContent !== undefined ? userContent : userMessage;
   const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
     { role: "user", content: firstUserContent },
   ];
   const toolCalls: AgentToolCallRecord[] = [];
   const emit = params.onMessage;
-  if (emit) { emit(messages[0]); emit(messages[1]); }
+  if (emit) {
+    emit(messages[0]);
+    emit(messages[1]);
+  }
 
   for (let iteration = 0; iteration < maxIterations; iteration += 1) {
     let res;
@@ -229,13 +249,21 @@ export async function callLLMWithTools(params: {
         ...(params.maxTokens != null && params.maxTokens > 0
           ? { max_tokens: params.maxTokens }
           : {}),
-        ...(params.parallelToolCalls === false ? { parallel_tool_calls: false } : {}),
+        ...(params.parallelToolCalls === false
+          ? { parallel_tool_calls: false }
+          : {}),
         tools: activeTools.length > 0 ? activeTools : undefined,
         tool_choice: activeTools.length > 0 ? "auto" : undefined,
-        ...(params.thinkingLevel ? { thinking_level: params.thinkingLevel } : {}),
+        ...(params.thinkingLevel
+          ? { thinking_level: params.thinkingLevel }
+          : {}),
         langfuseGenerationName: lfToolAgentRound(
-          resolveToolLoopPhase(params.langfusePhase, params.langfuseAgentLabel, "tool_prompt_tools"),
-          iteration
+          resolveToolLoopPhase(
+            params.langfusePhase,
+            params.langfuseAgentLabel,
+            "tool_prompt_tools",
+          ),
+          iteration,
         ),
         langfuseGenerationMetadata: {
           iteration: iteration + 1,
@@ -253,7 +281,7 @@ export async function callLLMWithTools(params: {
 
       if (shouldDisableTools) {
         console.warn(
-          `[callLLMWithTools] model=${model} rejected tool payload; fallback to plain completion.`
+          `[callLLMWithTools] model=${model} rejected tool payload; fallback to plain completion.`,
         );
         activeTools = [];
         continue;
@@ -266,7 +294,7 @@ export async function callLLMWithTools(params: {
 
     if (res.choices[0]?.finish_reason === "length") {
       throw new Error(
-        `LLM response truncated (finish_reason=length) at iteration ${iteration}. Reduce prompt size or increase max_tokens.`
+        `LLM response truncated (finish_reason=length) at iteration ${iteration}. Reduce prompt size or increase max_tokens.`,
       );
     }
 
@@ -289,7 +317,7 @@ export async function callLLMWithTools(params: {
   }
 
   console.warn(
-    `[callLLMWithTools] maxIterations (${maxIterations}) exhausted without a final response. Returning last tool call results.`
+    `[callLLMWithTools] maxIterations (${maxIterations}) exhausted without a final response. Returning last tool call results.`,
   );
   return { content: "", toolCalls };
 }
@@ -309,7 +337,10 @@ export async function callLLMWithToolsFromMessages(params: {
   parallelToolCalls?: boolean;
   model?: string;
   thinkingLevel?: string;
-  executeToolOverrides?: Record<string, (args: Record<string, unknown>) => Promise<ToolResult | string>>;
+  executeToolOverrides?: Record<
+    string,
+    (args: Record<string, unknown>) => Promise<ToolResult | string>
+  >;
   onMessage?: (msg: ChatMessage) => void;
   /** If set, invoked after each tool result is appended; return true to stop before the next LLM call. */
   shouldAbortAfterToolResults?: () => boolean;
@@ -344,6 +375,16 @@ export async function callLLMWithToolsFromMessages(params: {
     textPreview: string | null;
     toolCallNames: string[];
   }) => void;
+  /**
+   * Let a role worker reject an assistant stop when its deterministic
+   * postcondition is not satisfied. Return true after appending a recovery
+   * message to continue with the next round.
+   */
+  onAssistantStop?: (context: {
+    iteration: number;
+    message: ChatCompletionResponse["choices"][number]["message"];
+    messages: ChatMessage[];
+  }) => boolean;
   langfusePhase?: string;
   /** @deprecated Prefer `langfusePhase` */
   langfuseAgentLabel?: string;
@@ -351,12 +392,12 @@ export async function callLLMWithToolsFromMessages(params: {
   /** Optional per-iteration tool subset (e.g. batch-write first round). */
   resolveToolsForIteration?: (
     iteration: number,
-    defaultTools: ChatCompletionTool[]
+    defaultTools: ChatCompletionTool[],
   ) => ChatCompletionTool[];
   /** Optional per-iteration tool_choice (defaults to auto when tools present). */
   resolveToolChoiceForIteration?: (
     iteration: number,
-    toolsForRound: ChatCompletionTool[]
+    toolsForRound: ChatCompletionTool[],
   ) => ToolLoopToolChoice | undefined;
   /** Shrink tool role message content sent back to the model on the next turn. */
   formatToolResultForModel?: (info: FormatToolResultForModelParams) => string;
@@ -388,18 +429,20 @@ export async function callLLMWithToolsFromMessages(params: {
   const phase = resolveToolLoopPhase(
     params.langfusePhase,
     params.langfuseAgentLabel,
-    "tool_prompt_messages"
+    "tool_prompt_messages",
   );
 
   for (let iteration = 0; iteration < maxIterations; iteration += 1) {
     params.compactMessagesBeforeRound?.({ iteration, maxIterations, messages });
 
-    const toolsForRound = params.resolveToolsForIteration?.(iteration, tools) ?? tools;
+    const toolsForRound =
+      params.resolveToolsForIteration?.(iteration, tools) ?? tools;
     activeTools = toolsForRound;
 
     const toolChoice =
       activeTools.length > 0
-        ? (params.resolveToolChoiceForIteration?.(iteration, activeTools) ?? "auto")
+        ? (params.resolveToolChoiceForIteration?.(iteration, activeTools) ??
+          "auto")
         : undefined;
 
     // Fire the approaching-limit callback once
@@ -416,7 +459,10 @@ export async function callLLMWithToolsFromMessages(params: {
     const requestRound = (lengthRetry: boolean) => {
       const compactedMessages =
         lengthRetry || params.completionProfile === "code"
-          ? compactToolHistoryForRequest(messages, params.completionProfile === "code")
+          ? compactToolHistoryForRequest(
+              messages,
+              params.completionProfile === "code",
+            )
           : messages;
       const requestMessages =
         params.completionProfile === "code"
@@ -426,13 +472,15 @@ export async function callLLMWithToolsFromMessages(params: {
         params.completionProfile,
         model,
         requestMessages,
-        activeTools
+        activeTools,
       );
       return chatCompletion({
         model,
         messages: requestMessages,
         temperature,
-        ...(roundCompletionMaxTokens ? { max_tokens: roundCompletionMaxTokens } : {}),
+        ...(roundCompletionMaxTokens
+          ? { max_tokens: roundCompletionMaxTokens }
+          : {}),
         ...(lengthRetry
           ? { parallel_tool_calls: false }
           : params.parallelToolCalls === false
@@ -484,11 +532,11 @@ export async function callLLMWithToolsFromMessages(params: {
           throw new Error(
             `Model "${model}" rejected the tool-calling payload (HTTP 400). ` +
               `This agent requires tool support — verify the model is compatible. ` +
-              `Detail: ${msg.slice(0, 300)}`
+              `Detail: ${msg.slice(0, 300)}`,
           );
         }
         console.warn(
-          `[callLLMWithToolsFromMessages] model=${model} rejected tool payload; fallback to plain completion.`
+          `[callLLMWithToolsFromMessages] model=${model} rejected tool payload; fallback to plain completion.`,
         );
         activeTools = [];
         continue;
@@ -501,14 +549,15 @@ export async function callLLMWithToolsFromMessages(params: {
 
     if (res.choices[0]?.finish_reason === "length") {
       const usage = res.usage;
-      const reasoningTokens = usage?.completion_tokens_details?.reasoning_tokens;
+      const reasoningTokens =
+        usage?.completion_tokens_details?.reasoning_tokens;
       throw new Error(
-          `LLM response truncated after one recovery attempt (finish_reason=length): ` +
+        `LLM response truncated after one recovery attempt (finish_reason=length): ` +
           `phase=${phase} model=${model} iteration=${iteration} ` +
           `max_tokens=${roundCompletionMaxTokens ?? "provider-default"} ` +
           `prompt_tokens=${usage?.prompt_tokens ?? "unknown"} ` +
           `completion_tokens=${usage?.completion_tokens ?? "unknown"} ` +
-          `reasoning_tokens=${reasoningTokens ?? "unknown"}.`
+          `reasoning_tokens=${reasoningTokens ?? "unknown"}.`,
       );
     }
 
@@ -527,7 +576,8 @@ export async function callLLMWithToolsFromMessages(params: {
     const toolCallNames =
       message.tool_calls
         ?.map((tc) => tc.function?.name)
-        .filter((n): n is string => typeof n === "string" && n.length > 0) ?? [];
+        .filter((n): n is string => typeof n === "string" && n.length > 0) ??
+      [];
     params.onAssistantRound?.({
       iteration,
       textPreview:
@@ -538,7 +588,13 @@ export async function callLLMWithToolsFromMessages(params: {
     });
 
     if (!message.tool_calls || message.tool_calls.length === 0) {
-      return { content: message.content?.trim() ?? lastAssistantContent, toolCalls };
+      if (params.onAssistantStop?.({ iteration, message, messages })) {
+        continue;
+      }
+      return {
+        content: message.content?.trim() ?? lastAssistantContent,
+        toolCalls,
+      };
     }
 
     await dispatchToolCalls({
@@ -550,7 +606,8 @@ export async function callLLMWithToolsFromMessages(params: {
       iteration,
       onToolCall: params.onToolCall,
       formatToolResultForModel: params.formatToolResultForModel,
-      maxSourceMutationCalls: params.completionProfile === "code" ? 1 : undefined,
+      maxSourceMutationCalls:
+        params.completionProfile === "code" ? 1 : undefined,
     });
 
     if (shouldAbortAfterToolResults?.()) {
@@ -560,7 +617,7 @@ export async function callLLMWithToolsFromMessages(params: {
 
   console.warn(
     `[callLLMWithToolsFromMessages] maxIterations (${maxIterations}) exhausted ` +
-      `without a final assistant message. model=${model}, toolCalls=${toolCalls.length}`
+      `without a final assistant message. model=${model}, toolCalls=${toolCalls.length}`,
   );
   return { content: lastAssistantContent, toolCalls };
 }
@@ -572,10 +629,7 @@ export async function callLLMWithToolsFromMessages(params: {
  * `tool_calls` batch, the whole batch falls back to serial execution
  * to preserve the previous safe semantics.
  */
-const SERIAL_ONLY_TOOLS = new Set<string>([
-  "install_package",
-  "exec_shell",
-]);
+const SERIAL_ONLY_TOOLS = new Set<string>(["install_package", "exec_shell"]);
 
 interface ParsedToolCall {
   id: string;
@@ -602,7 +656,7 @@ async function executeOne(
   executeToolOverrides: Record<
     string,
     (args: Record<string, unknown>) => Promise<ToolResult | string>
-  >
+  >,
 ): Promise<ToolResult | string> {
   const overrideFn = executeToolOverrides[call.name];
   return overrideFn
@@ -621,7 +675,12 @@ async function executeOne(
 async function dispatchToolCalls(params: {
   toolCalls: AgentToolCallRecord[];
   messages: ChatMessage[];
-  message: { tool_calls?: Array<{ id: string; function: { name: string; arguments?: string } }> };
+  message: {
+    tool_calls?: Array<{
+      id: string;
+      function: { name: string; arguments?: string };
+    }>;
+  };
   executeToolOverrides: Record<
     string,
     (args: Record<string, unknown>) => Promise<ToolResult | string>
@@ -657,19 +716,23 @@ async function dispatchToolCalls(params: {
       return { call, skippedResult: undefined };
     }
     sourceMutationCallCount += 1;
-    if (maxSourceMutationCalls == null || sourceMutationCallCount <= maxSourceMutationCalls) {
+    if (
+      maxSourceMutationCalls == null ||
+      sourceMutationCallCount <= maxSourceMutationCalls
+    ) {
       return { call, skippedResult: undefined };
     }
     const skippedResult: ToolResult = {
       success: false,
-      error: "Skipped: only one source mutation tool call is allowed per model response.",
+      error:
+        "Skipped: only one source mutation tool call is allowed per model response.",
     };
     return { call, skippedResult };
   });
 
   const serializeForModel = (
     call: ParsedToolCall,
-    result: ToolResult | string
+    result: ToolResult | string,
   ): string => {
     if (formatToolResultForModel) {
       return formatToolResultForModel({
@@ -687,7 +750,8 @@ async function dispatchToolCalls(params: {
 
   if (requiresSerial) {
     for (const { call, skippedResult } of callsWithPolicy) {
-      const result = skippedResult ?? (await executeOne(call, executeToolOverrides));
+      const result =
+        skippedResult ?? (await executeOne(call, executeToolOverrides));
       toolCalls.push({ name: call.name, args: call.args, result });
       if (!skippedResult) {
         onToolCall?.({ name: call.name, args: call.args, result, iteration });
@@ -719,7 +783,7 @@ async function dispatchToolCalls(params: {
         };
         return { call, result: errorResult, skipped: false };
       }
-    })
+    }),
   );
 
   for (const { call, result, skipped } of settled) {

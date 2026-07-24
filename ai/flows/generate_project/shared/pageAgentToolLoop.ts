@@ -10,8 +10,14 @@ import type { ChatCompletionTool } from "openai/resources/chat/completions";
 export const PAGE_AGENT_DEFAULT_MAX_ITERATIONS = 96;
 
 /** Read-only tools available only after bootstrap or when lint/debug needs them. */
-export const PAGE_AGENT_OBSERVE_TOOL_NAME_LIST = ["read_file", "list_dir", "search_code"] as const;
-export const PAGE_AGENT_OBSERVE_TOOL_NAMES = new Set<string>(PAGE_AGENT_OBSERVE_TOOL_NAME_LIST);
+export const PAGE_AGENT_OBSERVE_TOOL_NAME_LIST = [
+  "read_file",
+  "list_dir",
+  "search_code",
+] as const;
+export const PAGE_AGENT_OBSERVE_TOOL_NAMES = new Set<string>(
+  PAGE_AGENT_OBSERVE_TOOL_NAME_LIST,
+);
 
 export const PAGE_AGENT_ACT_TOOL_NAMES = [
   "write_file",
@@ -70,7 +76,9 @@ export interface PageAgentSessionState {
   actNudgeSent: boolean;
 }
 
-export function createPageAgentSessionState(bootstrapSummary = ""): PageAgentSessionState {
+export function createPageAgentSessionState(
+  bootstrapSummary = "",
+): PageAgentSessionState {
   return {
     writtenPaths: [],
     editedPaths: [],
@@ -84,7 +92,7 @@ export function createPageAgentSessionState(bootstrapSummary = ""): PageAgentSes
 export function shouldRunPageAgentCompaction(
   state: PageAgentSessionState,
   iteration: number,
-  compactFromIteration: number
+  compactFromIteration: number,
 ): boolean {
   if (state.writtenPaths.length === 0) return false;
   return iteration + 1 >= compactFromIteration;
@@ -92,7 +100,7 @@ export function shouldRunPageAgentCompaction(
 
 export function filterPageAgentToolsForPhase(
   tools: ChatCompletionTool[],
-  allowObserve: boolean
+  allowObserve: boolean,
 ): ChatCompletionTool[] {
   if (allowObserve) return tools;
   return tools.filter((t) => {
@@ -101,12 +109,14 @@ export function filterPageAgentToolsForPhase(
   });
 }
 
-export function recordPageAgentToolCall(
+export function recordPageAgentToolResult(
   state: PageAgentSessionState,
   name: string,
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  result: ToolResult | string,
 ): void {
   state.toolNames.push(name);
+  if (typeof result !== "string" && !result.success) return;
   const path = normalizeAgentRelativePath(args.path);
   if (!path) return;
   if (name === "write_file") {
@@ -115,6 +125,14 @@ export function recordPageAgentToolCall(
   if (name === "edit_file") {
     if (!state.editedPaths.includes(path)) state.editedPaths.push(path);
   }
+}
+
+export function shouldRejectRepeatedPageAgentWrite(
+  state: PageAgentSessionState,
+  rawPath: unknown,
+): boolean {
+  const path = normalizeAgentRelativePath(rawPath);
+  return Boolean(path) && state.writtenPaths.includes(path);
 }
 
 function countLinesFromWriteArgs(args: Record<string, unknown>): number | null {
@@ -157,7 +175,9 @@ export function formatPageAgentToolResultForModel(info: {
     return JSON.stringify({
       success: false,
       error: result.error ?? "tool failed",
-      ...(result.output ? { output: truncateForToolMessage(result.output, 400) } : {}),
+      ...(result.output
+        ? { output: truncateForToolMessage(result.output, 400) }
+        : {}),
     });
   }
 
@@ -196,7 +216,10 @@ export function formatPageAgentToolResultForModel(info: {
 
   if (name === "read_lints" || name === "search_code" || name === "list_dir") {
     const out = result.output ?? "";
-    return truncateForToolMessage(typeof out === "string" ? out : JSON.stringify(out), 2_000);
+    return truncateForToolMessage(
+      typeof out === "string" ? out : JSON.stringify(out),
+      2_000,
+    );
   }
 
   if (result.output && typeof result.output === "string") {
@@ -211,7 +234,7 @@ export function formatPageAgentToolResultForModel(info: {
 
 /** Cap read_file payload returned to the model on subsequent turns (Page Agent only). */
 export function createBootstrapGuardedReadExecutor(
-  bootstrappedPaths: Set<string>
+  bootstrappedPaths: Set<string>,
 ): (args: Record<string, unknown>) => Promise<ToolResult | string> {
   return async (args: Record<string, unknown>) => {
     const path = normalizeAgentRelativePath(args.path);
@@ -229,7 +252,7 @@ export function createBootstrapGuardedReadExecutor(
 
 /** list_dir for trees already in bootstrap — steer agent to write. */
 export function createBootstrapGuardedListDirExecutor(
-  bootstrappedPaths: Set<string>
+  bootstrappedPaths: Set<string>,
 ): (args: Record<string, unknown>) => Promise<ToolResult | string> {
   return async (args: Record<string, unknown>) => {
     const path = normalizeAgentRelativePath(args.path ?? ".");
@@ -259,7 +282,8 @@ export function isPageAgentForbiddenWritePath(relativePath: string): boolean {
   const path = normalizeAgentRelativePath(relativePath);
   if (!path) return false;
   if (path === "app/layout.tsx" || path === "app/globals.css") return true;
-  if (path === "components/chrome" || path.startsWith("components/chrome/")) return true;
+  if (path === "components/chrome" || path.startsWith("components/chrome/"))
+    return true;
   return false;
 }
 
@@ -270,7 +294,7 @@ export interface PageAgentWriteOwnership {
 
 export function isPageAgentOwnedWritePath(
   relativePath: string,
-  ownership: PageAgentWriteOwnership
+  ownership: PageAgentWriteOwnership,
 ): boolean {
   const path = normalizeAgentRelativePath(relativePath);
   const targetPath = normalizeAgentRelativePath(ownership.targetPath);
@@ -278,7 +302,11 @@ export function isPageAgentOwnedWritePath(
   const isCanonicalRelativePath = (candidate: string): boolean =>
     Boolean(candidate) &&
     !candidate.startsWith("/") &&
-    candidate.split("/").every((segment) => Boolean(segment) && segment !== "." && segment !== "..");
+    candidate
+      .split("/")
+      .every(
+        (segment) => Boolean(segment) && segment !== "." && segment !== "..",
+      );
 
   if (
     !isCanonicalRelativePath(path) ||
@@ -292,7 +320,7 @@ export function isPageAgentOwnedWritePath(
 
 export function createPageAgentChromeDeferredWriteExecutor(
   toolName: "write_file" | "edit_file",
-  ownership: PageAgentWriteOwnership
+  ownership: PageAgentWriteOwnership,
 ): (args: Record<string, unknown>) => Promise<ToolResult | string> {
   return async (args: Record<string, unknown>) => {
     const path = normalizeAgentRelativePath(args.path);
@@ -319,7 +347,7 @@ export function createPageAgentChromeDeferredWriteExecutor(
 }
 
 export async function executePageAgentReadFile(
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
 ): Promise<ToolResult | string> {
   const result = await executeSystemTool("read_file", args);
   if (typeof result === "string") {
@@ -336,7 +364,7 @@ export async function executePageAgentReadFile(
 
 /** @deprecated Alias — list_dir is no longer blocked for Page Agent. */
 export async function executePageAgentListDir(
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
 ): Promise<ToolResult | string> {
   return executeSystemTool("list_dir", args);
 }
@@ -345,7 +373,11 @@ export async function executePageAgentListDir(
 export function compactPageAgentMessages(
   messages: ChatMessage[],
   state: PageAgentSessionState,
-  options?: { keepRecent?: number; bootstrapSummary?: string; preserveHeadCount?: number }
+  options?: {
+    keepRecent?: number;
+    bootstrapSummary?: string;
+    preserveHeadCount?: number;
+  },
 ): void {
   const keepRecent = options?.keepRecent ?? 6;
   const preserveHeadCount = options?.preserveHeadCount ?? 2;
@@ -355,7 +387,9 @@ export function compactPageAgentMessages(
   const tail = messages.slice(-keepRecent);
 
   const written =
-    state.writtenPaths.length > 0 ? state.writtenPaths.join(", ") : "(none yet)";
+    state.writtenPaths.length > 0
+      ? state.writtenPaths.join(", ")
+      : "(none yet)";
   const edited =
     state.editedPaths.length > 0 ? state.editedPaths.join(", ") : "(none)";
   const bootstrapNote =

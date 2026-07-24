@@ -172,7 +172,11 @@ function formatDesignSystemMatchDetail(
   const candidateIds = outcome.trace.candidates
     .map((candidate) => candidate.skillId)
     .join(",");
-  return `LLM fallback:${outcome.fallbackReason} · candidates:${candidateIds || "none"}`;
+  const failure = outcome.trace.matcherFailure;
+  const failureDetail = failure
+    ? ` · model:${failure.model} · cause:${failure.message}`
+    : "";
+  return `LLM fallback:${outcome.fallbackReason} · candidates:${candidateIds || "none"}${failureDetail}`;
 }
 
 

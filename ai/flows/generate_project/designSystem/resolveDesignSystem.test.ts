@@ -701,6 +701,10 @@ describe("DesignSystemResolver", () => {
       judge: vi.fn().mockRejectedValue(
         Object.assign(new Error("response ended inside JSON"), {
           matcherFailureReason: "matcher_response_truncated",
+          matcherFailureDetail: {
+            model: "gemini-test",
+            message: "response ended inside JSON",
+          },
         }),
       ),
       generate: vi
@@ -716,6 +720,12 @@ describe("DesignSystemResolver", () => {
     expect(result).toMatchObject({
       source: "generated",
       fallbackReason: "matcher_response_truncated",
+      trace: {
+        matcherFailure: {
+          model: "gemini-test",
+          message: "response ended inside JSON",
+        },
+      },
     });
   });
 

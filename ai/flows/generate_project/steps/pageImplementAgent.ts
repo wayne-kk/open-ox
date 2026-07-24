@@ -19,7 +19,12 @@ import { createImageExecutor } from "@/ai/tools/system/generateImageTool";
 import type { PendingImage } from "@/ai/tools/system/generateImageTool";
 import { getModelForStep, getThinkingLevelForStep } from "@/lib/config/models";
 import { slugToPageComponentRoot, slugToPagePath } from "../shared/paths";
-import type { PlannedPageBlueprint, StepTrace, PageAgentProjectContext, BuildStep } from "../types";
+import type {
+  PlannedPageBlueprint,
+  StepTrace,
+  PageAgentProjectContext,
+  BuildStep,
+} from "../types";
 import { resolvePageImplementAgentRuleIds } from "../shared/agentRuleBundles";
 import { buildUserVisionContent } from "../shared/userVisionContent";
 import { screenshotGuardrailIdFromContext } from "../shared/screenshotIntentMode";
@@ -56,8 +61,9 @@ import {
   isPageAgentBatchFirstRoundEnabled,
   PAGE_AGENT_TOOL_NAMES,
   pageAgentCompactFromIteration,
-  recordPageAgentToolCall,
+  recordPageAgentToolResult,
   resolvePageAgentMaxIterations,
+  shouldRejectRepeatedPageAgentWrite,
   shouldRunPageAgentCompaction,
 } from "../shared/pageAgentToolLoop";
 
@@ -92,14 +98,25 @@ function truncate(text: string, max: number): string {
 }
 
 function assertDefaultExportPage(tsx: string, path: string): void {
-  if (!/export\s+default\s+function\b/.test(tsx) && !/export\s+default\s+\w+/.test(tsx)) {
-    throw new Error(`page_implement_agent: ${path} must include a default export`);
+  if (
+    !/export\s+default\s+function\b/.test(tsx) &&
+    !/export\s+default\s+\w+/.test(tsx)
+  ) {
+    throw new Error(
+      `page_implement_agent: ${path} must include a default export`,
+    );
   }
 }
 
-export function pageImplementationIncompleteReason(tsx: string, path: string): string | null {
+export function pageImplementationIncompleteReason(
+  tsx: string,
+  path: string,
+): string | null {
   if (!tsx.trim()) return `${path} is empty or missing`;
-  if (!/export\s+default\s+function\b/.test(tsx) && !/export\s+default\s+\w+/.test(tsx)) {
+  if (
+    !/export\s+default\s+function\b/.test(tsx) &&
+    !/export\s+default\s+\w+/.test(tsx)
+  ) {
     return `${path} must include a default export`;
   }
   if (tsx.includes("Preparing your site")) {
@@ -139,29 +156,29 @@ export interface PageImplementAgentResult {
 }
 
 export async function runPageImplementAgent(
-  params: RunPageImplementAgentParams
+  params: RunPageImplementAgentParams,
 ): Promise<PageImplementAgentResult> {
-  const {
-    page,
-    projectContext,
-    onMessage,
-    onStep,
-  } = params;
+  const { page, projectContext, onMessage, onStep } = params;
   const targetPath = slugToPagePath(page.slug);
   const componentRoot = slugToPageComponentRoot(page.slug);
   const model = getModelForStep("page_implement_agent");
   const thinking = getThinkingLevelForStep("page_implement_agent");
   const agentStepName = `page_implement_agent:${page.slug}`;
-  const userContent = prepareUserProvidedContentForPageAgent(projectContext.userProvidedContent);
+  const userContent = prepareUserProvidedContentForPageAgent(
+    projectContext.userProvidedContent,
+  );
   const hasRefShot = Boolean(projectContext.referenceScreenshotDataUrl?.trim());
   const imageUrlFallbackText = shouldScanPromptForUserImageUrls(
     projectContext.screenshotIntentMode ?? "none",
     hasRefShot,
-    projectContext.rawUserInput
+    projectContext.rawUserInput,
   )
     ? (projectContext.rawUserInput ?? "")
     : "";
-  const userImageUrls = listUserProvidedImageUrls(userContent, imageUrlFallbackText);
+  const userImageUrls = listUserProvidedImageUrls(
+    userContent,
+    imageUrlFallbackText,
+  );
   const userImageCount = userImageUrls.length;
   const hasUserContent = hasUserProvidedContent(userContent);
   const refShot = projectContext.referenceScreenshotDataUrl ?? null;
@@ -170,7 +187,7 @@ export async function runPageImplementAgent(
     shouldBlockSkillsForScreenshotReplicate(
       projectContext.screenshotIntentMode ?? "none",
       Boolean(refShot?.trim()),
-      projectContext.rawUserInput
+      projectContext.rawUserInput,
     );
 
   const planJson = JSON.stringify(
@@ -182,7 +199,7 @@ export async function runPageImplementAgent(
       constraints: page.pageDesignPlan.constraints,
     },
     null,
-    2
+    2,
   );
 
   const userMessage = buildPageAgentUserMessage({
@@ -205,7 +222,7 @@ export async function runPageImplementAgent(
 
   const refGuardId = screenshotGuardrailIdFromContext(
     projectContext.screenshotIntentMode,
-    Boolean(refShot?.trim())
+    Boolean(refShot?.trim()),
   );
   const systemPrompt = composePromptBlocks([
     loadSystem("frontend"),
@@ -217,9 +234,9 @@ export async function runPageImplementAgent(
           loadGuardrail("screenshotReplicatePageOwnsChrome"),
         ]
       : [loadGuardrail("chromeDeferredNoPageNav")]),
-    ...resolvePageImplementAgentRuleIds({ userProvidedImageCount: userImageCount }).map(
-      loadGuardrail
-    ),
+    ...resolvePageImplementAgentRuleIds({
+      userProvidedImageCount: userImageCount,
+    }).map(loadGuardrail),
   ]);
 
   const messages: ChatMessage[] = [
@@ -243,25 +260,76 @@ export async function runPageImplementAgent(
     messages.push({ role: "user", content: bootstrap.message });
   }
 
+  const sessionState = createPageAgentSessionState(bootstrapSummary);
+
   const readFileExecutor = bootstrapEnabled
     ? createBootstrapGuardedReadExecutor(bootstrappedPaths)
     : executePageAgentReadFile;
   const listDirExecutor = bootstrapEnabled
     ? createBootstrapGuardedListDirExecutor(bootstrappedPaths)
     : executePageAgentListDir;
-  const chromeDeferredWrites = !replicateLayout;
-  const writeFileExecutor = chromeDeferredWrites
-    ? createPageAgentChromeDeferredWriteExecutor("write_file", { targetPath, componentRoot })
-    : undefined;
-  const editFileExecutor = chromeDeferredWrites
-    ? createPageAgentChromeDeferredWriteExecutor("edit_file", { targetPath, componentRoot })
-    : undefined;
+  const baseWriteFileExecutor = createPageAgentChromeDeferredWriteExecutor(
+    "write_file",
+    { targetPath, componentRoot },
+  );
+  const baseEditFileExecutor = createPageAgentChromeDeferredWriteExecutor(
+    "edit_file",
+    { targetPath, componentRoot },
+  );
+  const guardTargetFirst =
+    (
+      toolName: "write_file" | "edit_file",
+      executor: (args: Record<string, unknown>) => Promise<ToolResult | string>,
+    ) =>
+    async (args: Record<string, unknown>): Promise<ToolResult | string> => {
+      const path = String(args.path ?? "")
+        .trim()
+        .replace(/^\.\//, "");
+      if (
+        pageImplementationIncompleteReason(
+          readSiteFile(targetPath),
+          targetPath,
+        ) &&
+        path !== targetPath
+      ) {
+        return {
+          success: false,
+          error:
+            `Target-first: implement \`${targetPath}\` before writing page-local components. ` +
+            `Use ${sessionState.writtenPaths.includes(targetPath) ? "edit_file" : "write_file"} on the target page now.`,
+        };
+      }
+      if (
+        toolName === "write_file" &&
+        shouldRejectRepeatedPageAgentWrite(sessionState, path)
+      ) {
+        return {
+          success: false,
+          error: `\`${path}\` was already created successfully. Use \`edit_file\` for subsequent changes.`,
+        };
+      }
+      return executor(args);
+    };
+  const writeFileExecutor = guardTargetFirst(
+    "write_file",
+    baseWriteFileExecutor,
+  );
+  const editFileExecutor = guardTargetFirst(
+    "edit_file",
+    baseEditFileExecutor,
+  );
 
   const pageImageScope = `page-${componentRoot.slice("components/pages/".length)}`;
-  const { executor: baseImageExecutor, pendingImages } = createImageExecutor(pageImageScope, {
-    filenamePrefix: pageImageScope,
-  });
-  const imageExecutor = guardGenerateImageExecutor(baseImageExecutor, userImageUrls);
+  const { executor: baseImageExecutor, pendingImages } = createImageExecutor(
+    pageImageScope,
+    {
+      filenamePrefix: pageImageScope,
+    },
+  );
+  const imageExecutor = guardGenerateImageExecutor(
+    baseImageExecutor,
+    userImageUrls,
+  );
 
   const imageTool =
     userImageCount > 0
@@ -270,7 +338,7 @@ export async function runPageImplementAgent(
 
   const fullPageTools: ChatCompletionTool[] = [
     ...getSystemToolDefinitions(
-      PAGE_AGENT_TOOL_NAMES.filter((name) => name !== "generate_image")
+      PAGE_AGENT_TOOL_NAMES.filter((name) => name !== "generate_image"),
     ),
     ...(imageTool ? [imageTool] : []),
     completeTool,
@@ -284,10 +352,11 @@ export async function runPageImplementAgent(
 
   let implementationComplete = false;
   let completeSummary = "";
-  const sessionState = createPageAgentSessionState(bootstrapSummary);
   const compactFromIter = pageAgentCompactFromIteration();
   const maxIterations = resolvePageAgentMaxIterations();
   const preserveHeadCount = bootstrapEnabled ? 3 : 2;
+  let emptyStopRecoveries = 0;
+  let iterationsUsed = 0;
 
   const { content, toolCalls } = await callLLMWithToolsFromMessages({
     messages,
@@ -300,14 +369,14 @@ export async function runPageImplementAgent(
     executeToolOverrides: {
       read_file: readFileExecutor,
       list_dir: listDirExecutor,
-      ...(writeFileExecutor ? { write_file: writeFileExecutor } : {}),
-      ...(editFileExecutor ? { edit_file: editFileExecutor } : {}),
+      write_file: writeFileExecutor,
+      edit_file: editFileExecutor,
       [PAGE_IMPLEMENTATION_COMPLETE]: async (
-        args: Record<string, unknown>
+        args: Record<string, unknown>,
       ): Promise<ToolResult> => {
         const incompleteReason = pageImplementationIncompleteReason(
           readSiteFile(targetPath),
-          targetPath
+          targetPath,
         );
         if (incompleteReason) {
           return {
@@ -318,8 +387,12 @@ export async function runPageImplementAgent(
           };
         }
         implementationComplete = true;
-        completeSummary = typeof args.summary === "string" ? args.summary.trim() : "";
-        return { success: true, output: "page_implementation_complete acknowledged" };
+        completeSummary =
+          typeof args.summary === "string" ? args.summary.trim() : "";
+        return {
+          success: true,
+          output: "page_implementation_complete acknowledged",
+        };
       },
       generate_image: imageExecutor,
     },
@@ -371,11 +444,19 @@ export async function runPageImplementAgent(
       }
 
       if (batchFirstRound && iteration === 0) {
-        toolsForRound = filterPageAgentToolsForPhase(batchWriteTools, allowObserve);
+        toolsForRound = filterPageAgentToolsForPhase(
+          batchWriteTools,
+          allowObserve,
+        );
       }
-      if (pageImplementationIncompleteReason(readSiteFile(targetPath), targetPath)) {
+      if (
+        pageImplementationIncompleteReason(readSiteFile(targetPath), targetPath)
+      ) {
+        const requiredMutation = sessionState.writtenPaths.includes(targetPath)
+          ? "edit_file"
+          : "write_file";
         toolsForRound = toolsForRound.filter(
-          (tool) => tool.function?.name !== PAGE_IMPLEMENTATION_COMPLETE
+          (tool) => tool.function?.name === requiredMutation,
         );
       }
       return toolsForRound;
@@ -400,10 +481,34 @@ export async function runPageImplementAgent(
       return "auto";
     },
     onMessage,
+    onAssistantRound: ({ iteration }) => {
+      iterationsUsed = Math.max(iterationsUsed, iteration + 1);
+    },
+    onAssistantStop: ({ messages: msgs }) => {
+      const incompleteReason = pageImplementationIncompleteReason(
+        readSiteFile(targetPath),
+        targetPath,
+      );
+      if (!incompleteReason || emptyStopRecoveries >= 2) return false;
+      emptyStopRecoveries += 1;
+      const requiredMutation = sessionState.writtenPaths.includes(targetPath)
+        ? "edit_file"
+        : "write_file";
+      const nudge: ChatMessage = {
+        role: "system",
+        content:
+          `[Recovery ${emptyStopRecoveries}/2] You stopped before the target page was implemented: ` +
+          `${incompleteReason}. Your next response must call \`${requiredMutation}\` for ` +
+          `\`${targetPath}\`. Do not write a section file or return prose.`,
+      };
+      msgs.push(nudge);
+      onMessage?.(nudge);
+      return true;
+    },
     shouldAbortAfterToolResults: () => implementationComplete,
     requireTools: true,
     onToolCall: ({ name, args, iteration, result }) => {
-      recordPageAgentToolCall(sessionState, name, args);
+      recordPageAgentToolResult(sessionState, name, args, result);
 
       if (name === "read_lints" && typeof result === "object") {
         const errN = Number(result.meta?.verifyErrorCount ?? 0);
@@ -415,19 +520,30 @@ export async function runPageImplementAgent(
       if (!onStep) return;
       if (VISIBLE_TOOL_NAMES.has(name)) {
         const filePath = String(args.path ?? "");
+        const succeeded = typeof result === "string" || result.success;
         onStep({
           step: `page_agent_tool:${page.slug}:${name}:${iteration}`,
-          status: "ok",
-          detail: `${name.replace("_", " ")}: ${filePath}`,
+          status: succeeded ? "ok" : "error",
+          detail: succeeded
+            ? `${name.replace("_", " ")}: ${filePath}`
+            : `${name.replace("_", " ")} rejected: ${filePath}`,
           timestamp: Date.now(),
           duration: 0,
         });
       }
       const detail =
         name === "read_file" || name === "list_dir"
-          ? `reading ${String(args.path ?? "").split("/").pop() || "..."}`
+          ? `reading ${
+              String(args.path ?? "")
+                .split("/")
+                .pop() || "..."
+            }`
           : name === "write_file" || name === "edit_file"
-            ? `writing ${String(args.path ?? "").split("/").pop() || "..."}`
+            ? `writing ${
+                String(args.path ?? "")
+                  .split("/")
+                  .pop() || "..."
+              }`
             : undefined;
       if (detail) {
         onStep({
@@ -455,6 +571,19 @@ export async function runPageImplementAgent(
     langfusePhase: lfPageImplementPhaseSlug(page.slug),
   });
 
+  const finalIncompleteReason = pageImplementationIncompleteReason(
+    readSiteFile(targetPath),
+    targetPath,
+  );
+  if (finalIncompleteReason) {
+    throw new Error(
+      `page_implement_agent:${page.slug}: stopped after ${iterationsUsed}/${maxIterations} iterations ` +
+        `without completing ${targetPath}: ${finalIncompleteReason}. ` +
+        `Successful target write: ${sessionState.writtenPaths.includes(targetPath) ? "yes" : "no"}. ` +
+        `Empty-stop recoveries: ${emptyStopRecoveries}/2. Model: ${model}, ` +
+        `tool calls: ${toolCalls.length}. Last message: ${(content || "(empty)").slice(0, 300)}`,
+    );
+  }
   if (!implementationComplete) {
     const implicitTsx = readSiteFile(targetPath);
     const incompleteReason = pageImplementationIncompleteReason(implicitTsx, targetPath);
@@ -482,20 +611,24 @@ export async function runPageImplementAgent(
   if (!tsx) {
     throw new Error(
       `page_implement_agent:${page.slug}: ${targetPath} is empty or missing ` +
-        `after agent signaled completion`
+        `after agent signaled completion`,
     );
   }
   assertDefaultExportPage(tsx, targetPath);
   if (tsx.includes("Preparing your site")) {
     throw new Error(
       `page_implement_agent:${page.slug}: ${targetPath} is still the default stub ` +
-        `("Preparing your site…") after the agent signaled completion`
+        `("Preparing your site…") after the agent signaled completion`,
     );
   }
   await formatSiteFile(targetPath);
 
   const writtenPaths = Array.from(
-    new Set([...sessionState.writtenPaths, ...sessionState.editedPaths, targetPath])
+    new Set([
+      ...sessionState.writtenPaths,
+      ...sessionState.editedPaths,
+      targetPath,
+    ]),
   );
 
   const trace: StepTrace = {

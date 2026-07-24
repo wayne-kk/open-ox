@@ -15,6 +15,10 @@ import {
   parseDesignSystemMatcherResponse,
 } from "./productionResolver";
 import { createFileDesignSystemSkillCatalog } from "./catalog";
+import {
+  beginModelRuntimeContext,
+  setStepThinkingLevel,
+} from "@/lib/config/models";
 
 const catalog = createFileDesignSystemSkillCatalog();
 const request = {
@@ -37,6 +41,28 @@ function completion(content: string) {
 describe("production design-system matcher", () => {
   beforeEach(() => {
     callLLMWithMeta.mockReset();
+    beginModelRuntimeContext();
+  });
+
+  it("honors the configured thinking level for the matcher step", async () => {
+    setStepThinkingLevel("match_design_system_skill", "low");
+    callLLMWithMeta.mockResolvedValue(
+      completion(
+        JSON.stringify({
+          skillId: "newsprint",
+          confidence: 0.94,
+          evidence: ["explicit newsprint direction"],
+          conflicts: [],
+          reason: "Strong fit",
+        }),
+      ),
+    );
+
+    await judgeCandidates(catalog, request, candidates);
+
+    expect(callLLMWithMeta.mock.calls[0]?.[5]).toMatchObject({
+      thinkingLevel: "low",
+    });
   });
 
   it.each(["null", "none", "", "no_match"])(
@@ -95,6 +121,9 @@ describe("production design-system matcher", () => {
 
     await expect(judgeCandidates(catalog, request, candidates)).rejects.toMatchObject({
       matcherFailureReason: "matcher_request_failed",
+      matcherFailureDetail: expect.objectContaining({
+        message: "gateway unavailable",
+      }),
     });
     expect(callLLMWithMeta).toHaveBeenCalledOnce();
   });

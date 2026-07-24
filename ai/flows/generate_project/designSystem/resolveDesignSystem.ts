@@ -5,6 +5,7 @@ import type {
   DesignSystemResolutionRequest,
   DesignSystemResolver,
   DesignSystemResolverDependencies,
+  DesignSystemMatcherFailureDetail,
   DesignSystemSkill,
 } from "./types";
 import { validateDesignSystemSkill } from "./skillContent";
@@ -29,6 +30,19 @@ function matcherFallbackReason(error: unknown): DesignSystemFallbackReason {
     default:
       return "matcher_request_failed";
   }
+}
+
+function matcherFailureDetail(
+  error: unknown,
+): DesignSystemMatcherFailureDetail | undefined {
+  if (!error || typeof error !== "object" || !("matcherFailureDetail" in error)) {
+    return undefined;
+  }
+  const detail = error.matcherFailureDetail;
+  if (!detail || typeof detail !== "object") return undefined;
+  if (!("model" in detail) || typeof detail.model !== "string") return undefined;
+  if (!("message" in detail) || typeof detail.message !== "string") return undefined;
+  return { model: detail.model, message: detail.message };
 }
 
 function inferSurfaceMode(
@@ -194,12 +208,14 @@ async function generateFallback(
   candidates: DesignSystemCandidate[],
   judgeOutcome?: Awaited<ReturnType<DesignSystemResolverDependencies["judge"]>>,
   observer?: DesignSystemResolutionObserver,
+  matcherFailure?: DesignSystemMatcherFailureDetail,
 ) {
   const matchOutcome = {
     source: "generated" as const,
     fallbackReason,
     trace: {
       candidates,
+      ...(matcherFailure ? { matcherFailure } : {}),
       ...(judgeOutcome
         ? {
             decision: judgeOutcome.decision,
@@ -321,6 +337,7 @@ export function createDesignSystemResolver(
           candidates,
           undefined,
           observer,
+          matcherFailureDetail(error),
         );
       }
       const { decision } = judgeOutcome;

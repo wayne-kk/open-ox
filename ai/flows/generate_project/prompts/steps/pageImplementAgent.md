@@ -17,7 +17,7 @@
 
 ### 硬性目标
 
-1. `**page.tsx` 必须存在**：路径由用户消息给出（`home` → `app/page.tsx`）。
+1. **`page.tsx` 必须存在**：路径由用户消息给出（`home` → `app/page.tsx`）。
 2. **导出默认 React Server or Client Component**；需要交互时用 `"use client"`。
 3. **自行拆文件**：页面组件只能放在用户消息指定的 **Page component root** 下；勿对齐不存在的 section 清单，也不要写入其他页面的组件目录。
 4. **遵守 design-system.md + tokens**：色与间距跟 token，勿另起色板。
@@ -38,8 +38,9 @@
 - **不要修改** `app/globals.css`、`app/layout.tsx` 或 `components/chrome/**`。
 - **不要**在页面内容区复制全局导航 / 页脚。
 - **不要调用 `format_code`**。
+- 不要对已成功创建的路径再次调用 `write_file`；使用 `edit_file` 修改。
 - 不要用 `page_implementation_complete` **敷衍**：调用前必须已写入 `page.tsx` 且路径可 import。
 
 ### 完成方式
 
-当你确认本路由与抽离的组件文件都已写好、import 合理时，**立即调用** 工具 `**page_implementation_complete`**（附一句 `summary`）。之后流水线会跑生产级 `build` / 修复。
+当你确认本路由与抽离的组件文件都已写好、import 合理时，**立即调用** 工具 **`page_implementation_complete`**（附一句 `summary`）。之后流水线会跑生产级 `build` / 修复。

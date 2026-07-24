@@ -30,7 +30,9 @@ export interface BuildPageAgentUserMessageParams {
   screenshotReplicaLayout?: boolean;
 }
 
-function buildWorkspaceNoteBlock(params: BuildPageAgentUserMessageParams): string {
+function buildWorkspaceNoteBlock(
+  params: BuildPageAgentUserMessageParams,
+): string {
   const lines = [
     "The **next message** pre-loads full `design-system.md`, layout, globals, directory trees",
     ...(params.userProvidedFileHint ? ["and user-provided content"] : []),
@@ -39,7 +41,9 @@ function buildWorkspaceNoteBlock(params: BuildPageAgentUserMessageParams): strin
   return lines.join(" ");
 }
 
-export function buildPageAgentUserMessage(params: BuildPageAgentUserMessageParams): string {
+export function buildPageAgentUserMessage(
+  params: BuildPageAgentUserMessageParams,
+): string {
   const {
     targetPath,
     slug,

@@ -67,8 +67,14 @@ export interface DesignSystemCandidate {
 export interface DesignSystemResolutionTrace {
   candidates: DesignSystemCandidate[];
   decision?: DesignSystemJudgeDecision;
+  matcherFailure?: DesignSystemMatcherFailureDetail;
   judgeTrace?: StepTrace;
   generationTrace?: StepTrace;
+}
+
+export interface DesignSystemMatcherFailureDetail {
+  model: string;
+  message: string;
 }
 
 export type DesignSystemFallbackReason =
