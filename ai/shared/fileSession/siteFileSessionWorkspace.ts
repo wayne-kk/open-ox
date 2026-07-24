@@ -65,6 +65,13 @@ export class SiteFileSessionWorkspace implements FileSessionWorkspace {
     return { content, revision: revision(content) };
   }
 
+  async readIfExists(path: string): Promise<{ content: string; revision: string } | null> {
+    const fullPath = this.fullPath(path);
+    if (!existsSync(fullPath)) return null;
+    const content = readFileSync(fullPath, "utf-8");
+    return { content, revision: revision(content) };
+  }
+
   async createOrReplace(
     path: string,
     content: string,

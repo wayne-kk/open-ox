@@ -74,6 +74,31 @@ describe("pageImplementationIncompleteReason", () => {
     expect(session.stopDecision()).toEqual({ kind: "complete" });
   });
 
+  it("creates a nested page when scaffold did not provide a replaceable baseline", async () => {
+    const workspace = new InMemoryFileSessionWorkspace();
+    const session = createPageFileSession({
+      slug: "profile",
+      targetPath: "app/profile/page.tsx",
+      componentRoot: "components/pages/profile",
+      workspace,
+    });
+
+    const created = await session.execute({
+      name: "create_file",
+      args: {
+        path: "app/profile/page.tsx",
+        content: "export default function Profile() { return <main>Profile</main>; }",
+      },
+    });
+
+    expect(created).toMatchObject({
+      success: true,
+      kind: "file_created",
+      path: "app/profile/page.tsx",
+    });
+    expect(session.stopDecision()).toEqual({ kind: "complete" });
+  });
+
   it("keeps a valid page complete when a shared contract rewrite is rejected", async () => {
     const workspace = new InMemoryFileSessionWorkspace({
       "app/page.tsx": "export default function Home() { return <main>Preparing your site…</main>; }",

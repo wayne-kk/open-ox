@@ -17,6 +17,7 @@ export interface FileSessionMutationResult {
 
 export interface FileSessionWorkspace {
   read(path: string): Promise<{ content: string; revision: string }>;
+  readIfExists(path: string): Promise<{ content: string; revision: string } | null>;
   createOrReplace(
     path: string,
     content: string,
@@ -371,25 +372,19 @@ export function createFileSession(options: FileSessionOptions): FileSession {
       };
     }
 
-    let expectedRevision: string | undefined;
-    if (!replaceable.has(call.args.path)) {
-      try {
-        await options.workspace.read(call.args.path);
-        return {
-          success: false,
-          kind: "error",
-          cached: false,
-          code: "FILE_ALREADY_EXISTS",
-          path: call.args.path,
-          error: `${call.args.path} already exists`,
-          retryable: true,
-        };
-      } catch {
-        // Missing files are valid create targets.
-      }
-    } else {
-      expectedRevision = (await options.workspace.read(call.args.path)).revision;
+    const existing = await options.workspace.readIfExists(call.args.path);
+    if (existing && !replaceable.has(call.args.path)) {
+      return {
+        success: false,
+        kind: "error",
+        cached: false,
+        code: "FILE_ALREADY_EXISTS",
+        path: call.args.path,
+        error: `${call.args.path} already exists`,
+        retryable: true,
+      };
     }
+    const expectedRevision = existing?.revision;
 
     if (records.size >= (options.maxFiles ?? 8) && !records.has(call.args.path)) {
       terminalError = `File limit exceeded for ${options.owner}`;
@@ -640,6 +635,11 @@ export class InMemoryFileSessionWorkspace implements FileSessionWorkspace {
     const content = this.files.get(path);
     if (content === undefined) throw new Error(`File not found: ${path}`);
     return { content, revision: revisionOf(content) };
+  }
+
+  async readIfExists(path: string): Promise<{ content: string; revision: string } | null> {
+    const content = this.files.get(path);
+    return content === undefined ? null : { content, revision: revisionOf(content) };
   }
 
   async readText(path: string): Promise<string> {
