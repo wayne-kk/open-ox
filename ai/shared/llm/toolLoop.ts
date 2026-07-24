@@ -23,6 +23,7 @@ const LENGTH_RETRY_TOOL_CONTENT_MAX_CHARS = 24_000;
 const PROACTIVE_OLD_TOOL_CONTENT_MAX_CHARS = 500;
 const PROACTIVE_RECENT_TOOL_MESSAGES = 6;
 const CONTEXT_WINDOW_SAFETY_TOKENS = 1_024;
+const MIN_COMPLETION_TOKENS = 1_024;
 const VISION_TOKEN_ESTIMATE = { low: 1_024, auto: 2_048, high: 4_096 } as const;
 const SOURCE_MUTATION_TOOL_NAMES = new Set([
   "write_file",
@@ -37,15 +38,27 @@ const CODE_TOOL_CALL_POLICY: ChatMessage = {
     "When using write_file or edit_file, make exactly one source mutation call in that response.",
 };
 
+function estimateTextTokens(value: string): number {
+  let asciiCharacters = 0;
+  let nonAsciiCharacters = 0;
+  for (const character of value) {
+    if (character.codePointAt(0)! <= 0x7f) asciiCharacters += 1;
+    else nonAsciiCharacters += 1;
+  }
+  // Source code and JSON average roughly 3–4 ASCII characters per token.
+  // CJK and other non-ASCII scripts can approach one code point per token.
+  return Math.ceil(asciiCharacters / 3 + nonAsciiCharacters);
+}
+
 function estimateMessageTokens(message: ChatMessage): number {
   const { content, ...metadata } = message;
-  let estimate = JSON.stringify(metadata).length;
-  if (typeof content === "string") return estimate + content.length;
+  let estimate = estimateTextTokens(JSON.stringify(metadata));
+  if (typeof content === "string") return estimate + estimateTextTokens(content);
   if (!Array.isArray(content)) return estimate;
 
   for (const part of content) {
     if (part.type === "text") {
-      estimate += part.text.length;
+      estimate += estimateTextTokens(part.text);
       continue;
     }
     estimate += VISION_TOKEN_ESTIMATE[part.image_url.detail ?? "auto"];
@@ -65,17 +78,23 @@ function resolveCompletionMaxTokens(
     (candidate) => candidate.id === model,
   )?.contextWindow;
   if (!contextWindow) return profileTokens;
-  // Text characters are conservative for mixed ASCII/CJK prompts. Image data
-  // URLs use a fixed vision estimate because providers do not tokenize base64.
+  // Image data URLs use a fixed vision estimate because providers do not
+  // tokenize their base64 payload as prompt text.
   const estimatedPromptTokens =
     messages.reduce(
       (total, message) => total + estimateMessageTokens(message),
       0,
-    ) + JSON.stringify(tools).length;
-  const availableCompletionTokens = Math.max(
-    1,
-    contextWindow - estimatedPromptTokens - CONTEXT_WINDOW_SAFETY_TOKENS,
-  );
+    ) + estimateTextTokens(JSON.stringify(tools));
+  const availableCompletionTokens =
+    contextWindow - estimatedPromptTokens - CONTEXT_WINDOW_SAFETY_TOKENS;
+  if (availableCompletionTokens < MIN_COMPLETION_TOKENS) {
+    throw new Error(
+      `Insufficient completion budget for model "${model}": ` +
+        `estimated_prompt_tokens=${estimatedPromptTokens}, context_window=${contextWindow}, ` +
+        `available_completion_tokens=${availableCompletionTokens}, minimum=${MIN_COMPLETION_TOKENS}. ` +
+        `Compact the conversation history before retrying.`,
+    );
+  }
   return Math.min(profileTokens, availableCompletionTokens);
 }
 
@@ -614,6 +633,9 @@ export async function callLLMWithToolsFromMessages(params: {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const msgLower = msg.toLowerCase();
+      if (msgLower.includes("insufficient completion budget")) {
+        throw err;
+      }
       if (msgLower.includes("invalid conversation history")) {
         throw err;
       }

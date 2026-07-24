@@ -108,10 +108,64 @@ describe("callLLMWithToolsFromMessages", () => {
     expect(gateway.chatCompletion.mock.calls[0]?.[0].max_tokens).toBe(8_192);
     expect(
       gateway.chatCompletion.mock.calls[1]?.[0].max_tokens,
-    ).toBeGreaterThan(0);
+    ).toBeGreaterThan(7_000);
     expect(gateway.chatCompletion.mock.calls[1]?.[0].max_tokens).toBeLessThan(
-      2_000,
+      9_000,
     );
+  });
+
+  it("does not collapse the output budget by counting ASCII code characters as tokens", async () => {
+    setCustomModels([
+      {
+        id: "gemini-budget-probe",
+        displayName: "Gemini Budget Probe",
+        contextWindow: 128_000,
+      },
+    ]);
+    gateway.chatCompletion.mockImplementation(
+      async (params: ChatCompletionParams) =>
+        (params.max_tokens ?? 0) >= 16_384
+          ? response({ finishReason: "stop", content: "done" })
+          : response({ finishReason: "length", content: null }),
+    );
+
+    await expect(
+      callLLMWithToolsFromMessages({
+        messages: [
+          { role: "system", content: "Implement the page." },
+          { role: "user", content: "x".repeat(123_000) },
+        ],
+        tools: [],
+        model: "gemini-budget-probe",
+        maxIterations: 1,
+        completionProfile: "code",
+      }),
+    ).resolves.toEqual({ content: "done", toolCalls: [] });
+    expect(gateway.chatCompletion.mock.calls[0]?.[0].max_tokens).toBe(16_384);
+  });
+
+  it("refuses to send a request when the real completion budget is unusably small", async () => {
+    setCustomModels([
+      {
+        id: "exhausted-budget-probe",
+        displayName: "Exhausted Budget Probe",
+        contextWindow: 12_000,
+      },
+    ]);
+
+    await expect(
+      callLLMWithToolsFromMessages({
+        messages: [
+          { role: "system", content: "继续实现页面。" },
+          { role: "user", content: "汉".repeat(11_000) },
+        ],
+        tools: [],
+        model: "exhausted-budget-probe",
+        maxIterations: 1,
+        completionProfile: "code",
+      }),
+    ).rejects.toThrow(/insufficient completion budget/i);
+    expect(gateway.chatCompletion).not.toHaveBeenCalled();
   });
 
   it("estimates vision input without counting base64 image bytes as text tokens", async () => {
