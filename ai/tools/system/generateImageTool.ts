@@ -97,17 +97,20 @@ export interface PendingImage {
   durationMs: number;
   /** Whether the image was successfully generated and written to disk. */
   success: boolean;
+  /** Failure reason for telemetry; absent for successful or still-pending jobs. */
+  error?: string;
 }
 
 export interface ImageExecutorOptions {
   /** Prefix output filenames when multiple agents can generate assets concurrently. */
   filenamePrefix?: string;
-  /** Fail when generation is unavailable instead of returning a remote placeholder URL. */
-  requireGeneratedAsset?: boolean;
-  /** Resolve the tool call only after the image is successfully written. */
-  awaitCompletion?: boolean;
+}
+
+export interface RequiredImageExecutorOptions extends ImageExecutorOptions {
   /** Test seam for the image backend. */
   generateImage?: typeof generateProjectImage;
+  /** Receives a typed event only after the required asset is written successfully. */
+  onGeneratedAsset?(asset: PendingImage): void;
 }
 
 function prefixImageFilename(prefix: string, filename: string): string {
@@ -128,14 +131,17 @@ function appendImageFilenameSuffix(filename: string, suffixParts: string[]): str
 }
 
 /** The returned path is authoritative; callers must use it instead of reconstructing a filename. */
-export function createImageExecutor(
+function createImageExecutorInternal(
   scopeLabel: string,
-  options: ImageExecutorOptions = {}
+  options: RequiredImageExecutorOptions,
+  mode: "queued" | "required",
 ): {
   executor: ToolExecutor;
   pendingImages: PendingImage[];
+  attempts: PendingImage[];
 } {
   const pendingImages: PendingImage[] = [];
+  const attempts: PendingImage[] = [];
   const usedFilenames = new Set<string>();
 
   const executor: ToolExecutor = async (
@@ -163,12 +169,34 @@ export function createImageExecutor(
     const publicPath = projectImagePath(filename, "png");
 
     if (!prompt.trim()) {
+      if (mode === "required") {
+        attempts.push({
+          filename,
+          prompt,
+          size,
+          publicPath,
+          durationMs: 0,
+          success: false,
+          error: "prompt is required",
+          promise: Promise.resolve(),
+        });
+      }
       return { success: false, error: "prompt is required" };
     }
 
     const apiKey = process.env.ARK_API_KEY?.trim();
     if (!apiKey) {
-      if (options.requireGeneratedAsset) {
+      if (mode === "required") {
+        attempts.push({
+          filename,
+          prompt,
+          size,
+          publicPath,
+          durationMs: 0,
+          success: false,
+          error: "ARK_API_KEY is not configured",
+          promise: Promise.resolve(),
+        });
         return {
           success: false,
           error: "ARK_API_KEY is not configured; a required page image cannot be generated.",
@@ -212,13 +240,15 @@ export function createImageExecutor(
         pending.durationMs = Date.now() - t0;
         pending.success = false;
         const msg = err instanceof Error ? err.message : String(err);
+        pending.error = msg;
         console.error(`[generate_image] Failed to generate "${filename}":`, msg);
       } finally {
         releaseSlot();
       }
     })();
 
-    if (options.awaitCompletion) {
+    attempts.push(pending);
+    if (mode === "required") {
       await pending.promise;
       if (!pending.success) {
         return {
@@ -227,18 +257,39 @@ export function createImageExecutor(
         };
       }
       pendingImages.push(pending);
+      options.onGeneratedAsset?.(pending);
     } else {
       pendingImages.push(pending);
     }
 
     return {
       success: true,
-      output: `${options.awaitCompletion ? "Image generated" : "Image will be generated"}. Use this path in your component: ${pending.publicPath}`,
+      output: `${mode === "required" ? "Image generated" : "Image will be generated"}. Use this path in your component: ${pending.publicPath}`,
       meta: { path: pending.publicPath, filename },
     };
   };
 
+  return { executor, pendingImages, attempts };
+}
+
+export function createImageExecutor(
+  scopeLabel: string,
+  options: ImageExecutorOptions = {},
+): { executor: ToolExecutor; pendingImages: PendingImage[] } {
+  const { executor, pendingImages } = createImageExecutorInternal(scopeLabel, options, "queued");
   return { executor, pendingImages };
+}
+
+export function createRequiredImageExecutor(
+  scopeLabel: string,
+  options: RequiredImageExecutorOptions = {},
+): { executor: ToolExecutor; attempts: PendingImage[]; generatedImages: PendingImage[] } {
+  const { executor, attempts, pendingImages } = createImageExecutorInternal(
+    scopeLabel,
+    options,
+    "required",
+  );
+  return { executor, attempts, generatedImages: pendingImages };
 }
 
 export async function awaitPendingImages(

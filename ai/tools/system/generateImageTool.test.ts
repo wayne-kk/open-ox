@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createImageExecutor } from "./generateImageTool";
+import { createImageExecutor, createRequiredImageExecutor } from "./generateImageTool";
 
 describe("createImageExecutor", () => {
   let previousApiKey: string | undefined;
@@ -71,9 +71,8 @@ describe("createImageExecutor", () => {
   });
 
   it("rejects placeholder fallback when the caller requires a generated asset", async () => {
-    const images = createImageExecutor("page-home", {
+    const images = createRequiredImageExecutor("page-home", {
       filenamePrefix: "page-home",
-      requireGeneratedAsset: true,
     });
 
     const result = await images.executor({
@@ -85,15 +84,16 @@ describe("createImageExecutor", () => {
       success: false,
       error: expect.stringContaining("ARK_API_KEY"),
     });
-    expect(images.pendingImages).toHaveLength(0);
+    expect(images.attempts).toHaveLength(1);
+    expect(images.generatedImages).toHaveLength(0);
   });
 
   it("can wait for the image backend before reporting page asset success", async () => {
     process.env.ARK_API_KEY = "test-key";
-    const images = createImageExecutor("page-home", {
+    const recorded: string[] = [];
+    const images = createRequiredImageExecutor("page-home", {
       filenamePrefix: "page-home",
-      requireGeneratedAsset: true,
-      awaitCompletion: true,
+      onGeneratedAsset: (asset) => recorded.push(asset.publicPath),
       generateImage: async () => ({
         ok: true,
         path: "/images/page-home-hero.png",
@@ -110,16 +110,16 @@ describe("createImageExecutor", () => {
       success: true,
       meta: { path: "/images/page-home-hero.png" },
     });
-    expect(images.pendingImages[0]).toMatchObject({ success: true });
+    expect(images.generatedImages[0]).toMatchObject({ success: true });
+    expect(images.attempts).toHaveLength(1);
+    expect(recorded).toEqual(["/images/page-home-hero.png"]);
   });
 
   it("does not retain a failed awaited attempt in the delivery list", async () => {
     process.env.ARK_API_KEY = "test-key";
     let attempt = 0;
-    const images = createImageExecutor("page-home", {
+    const images = createRequiredImageExecutor("page-home", {
       filenamePrefix: "page-home",
-      requireGeneratedAsset: true,
-      awaitCompletion: true,
       generateImage: async () => {
         attempt += 1;
         return attempt === 1
@@ -134,7 +134,21 @@ describe("createImageExecutor", () => {
     expect(
       await images.executor({ filename: "hero", prompt: "Editorial hero, sharp focus, 4K" }),
     ).toMatchObject({ success: true });
-    expect(images.pendingImages).toHaveLength(1);
-    expect(images.pendingImages[0]).toMatchObject({ success: true });
+    expect(images.attempts).toHaveLength(2);
+    expect(images.attempts[0]).toMatchObject({ success: false, error: "temporary failure" });
+    expect(images.generatedImages).toHaveLength(1);
+    expect(images.generatedImages[0]).toMatchObject({ success: true });
+  });
+
+  it("records rejected required calls as failed attempts", async () => {
+    process.env.ARK_API_KEY = "test-key";
+    const images = createRequiredImageExecutor("page-home");
+
+    expect(await images.executor({ filename: "hero", prompt: "" })).toMatchObject({
+      success: false,
+    });
+    expect(images.attempts).toHaveLength(1);
+    expect(images.attempts[0]).toMatchObject({ success: false, error: "prompt is required" });
+    expect(images.generatedImages).toHaveLength(0);
   });
 });

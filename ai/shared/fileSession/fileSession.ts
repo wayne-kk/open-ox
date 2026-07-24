@@ -66,9 +66,19 @@ export interface FileSessionOptions {
   requiredArtifacts: string[];
   replaceableBaselinePaths?: string[];
   validateArtifact?(path: string, content: string): string | null;
+  validateCompletion?(context: FileSessionCompletionContext): string | null;
   maxConsecutiveFailuresPerFile?: number;
   maxFiles?: number;
   maxMutationsPerFile?: number;
+}
+
+export interface FileSessionArtifact {
+  content: string;
+  revision: string;
+}
+
+export interface FileSessionCompletionContext {
+  artifacts: ReadonlyMap<string, FileSessionArtifact>;
 }
 
 interface FileRecord {
@@ -131,10 +141,7 @@ export function createFileSession(options: FileSessionOptions): FileSession {
       const snapshot = await options.workspace.read(call.args.path);
       const previous = records.get(call.args.path);
       records.set(call.args.path, {
-        content: snapshot.content
-          .split("\n")
-          .map((line, index) => `${index + 1}: ${line}`)
-          .join("\n"),
+        content: snapshot.content,
         revision: snapshot.revision,
         diagnostics:
           previous?.revision === snapshot.revision ? previous.diagnostics : [],
@@ -353,6 +360,25 @@ export function createFileSession(options: FileSessionOptions): FileSession {
     if (openDiagnostics > 0) {
       return { kind: "continue", reason: `${openDiagnostics} diagnostic(s) remain` };
     }
+    const completionReason = options.validateCompletion?.({
+      artifacts: new Map(
+        [...records.entries()]
+          .filter(
+            ([path]) =>
+              options.requiredArtifacts.includes(path) ||
+              emittedEvents.some(
+                (event) =>
+                  event.path === path &&
+                  (event.kind === "file_created" || event.kind === "file_updated"),
+              ),
+          )
+          .map(([path, record]) => [
+            path,
+            { content: record.content, revision: record.revision },
+          ]),
+      ),
+    });
+    if (completionReason) return { kind: "continue", reason: completionReason };
     return { kind: "complete" };
   };
 

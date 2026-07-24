@@ -15,7 +15,6 @@ describe("pageImageCompletionReason", () => {
         sources: { "components/pages/home/Hero.tsx": placeholderSource },
         generatedPaths: [],
         assetExists: () => false,
-        generationRequired: true,
       }),
     ).toContain("generate_image");
 
@@ -30,21 +29,32 @@ describe("pageImageCompletionReason", () => {
         },
         generatedPaths: [generatedPath],
         assetExists: () => false,
-        generationRequired: true,
       }),
     ).toBeNull();
   });
 
-  it("accepts real user URLs and existing local assets but rejects invented image paths", () => {
+  it("accepts exact user URLs and existing local assets but rejects other remote or invented paths", () => {
+    const userUrl = "https://cdn.example.com/user-provided.jpg";
     expect(
       pageImageCompletionReason({
         sources: {
-          "app/page.tsx": `export default () => <img src="https://cdn.example.com/real.jpg" alt="Real" />`,
+          "app/page.tsx": `export default () => <img src="${userUrl}" alt="Real" />`,
+        },
+        generatedPaths: [],
+        allowedRemoteUrls: [userUrl],
+        assetExists: () => false,
+      }),
+    ).toBeNull();
+
+    expect(
+      pageImageCompletionReason({
+        sources: {
+          "app/page.tsx": `export default () => <img src="https://cdn.example.com/arbitrary.jpg" />`,
         },
         generatedPaths: [],
         assetExists: () => false,
       }),
-    ).toBeNull();
+    ).toContain("not a user-provided URL");
 
     expect(
       pageImageCompletionReason({
@@ -64,20 +74,18 @@ describe("pageImageCompletionReason", () => {
         sources: { "app/page.tsx": `<img src="${fallback}" alt="Hero" />` },
         generatedPaths: [fallback],
         assetExists: () => false,
-        generationRequired: true,
       }),
     ).toContain("placeholder");
   });
 
-  it("remembers that generation is required and requires the returned path to be consumed", () => {
+  it("does not retain an obsolete placeholder obligation after the source revision changes", () => {
     expect(
       pageImageCompletionReason({
         sources: { "app/page.tsx": `<img src="/images/existing.png" alt="Hero" />` },
         generatedPaths: [],
         assetExists: () => true,
-        generationRequired: true,
       }),
-    ).toContain("Call generate_image");
+    ).toBeNull();
   });
 
   it("exempts exact user-provided URLs and detects image paths stored in data", () => {
@@ -141,5 +149,210 @@ describe("pageImageCompletionReason", () => {
         assetExists: () => false,
       }),
     ).toContain("placeholder");
+  });
+
+  it("requires every successfully generated asset to be referenced", () => {
+    expect(
+      pageImageCompletionReason({
+        sources: { "app/page.tsx": `<img src="/images/first.png" alt="Hero" />` },
+        generatedPaths: ["/images/first.png", "/images/unused.png"],
+        assetExists: () => false,
+      }),
+    ).toContain("/images/unused.png");
+  });
+
+  it("does not count an unused image variable as consuming a generated asset", () => {
+    expect(
+      pageImageCompletionReason({
+        sources: {
+          "app/page.tsx": `const heroImage = "/images/generated.png"; export default () => <main />;`,
+        },
+        generatedPaths: ["/images/generated.png"],
+        assetExists: () => false,
+      }),
+    ).toContain("not referenced by the current page revision");
+  });
+
+  it("counts inline style and stylesheet URLs as real image sinks", () => {
+    for (const sources of [
+      {
+        "app/page.tsx": `export default () => <div style={{ backgroundImage: "url(/images/generated.png)" }} />;`,
+      },
+      {
+        "app/page.tsx": `import styles from "./page.module.css"; export default () => <div className={styles.hero} />;`,
+        "app/page.module.css": `.hero { background-image: url(/images/generated.png); }`,
+      },
+    ]) {
+      expect(
+        pageImageCompletionReason({
+          sources,
+          generatedPaths: ["/images/generated.png"],
+          assetExists: () => false,
+        }),
+      ).toBeNull();
+    }
+  });
+
+  it("detects placeholders and missing assets in scoped CSS-bearing syntax", () => {
+    for (const sources of [
+      { "app/page.module.css": `.hero { background: url(https://picsum.photos/hero); }` },
+      { "app/page.tsx": `export default () => <div className="bg-[url('/images/missing.png')]" />;` },
+      {
+        "app/page.tsx": "export default () => <style jsx>{`.hero { background: url(https://picsum.photos/hero); }`}</style>;",
+      },
+    ]) {
+      expect(
+        pageImageCompletionReason({
+          sources,
+          generatedPaths: [],
+          assetExists: () => false,
+        }),
+      ).not.toBeNull();
+    }
+  });
+
+  it("allows non-image CSS interpolation but rejects dynamic image CSS", () => {
+    expect(
+      pageImageCompletionReason({
+        sources: {
+          "app/page.tsx": "const Box = styled.div`color: ${p => p.color};`; export default () => <Box />;",
+        },
+        generatedPaths: [],
+        assetExists: () => false,
+      }),
+    ).toBeNull();
+
+    expect(
+      pageImageCompletionReason({
+        sources: {
+          "app/page.tsx": "export default () => <div className={`bg-[url(${heroUrl})]`} />;",
+        },
+        generatedPaths: [],
+        assetExists: () => false,
+      }),
+    ).toContain("cannot be verified statically");
+  });
+
+  it("extracts static image-set candidates as image sinks", () => {
+    expect(
+      pageImageCompletionReason({
+        sources: {
+          "app/page.module.css": `.hero { background-image: image-set("https://picsum.photos/hero" 1x); }`,
+        },
+        generatedPaths: [],
+        assetExists: () => false,
+      }),
+    ).toContain("placeholder");
+
+    expect(
+      pageImageCompletionReason({
+        sources: {
+          "app/page.module.css": `.hero { background-image: image-set("/images/generated.png" 1x); }`,
+        },
+        generatedPaths: ["/images/generated.png"],
+        assetExists: () => false,
+      }),
+    ).toBeNull();
+  });
+
+  it("rejects protocol-relative remote image URLs", () => {
+    expect(
+      pageImageCompletionReason({
+        sources: { "app/page.tsx": `<img src="//cdn.example.com/arbitrary.jpg" />` },
+        generatedPaths: [],
+        assetExists: () => false,
+      }),
+    ).toContain("not a user-provided URL");
+  });
+
+  it("matches placeholder URL hostnames exactly and ignores comments", () => {
+    const allowedUrl = "https://cdn.example.com/assets/picsum.photos-cover.jpg";
+    expect(
+      pageImageCompletionReason({
+        sources: {
+          "app/page.tsx": `
+            // background-image: url(https://picsum.photos/comment-only)
+            export default () => <img src="${allowedUrl}" />;
+          `,
+        },
+        generatedPaths: [],
+        allowedRemoteUrls: [allowedUrl],
+        assetExists: () => false,
+      }),
+    ).toBeNull();
+  });
+
+  it("detects responsive and template-string placeholders", () => {
+    for (const source of [
+      `export default () => <img srcSet="https://picsum.photos/400 1x, https://picsum.photos/800 2x" />;`,
+      "const id = 10; export default () => <img src={`https://picsum.photos/${id}/800`} />;",
+    ]) {
+      expect(
+        pageImageCompletionReason({
+          sources: { "app/page.tsx": source },
+          generatedPaths: [],
+          assetExists: () => false,
+        }),
+      ).toContain("placeholder");
+    }
+  });
+
+  it("resolves shadowed image variables in their lexical scope", () => {
+    const source = `
+      function Placeholder() {
+        const heroImage = "https://picsum.photos/1200/800";
+        return <img src={heroImage} />;
+      }
+      function Ready() {
+        const heroImage = "/images/ready.png";
+        return <img src={heroImage} />;
+      }
+    `;
+    expect(
+      pageImageCompletionReason({
+        sources: { "app/page.tsx": source },
+        generatedPaths: ["/images/ready.png"],
+        assetExists: () => false,
+      }),
+    ).toContain("placeholder");
+  });
+
+  it("rejects local image paths that escape the public images directory", () => {
+    expect(
+      pageImageCompletionReason({
+        sources: { "app/page.tsx": `<img src="/images/../../../tmp/existing.png" />` },
+        generatedPaths: [],
+        assetExists: () => true,
+      }),
+    ).toContain("invalid image asset path");
+  });
+
+  it("checks every local images path, including SVG and extensionless assets", () => {
+    for (const path of ["/images/brand.svg", "/images/avatar"]) {
+      expect(
+        pageImageCompletionReason({
+          sources: { "app/page.tsx": `<img src="${path}" />` },
+          generatedPaths: [],
+          assetExists: () => false,
+        }),
+      ).toContain("missing image asset");
+    }
+  });
+
+  it("rejects image expressions that cannot be verified statically", () => {
+    for (const source of [
+      `import { HERO } from "./assets"; export default () => <img src={HERO} />;`,
+      `const getHero = () => "https://picsum.photos/1200/800"; export default () => <img src={getHero()} />;`,
+      `const config = getConfig(); export default () => <img src={config.image} />;`,
+      "const slug = 'hero'; export default () => <img src={`/images/${slug}.png`} />;",
+    ]) {
+      expect(
+        pageImageCompletionReason({
+          sources: { "app/page.tsx": source },
+          generatedPaths: [],
+          assetExists: () => false,
+        }),
+      ).toContain("cannot be verified statically");
+    }
   });
 });

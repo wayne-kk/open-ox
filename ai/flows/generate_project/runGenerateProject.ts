@@ -539,6 +539,13 @@ async function generatePages(params: {
         summary: outcome.summary,
         toolInvocations: outcome.toolCallRecords,
         pendingImagesCount: outcome.pendingImages.length,
+        imageAttempts: outcome.imageAttempts.map((attempt) => ({
+          filename: attempt.filename,
+          path: attempt.publicPath,
+          success: attempt.success,
+          error: attempt.error,
+          durationMs: attempt.durationMs,
+        })),
       });
       await persistSiteFileArtifact(artifactLogger, agentStepName, outcome.pagePath, "page");
 
@@ -1519,11 +1526,6 @@ async function runGenerateProjectInner(
         .map((img) => `public/images/${img.filename}.png`)
         .filter((p) => !result.generatedFiles.includes(p));
       appendGeneratedFiles(result, imagePaths);
-      if (imageStats.failed > 0) {
-        throw new Error(
-          `Image generation failed for ${imageStats.failed}/${imageStats.total} required page asset(s).`,
-        );
-      }
     }
 
     // ── Optional pre-build typecheck (generated .tsx only) ───────────────────

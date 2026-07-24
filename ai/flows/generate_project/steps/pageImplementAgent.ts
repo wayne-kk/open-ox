@@ -2,8 +2,6 @@
  * Per-route UI via multi-turn system tools (Cursor-style), without a fixed section manifest.
  */
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
-import { existsSync } from "fs";
-import { join } from "path";
 import {
   composePromptBlocks,
   loadGuardrail,
@@ -16,7 +14,7 @@ import { lfPageImplementPhaseSlug } from "@/lib/observability/langfuseGeneration
 import type { ChatMessage } from "@/ai/shared/llm/types";
 import type { ToolResult } from "@/ai/tools";
 import { getSystemToolDefinitions } from "@/ai/tools/systemToolCatalog";
-import { createImageExecutor } from "@/ai/tools/system/generateImageTool";
+import { createRequiredImageExecutor } from "@/ai/tools/system/generateImageTool";
 import type { PendingImage } from "@/ai/tools/system/generateImageTool";
 import { getModelForStep, getThinkingLevelForStep } from "@/lib/config/models";
 import { slugToPageComponentRoot, slugToPagePath } from "../shared/paths";
@@ -58,7 +56,10 @@ import {
 } from "@/ai/shared/fileSession/fileSession";
 import { SiteFileSessionWorkspace } from "@/ai/shared/fileSession/siteFileSessionWorkspace";
 import { getSiteRoot } from "@/ai/tools/system/common";
-import { pageImageCompletionReason } from "../shared/pageImageCompletionPolicy";
+import {
+  createPageImageAssetSession,
+  createPublicImageAssetExists,
+} from "../shared/pageImageCompletionPolicy";
 
 function truncate(text: string, max: number): string {
   if (text.length <= max) return text;
@@ -106,6 +107,7 @@ export function createPageFileSession(options: {
   targetPath: string;
   componentRoot: string;
   workspace: FileSessionWorkspace;
+  validateCompletion?: NonNullable<Parameters<typeof createFileSession>[0]["validateCompletion"]>;
 }) {
   const { slug, targetPath, componentRoot, workspace } = options;
   return createFileSession({
@@ -116,6 +118,7 @@ export function createPageFileSession(options: {
     replaceableBaselinePaths: [targetPath],
     validateArtifact: (path, content) =>
       pageImplementationIncompleteReason(content, path),
+    validateCompletion: options.validateCompletion,
     maxFiles: 8,
     maxMutationsPerFile: 4,
     maxConsecutiveFailuresPerFile: 2,
@@ -139,6 +142,8 @@ export interface PageImplementAgentResult {
   writtenPaths: string[];
   trace: StepTrace;
   pendingImages: PendingImage[];
+  /** Every required generation attempt, including failures later retried successfully. */
+  imageAttempts: PendingImage[];
   summary: string;
   toolCallRecords: number;
 }
@@ -243,20 +248,28 @@ export async function runPageImplementAgent(
     messages.push({ role: "user", content: bootstrap.message });
   }
 
+  const imageAssets = createPageImageAssetSession({
+    allowedRemoteUrls: userImageUrls,
+    assetExists: createPublicImageAssetExists(getSiteRoot()),
+  });
   const fileSession = createPageFileSession({
     slug: page.slug,
     targetPath,
     componentRoot,
     workspace: new SiteFileSessionWorkspace(),
+    validateCompletion: imageAssets.validateCompletion,
   });
 
   const pageImageScope = `page-${componentRoot.slice("components/pages/".length)}`;
-  const { executor: baseImageExecutor, pendingImages } = createImageExecutor(
+  const {
+    executor: baseImageExecutor,
+    generatedImages: pendingImages,
+    attempts: imageAttempts,
+  } = createRequiredImageExecutor(
     pageImageScope,
     {
       filenamePrefix: pageImageScope,
-      requireGeneratedAsset: true,
-      awaitCompletion: true,
+      onGeneratedAsset: (asset) => imageAssets.recordGeneratedAsset(asset.publicPath),
     },
   );
   const imageExecutor = guardGenerateImageExecutor(
@@ -276,34 +289,6 @@ export async function runPageImplementAgent(
   const maxIterations = resolvePageAgentMaxIterations();
   let emptyStopRecoveries = 0;
   let iterationsUsed = 0;
-  const generatedImagePaths = new Set<string>();
-  let imageGenerationRequired = false;
-
-  const pageStopDecision = () => {
-    const fileDecision = fileSession.stopDecision();
-    if (fileDecision.kind !== "complete") return fileDecision;
-    const sources = Object.fromEntries(
-      fileSession.writtenPaths().map((path) => [path, readSiteFile(path)]),
-    );
-    const policyInput = {
-      sources,
-      generatedPaths: [...generatedImagePaths],
-      allowedRemoteUrls: userImageUrls,
-      assetExists: (publicPath: string) =>
-        existsSync(join(getSiteRoot(), "public", publicPath.replace(/^\//, ""))),
-    };
-    if (pageImageCompletionReason(policyInput)) {
-      imageGenerationRequired = true;
-    }
-    const imageReason = pageImageCompletionReason({
-      ...policyInput,
-      generationRequired: imageGenerationRequired,
-    });
-    return imageReason
-      ? ({ kind: "continue", reason: imageReason } as const)
-      : ({ kind: "complete" } as const);
-  };
-
   const executeFileCommand = async (
     name: FileSessionCall["name"],
     args: Record<string, unknown>,
@@ -349,13 +334,13 @@ export async function runPageImplementAgent(
       );
     },
     resolveToolChoiceForIteration: () =>
-      pageStopDecision().kind === "complete" ? "auto" : "required",
+      fileSession.stopDecision().kind === "complete" ? "auto" : "required",
     onMessage,
     onAssistantRound: ({ iteration }) => {
       iterationsUsed = Math.max(iterationsUsed, iteration + 1);
     },
     onAssistantStop: ({ messages: msgs }) => {
-      const decision = pageStopDecision();
+      const decision = fileSession.stopDecision();
       if (decision.kind === "complete" || emptyStopRecoveries >= 2) return false;
       emptyStopRecoveries += 1;
       const nudge: ChatMessage = {
@@ -368,17 +353,9 @@ export async function runPageImplementAgent(
       onMessage?.(nudge);
       return true;
     },
-    shouldAbortAfterToolResults: () => pageStopDecision().kind !== "continue",
+    shouldAbortAfterToolResults: () => fileSession.stopDecision().kind !== "continue",
     requireTools: true,
     onToolCall: ({ name, args, iteration, result }) => {
-      if (
-        name === "generate_image" &&
-        typeof result === "object" &&
-        result.success &&
-        typeof result.meta?.path === "string"
-      ) {
-        generatedImagePaths.add(result.meta.path);
-      }
       if (!onStep) return;
       const cached = typeof result === "object" && result.meta?.cached === true;
       if (VISIBLE_TOOL_NAMES.has(name) && !cached) {
@@ -433,7 +410,7 @@ export async function runPageImplementAgent(
     langfusePhase: lfPageImplementPhaseSlug(page.slug),
   });
 
-  const finalDecision = pageStopDecision();
+  const finalDecision = fileSession.stopDecision();
   if (finalDecision.kind !== "complete") {
     throw new Error(
       `page_implement_agent:${page.slug}: stopped after ${iterationsUsed}/${maxIterations} iterations ` +
@@ -471,6 +448,13 @@ export async function runPageImplementAgent(
       completeSummary,
       assistantTail: truncate(content, 2000),
       toolInvocations: toolCalls.length,
+      imageAttempts: imageAttempts.map(({ filename, publicPath, success, error, durationMs }) => ({
+        filename,
+        publicPath,
+        success,
+        error,
+        durationMs,
+      })),
     },
     llmCall: {
       model,
@@ -486,6 +470,7 @@ export async function runPageImplementAgent(
     writtenPaths,
     trace,
     pendingImages,
+    imageAttempts,
     summary: completeSummary || content.slice(0, 500) || "ok",
     toolCallRecords: toolCalls.length,
   };

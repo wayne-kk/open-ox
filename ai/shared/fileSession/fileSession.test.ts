@@ -23,6 +23,77 @@ function createSession() {
 }
 
 describe("FileSession", () => {
+  it("evaluates completion validators against the current artifact revisions", async () => {
+    const workspace = new InMemoryFileSessionWorkspace();
+    const session = createFileSession({
+      owner: "page:home",
+      workspace,
+      ownsPath: (path) => path === "app/page.tsx",
+      requiredArtifacts: ["app/page.tsx"],
+      validateCompletion: ({ artifacts }) =>
+        artifacts.get("app/page.tsx")?.content ===
+        "export default () => <img src='placeholder' />"
+          ? "page still contains a placeholder"
+          : null,
+    });
+
+    await session.execute({
+      name: "create_file",
+      args: { path: "app/page.tsx", content: "export default () => <img src='placeholder' />" },
+    });
+    expect(session.stopDecision()).toEqual({
+      kind: "continue",
+      reason: "page still contains a placeholder",
+    });
+
+    const snapshot = await session.execute({
+      name: "read_file_snapshot",
+      args: { path: "app/page.tsx" },
+    });
+    expect(session.stopDecision()).toEqual({
+      kind: "continue",
+      reason: "page still contains a placeholder",
+    });
+    await session.execute({
+      name: "apply_file_patch",
+      args: {
+        path: "app/page.tsx",
+        baseRevision: snapshot.revision!,
+        edits: [{
+          range: { start: { line: 0, character: 32 }, end: { line: 0, character: 43 } },
+          newText: "/images/hero.png",
+        }],
+      },
+    });
+
+    expect(session.stopDecision()).toEqual({ kind: "complete" });
+  });
+
+  it("excludes read-only records from completion validation", async () => {
+    const workspace = new InMemoryFileSessionWorkspace({
+      "app/page.tsx": "export default () => <main>Ready</main>",
+      "components/pages/home/Legacy.tsx": "export const legacy = 'placeholder'",
+    });
+    const session = createFileSession({
+      owner: "page:home",
+      workspace,
+      ownsPath: (path) => path === "app/page.tsx" || path.startsWith("components/pages/home/"),
+      requiredArtifacts: ["app/page.tsx"],
+      replaceableBaselinePaths: ["app/page.tsx"],
+      validateCompletion: ({ artifacts }) =>
+        [...artifacts.values()].some((artifact) => artifact.content.includes("placeholder"))
+          ? "written source contains a placeholder"
+          : null,
+    });
+    await session.execute({ name: "read_file_snapshot", args: { path: "components/pages/home/Legacy.tsx" } });
+    await session.execute({
+      name: "create_file",
+      args: { path: "app/page.tsx", content: "export default () => <main>Ready</main>" },
+    });
+
+    expect(session.stopDecision()).toEqual({ kind: "complete" });
+  });
+
   it("makes duplicate create delivery idempotent and rejects a different overwrite", async () => {
     const { session, workspace } = createSession();
     const call = {
@@ -98,7 +169,7 @@ describe("FileSession", () => {
         content: "export function Hero() { return <h1>Hello</h1>; }",
       },
     });
-    const snapshot = await session.execute({
+    await session.execute({
       name: "read_file_snapshot",
       args: { path: "components/pages/home/Hero.tsx" },
     });

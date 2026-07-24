@@ -6,6 +6,7 @@ import {
   createPageFileSession,
 } from "./pageImplementAgent";
 import { InMemoryFileSessionWorkspace } from "@/ai/shared/fileSession/fileSession";
+import { createPageImageAssetSession } from "../shared/pageImageCompletionPolicy";
 
 describe("pageImplementationIncompleteReason", () => {
   const path = "app/page.tsx";
@@ -67,6 +68,54 @@ describe("pageImplementationIncompleteReason", () => {
       args: {
         path: "app/page.tsx",
         content: "export default function Home() { return <main>Ready</main>; }",
+      },
+    });
+
+    expect(session.stopDecision()).toEqual({ kind: "complete" });
+  });
+
+  it("keeps image completion inside the file session and binds it to current revisions", async () => {
+    const workspace = new InMemoryFileSessionWorkspace({
+      "app/page.tsx": "export default function Home() { return <main>Preparing your site…</main>; }",
+    });
+    const images = createPageImageAssetSession({ assetExists: () => false });
+    const session = createPageFileSession({
+      slug: "home",
+      targetPath: "app/page.tsx",
+      componentRoot: "components/pages/home",
+      workspace,
+      validateCompletion: images.validateCompletion,
+    });
+
+    const placeholderSource = `export default function Home() { return <img src="https://picsum.photos/1200/800" />; }`;
+    await session.execute({
+      name: "create_file",
+      args: {
+        path: "app/page.tsx",
+        content: placeholderSource,
+      },
+    });
+    expect(session.stopDecision()).toMatchObject({ kind: "continue" });
+
+    images.recordGeneratedAsset("/images/page-home-hero.png");
+    const snapshot = await session.execute({
+      name: "read_file_snapshot",
+      args: { path: "app/page.tsx" },
+    });
+    const placeholder = "https://picsum.photos/1200/800";
+    const placeholderStart = placeholderSource.indexOf(placeholder);
+    await session.execute({
+      name: "apply_file_patch",
+      args: {
+        path: "app/page.tsx",
+        baseRevision: snapshot.revision!,
+        edits: [{
+          range: {
+            start: { line: 0, character: placeholderStart },
+            end: { line: 0, character: placeholderStart + placeholder.length },
+          },
+          newText: "/images/page-home-hero.png",
+        }],
       },
     });
 
