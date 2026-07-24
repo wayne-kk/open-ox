@@ -37,7 +37,6 @@ describe("pageAgentBrief", () => {
       userProvidedFileHint: "",
       userProvidedImagesBlock: "",
       userImageCount: 0,
-      completeToolName: "page_implementation_complete",
     });
     expect(msg).toContain("Workspace context");
     expect(msg).toContain("design-system.md");
@@ -46,10 +45,10 @@ describe("pageAgentBrief", () => {
     expect(msg).toContain("chrome-first");
     expect(msg).toContain("site-wide Nav/Navbar/Header/Sidebar/Footer");
     expect(msg).toContain("bottom tab bars");
-    expect(msg).toContain("exactly one `write_file` or `edit_file` call per response");
-    expect(msg).toContain("Write page-local components under");
-    expect(msg).toContain("Write `app/page.tsx` last and only once");
-    expect(msg).toContain("use `edit_file` only for the smallest required fix");
+    expect(msg).toContain("Use `create_file` once per path");
+    expect(msg).toContain("create page-local components");
+    expect(msg).toContain("Create `app/page.tsx` no later than your third mutation");
+    expect(msg).toContain("read its current snapshot and apply the smallest patch");
     expect(msg).not.toContain("parallel `write_file`");
     expect(msg).not.toContain(PAGE_AGENT_HERO_SKILL_PATH);
     expect(msg.length).toBeLessThan(4_500);
@@ -70,7 +69,6 @@ describe("pageAgentBrief", () => {
       userProvidedFileHint: "",
       userProvidedImagesBlock: "",
       userImageCount: 0,
-      completeToolName: "page_implementation_complete",
       screenshotReplicaLayout: true,
     });
     expect(msg).toContain("screenshot replicate");
@@ -93,7 +91,6 @@ describe("pageAgentBrief", () => {
       userProvidedFileHint: "",
       userProvidedImagesBlock: "",
       userImageCount: 0,
-      completeToolName: "page_implementation_complete",
     });
     expect(msg).not.toContain(PAGE_AGENT_HERO_SKILL_PATH);
     expect(msg).not.toContain("hero skill");

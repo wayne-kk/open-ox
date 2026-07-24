@@ -123,7 +123,7 @@ ${fileSections.join("\n\n")}`;
     `- ${PAGE_AGENT_LAYOUT_PATH} (chrome already mounted — content only)`,
     `- ${PAGE_AGENT_GLOBALS_PATH}`,
     ...(params.hasUserProvidedContent ? [`- ${USER_PROVIDED_CONTENT_PATH}`] : []),
-    "Continue with write/edit on the target page, then call page_implementation_complete.",
+    "Continue with create_file on the target page. For later changes, read_file_snapshot then apply_file_patch. Completion is automatic after required artifacts are valid.",
   ].join("\n");
 
   return { bootstrappedPaths, message, compactSummary };

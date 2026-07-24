@@ -25,7 +25,6 @@ export interface BuildPageAgentUserMessageParams {
   userProvidedFileHint: string;
   userProvidedImagesBlock: string;
   userImageCount: number;
-  completeToolName: string;
   /** Screenshot replicate: page owns header/footer; layout is pass-through only. */
   screenshotReplicaLayout?: boolean;
 }
@@ -58,7 +57,6 @@ export function buildPageAgentUserMessage(
     userProvidedFileHint,
     userProvidedImagesBlock,
     userImageCount,
-    completeToolName,
     screenshotReplicaLayout,
   } = params;
   const componentRoot = slugToPageComponentRoot(slug);
@@ -108,16 +106,16 @@ ${layoutContractBlock}
 ${userProvidedFileHint}${userProvidedImagesBlock}
 
 ## Instructions
-1. **Implement this route only**: Other routes are handled by separate Page Agents. The tool runtime permits exactly one \`write_file\` or \`edit_file\` call per response.
-2. **Write each file once**: Write page-local components under \`${componentRoot}/**\` first. After each successful write, continue to the next required file instead of rewriting that path. Write \`${targetPath}\` last and only once, after its imports are known.
+1. **Implement this route only**: Other routes are handled by separate Page Agents. Use \`create_file\` once per path. To change an existing session file, call \`read_file_snapshot\` and then \`apply_file_patch\` with its exact revision.
+2. **Create each file once**: You may create page-local components under \`${componentRoot}/**\` before the route when their imports need to exist first. After each successful create, continue to the next required file. Create \`${targetPath}\` no later than your third mutation.
 3. **User images**: Use listed https URLs as remote \`src\`; each URL at most once.${
     userImageCount > 0
       ? ` ${userImageCount} user URL(s) — assign all before \`generate_image\` for extras.`
       : " Use \`generate_image\` only when you need visuals without user URLs."
   }
-4. **Fix & finish**: Run \`read_lints\` after the files are written. When a diagnostic names a written file, use \`edit_file\` only for the smallest required fix; do not replace the whole file with \`write_file\`. Then call \`${completeToolName}\` with a brief summary. Do not call \`format_code\` — write/edit auto-formats.
+4. **Fix & finish**: Call \`verify_files\`. When diagnostics name a file, read its current snapshot and apply the smallest patch. Completion is decided automatically from the required artifact and diagnostics; there is no completion signal tool. Formatting is automatic.
 
-⚠️ \`${completeToolName}\` is mandatory.
+Do not repeat a successful create command or recreate a path to revise it.
 
 Do not write another route or any component outside \`${componentRoot}/**\`.`;
 }

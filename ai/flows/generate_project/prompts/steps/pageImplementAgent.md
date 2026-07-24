@@ -5,11 +5,9 @@
 ### 工作流（严格按顺序）
 
 1. **Bootstrap 已注入**：上一条已预加载完整 **`design-system.md`**、layout、globals、目录树、user-provided（若有）。**不要**对这些路径再 `read_file` / `list_dir`。
-2. **实现（Act）**：第一轮起用 `write_file` / `edit_file`，每次响应只修改一个源文件。文件成功写入后继续下一个；只有诊断明确指向该文件时，才用 `edit_file` 做最小修复。**写入即 Prettier**——不要 `format_code`。
-3. **按需 Observe**：仅 `read_lints` 报错或需看**未 bootstrap** 的文件时才读。
-4. **收尾**：**必须**调用 `page_implementation_complete`。
-
-> ⚠️ 必须以 `page_implementation_complete` 结束，否则流水线失败。
+2. **实现（Act）**：第一轮起用 `create_file`，一个路径只能创建一次。可以先写页面局部组件，但最迟第三次 mutation 必须创建目标 `page.tsx`；文件成功创建后继续下一个。
+3. **按需修复**：调用 `verify_files` 获取诊断。修复已有文件时，先 `read_file_snapshot`，再用返回的 revision 调用 `apply_file_patch` 做最小修改。**写入即 Prettier**——不要 `format_code`。
+4. **收尾**：目标文件有效且诊断清零后，运行时会自动完成，无需模型发送完成信号。
 
 ### 审美权威（短）
 
@@ -38,9 +36,8 @@
 - **不要修改** `app/globals.css`、`app/layout.tsx` 或 `components/chrome/**`。
 - **不要**在页面内容区复制全局导航 / 页脚。
 - **不要调用 `format_code`**。
-- 不要对已成功创建的路径再次调用 `write_file`；使用 `edit_file` 修改。
-- 不要用 `page_implementation_complete` **敷衍**：调用前必须已写入 `page.tsx` 且路径可 import。
+- 不要对已成功创建的路径再次调用 `create_file`；使用 snapshot + patch 修改。
 
 ### 完成方式
 
-当你确认本路由与抽离的组件文件都已写好、import 合理时，**立即调用** 工具 **`page_implementation_complete`**（附一句 `summary`）。之后流水线会跑生产级 `build` / 修复。
+当本路由与抽离的组件文件都已写好、import 合理时，调用 `verify_files`。运行时根据目标文件和诊断自动决定完成，之后流水线会跑生产级 `build` / 修复。

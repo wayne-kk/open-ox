@@ -24,7 +24,12 @@ const PROACTIVE_OLD_TOOL_CONTENT_MAX_CHARS = 500;
 const PROACTIVE_RECENT_TOOL_MESSAGES = 6;
 const CONTEXT_WINDOW_SAFETY_TOKENS = 1_024;
 const VISION_TOKEN_ESTIMATE = { low: 1_024, auto: 2_048, high: 4_096 } as const;
-const SOURCE_MUTATION_TOOL_NAMES = new Set(["write_file", "edit_file"]);
+const SOURCE_MUTATION_TOOL_NAMES = new Set([
+  "write_file",
+  "edit_file",
+  "create_file",
+  "apply_file_patch",
+]);
 const CODE_TOOL_CALL_POLICY: ChatMessage = {
   role: "system",
   content:

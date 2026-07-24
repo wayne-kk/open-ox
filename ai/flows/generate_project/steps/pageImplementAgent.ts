@@ -4,7 +4,6 @@
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import {
   composePromptBlocks,
-  formatSiteFile,
   loadGuardrail,
   loadStepPrompt,
   loadSystem,
@@ -48,49 +47,14 @@ import {
   buildPageAgentBootstrap,
   isPageAgentBootstrapEnabled,
 } from "../shared/pageAgentBootstrap";
+import { resolvePageAgentMaxIterations } from "../shared/pageAgentToolLoop";
 import {
-  compactPageAgentMessages,
-  createBootstrapGuardedListDirExecutor,
-  createBootstrapGuardedReadExecutor,
-  createPageAgentChromeDeferredWriteExecutor,
-  createPageAgentSessionState,
-  executePageAgentListDir,
-  executePageAgentReadFile,
-  filterPageAgentToolsForPhase,
-  formatPageAgentToolResultForModel,
-  isPageAgentBatchFirstRoundEnabled,
-  PAGE_AGENT_TOOL_NAMES,
-  pageAgentCompactFromIteration,
-  recordPageAgentToolResult,
-  resolvePageAgentMaxIterations,
-  shouldRejectRepeatedPageAgentWrite,
-  shouldRunPageAgentCompaction,
-} from "../shared/pageAgentToolLoop";
-
-export const PAGE_IMPLEMENTATION_COMPLETE = "page_implementation_complete";
-
-const completeTool: ChatCompletionTool = {
-  type: "function",
-  function: {
-    name: PAGE_IMPLEMENTATION_COMPLETE,
-    description:
-      "MANDATORY — call this tool exactly once as your final action after the page " +
-      "is fully implemented. Preconditions: page.tsx exists with a default export, " +
-      "extracted components live under components/, and imports resolve. " +
-      "After you call this, the global pipeline runs a production build — do NOT skip this tool.",
-    parameters: {
-      type: "object",
-      properties: {
-        summary: {
-          type: "string",
-          description:
-            "Brief summary: list files created/changed and describe the layout approach (1-3 sentences).",
-        },
-      },
-      required: ["summary"],
-    },
-  },
-};
+  createFileSession,
+  fileSessionTools,
+  type FileSessionCall,
+  type FileSessionWorkspace,
+} from "@/ai/shared/fileSession/fileSession";
+import { SiteFileSessionWorkspace } from "@/ai/shared/fileSession/siteFileSessionWorkspace";
 
 function truncate(text: string, max: number): string {
   if (text.length <= max) return text;
@@ -125,16 +89,36 @@ export function pageImplementationIncompleteReason(
   return null;
 }
 
-export function shouldAcceptImplicitPageImplementation(tsx: string, path: string): boolean {
+export function isPageImplementationValid(tsx: string, path: string): boolean {
   return pageImplementationIncompleteReason(tsx, path) === null;
 }
 
 export function pageImplementationRequiresToolCall(tsx: string, path: string): boolean {
-  return !shouldAcceptImplicitPageImplementation(tsx, path);
+  return !isPageImplementationValid(tsx, path);
 }
 
-/** Tools whose execution should be surfaced as individual sub-steps in the build conversation. */
-const VISIBLE_TOOL_NAMES = new Set(["write_file", "edit_file"]);
+export function createPageFileSession(options: {
+  slug: string;
+  targetPath: string;
+  componentRoot: string;
+  workspace: FileSessionWorkspace;
+}) {
+  const { slug, targetPath, componentRoot, workspace } = options;
+  return createFileSession({
+    owner: `page:${slug}`,
+    workspace,
+    ownsPath: (path) => path === targetPath || path.startsWith(`${componentRoot}/`),
+    requiredArtifacts: [targetPath],
+    replaceableBaselinePaths: [targetPath],
+    validateArtifact: (path, content) =>
+      pageImplementationIncompleteReason(content, path),
+    maxFiles: 8,
+    maxMutationsPerFile: 4,
+    maxConsecutiveFailuresPerFile: 2,
+  });
+}
+
+const VISIBLE_TOOL_NAMES = new Set(["create_file", "apply_file_patch"]);
 
 export interface RunPageImplementAgentParams {
   page: PlannedPageBlueprint;
@@ -216,7 +200,6 @@ export async function runPageImplementAgent(
     userProvidedFileHint: userProvidedContentFileHint(hasUserContent),
     userProvidedImagesBlock: userProvidedContentImagesBlock(userContent),
     userImageCount,
-    completeToolName: PAGE_IMPLEMENTATION_COMPLETE,
     screenshotReplicaLayout: replicateLayout,
   });
 
@@ -248,76 +231,20 @@ export async function runPageImplementAgent(
   ];
 
   const bootstrapEnabled = isPageAgentBootstrapEnabled();
-  let bootstrappedPaths = new Set<string>();
-  let bootstrapSummary = "";
   if (bootstrapEnabled) {
     const bootstrap = buildPageAgentBootstrap({
       hasUserProvidedContent: hasUserContent,
       designSystem: params.designSystem,
     });
-    bootstrappedPaths = bootstrap.bootstrappedPaths;
-    bootstrapSummary = bootstrap.compactSummary;
     messages.push({ role: "user", content: bootstrap.message });
   }
 
-  const sessionState = createPageAgentSessionState(bootstrapSummary);
-
-  const readFileExecutor = bootstrapEnabled
-    ? createBootstrapGuardedReadExecutor(bootstrappedPaths)
-    : executePageAgentReadFile;
-  const listDirExecutor = bootstrapEnabled
-    ? createBootstrapGuardedListDirExecutor(bootstrappedPaths)
-    : executePageAgentListDir;
-  const baseWriteFileExecutor = createPageAgentChromeDeferredWriteExecutor(
-    "write_file",
-    { targetPath, componentRoot },
-  );
-  const baseEditFileExecutor = createPageAgentChromeDeferredWriteExecutor(
-    "edit_file",
-    { targetPath, componentRoot },
-  );
-  const guardTargetFirst =
-    (
-      toolName: "write_file" | "edit_file",
-      executor: (args: Record<string, unknown>) => Promise<ToolResult | string>,
-    ) =>
-    async (args: Record<string, unknown>): Promise<ToolResult | string> => {
-      const path = String(args.path ?? "")
-        .trim()
-        .replace(/^\.\//, "");
-      if (
-        pageImplementationIncompleteReason(
-          readSiteFile(targetPath),
-          targetPath,
-        ) &&
-        path !== targetPath
-      ) {
-        return {
-          success: false,
-          error:
-            `Target-first: implement \`${targetPath}\` before writing page-local components. ` +
-            `Use ${sessionState.writtenPaths.includes(targetPath) ? "edit_file" : "write_file"} on the target page now.`,
-        };
-      }
-      if (
-        toolName === "write_file" &&
-        shouldRejectRepeatedPageAgentWrite(sessionState, path)
-      ) {
-        return {
-          success: false,
-          error: `\`${path}\` was already created successfully. Use \`edit_file\` for subsequent changes.`,
-        };
-      }
-      return executor(args);
-    };
-  const writeFileExecutor = guardTargetFirst(
-    "write_file",
-    baseWriteFileExecutor,
-  );
-  const editFileExecutor = guardTargetFirst(
-    "edit_file",
-    baseEditFileExecutor,
-  );
+  const fileSession = createPageFileSession({
+    slug: page.slug,
+    targetPath,
+    componentRoot,
+    workspace: new SiteFileSessionWorkspace(),
+  });
 
   const pageImageScope = `page-${componentRoot.slice("components/pages/".length)}`;
   const { executor: baseImageExecutor, pendingImages } = createImageExecutor(
@@ -337,26 +264,31 @@ export async function runPageImplementAgent(
       : getSystemToolDefinitions(["generate_image"])[0];
 
   const fullPageTools: ChatCompletionTool[] = [
-    ...getSystemToolDefinitions(
-      PAGE_AGENT_TOOL_NAMES.filter((name) => name !== "generate_image"),
-    ),
-    ...(imageTool ? [imageTool] : []),
-    completeTool,
-  ];
-
-  const batchFirstRound = isPageAgentBatchFirstRoundEnabled();
-  const batchWriteTools: ChatCompletionTool[] = [
-    ...getSystemToolDefinitions(["read_file", "list_dir", "write_file"]),
+    ...fileSessionTools,
     ...(imageTool ? [imageTool] : []),
   ];
-
-  let implementationComplete = false;
-  let completeSummary = "";
-  const compactFromIter = pageAgentCompactFromIteration();
   const maxIterations = resolvePageAgentMaxIterations();
-  const preserveHeadCount = bootstrapEnabled ? 3 : 2;
   let emptyStopRecoveries = 0;
   let iterationsUsed = 0;
+
+  const executeFileCommand = async (
+    name: FileSessionCall["name"],
+    args: Record<string, unknown>,
+  ): Promise<ToolResult> => {
+    const event = await fileSession.execute({ name, args } as FileSessionCall);
+    return event.success
+      ? {
+          success: true,
+          output: JSON.stringify(event),
+          meta: {
+            path: event.path,
+            revision: event.revision,
+            eventKind: event.kind,
+            cached: event.cached,
+          },
+        }
+      : { success: false, error: `${event.code}: ${event.error}` };
+  };
 
   const { content, toolCalls } = await callLLMWithToolsFromMessages({
     messages,
@@ -367,178 +299,68 @@ export async function runPageImplementAgent(
     model,
     ...(thinking ? { thinkingLevel: thinking } : {}),
     executeToolOverrides: {
-      read_file: readFileExecutor,
-      list_dir: listDirExecutor,
-      write_file: writeFileExecutor,
-      edit_file: editFileExecutor,
-      [PAGE_IMPLEMENTATION_COMPLETE]: async (
-        args: Record<string, unknown>,
-      ): Promise<ToolResult> => {
-        const incompleteReason = pageImplementationIncompleteReason(
-          readSiteFile(targetPath),
-          targetPath,
-        );
-        if (incompleteReason) {
-          return {
-            success: false,
-            error:
-              `Cannot complete page implementation: ${incompleteReason}. ` +
-              `Write the target page successfully, then call ${PAGE_IMPLEMENTATION_COMPLETE} again.`,
-          };
-        }
-        implementationComplete = true;
-        completeSummary =
-          typeof args.summary === "string" ? args.summary.trim() : "";
-        return {
-          success: true,
-          output: "page_implementation_complete acknowledged",
-        };
-      },
+      create_file: (args) => executeFileCommand("create_file", args),
+      read_file_snapshot: (args) => executeFileCommand("read_file_snapshot", args),
+      apply_file_patch: (args) => executeFileCommand("apply_file_patch", args),
+      verify_files: (args) => executeFileCommand("verify_files", args),
       generate_image: imageExecutor,
     },
-    formatToolResultForModel: formatPageAgentToolResultForModel,
-    compactMessagesBeforeRound: ({ iteration, messages: msgs }) => {
-      if (
-        bootstrapEnabled &&
-        !sessionState.actNudgeSent &&
-        iteration >= 2 &&
-        sessionState.writtenPaths.length === 0
-      ) {
-        const nudge: ChatMessage = {
-          role: "system",
-          content:
-            `[Act mode] Workspace bootstrap is already in context. Stop read/list — ` +
-            `\`write_file\` \`${targetPath}\` and page components, then \`${PAGE_IMPLEMENTATION_COMPLETE}\`.`,
-        };
-        msgs.push(nudge);
-        sessionState.actNudgeSent = true;
-        onMessage?.(nudge);
-      }
-      if (
-        shouldRunPageAgentCompaction(sessionState, iteration, compactFromIter)
-      ) {
-        compactPageAgentMessages(msgs, sessionState, {
-          bootstrapSummary,
-          preserveHeadCount,
-        });
-      }
+    resolveToolsForIteration: (_iteration, defaults) => {
+      const legalFileToolNames = new Set(
+        fileSession.tools().map((tool) => tool.function?.name),
+      );
+      return defaults.filter(
+        (tool) =>
+          tool.function?.name === "generate_image" ||
+          legalFileToolNames.has(tool.function?.name),
+      );
     },
-    resolveToolsForIteration: (iteration, defaults) => {
-      const allowObserve = sessionState.allowObserveTools || !bootstrapEnabled;
-      let toolsForRound = filterPageAgentToolsForPhase(defaults, allowObserve);
-
-      if (
-        bootstrapEnabled &&
-        iteration === 0 &&
-        sessionState.writtenPaths.length === 0
-      ) {
-        toolsForRound = toolsForRound.filter((t) => {
-          const n = t.function?.name;
-          return (
-            n === "write_file" ||
-            n === "edit_file" ||
-            n === "generate_image" ||
-            n === PAGE_IMPLEMENTATION_COMPLETE
-          );
-        });
-      }
-
-      if (batchFirstRound && iteration === 0) {
-        toolsForRound = filterPageAgentToolsForPhase(
-          batchWriteTools,
-          allowObserve,
-        );
-      }
-      if (
-        pageImplementationIncompleteReason(readSiteFile(targetPath), targetPath)
-      ) {
-        const requiredMutation = sessionState.writtenPaths.includes(targetPath)
-          ? "edit_file"
-          : "write_file";
-        toolsForRound = toolsForRound.filter(
-          (tool) => tool.function?.name === requiredMutation,
-        );
-      }
-      return toolsForRound;
-    },
-    resolveToolChoiceForIteration: (iteration, toolsForRound) => {
-      if (
-        toolsForRound.length > 0 &&
-        pageImplementationRequiresToolCall(readSiteFile(targetPath), targetPath)
-      ) {
-        return "required";
-      }
-      if (batchFirstRound && iteration === 0 && toolsForRound.length > 0) {
-        return "required";
-      }
-      if (
-        bootstrapEnabled &&
-        iteration === 0 &&
-        toolsForRound.some((t) => t.function?.name === "write_file")
-      ) {
-        return "required";
-      }
-      return "auto";
-    },
+    resolveToolChoiceForIteration: () =>
+      fileSession.stopDecision().kind === "complete" ? "auto" : "required",
     onMessage,
     onAssistantRound: ({ iteration }) => {
       iterationsUsed = Math.max(iterationsUsed, iteration + 1);
     },
     onAssistantStop: ({ messages: msgs }) => {
-      const incompleteReason = pageImplementationIncompleteReason(
-        readSiteFile(targetPath),
-        targetPath,
-      );
-      if (!incompleteReason || emptyStopRecoveries >= 2) return false;
+      const decision = fileSession.stopDecision();
+      if (decision.kind === "complete" || emptyStopRecoveries >= 2) return false;
       emptyStopRecoveries += 1;
-      const requiredMutation = sessionState.writtenPaths.includes(targetPath)
-        ? "edit_file"
-        : "write_file";
       const nudge: ChatMessage = {
         role: "system",
         content:
-          `[Recovery ${emptyStopRecoveries}/2] You stopped before the target page was implemented: ` +
-          `${incompleteReason}. Your next response must call \`${requiredMutation}\` for ` +
-          `\`${targetPath}\`. Do not write a section file or return prose.`,
+          `[File session recovery ${emptyStopRecoveries}/2] ${decision.kind === "continue" ? decision.reason : decision.error}. ` +
+          `Use create_file for a missing path, or read_file_snapshot then apply_file_patch for an existing path.`,
       };
       msgs.push(nudge);
       onMessage?.(nudge);
       return true;
     },
-    shouldAbortAfterToolResults: () => implementationComplete,
+    shouldAbortAfterToolResults: () => fileSession.stopDecision().kind !== "continue",
     requireTools: true,
     onToolCall: ({ name, args, iteration, result }) => {
-      recordPageAgentToolResult(sessionState, name, args, result);
-
-      if (name === "read_lints" && typeof result === "object") {
-        const errN = Number(result.meta?.verifyErrorCount ?? 0);
-        if (errN > 0 || (result.diagnostics?.length ?? 0) > 0) {
-          sessionState.allowObserveTools = true;
-        }
-      }
-
       if (!onStep) return;
-      if (VISIBLE_TOOL_NAMES.has(name)) {
+      const cached = typeof result === "object" && result.meta?.cached === true;
+      if (VISIBLE_TOOL_NAMES.has(name) && !cached) {
         const filePath = String(args.path ?? "");
         const succeeded = typeof result === "string" || result.success;
         onStep({
-          step: `page_agent_tool:${page.slug}:${name}:${iteration}`,
+          step: `page_agent_file:${page.slug}:${filePath}`,
           status: succeeded ? "ok" : "error",
           detail: succeeded
-            ? `${name.replace("_", " ")}: ${filePath}`
-            : `${name.replace("_", " ")} rejected: ${filePath}`,
+            ? `[${page.slug}] ${name.replace("_", " ")}: ${filePath}`
+            : `[${page.slug}] ${name.replace("_", " ")} rejected: ${filePath}`,
           timestamp: Date.now(),
           duration: 0,
         });
       }
       const detail =
-        name === "read_file" || name === "list_dir"
+        name === "read_file_snapshot"
           ? `reading ${
               String(args.path ?? "")
                 .split("/")
                 .pop() || "..."
             }`
-          : name === "write_file" || name === "edit_file"
+          : name === "create_file" || name === "apply_file_patch"
             ? `writing ${
                 String(args.path ?? "")
                   .split("/")
@@ -561,9 +383,8 @@ export async function runPageImplementAgent(
         content:
           `[Iteration Budget] You have used most of your available tool-calling rounds. ` +
           `Wrap up now:\n` +
-          `1. Ensure \`${targetPath}\` exists and has a \`export default\` component.\n` +
-          `2. Call \`${PAGE_IMPLEMENTATION_COMPLETE}\` with a brief summary.\n` +
-          `Do NOT start new files or features — finalize what you have and call the completion tool.`,
+          `Ensure \`${targetPath}\` is implemented and clean. Use verify_files; completion is automatic. ` +
+          `Do not start new files or features.`,
       };
       msgs.push(nudge);
       onMessage?.(nudge);
@@ -571,41 +392,17 @@ export async function runPageImplementAgent(
     langfusePhase: lfPageImplementPhaseSlug(page.slug),
   });
 
-  const finalIncompleteReason = pageImplementationIncompleteReason(
-    readSiteFile(targetPath),
-    targetPath,
-  );
-  if (finalIncompleteReason) {
+  const finalDecision = fileSession.stopDecision();
+  if (finalDecision.kind !== "complete") {
     throw new Error(
       `page_implement_agent:${page.slug}: stopped after ${iterationsUsed}/${maxIterations} iterations ` +
-        `without completing ${targetPath}: ${finalIncompleteReason}. ` +
-        `Successful target write: ${sessionState.writtenPaths.includes(targetPath) ? "yes" : "no"}. ` +
+        `without completing ${targetPath}: ${finalDecision.kind === "continue" ? finalDecision.reason : finalDecision.error}. ` +
+        `Successful target write: ${fileSession.writtenPaths().includes(targetPath) ? "yes" : "no"}. ` +
         `Empty-stop recoveries: ${emptyStopRecoveries}/2. Model: ${model}, ` +
         `tool calls: ${toolCalls.length}. Last message: ${(content || "(empty)").slice(0, 300)}`,
     );
   }
-  if (!implementationComplete) {
-    const implicitTsx = readSiteFile(targetPath);
-    const incompleteReason = pageImplementationIncompleteReason(implicitTsx, targetPath);
-
-    if (!incompleteReason) {
-      console.warn(
-        `[page_implement_agent:${page.slug}] Agent did not call ${PAGE_IMPLEMENTATION_COMPLETE} ` +
-          `but ${targetPath} exists with a valid default export — accepting implicit completion. ` +
-          `(model=${model}, toolCalls=${toolCalls.length})`
-      );
-      implementationComplete = true;
-      completeSummary =
-        content || `[implicit] Page implemented at ${targetPath}`;
-    } else {
-      throw new Error(
-        `page_implement_agent:${page.slug}: agent exhausted ${maxIterations} iterations ` +
-          `without completing ${targetPath}: ${incompleteReason}. Expected the agent to call ` +
-          `${PAGE_IMPLEMENTATION_COMPLETE}. Model: ${model}, tool calls: ${toolCalls.length}. ` +
-          `Last message: ${(content || "(empty)").slice(0, 300)}`
-      );
-    }
-  }
+  const completeSummary = content || `Page output contract satisfied at ${targetPath}`;
 
   const tsx = readSiteFile(targetPath);
   if (!tsx) {
@@ -621,15 +418,7 @@ export async function runPageImplementAgent(
         `("Preparing your site…") after the agent signaled completion`,
     );
   }
-  await formatSiteFile(targetPath);
-
-  const writtenPaths = Array.from(
-    new Set([
-      ...sessionState.writtenPaths,
-      ...sessionState.editedPaths,
-      targetPath,
-    ]),
-  );
+  const writtenPaths = fileSession.writtenPaths();
 
   const trace: StepTrace = {
     input: {

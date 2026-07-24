@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   pageImplementationIncompleteReason,
   pageImplementationRequiresToolCall,
-  shouldAcceptImplicitPageImplementation,
+  isPageImplementationValid,
+  createPageFileSession,
 } from "./pageImplementAgent";
+import { InMemoryFileSessionWorkspace } from "@/ai/shared/fileSession/fileSession";
 
 describe("pageImplementationIncompleteReason", () => {
   const path = "app/page.tsx";
@@ -31,12 +33,12 @@ describe("pageImplementationIncompleteReason", () => {
     expect(pageImplementationIncompleteReason(source, path)).toBeNull();
   });
 
-  it("does not implicitly complete while the scaffold stub is still present", () => {
+  it("does not validate while the scaffold stub is still present", () => {
     const source = `export default function Home() {
       return <main>Preparing your site…</main>;
     }`;
 
-    expect(shouldAcceptImplicitPageImplementation(source, path)).toBe(false);
+    expect(isPageImplementationValid(source, path)).toBe(false);
     expect(pageImplementationRequiresToolCall(source, path)).toBe(true);
   });
 
@@ -45,7 +47,29 @@ describe("pageImplementationIncompleteReason", () => {
       return <main>Welcome</main>;
     }`;
 
-    expect(shouldAcceptImplicitPageImplementation(source, path)).toBe(true);
+    expect(isPageImplementationValid(source, path)).toBe(true);
     expect(pageImplementationRequiresToolCall(source, path)).toBe(false);
+  });
+
+  it("completes the Page file policy after replacing the bootstrap stub", async () => {
+    const workspace = new InMemoryFileSessionWorkspace({
+      "app/page.tsx": "export default function Home() { return <main>Preparing your site…</main>; }",
+    });
+    const session = createPageFileSession({
+      slug: "home",
+      targetPath: "app/page.tsx",
+      componentRoot: "components/pages/home",
+      workspace,
+    });
+
+    await session.execute({
+      name: "create_file",
+      args: {
+        path: "app/page.tsx",
+        content: "export default function Home() { return <main>Ready</main>; }",
+      },
+    });
+
+    expect(session.stopDecision()).toEqual({ kind: "complete" });
   });
 });
