@@ -6,9 +6,8 @@
 
 1. 合法 JSON。
 2. 顶层 **`chromeForm`**（必填）与可选 **`sharedContracts`**。
-3. 每个 page 必须有完整的 `pageDesignPlan`。
-4. 每个 page 的 **`sections` 必须为 `[]`**（空数组）。
-5. 输入页面清单是规范事实：不得增删页面、改 slug、改顺序或改写页面元数据，只为每个既有 slug 补充 `pageDesignPlan`。
+3. 顶层 **`pageDesignPlans`** 数组必须为输入清单中的每个页面提供一个完整计划，并严格保持输入顺序。
+4. 不要输出 `pages`、`slug`、标题、描述或 `sections`。规范页面元数据由编排器持有，模型无权复述或修改。
 
 ## Chrome-first 契约
 
@@ -36,22 +35,13 @@
 {
   "chromeForm": "top-nav+footer",
   "sharedContracts": [],
-  "pages": [
+  "pageDesignPlans": [
     {
-      "title": "Home",
-      "slug": "home",
-      "description": "...",
-      "journeyStage": "discover",
-      "primaryRoleIds": [],
-      "supportingCapabilityIds": [],
-      "sections": [],
-      "pageDesignPlan": {
-        "pageGoal": "...",
-        "narrativeArc": "...",
-        "layoutStrategy": "...",
-        "hierarchy": ["..."],
-        "constraints": ["..."]
-      }
+      "pageGoal": "...",
+      "narrativeArc": "...",
+      "layoutStrategy": "...",
+      "hierarchy": ["..."],
+      "constraints": ["..."]
     }
   ]
 }
@@ -59,7 +49,7 @@
 
 ### 硬性要求
 
-- 顶层包含：`chromeForm`、`sharedContracts`（可空数组）、`pages`。
-- `pages` 必须与用户消息中的页面清单一一对应，slug 和数量完全一致。
-- 每个 page 的 `sections` 必须是 `[]`。
+- 顶层包含：`chromeForm`、`sharedContracts`（可空数组）、`pageDesignPlans`。
+- `pageDesignPlans` 必须与用户消息中的页面清单按顺序一一对应，数量完全一致。
+- 禁止输出 `pages` 或任何 route slug；页面身份由编排器按位置合并。
 - `chromeForm` 必须是你基于 brief 的判断，不是默认营销站模板。

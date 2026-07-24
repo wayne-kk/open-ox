@@ -76,22 +76,13 @@ const blueprint: ProjectBlueprint = {
   },
 };
 
-function pagePlan(slug: string, title: string) {
+function pageDesignPlan(slug: string) {
   return {
-    title,
-    slug,
-    description: `Model-authored ${slug}`,
-    journeyStage: "model-authored",
-    primaryRoleIds: ["model-role"],
-    supportingCapabilityIds: ["model-capability"],
-    sections: [],
-    pageDesignPlan: {
-      pageGoal: `Goal for ${slug}`,
-      narrativeArc: `Arc for ${slug}`,
-      layoutStrategy: `Layout for ${slug}`,
-      hierarchy: ["Primary"],
-      constraints: ["Keep it focused"],
-    },
+    pageGoal: `Goal for ${slug}`,
+    narrativeArc: `Arc for ${slug}`,
+    layoutStrategy: `Layout for ${slug}`,
+    hierarchy: ["Primary"],
+    constraints: ["Keep it focused"],
   };
 }
 
@@ -101,15 +92,12 @@ describe("stepPlanProject", () => {
     writeSiteFile.mockReset();
   });
 
-  it("keeps the canonical route order and page metadata from the analyzed blueprint", async () => {
+  it("merges positional design plans into canonical routes owned by the blueprint", async () => {
     callLLMWithMeta.mockResolvedValue({
       content: JSON.stringify({
         chromeForm: "top-nav+footer",
         sharedContracts: [],
-        pages: [
-          pagePlan("about", "Changed about"),
-          pagePlan("home", "Changed home"),
-        ],
+        pageDesignPlans: [pageDesignPlan("home"), pageDesignPlan("about")],
       }),
       model: "test-model",
     });
@@ -151,18 +139,18 @@ describe("stepPlanProject", () => {
     ]);
   });
 
-  it("rejects a plan that drops a canonical route", async () => {
+  it("rejects a plan count that does not match canonical routes", async () => {
     callLLMWithMeta.mockResolvedValue({
       content: JSON.stringify({
         chromeForm: "top-nav+footer",
         sharedContracts: [],
-        pages: [pagePlan("home", "Home")],
+        pageDesignPlans: [pageDesignPlan("home")],
       }),
       model: "test-model",
     });
 
     await expect(stepPlanProject(blueprint)).rejects.toThrow(
-      "route count changed from 2 to 1",
+      "design plan count changed from 2 to 1",
     );
   });
 });

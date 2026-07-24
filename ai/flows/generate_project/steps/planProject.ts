@@ -62,7 +62,7 @@ ${blueprint.brief.projectDescription}
 >
 > 可选形态：\`top-nav+footer\` | \`top-nav\` | \`sidebar\` | \`bottom-tabs\` | \`none\`（极简壳，仍由 Chrome 拥有）。**不要**使用已删除的 \`page-local\`。
 > **不要**套用死板产品类型配方；**不要**在 keywords 为空时脑补 SaaS 气质词（clean / professional / modern 等）。
-> 页面清单已经锁定。必须原样返回每个 slug，不能新增、删除、重命名或合并路由；只为每页补充 \`pageDesignPlan\`。
+> 页面清单已经锁定。输出中不要重复页面 slug、标题或描述。\`pageDesignPlans\` 必须严格按下方页面清单顺序排列；规范路由由编排器持有并合并。
 
 请输出 JSON，结构如下：
 \`\`\`json
@@ -77,7 +77,7 @@ ${blueprint.brief.projectDescription}
       "detailRoutePattern": "/items/[id]"
     }
   ],
-  "pages": [ /* pageDesignPlan per page — unchanged */ ]
+  "pageDesignPlans": [ /* one pageDesignPlan per canonical page, in input order */ ]
 }
 \`\`\`
 
@@ -102,48 +102,34 @@ ${blueprint.site.pages
   const trace = stepTraceFromLlmCompletion(systemPrompt, userMessage, meta);
   const parsed = JSON.parse(extractJSON(raw)) as unknown;
 
-  const parsedPages =
-    isObjectRecord(parsed) && Array.isArray(parsed.pages)
-      ? parsed.pages
-      : isObjectRecord(parsed) && isObjectRecord(parsed.site) && Array.isArray(parsed.site.pages)
-        ? parsed.site.pages
-        : [];
+  const parsedPlans =
+    isObjectRecord(parsed) && Array.isArray(parsed.pageDesignPlans)
+      ? parsed.pageDesignPlans
+      : [];
 
-  if (!isObjectRecord(parsed) || parsedPages.length === 0) {
-    throw new Error("plan_project: invalid JSON — missing pages or empty pages array");
-  }
-
-  if (parsedPages.length !== blueprint.site.pages.length) {
+  if (!isObjectRecord(parsed) || parsedPlans.length === 0) {
     throw new Error(
-      `plan_project: route count changed from ${blueprint.site.pages.length} to ${parsedPages.length}`
+      "plan_project: invalid JSON — missing pageDesignPlans or empty pageDesignPlans array"
     );
   }
 
-  const plansBySlug = new Map<string, PageDesignPlan>();
-  parsedPages.forEach((candidate, pageIndex) => {
-    if (!isObjectRecord(candidate)) {
-      throw new Error(`plan_project: page at index ${pageIndex} is not an object`);
-    }
-    const slug = typeof candidate.slug === "string" ? candidate.slug : "";
-    if (!slug) {
-      throw new Error(`plan_project: page at index ${pageIndex} is missing slug`);
-    }
-    if (plansBySlug.has(slug)) {
-      throw new Error(`plan_project: duplicate route slug ${slug}`);
-    }
-    if (!isPageDesignPlan(candidate.pageDesignPlan)) {
+  if (parsedPlans.length !== blueprint.site.pages.length) {
+    throw new Error(
+      `plan_project: design plan count changed from ${blueprint.site.pages.length} to ${parsedPlans.length}`
+    );
+  }
+
+  const pageDesignPlans = parsedPlans.map((candidate, pageIndex) => {
+    if (!isPageDesignPlan(candidate)) {
       throw new Error(
-        `plan_project: page at index ${pageIndex} (${slug}) has missing or invalid pageDesignPlan`
+        `plan_project: pageDesignPlan at index ${pageIndex} is invalid`
       );
     }
-    plansBySlug.set(slug, candidate.pageDesignPlan);
+    return candidate;
   });
 
-  const pages: PlannedPageBlueprint[] = blueprint.site.pages.map((page) => {
-    const pageDesignPlan = plansBySlug.get(page.slug);
-    if (!pageDesignPlan) {
-      throw new Error(`plan_project: canonical route ${page.slug} is missing from planned pages`);
-    }
+  const pages: PlannedPageBlueprint[] = blueprint.site.pages.map((page, pageIndex) => {
+    const pageDesignPlan = pageDesignPlans[pageIndex];
     return {
       ...page,
       sections: [],
