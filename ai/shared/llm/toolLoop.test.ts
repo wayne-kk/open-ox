@@ -398,7 +398,7 @@ describe("callLLMWithToolsFromMessages", () => {
   });
 
   it("compacts oversized tool history before retrying", async () => {
-    const fullToolResult = "x".repeat(20_000);
+    const fullToolResult = "x".repeat(30_000);
     const messages: ChatMessage[] = [
       ...initialMessages(),
       {
@@ -420,7 +420,7 @@ describe("callLLMWithToolsFromMessages", () => {
         );
         const compacted =
           typeof toolMessage?.content === "string" &&
-          toolMessage.content.length <= 2_100;
+          toolMessage.content.length <= 24_100;
         return compacted
           ? response({
               finishReason: "stop",
@@ -447,7 +447,7 @@ describe("callLLMWithToolsFromMessages", () => {
   it("summarizes successful oversized tool calls without emitting schema-invalid history", async () => {
     const fullToolArguments = JSON.stringify({
       path: "app/page.tsx",
-      content: "x".repeat(20_000),
+      content: "x".repeat(30_000),
     });
     const messages: ChatMessage[] = [
       ...initialMessages(),
