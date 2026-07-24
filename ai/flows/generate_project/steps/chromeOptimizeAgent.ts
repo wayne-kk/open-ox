@@ -184,6 +184,7 @@ Hard rules:
     temperature: 0.35,
     maxIterations,
     completionProfile: "code",
+    contextSessionKind: "chrome",
     model,
     ...(thinking ? { thinkingLevel: thinking } : {}),
     executeToolOverrides: {

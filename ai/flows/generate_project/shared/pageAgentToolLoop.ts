@@ -4,7 +4,6 @@
 
 import { executeSystemTool } from "@/ai/tools";
 import type { ToolResult } from "@/ai/tools";
-import type { ChatMessage } from "@/ai/shared/llm/types";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 
 export const PAGE_AGENT_DEFAULT_MAX_ITERATIONS = 96;
@@ -367,45 +366,4 @@ export async function executePageAgentListDir(
   args: Record<string, unknown>,
 ): Promise<ToolResult | string> {
   return executeSystemTool("list_dir", args);
-}
-
-/** S5 — collapse middle turns after first write; re-inject bootstrap summary. */
-export function compactPageAgentMessages(
-  messages: ChatMessage[],
-  state: PageAgentSessionState,
-  options?: {
-    keepRecent?: number;
-    bootstrapSummary?: string;
-    preserveHeadCount?: number;
-  },
-): void {
-  const keepRecent = options?.keepRecent ?? 6;
-  const preserveHeadCount = options?.preserveHeadCount ?? 2;
-  if (messages.length <= preserveHeadCount + keepRecent) return;
-
-  const head = messages.slice(0, preserveHeadCount);
-  const tail = messages.slice(-keepRecent);
-
-  const written =
-    state.writtenPaths.length > 0
-      ? state.writtenPaths.join(", ")
-      : "(none yet)";
-  const edited =
-    state.editedPaths.length > 0 ? state.editedPaths.join(", ") : "(none)";
-  const bootstrapNote =
-    options?.bootstrapSummary?.trim() ||
-    state.bootstrapSummary.trim() ||
-    "Bootstrap context was provided earlier — do not re-read those files.";
-
-  const summary: ChatMessage = {
-    role: "system",
-    content:
-      `[Context compacted — earlier tool turns omitted from prompt]\n` +
-      `${bootstrapNote}\n` +
-      `- Files written: ${written}\n` +
-      `- Files edited: ${edited}\n` +
-      `- Do NOT re-read bootstrap paths. Finish \`app/page.tsx\` (or target route) and call page_implementation_complete.`,
-  };
-
-  messages.splice(0, messages.length, ...head, summary, ...tail);
 }

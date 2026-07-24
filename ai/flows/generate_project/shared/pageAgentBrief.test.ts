@@ -4,7 +4,6 @@ import {
   PAGE_AGENT_HERO_SKILL_PATH,
 } from "./pageAgentBrief";
 import {
-  compactPageAgentMessages,
   createBootstrapGuardedReadExecutor,
   createPageAgentSessionState,
   filterPageAgentToolsForPhase,
@@ -19,7 +18,6 @@ import {
   shouldRejectRepeatedPageAgentWrite,
   shouldRunPageAgentCompaction,
 } from "./pageAgentToolLoop";
-import type { ChatMessage } from "@/ai/shared/llm/types";
 
 describe("pageAgentBrief", () => {
   it("buildPageAgentUserMessage focuses on task and bootstrap note", () => {
@@ -200,32 +198,6 @@ describe("pageAgentToolLoop", () => {
       result: { success: false, error: "disk full" },
     });
     expect(out).toContain("disk full");
-  });
-
-  it("compactPageAgentMessages preserves head and tail", () => {
-    const state = createPageAgentSessionState("bootstrap note");
-    state.writtenPaths.push("app/page.tsx");
-    const messages: ChatMessage[] = [
-      { role: "system", content: "sys" },
-      { role: "user", content: "user" },
-      { role: "assistant", content: "old1" },
-      { role: "tool", tool_call_id: "a", content: "t1" },
-      { role: "assistant", content: "old2" },
-      { role: "tool", tool_call_id: "b", content: "t2" },
-      { role: "assistant", content: "recent" },
-      { role: "tool", tool_call_id: "c", content: "t3" },
-    ];
-    compactPageAgentMessages(messages, state, {
-      keepRecent: 2,
-      preserveHeadCount: 2,
-    });
-    expect(messages[0].role).toBe("system");
-    expect(messages[1].role).toBe("user");
-    expect(messages[2].role).toBe("system");
-    expect(String(messages[2].content)).toContain("app/page.tsx");
-    expect(String(messages[2].content)).toContain("Do NOT re-read bootstrap");
-    expect(messages.at(-1)?.content).toBe("t3");
-    expect(messages.length).toBe(5);
   });
 
   it("shouldRunPageAgentCompaction waits until first write", () => {

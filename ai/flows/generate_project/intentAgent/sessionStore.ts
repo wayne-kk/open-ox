@@ -8,8 +8,11 @@ import fs from "fs/promises";
 import path from "path";
 import type { ChatMessage } from "@/ai/shared/llm/types";
 import { getSiteRoot, WORKSPACE_ROOT } from "@/lib/projectManager";
+import { isAgentContextV2Enabled, JsonlContextEventStore } from "@/ai/shared/agentContext";
+import { contextEventsToLegacyMessages, legacyMessagesToEvents } from "@/ai/shared/agentContext/legacyMessages";
 
 export const INTENT_AGENT_SESSION_FILE = "intent-agent-session.json";
+const INTENT_AGENT_MIGRATED_V1_FILE = "intent-agent-session.migrated-v1.json";
 
 export interface IntentAgentPersistedSessionV1 {
   version: 1;
@@ -17,6 +20,18 @@ export interface IntentAgentPersistedSessionV1 {
   updatedAt: string;
   turnCounter: number;
   messages: ChatMessage[];
+}
+
+interface IntentAgentPersistedSessionV2 {
+  version: 2;
+  projectId: string;
+  updatedAt: string;
+  turnCounter: number;
+  messageCount: number;
+  eventSessionId: string;
+  sessionId: string;
+  lastSequence: number;
+  policyVersion: "v1";
 }
 
 function sessionDir(projectId: string): string {
@@ -50,12 +65,37 @@ function parsePersistedSession(raw: string): IntentAgentPersistedSessionV1 | nul
   }
 }
 
+function parseV2(raw: string): IntentAgentPersistedSessionV2 | null {
+  try {
+    const value = JSON.parse(raw) as IntentAgentPersistedSessionV2;
+    return value?.version === 2 && typeof value.projectId === "string" &&
+      Number.isSafeInteger(value.messageCount) && typeof value.eventSessionId === "string" &&
+      typeof value.sessionId === "string" && Number.isSafeInteger(value.lastSequence) &&
+      value.policyVersion === "v1" ? value : null;
+  } catch { return null; }
+}
+
+function eventStore(projectId: string): JsonlContextEventStore {
+  return new JsonlContextEventStore(path.join(sessionDir(projectId), "events"));
+}
+
+function eventSessionId(projectId: string): string {
+  return `intent:${projectId}`;
+}
+
 export async function loadIntentAgentSession(
   projectId: string
 ): Promise<IntentAgentPersistedSessionV1 | null> {
   const primary = getIntentAgentSessionPath(projectId);
   try {
     const raw = await fs.readFile(primary, "utf-8");
+    const v2 = parseV2(raw);
+    if (v2 && v2.projectId === projectId) {
+      const events = await eventStore(projectId).read(v2.eventSessionId);
+      const messages = contextEventsToLegacyMessages(events);
+      if (messages.length !== v2.messageCount || (messages[0] && messages[0].role !== "system")) return null;
+      return { version: 1, projectId, updatedAt: v2.updatedAt, turnCounter: v2.turnCounter, messages };
+    }
     const parsed = parsePersistedSession(raw);
     if (parsed) return parsed;
   } catch {
@@ -74,14 +114,59 @@ export async function loadIntentAgentSession(
 export async function saveIntentAgentSession(session: IntentAgentPersistedSessionV1): Promise<void> {
   const dir = sessionDir(session.projectId);
   await fs.mkdir(dir, { recursive: true });
-  const next: IntentAgentPersistedSessionV1 = {
-    ...session,
-    updatedAt: new Date().toISOString(),
-  };
   const file = getIntentAgentSessionPath(session.projectId);
-  await fs.writeFile(file, JSON.stringify(next, null, 2), "utf-8");
+  let existingV2: IntentAgentPersistedSessionV2 | null = null;
+  try { existingV2 = parseV2(await fs.readFile(file, "utf8")); } catch { /* new session */ }
+  if (!isAgentContextV2Enabled("intent") && !existingV2) {
+    await fs.writeFile(file, JSON.stringify({ ...session, updatedAt: new Date().toISOString() }, null, 2), "utf8");
+    return;
+  }
+  const store = eventStore(session.projectId);
+  let previousCount = existingV2?.projectId === session.projectId ? existingV2.messageCount : 0;
+  const alreadyWritten = await store.read(eventSessionId(session.projectId));
+  if (previousCount === 0 && alreadyWritten.length > 0) {
+    const recoveredPrefix = contextEventsToLegacyMessages(alreadyWritten);
+    if (JSON.stringify(recoveredPrefix) !== JSON.stringify(session.messages.slice(0, recoveredPrefix.length))) {
+      throw new Error("Intent Agent V2 recovery log does not match the session prefix");
+    }
+    previousCount = recoveredPrefix.length;
+  }
+  if (previousCount > session.messages.length) {
+    throw new Error("Intent Agent V2 history cannot shrink; clear the session before replacing it");
+  }
+  const delta = legacyMessagesToEvents(session.messages, previousCount);
+  if (delta.length > 0) await store.append(eventSessionId(session.projectId), delta);
+  const reloaded = await store.read(eventSessionId(session.projectId));
+  if (reloaded.length !== session.messages.length) {
+    throw new Error(`Intent Agent V2 reload verification failed: expected ${session.messages.length}, got ${reloaded.length}`);
+  }
+  if (JSON.stringify(contextEventsToLegacyMessages(reloaded)) !== JSON.stringify(session.messages)) {
+    throw new Error("Intent Agent V2 identity projection verification failed");
+  }
+  const next: IntentAgentPersistedSessionV2 = {
+    version: 2,
+    projectId: session.projectId,
+    updatedAt: new Date().toISOString(),
+    turnCounter: session.turnCounter,
+    messageCount: session.messages.length,
+    eventSessionId: eventSessionId(session.projectId),
+    sessionId: eventSessionId(session.projectId),
+    lastSequence: reloaded.at(-1)?.sequence ?? 0,
+    policyVersion: "v1",
+  };
+  const temporary = `${file}.tmp`;
+  let primaryWasV1 = false;
   try {
-    await fs.unlink(legacySessionPath(session.projectId));
+    primaryWasV1 = parsePersistedSession(await fs.readFile(file, "utf8")) !== null;
+  } catch { /* new session */ }
+  if (primaryWasV1) {
+    await fs.rename(file, path.join(dir, INTENT_AGENT_MIGRATED_V1_FILE));
+  }
+  await fs.writeFile(temporary, JSON.stringify(next, null, 2), "utf-8");
+  await fs.rename(temporary, file);
+  try {
+    const legacy = legacySessionPath(session.projectId);
+    await fs.rename(legacy, path.join(path.dirname(legacy), INTENT_AGENT_MIGRATED_V1_FILE));
   } catch {
     /* no legacy file */
   }
@@ -95,6 +180,11 @@ export async function clearIntentAgentSession(projectId: string): Promise<void> 
   }
   try {
     await fs.unlink(legacySessionPath(projectId));
+  } catch {
+    // ignore
+  }
+  try {
+    await fs.rm(path.join(sessionDir(projectId), "events"), { recursive: true, force: true });
   } catch {
     // ignore
   }

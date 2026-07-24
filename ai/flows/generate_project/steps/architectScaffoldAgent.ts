@@ -150,6 +150,7 @@ Hard rules:
     temperature: 0.4,
     maxIterations,
     completionProfile: "code",
+    contextSessionKind: "scaffold",
     model,
     ...(thinking ? { thinkingLevel: thinking } : {}),
     executeToolOverrides: {

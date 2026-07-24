@@ -11,6 +11,9 @@ import type {
 } from "./types";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { lfToolAgentRound } from "@/lib/observability/langfuseGenerationCatalog";
+import { createAgentContext, InMemoryContextEventStore, isAgentContextV2Enabled } from "@/ai/shared/agentContext";
+import type { ContextSessionKind } from "@/ai/shared/agentContext";
+import { legacyMessagesToEvents } from "@/ai/shared/agentContext/legacyMessages";
 
 export type ToolLoopToolChoice = "required" | "auto" | "none";
 export type ToolLoopCompletionProfile = "control" | "code";
@@ -444,6 +447,8 @@ export async function callLLMWithToolsFromMessages(params: {
   maxIterations?: number;
   /** Shared output budget tuned for control turns or source-code tool calls. */
   completionProfile?: ToolLoopCompletionProfile;
+  /** Typed context identity used by staged AgentContext rollout. */
+  contextSessionKind?: ContextSessionKind;
   /** When false, the model may only call one tool per turn. */
   parallelToolCalls?: boolean;
   model?: string;
@@ -542,6 +547,27 @@ export async function callLLMWithToolsFromMessages(params: {
     params.langfuseAgentLabel,
     "tool_prompt_messages",
   );
+  const configuredModel = getAllModels().find((candidate) => candidate.id === model);
+  const contextSessionKind = params.contextSessionKind ?? "page";
+  const agentContext = params.completionProfile && isAgentContextV2Enabled(contextSessionKind)
+    ? createAgentContext(
+        {
+          sessionId: `${phase}:${crypto.randomUUID()}`,
+          sessionKind: contextSessionKind,
+          policyVersion: "v1",
+        },
+        { eventStore: new InMemoryContextEventStore() },
+      )
+    : undefined;
+  let syncedMessageCount = 0;
+  let lastProjectionThroughEventId: string | undefined;
+
+  const syncContext = async () => {
+    if (!agentContext || syncedMessageCount >= messages.length) return;
+    const events = legacyMessagesToEvents(messages, syncedMessageCount);
+    if (events.length > 0) await agentContext.append(events);
+    syncedMessageCount = messages.length;
+  };
 
   for (let iteration = 0; iteration < maxIterations; iteration += 1) {
     params.compactMessagesBeforeRound?.({ iteration, maxIterations, messages });
@@ -567,24 +593,34 @@ export async function callLLMWithToolsFromMessages(params: {
     }
 
     let roundCompletionMaxTokens: number | undefined;
-    const requestRound = (lengthRetry: boolean) => {
-      const compactedMessages =
-        lengthRetry || params.completionProfile === "code"
-          ? compactToolHistoryForRequest(
-              messages,
-              params.completionProfile === "code",
-            )
+    const requestRound = async (lengthRetry: boolean) => {
+      await syncContext();
+      const projection = agentContext
+        ? await agentContext.project({
+            model: {
+              id: model,
+              provider: model.toLowerCase().includes("gemini") ? "gemini-compatible" : "openai",
+              contextWindow: configuredModel?.contextWindow ?? 128_000,
+            },
+            tools: activeTools,
+            toolChoice: toolChoice ?? "none",
+            completionProfile: params.completionProfile!,
+            pressure: lengthRetry ? "overflow_recovery" : "normal",
+          })
+        : undefined;
+      lastProjectionThroughEventId = projection?.throughEventId;
+      const compactedMessages = projection?.messages
+        ? [...projection.messages]
+        : lengthRetry || params.completionProfile === "code"
+          ? compactToolHistoryForRequest(messages, params.completionProfile === "code")
           : messages;
       const requestMessages =
         params.completionProfile === "code"
           ? [...compactedMessages, CODE_TOOL_CALL_POLICY]
           : compactedMessages;
       assertRequestEndsWithValidTurn(requestMessages);
-      roundCompletionMaxTokens = resolveCompletionMaxTokens(
-        params.completionProfile,
-        model,
-        requestMessages,
-        activeTools,
+      roundCompletionMaxTokens = projection?.maxCompletionTokens ?? resolveCompletionMaxTokens(
+        params.completionProfile, model, requestMessages, activeTools,
       );
       return chatCompletion({
         model,
@@ -619,6 +655,27 @@ export async function callLLMWithToolsFromMessages(params: {
     let res;
     try {
       res = await requestRound(false);
+      const observeResponse = async (response: ChatCompletionResponse) => {
+        if (!agentContext || !lastProjectionThroughEventId) return;
+        const usage = response.usage;
+        const finishReason = response.choices[0]?.finish_reason;
+        const completionTokens = usage?.completion_tokens;
+        const outputLimitReached = finishReason === "length" && completionTokens !== undefined &&
+          roundCompletionMaxTokens !== undefined && completionTokens >= roundCompletionMaxTokens * 0.8;
+        await agentContext.observe({
+          throughEventId: lastProjectionThroughEventId,
+          model,
+          // Ambiguous/zero-output length responses take the stronger projection
+          // path. Only measured completion saturation is classified as output truncation.
+          outcome: finishReason === "length" ? outputLimitReached ? "output_length" : "context_overflow" : "completed",
+          usage: usage ? {
+            promptTokens: usage.prompt_tokens,
+            completionTokens: usage.completion_tokens,
+            reasoningTokens: usage.completion_tokens_details?.reasoning_tokens,
+          } : undefined,
+        });
+      };
+      await observeResponse(res);
       if (res.choices[0]?.finish_reason === "length") {
         const recoveryNudge: ChatMessage = {
           role: "system",
@@ -629,6 +686,7 @@ export async function callLLMWithToolsFromMessages(params: {
         messages.push(recoveryNudge);
         emit?.(recoveryNudge);
         res = await requestRound(true);
+        await observeResponse(res);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -716,6 +774,7 @@ export async function callLLMWithToolsFromMessages(params: {
       if (params.onAssistantStop?.({ iteration, message, messages })) {
         continue;
       }
+      await syncContext();
       return {
         content: message.content?.trim() ?? lastAssistantContent,
         toolCalls,
@@ -734,6 +793,7 @@ export async function callLLMWithToolsFromMessages(params: {
       maxSourceMutationCalls:
         params.completionProfile === "code" ? 1 : undefined,
     });
+    await syncContext();
 
     if (shouldAbortAfterToolResults?.()) {
       return { content: lastAssistantContent, toolCalls };
