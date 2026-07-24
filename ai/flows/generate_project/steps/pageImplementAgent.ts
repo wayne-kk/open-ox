@@ -2,6 +2,8 @@
  * Per-route UI via multi-turn system tools (Cursor-style), without a fixed section manifest.
  */
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
+import { existsSync } from "fs";
+import { join } from "path";
 import {
   composePromptBlocks,
   loadGuardrail,
@@ -55,6 +57,8 @@ import {
   type FileSessionWorkspace,
 } from "@/ai/shared/fileSession/fileSession";
 import { SiteFileSessionWorkspace } from "@/ai/shared/fileSession/siteFileSessionWorkspace";
+import { getSiteRoot } from "@/ai/tools/system/common";
+import { pageImageCompletionReason } from "../shared/pageImageCompletionPolicy";
 
 function truncate(text: string, max: number): string {
   if (text.length <= max) return text;
@@ -251,6 +255,8 @@ export async function runPageImplementAgent(
     pageImageScope,
     {
       filenamePrefix: pageImageScope,
+      requireGeneratedAsset: true,
+      awaitCompletion: true,
     },
   );
   const imageExecutor = guardGenerateImageExecutor(
@@ -270,6 +276,33 @@ export async function runPageImplementAgent(
   const maxIterations = resolvePageAgentMaxIterations();
   let emptyStopRecoveries = 0;
   let iterationsUsed = 0;
+  const generatedImagePaths = new Set<string>();
+  let imageGenerationRequired = false;
+
+  const pageStopDecision = () => {
+    const fileDecision = fileSession.stopDecision();
+    if (fileDecision.kind !== "complete") return fileDecision;
+    const sources = Object.fromEntries(
+      fileSession.writtenPaths().map((path) => [path, readSiteFile(path)]),
+    );
+    const policyInput = {
+      sources,
+      generatedPaths: [...generatedImagePaths],
+      allowedRemoteUrls: userImageUrls,
+      assetExists: (publicPath: string) =>
+        existsSync(join(getSiteRoot(), "public", publicPath.replace(/^\//, ""))),
+    };
+    if (pageImageCompletionReason(policyInput)) {
+      imageGenerationRequired = true;
+    }
+    const imageReason = pageImageCompletionReason({
+      ...policyInput,
+      generationRequired: imageGenerationRequired,
+    });
+    return imageReason
+      ? ({ kind: "continue", reason: imageReason } as const)
+      : ({ kind: "complete" } as const);
+  };
 
   const executeFileCommand = async (
     name: FileSessionCall["name"],
@@ -316,13 +349,13 @@ export async function runPageImplementAgent(
       );
     },
     resolveToolChoiceForIteration: () =>
-      fileSession.stopDecision().kind === "complete" ? "auto" : "required",
+      pageStopDecision().kind === "complete" ? "auto" : "required",
     onMessage,
     onAssistantRound: ({ iteration }) => {
       iterationsUsed = Math.max(iterationsUsed, iteration + 1);
     },
     onAssistantStop: ({ messages: msgs }) => {
-      const decision = fileSession.stopDecision();
+      const decision = pageStopDecision();
       if (decision.kind === "complete" || emptyStopRecoveries >= 2) return false;
       emptyStopRecoveries += 1;
       const nudge: ChatMessage = {
@@ -335,9 +368,17 @@ export async function runPageImplementAgent(
       onMessage?.(nudge);
       return true;
     },
-    shouldAbortAfterToolResults: () => fileSession.stopDecision().kind !== "continue",
+    shouldAbortAfterToolResults: () => pageStopDecision().kind !== "continue",
     requireTools: true,
     onToolCall: ({ name, args, iteration, result }) => {
+      if (
+        name === "generate_image" &&
+        typeof result === "object" &&
+        result.success &&
+        typeof result.meta?.path === "string"
+      ) {
+        generatedImagePaths.add(result.meta.path);
+      }
       if (!onStep) return;
       const cached = typeof result === "object" && result.meta?.cached === true;
       if (VISIBLE_TOOL_NAMES.has(name) && !cached) {
@@ -392,7 +433,7 @@ export async function runPageImplementAgent(
     langfusePhase: lfPageImplementPhaseSlug(page.slug),
   });
 
-  const finalDecision = fileSession.stopDecision();
+  const finalDecision = pageStopDecision();
   if (finalDecision.kind !== "complete") {
     throw new Error(
       `page_implement_agent:${page.slug}: stopped after ${iterationsUsed}/${maxIterations} iterations ` +

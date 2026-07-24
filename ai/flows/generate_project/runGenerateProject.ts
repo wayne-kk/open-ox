@@ -1519,6 +1519,11 @@ async function runGenerateProjectInner(
         .map((img) => `public/images/${img.filename}.png`)
         .filter((p) => !result.generatedFiles.includes(p));
       appendGeneratedFiles(result, imagePaths);
+      if (imageStats.failed > 0) {
+        throw new Error(
+          `Image generation failed for ${imageStats.failed}/${imageStats.total} required page asset(s).`,
+        );
+      }
     }
 
     // ── Optional pre-build typecheck (generated .tsx only) ───────────────────

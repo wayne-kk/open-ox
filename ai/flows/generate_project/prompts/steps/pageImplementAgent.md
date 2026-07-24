@@ -28,6 +28,7 @@
    - 若存在 `components/shared/**` 契约 stub，list/detail 卡片优先复用，勿另起一套。
 6. **质量习惯**：写入文件已自动 Prettier，无需手动 `format_code`；缺依赖时用 `install_package`。
 7. **用户内容与配图**：若 bootstrap 含 user-provided 内容或 URL，**必须**用这些 https URL 作远程 `src`。每张用户图 URL 最多用一次。不要用 `generate_image` 顶替用户照片。
+8. **图片占位必须落地**：若页面源码出现占位图服务、placeholder 路径或不存在的 `/images/*` 路径，必须调用 `generate_image`，再用 snapshot + patch 把工具返回路径写回源码；未引用的生图结果不算完成。
 
 ### 禁止
 

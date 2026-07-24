@@ -113,7 +113,7 @@ ${userProvidedFileHint}${userProvidedImagesBlock}
       ? ` ${userImageCount} user URL(s) — assign all before \`generate_image\` for extras.`
       : " Use \`generate_image\` only when you need visuals without user URLs."
   }
-4. **Fix & finish**: Call \`verify_files\`. When diagnostics name a file, read its current snapshot and apply the smallest patch. Completion is decided automatically from the required artifact and diagnostics; there is no completion signal tool. Formatting is automatic.
+4. **Fix & finish**: Call \`verify_files\`. When diagnostics name a file, read its current snapshot and apply the smallest patch. If owned source contains an image placeholder or a missing \`/images/*\` asset, completion is blocked until you call \`generate_image\` and patch the source to use its returned path. Completion is decided automatically; there is no completion signal tool. Formatting is automatic.
 
 Do not repeat a successful create command or recreate a path to revise it.
 

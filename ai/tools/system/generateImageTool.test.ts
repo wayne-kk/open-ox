@@ -69,4 +69,72 @@ describe("createImageExecutor", () => {
       (second as { meta?: { filename?: string } }).meta?.filename
     );
   });
+
+  it("rejects placeholder fallback when the caller requires a generated asset", async () => {
+    const images = createImageExecutor("page-home", {
+      filenamePrefix: "page-home",
+      requireGeneratedAsset: true,
+    });
+
+    const result = await images.executor({
+      filename: "hero",
+      prompt: "Editorial hero photograph, sharp focus, 4K",
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      error: expect.stringContaining("ARK_API_KEY"),
+    });
+    expect(images.pendingImages).toHaveLength(0);
+  });
+
+  it("can wait for the image backend before reporting page asset success", async () => {
+    process.env.ARK_API_KEY = "test-key";
+    const images = createImageExecutor("page-home", {
+      filenamePrefix: "page-home",
+      requireGeneratedAsset: true,
+      awaitCompletion: true,
+      generateImage: async () => ({
+        ok: true,
+        path: "/images/page-home-hero.png",
+        bytes: 42,
+      }),
+    });
+
+    const result = await images.executor({
+      filename: "hero",
+      prompt: "Editorial hero photograph, sharp focus, 4K",
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      meta: { path: "/images/page-home-hero.png" },
+    });
+    expect(images.pendingImages[0]).toMatchObject({ success: true });
+  });
+
+  it("does not retain a failed awaited attempt in the delivery list", async () => {
+    process.env.ARK_API_KEY = "test-key";
+    let attempt = 0;
+    const images = createImageExecutor("page-home", {
+      filenamePrefix: "page-home",
+      requireGeneratedAsset: true,
+      awaitCompletion: true,
+      generateImage: async () => {
+        attempt += 1;
+        return attempt === 1
+          ? { ok: false as const, error: "temporary failure" }
+          : { ok: true as const, path: "/images/page-home-hero-2.png", bytes: 42 };
+      },
+    });
+
+    expect(
+      await images.executor({ filename: "hero", prompt: "Editorial hero, sharp focus, 4K" }),
+    ).toMatchObject({ success: false });
+    expect(
+      await images.executor({ filename: "hero", prompt: "Editorial hero, sharp focus, 4K" }),
+    ).toMatchObject({ success: true });
+    expect(images.pendingImages).toHaveLength(1);
+    expect(images.pendingImages[0]).toMatchObject({ success: true });
+  });
 });

@@ -102,6 +102,12 @@ export interface PendingImage {
 export interface ImageExecutorOptions {
   /** Prefix output filenames when multiple agents can generate assets concurrently. */
   filenamePrefix?: string;
+  /** Fail when generation is unavailable instead of returning a remote placeholder URL. */
+  requireGeneratedAsset?: boolean;
+  /** Resolve the tool call only after the image is successfully written. */
+  awaitCompletion?: boolean;
+  /** Test seam for the image backend. */
+  generateImage?: typeof generateProjectImage;
 }
 
 function prefixImageFilename(prefix: string, filename: string): string {
@@ -162,6 +168,12 @@ export function createImageExecutor(
 
     const apiKey = process.env.ARK_API_KEY?.trim();
     if (!apiKey) {
+      if (options.requireGeneratedAsset) {
+        return {
+          success: false,
+          error: "ARK_API_KEY is not configured; a required page image cannot be generated.",
+        };
+      }
       const w = 1200;
       const h = 675;
       const fallbackUrl = `https://picsum.photos/seed/${filename}/${w}/${h}`;
@@ -183,7 +195,10 @@ export function createImageExecutor(
       const t0 = Date.now();
       try {
         console.log(`[generate_image] Generating "${filename}" (size=${size})...`);
-        const result = await generateProjectImage({ filenameBase: filename, prompt });
+        const result = await (options.generateImage ?? generateProjectImage)({
+          filenameBase: filename,
+          prompt,
+        });
         if (!result.ok) {
           throw new Error(result.error);
         }
@@ -203,12 +218,23 @@ export function createImageExecutor(
       }
     })();
 
-    pendingImages.push(pending);
+    if (options.awaitCompletion) {
+      await pending.promise;
+      if (!pending.success) {
+        return {
+          success: false,
+          error: `Failed to generate required image: ${filename}`,
+        };
+      }
+      pendingImages.push(pending);
+    } else {
+      pendingImages.push(pending);
+    }
 
     return {
       success: true,
-      output: `Image will be generated. Use this path in your component: ${publicPath}`,
-      meta: { path: publicPath, filename },
+      output: `${options.awaitCompletion ? "Image generated" : "Image will be generated"}. Use this path in your component: ${pending.publicPath}`,
+      meta: { path: pending.publicPath, filename },
     };
   };
 
