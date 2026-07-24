@@ -23,6 +23,148 @@ function createSession() {
 }
 
 describe("FileSession", () => {
+  it("rejects malformed file commands before workspace access and permits recovery", async () => {
+    const { session, workspace } = createSession();
+    let mutationCalls = 0;
+    const originalCreateOrReplace = workspace.createOrReplace.bind(workspace);
+    workspace.createOrReplace = async (...args) => {
+      mutationCalls += 1;
+      return originalCreateOrReplace(...args);
+    };
+
+    const malformedCall = {
+      name: "create_file",
+      args: { path: "app/page.tsx", content: undefined },
+    };
+    const first = await session.execute(malformedCall);
+    const second = await session.execute(malformedCall);
+
+    expect(first).toMatchObject({
+      success: false,
+      code: "INVALID_ARGUMENT",
+      path: "app/page.tsx",
+      retryable: true,
+      error: "create_file.content must be a string",
+    });
+    expect(second).toMatchObject({ success: false, code: "INVALID_ARGUMENT" });
+    expect(mutationCalls).toBe(0);
+    expect(session.stopDecision()).toMatchObject({ kind: "continue" });
+
+    const recovered = await session.execute({
+      name: "create_file",
+      args: {
+        path: "app/page.tsx",
+        content: "export default function Home() { return <main>Ready</main>; }",
+      },
+    });
+
+    expect(recovered).toMatchObject({ success: true, kind: "file_created" });
+    expect(mutationCalls).toBe(1);
+    expect(session.stopDecision()).toEqual({ kind: "complete" });
+  });
+
+  it("stops after the bounded protocol failure budget with the original validation error", async () => {
+    const { session } = createSession();
+    const malformedCall = {
+      name: "create_file",
+      args: { path: "app/page.tsx", content: undefined },
+    };
+
+    await session.execute(malformedCall);
+    await session.execute(malformedCall);
+    const third = await session.execute(malformedCall);
+
+    expect(third).toMatchObject({
+      success: false,
+      code: "INVALID_ARGUMENT",
+      retryable: false,
+    });
+    expect(session.stopDecision()).toEqual({
+      kind: "failed",
+      error:
+        "app/page.tsx failed 3 file command validation(s): INVALID_ARGUMENT: create_file.content must be a string",
+    });
+  });
+
+  it("includes the original workspace exception in the terminal decision", async () => {
+    const workspace = new InMemoryFileSessionWorkspace({
+      "app/page.tsx": "export default function Home() { return null; }",
+    });
+    workspace.createOrReplace = async () => {
+      throw new Error("disk quota exceeded");
+    };
+    const session = createFileSession({
+      owner: "page:home",
+      workspace,
+      ownsPath: (path) => path === "app/page.tsx",
+      requiredArtifacts: ["app/page.tsx"],
+      replaceableBaselinePaths: ["app/page.tsx"],
+    });
+    const call = {
+      name: "create_file",
+      args: { path: "app/page.tsx", content: "export default function Home() { return null; }" },
+    };
+
+    await session.execute(call);
+    const second = await session.execute(call);
+
+    expect(second).toMatchObject({ code: "WORKSPACE_ERROR", retryable: false });
+    expect(session.stopDecision()).toEqual({
+      kind: "failed",
+      error:
+        "app/page.tsx failed 2 consecutive file command(s): WORKSPACE_ERROR: disk quota exceeded; retryable=false",
+    });
+  });
+
+  it("resets session-level protocol failures after any valid command", async () => {
+    const { session } = createSession();
+    const missingPath = { name: "read_file_snapshot", args: {} };
+
+    await session.execute(missingPath);
+    await session.execute(missingPath);
+    await session.execute({
+      name: "read_file_snapshot",
+      args: { path: "app/page.tsx" },
+    });
+    const afterReset = await session.execute(missingPath);
+
+    expect(afterReset).toMatchObject({
+      code: "INVALID_ARGUMENT",
+      retryable: true,
+    });
+    expect(session.stopDecision()).toMatchObject({ kind: "continue" });
+  });
+
+  it("rejects a reversed patch range before workspace access", async () => {
+    const { session, workspace } = createSession();
+    let patchCalls = 0;
+    workspace.patch = async (...args) => {
+      patchCalls += 1;
+      return InMemoryFileSessionWorkspace.prototype.patch.apply(workspace, args);
+    };
+
+    const result = await session.execute({
+      name: "apply_file_patch",
+      args: {
+        path: "app/page.tsx",
+        baseRevision: "sha256:any",
+        edits: [{
+          range: {
+            start: { line: 2, character: 0 },
+            end: { line: 1, character: 0 },
+          },
+          newText: "replacement",
+        }],
+      },
+    });
+
+    expect(result).toMatchObject({
+      code: "INVALID_ARGUMENT",
+      error: "apply_file_patch.edits[0] range end must not precede range start",
+    });
+    expect(patchCalls).toBe(0);
+  });
+
   it("evaluates completion validators against the current artifact revisions", async () => {
     const workspace = new InMemoryFileSessionWorkspace();
     const session = createFileSession({

@@ -293,7 +293,15 @@ export async function runPageImplementAgent(
     name: FileSessionCall["name"],
     args: Record<string, unknown>,
   ): Promise<ToolResult> => {
-    const event = await fileSession.execute({ name, args } as FileSessionCall);
+    const event = await fileSession.execute({ name, args });
+    if (!event.success) {
+      console.warn(
+        `[page_implement_agent:${page.slug}] file command failed ` +
+          `iteration=${iterationsUsed} tool=${name} path=${event.path ?? "(none)"} ` +
+          `code=${event.code ?? "UNKNOWN"} retryable=${event.retryable ?? false} ` +
+          `error=${event.error ?? "Unknown error"}`,
+      );
+    }
     return event.success
       ? {
           success: true,
@@ -305,7 +313,16 @@ export async function runPageImplementAgent(
             cached: event.cached,
           },
         }
-      : { success: false, error: `${event.code}: ${event.error}` };
+      : {
+          success: false,
+          error: `${event.code}: ${event.error}`,
+          meta: {
+            path: event.path,
+            code: event.code,
+            retryable: event.retryable,
+            eventKind: event.kind,
+          },
+        };
   };
 
   const { content, toolCalls } = await callLLMWithToolsFromMessages({
@@ -417,7 +434,7 @@ export async function runPageImplementAgent(
         `without completing ${targetPath}: ${finalDecision.kind === "continue" ? finalDecision.reason : finalDecision.error}. ` +
         `Successful target write: ${fileSession.writtenPaths().includes(targetPath) ? "yes" : "no"}. ` +
         `Empty-stop recoveries: ${emptyStopRecoveries}/2. Model: ${model}, ` +
-        `tool calls: ${toolCalls.length}. Last message: ${(content || "(empty)").slice(0, 300)}`,
+        `tool calls: ${toolCalls.length}. Last message: ${content ? "non-empty" : "empty"}`,
     );
   }
   const completeSummary = content || `Page output contract satisfied at ${targetPath}`;
