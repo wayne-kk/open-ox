@@ -10,6 +10,81 @@ import { runPageBuildSession } from "./pageBuildSession";
 type ToolLoopParams = Parameters<typeof callLLMWithToolsFromMessages>[0];
 
 describe("runPageBuildSession", () => {
+  it("recovers an empty stop with the exact requirement and legal command", async () => {
+    const targetPath = "app/page.tsx";
+    const placeholder = "https://images.unsplash.com/hero.jpg";
+    const fileSession = createFileSession({
+      owner: "page:home",
+      workspace: new InMemoryFileSessionWorkspace(),
+      ownsPath: (path) => path === targetPath,
+      requiredArtifacts: [targetPath],
+    });
+    const imageTool = {
+      type: "function" as const,
+      function: { name: "generate_image", parameters: { type: "object", properties: {} } },
+    };
+    let generatedPath: string | null = null;
+    loop.call.mockImplementationOnce(async (params: ToolLoopParams) => {
+      await params.executeToolOverrides.create_target_page({
+        content: `export default () => <img src="${placeholder}" />`,
+      });
+      const history: ToolLoopParams["messages"] = [];
+      expect(params.onAssistantStop?.({
+        iteration: 15,
+        message: { role: "assistant", content: "" },
+        messages: history,
+      })).toBe(true);
+      expect(history.at(-1)?.content).toContain(`"path":"${targetPath}"`);
+      expect(history.at(-1)?.content).toContain(`"reference":"${placeholder}"`);
+      expect(history.at(-1)?.content).toContain('"nextAction":"generate_asset"');
+      expect(history.at(-1)?.content).toContain("legal_tools: generate_image");
+      expect(params.onAssistantStop?.({
+        iteration: 16,
+        message: { role: "assistant", content: "" },
+        messages: history,
+      })).toBe(true);
+      expect(params.onAssistantStop?.({
+        iteration: 17,
+        message: { role: "assistant", content: "" },
+        messages: history,
+      })).toBe(false);
+      return { content: "", toolCalls: [] };
+    });
+
+    const result = await runPageBuildSession({
+      slug: "home",
+      targetPath,
+      componentRoot: "components/pages/home",
+      initialMessages: [{ role: "user", content: "Build" }],
+      model: "gemini-3.6-flash",
+      maxIterations: 96,
+      fileSession,
+      assetLifecycle: {
+        inspect: (artifacts) => artifacts.get(targetPath)?.content.includes(placeholder)
+          ? [{
+              kind: "asset_reference",
+              path: targetPath,
+              reference: placeholder,
+              nextAction: generatedPath ? "edit_source" : "generate_asset",
+              ...(generatedPath ? { replacement: generatedPath } : {}),
+            }]
+          : [],
+        generation: {
+          tool: imageTool,
+          execute: async () => {
+            generatedPath = "/images/hero.png";
+            return { success: true, output: generatedPath };
+          },
+        },
+      },
+      langfusePhase: "page.home",
+    });
+    expect(result.finalDecision).toEqual({ kind: "complete" });
+    expect(result.finalRequirement).toBeUndefined();
+    expect(result.finalLegalTools).toEqual([]);
+    expect(result.deterministicRecoveries).toBe(3);
+  });
+
   it("adopts an existing target through edit semantics instead of exposing create", async () => {
     const targetPath = "app/page.tsx";
     const existing = "export default function Page() { return <main>BROKEN</main> }";

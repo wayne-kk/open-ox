@@ -13,6 +13,7 @@ export type PageArtifactRequirement =
       path: string;
       reference: string;
       nextAction: "generate_asset" | "edit_source";
+      replacement?: string;
     }
   | { kind: "source_diagnostic"; path: string; message: string };
 
@@ -57,6 +58,9 @@ export interface PageBuildSessionResult {
   iterationsUsed: number;
   emptyStopRecoveries: number;
   finalDecision: ReturnType<FileSession["stopDecision"]>;
+  finalRequirement?: PageArtifactRequirement;
+  finalLegalTools: string[];
+  deterministicRecoveries: number;
 }
 
 function pageRevisionStatus(
@@ -83,8 +87,9 @@ function pageBuildDecision(
 ): ReturnType<FileSession["stopDecision"]> {
   const decision = spec.fileSession.stopDecision();
   if (decision.kind !== "complete") return decision;
-  if ((spec.assetLifecycle?.inspect(spec.fileSession.artifacts()).length ?? 0) > 0) {
-    return { kind: "continue", reason: "artifact requirements remain" };
+  const requirement = spec.assetLifecycle?.inspect(spec.fileSession.artifacts())[0];
+  if (requirement) {
+    return { kind: "continue", reason: `artifact requirement: ${JSON.stringify(requirement)}` };
   }
   return pageRevisionStatus(
     spec.fileSession.events(),
@@ -249,6 +254,8 @@ export function pageBuildTaskState(
 
 export function pageBuildStateCard(spec: Pick<PageBuildSessionSpec, "slug" | "targetPath" | "componentRoot" | "fileSession" | "assetLifecycle">): string {
   const state = pageBuildRuntimeState(spec);
+  const requirement = spec.assetLifecycle?.inspect(spec.fileSession.artifacts())[0];
+  const legalTools = toolsForPageBuildPhase(spec).map((tool) => tool.function.name);
   return [
     `[Page build state: ${spec.slug}]`,
     `phase: ${state.phase}`,
@@ -256,6 +263,8 @@ export function pageBuildStateCard(spec: Pick<PageBuildSessionSpec, "slug" | "ta
     `target_revision: ${state.target?.revision ?? "missing"}`,
     `written_paths: ${state.writtenPaths.join(", ") || "none"}`,
     `next: ${state.decision.kind === "continue" ? state.decision.reason : state.decision.kind}`,
+    `requirement: ${requirement ? JSON.stringify(requirement) : "none"}`,
+    `legal_tools: ${legalTools.join(", ") || "none"}`,
     `ownership: ${state.ownership}`,
   ].join("\n");
 }
@@ -265,10 +274,10 @@ export function toolsForPageBuildPhase(spec: Pick<PageBuildSessionSpec, "targetP
   if (phase === "draft_target") return [CREATE_TARGET_TOOL];
   if (phase === "complete" || phase === "failed") return [];
   const requirement = spec.assetLifecycle?.inspect(spec.fileSession.artifacts())[0];
-  if (requirement?.kind === "asset_reference") {
-    if (requirement.nextAction === "generate_asset") {
-      return spec.assetLifecycle?.generation ? [spec.assetLifecycle.generation.tool] : [];
-    }
+  if (requirement?.kind === "asset_reference" && requirement.nextAction === "generate_asset") {
+    return spec.assetLifecycle?.generation ? [spec.assetLifecycle.generation.tool] : [];
+  }
+  if (requirement) {
     const fileTools = new Set(spec.fileSession.tools().map((tool) => tool.function.name));
     if (fileTools.size === 1 && fileTools.has("read_file_snapshot")) return [READ_TOOL];
     const pathEvents = spec.fileSession.events().filter((event) => event.path === requirement.path);
@@ -297,6 +306,7 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
   const messages = [...spec.initialMessages];
   let iterationsUsed = 0;
   let emptyStopRecoveries = 0;
+  let deterministicRecoveries = 0;
 
   const executeFile = async (call: FileSessionCall): Promise<ToolResult> =>
     eventResult(await spec.fileSession.execute(call));
@@ -395,7 +405,10 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
       emptyStopRecoveries += 1;
       const recovery: ChatMessage = {
         role: "user",
-        content: `${pageBuildStateCard(spec)}\n[Recovery ${emptyStopRecoveries}/2] Continue with one currently legal action.`,
+        content:
+          `${pageBuildStateCard(spec)}\n` +
+          `[Recovery ${emptyStopRecoveries}/2] The page is not complete. ` +
+          `Call exactly one tool from legal_tools now. Do not return text and do not stop.`,
       };
       history.push(recovery);
       spec.onEvent?.({ kind: "message", message: recovery });
@@ -414,11 +427,81 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
     langfusePhase: spec.langfusePhase,
   });
 
+  if (emptyStopRecoveries >= 2 && pageBuildDecision(spec).kind === "continue") {
+    for (let recovery = 0; recovery < 8; recovery += 1) {
+      const before = pageBuildDecision(spec);
+      if (before.kind !== "continue") break;
+      const requirement = spec.assetLifecycle?.inspect(spec.fileSession.artifacts())[0];
+      let result: ToolResult | string | null = null;
+      let toolName = "";
+      let args: Record<string, unknown> = {};
+
+      if (
+        requirement?.kind === "asset_reference" &&
+        requirement.nextAction === "generate_asset" &&
+        spec.assetLifecycle?.generation
+      ) {
+        toolName = PAGE_TOOL.image;
+        args = {
+          filename: `${spec.slug}-asset-${recovery + 1}`,
+          prompt:
+            `Create a production-ready image for the ${spec.slug} page. ` +
+            `It replaces the current asset reference ${requirement.reference}.`,
+        };
+        result = await spec.assetLifecycle.generation.execute(args);
+      } else if (
+        requirement?.kind === "asset_reference" &&
+        requirement.nextAction === "edit_source" &&
+        requirement.replacement
+      ) {
+        toolName = PAGE_TOOL.replace;
+        const snapshot = await spec.fileSession.execute({
+          name: "read_file_snapshot",
+          args: { path: requirement.path },
+        });
+        if (!snapshot.success || !snapshot.content || !snapshot.revision) break;
+        const replacement = snapshot.content.split(requirement.reference).join(requirement.replacement);
+        if (replacement === snapshot.content) break;
+        args = {
+          path: requirement.path,
+          baseRevision: snapshot.revision,
+          content: replacement,
+        };
+        result = await executeFile({ name: "replace_file", args: args as {
+          path: string;
+          baseRevision: string;
+          content: string;
+        } });
+      } else if (!requirement && toolsForPageBuildPhase(spec)[0]?.function.name === PAGE_TOOL.verify) {
+        toolName = PAGE_TOOL.verify;
+        result = await executeFile({ name: "verify_files", args: {} });
+      } else {
+        break;
+      }
+
+      deterministicRecoveries += 1;
+      spec.onEvent?.({
+        kind: "tool",
+        name: toolName,
+        args,
+        iteration: iterationsUsed + recovery,
+        result: result ?? { success: false, error: "deterministic recovery produced no result" },
+        ...pageToolActivity(toolName, args, spec.targetPath),
+      });
+      if (typeof result !== "string" && !result?.success) break;
+      const after = pageBuildDecision(spec);
+      if (JSON.stringify(after) === JSON.stringify(before)) break;
+    }
+  }
+
   return {
     content,
     toolCalls,
     iterationsUsed,
     emptyStopRecoveries,
     finalDecision: pageBuildDecision(spec),
+    finalRequirement: spec.assetLifecycle?.inspect(spec.fileSession.artifacts())[0],
+    finalLegalTools: toolsForPageBuildPhase(spec).map((tool) => tool.function.name),
+    deterministicRecoveries,
   };
 }

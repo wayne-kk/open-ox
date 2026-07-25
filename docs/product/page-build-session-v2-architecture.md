@@ -187,6 +187,14 @@ A generic provider `INVALID_ARGUMENT` is no longer relabeled as “model lacks t
 important because compatibility, malformed history, schema rejection, and context exhaustion have
 different owners and different remediations.
 
+When Gemini stops without a tool call while a typed asset requirement remains, recovery preserves
+the complete requirement (`path`, `reference`, `nextAction`, and replacement path when available)
+and names the exact legal tool. After two empty model recoveries, `PageBuildSession` executes only
+unambiguous lifecycle transitions itself: required image generation, literal reference replacement
+against a fresh revision, and full verification. Dynamic source diagnostics remain model-owned.
+This avoids converting provider non-compliance into an incomplete page while keeping code reasoning
+out of the deterministic controller.
+
 ## 9. Old versus current architecture
 
 | Concern | Previous | Current |

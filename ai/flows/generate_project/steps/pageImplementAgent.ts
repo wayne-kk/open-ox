@@ -331,6 +331,9 @@ export async function runPageImplementAgent(
     iterationsUsed,
     emptyStopRecoveries,
     finalDecision,
+    finalRequirement,
+    finalLegalTools,
+    deterministicRecoveries,
   } = build;
 
   if (finalDecision.kind !== "complete") {
@@ -338,6 +341,9 @@ export async function runPageImplementAgent(
       `page_implement_agent:${page.slug}: stopped after ${iterationsUsed}/${maxIterations} iterations ` +
         `without completing ${targetPath}: ${finalDecision.kind === "continue" ? finalDecision.reason : finalDecision.error}. ` +
         `Successful target write: ${fileSession.writtenPaths().includes(targetPath) ? "yes" : "no"}. ` +
+        `Requirement: ${finalRequirement ? JSON.stringify(finalRequirement) : "none"}. ` +
+        `Legal tools: ${finalLegalTools.join(",") || "none"}. ` +
+        `Deterministic recoveries: ${deterministicRecoveries}. ` +
         `Empty-stop recoveries: ${emptyStopRecoveries}/2. Model: ${model}, ` +
         `tool calls: ${toolCalls.length}. Last message: ${content ? "non-empty" : "empty"}`,
     );

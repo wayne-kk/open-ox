@@ -337,12 +337,14 @@ function inspectPageImageRequirements(options: PageImageInspectionOptions): Page
     reference: string,
     reason: string,
     nextAction: "generate_asset" | "edit_source",
+    replacement?: string,
   ): PageImageRequirementResult => ({
     requirement: {
       kind: "asset_reference",
       path,
       reference,
       nextAction,
+      ...(replacement ? { replacement } : {}),
     },
     reason,
   });
@@ -390,6 +392,7 @@ function inspectPageImageRequirements(options: PageImageInspectionOptions): Page
       violation.reference,
       violation.reason,
       index < unconsumed.length ? "edit_source" : "generate_asset",
+      unconsumed[index],
     ));
   }
   results.push(...pendingDiagnostics);
@@ -401,6 +404,7 @@ function inspectPageImageRequirements(options: PageImageInspectionOptions): Page
         path: sourcePath,
         reference: unconsumed[0],
         nextAction: "edit_source",
+        replacement: unconsumed[0],
       },
       reason: `Generated image ${unconsumed[0]} is not referenced by the current page revision. Patch the source to use the path returned by generate_image.`,
     });
