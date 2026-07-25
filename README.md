@@ -1,265 +1,234 @@
+<h1 align="center">Open-OX</h1>
+
+<p align="center"><strong>From one brief to a real, editable, deployable website.</strong></p>
+
 <p align="center">
-  <!-- MEDIA: docs/assets/readme/banner.png (~1920×640) -->
-  <img src="docs/assets/readme/banner.png" alt="Open-OX" width="720" />
+  An AI-native website production engine that plans, designs, implements,<br />
+  verifies, repairs, previews, and ships real Next.js projects.
 </p>
 
 <p align="center">
-  <strong>Open-OX</strong><br />
-  AI-native website production engine
-</p>
-
-<p align="center">
-  <em>Think it. Build it. Run it.</em>
-</p>
-
-<p align="center">
-  From one natural-language brief to a <strong>runnable, verifiable, editable, deployable</strong> Next.js project — not a screenshot, not a sandbox illusion.
-</p>
-
-<p align="center">
-  <a href="./README.md"><strong>English</strong></a>
-  ·
-  <a href="./README.zh-CN.md">简体中文</a>
-  ·
-  <a href="./CONTEXT.md">Glossary</a>
-  ·
-  <a href="./docs/adr/">ADRs</a>
-  ·
+  <a href="./README.zh-CN.md">简体中文</a> ·
+  <a href="https://open-ox.tech">Live Product</a> ·
+  <a href="https://p.open-ox.tech/2026-05-25T10-54-47-190Z_awwwards-ai-saas">Generated Example</a> ·
+  <a href="#what-open-ox-does">Features</a> ·
+  <a href="#how-it-works">How it works</a> ·
   <a href="./docs/product-iteration-outline.md">Roadmap</a>
 </p>
 
----
-
-> **Media placeholder — Hero / Demo**  
-> Drop `docs/assets/readme/hero.png` (Studio: pipeline + preview, 16:9 ≥1600px).  
-> Optional: YouTube / Bilibili demo — wrap the poster with a link (see `docs/assets/readme/PLACEHOLDERS.md`).
-
 <p align="center">
-  <img src="docs/assets/readme/hero.png" alt="Open-OX Studio — generation pipeline and live preview" width="900" />
-</p>
-
-<p align="center">
-  <!-- Replace YOUR_* when the demo is uploaded -->
-  <a href="https://www.youtube.com/watch?v=YOUR_YOUTUBE_ID">▶ Demo (YouTube)</a>
-  ·
-  <a href="https://www.bilibili.com/video/YOUR_BV">Bilibili</a>
+  <a href="https://open-ox.tech"><strong>Open Open-OX →</strong></a>
+  &nbsp;&nbsp;·&nbsp;&nbsp;
+  <a href="https://p.open-ox.tech/2026-05-25T10-54-47-190Z_awwwards-ai-saas"><strong>Explore a generated site →</strong></a>
 </p>
 
 ---
+
+<p align="center">
+  <a href="https://p.open-ox.tech/2026-05-25T10-54-47-190Z_awwwards-ai-saas">
+    <img src="docs/assets/readme/studio-overview.png" alt="Open-OX Studio with generation context and a live generated website preview" width="960" />
+  </a>
+</p>
+
+<p align="center"><em>One workbench for intent, agent traces, source-aware modification, preview, and delivery.</em></p>
 
 ## Why Open-OX
 
-Most AI site builders stop at *looking like* a website. Open-OX ships a **software-engineering production line**: structured intent, design systems, multi-agent implementation, build gates with auto-repair, transparent Studio traces, and a path to **your** production host.
+Most AI site builders stop when a page looks convincing. Open-OX continues until the result is a software project you can inspect, modify, build, export, and deploy.
 
-| Typical tools | Open-OX |
-|---------------|---------|
-| Screenshot / iframe theater | Real Next.js source on disk |
-| One-shot generation, then dead end | Conversational Modify + Design Mode writeback |
-| Opaque black box | Streamed pipeline nodes, auditable agent traces |
-| Platform-locked hosting | Export the repo · **BYO Vercel** Deploy |
-| “Good enough” HTML | Install → build → repair until it compiles |
+| Typical AI site builder | Open-OX |
+|---|---|
+| Screenshot or hosted preview | Real Next.js source code |
+| One-shot generation | Structured, observable production pipeline |
+| Regenerate to make changes | Modify Agent and element-level Design Mode |
+| Opaque execution | Live topology, logs, and agent traces |
+| Platform-owned hosting | Project export and bring-your-own Vercel |
+| “Looks right” as the finish line | Typecheck, build, and targeted auto-repair |
 
-**Ambition:** the default path from brief → shippable Next.js site for individuals and small teams who refuse to re-hire a contractor to “fix the AI draft.”
+## Live projects
 
----
+| Link | What it is |
+|---|---|
+| [open-ox.tech](https://open-ox.tech) | The live Open-OX product |
+| [Awwwards AI SaaS](https://p.open-ox.tech/2026-05-25T10-54-47-190Z_awwwards-ai-saas) | A real website generated and published through Open-OX |
 
-## Capabilities
+Preview URLs are served independently from the main application, so generated sites can be opened and shared without exposing Studio or project editing access.
 
-### 1. Prompt → Project — an engineering pipeline, not one mega-prompt
+## What Open-OX does
 
-Generation is decomposed into **fixed nodes with clear I/O**. Failures are localizable; retries are cheap relative to “reroll the whole site.”
+### Prompt to project
 
-1. **Intent Agent** — turns casual language into an executable Brief  
-2. **Design intent** — visual direction from copy and reference images  
-3. **Planning** — modules constrained by spec, not free-form sprawl  
-4. **Design system** — tokens, type, spacing shared across sections  
-5. **Architect scaffold** — one architecture pass, then implementable structure  
-6. **Page Implement Agents** — tool loops that write real TSX against the system  
-7. **Dependency install** — detect and install what the build needs  
-8. **Build + auto-repair** — compile gates; targeted repair loops on failure  
+Describe the site in natural language. Open-OX turns the request into a structured brief, visual direction, project plan, design system, and implementable architecture before page agents write production code.
 
-> **Media placeholder — Pipeline**  
-> `docs/assets/readme/pipeline.svg` (or `.png`) — eight-node diagram.
-
-<p align="center">
-  <img src="docs/assets/readme/pipeline.png" alt="Open-OX generation pipeline" width="900" />
-</p>
-
----
-
-### 2. Design systems & visual ammunition
-
-- **Design system first** — consistency by construction, not by luck  
-- **30+ style skills** — Swiss Minimal, Neo-Brutalism, Glassmorphism, Cyberpunk, Art Deco, Terminal, Luxury, and more  
-- **Hero skill matrix** — WebGL / shaders / particles / scroll morphs when the brief deserves presence  
-- **Reference images, two modes**  
-  - **Replicate** — layout fidelity  
-  - **Extract** — color & atmosphere without mechanical tracing  
-  - Deep visual analysis → constraints → implement (less design drift)
-
----
-
-### 3. Studio — transparent, iterable, precise
-
-- **Full-trace Studio** — topology, logs, and agent steps stream as the site is born  
-- **Modify Agent** — natural-language edits with tools (read / search / edit / build), structured diffs, history turns, bounded memory  
-- **Design Mode** — click an element in preview; adjust color, type, spacing, radius. Localization via compile-time `file:line:col` (`data-ox-source`); server JSX AST **Direct Apply** with verify. When Direct cannot apply, hand off a Modify draft — human confirms, never a silent second write engine  
-- **Brief / outline confirmation** (product direction) — align structure before burning expensive generation tokens  
-
-> **Media placeholder — Design Mode**  
-> `docs/assets/readme/design-mode.png`
+- Natural-language brief and reference images
+- Structured intent and information architecture
+- Design-system generation before page implementation
+- Real React, TypeScript, assets, and project files on disk
+- Single-page and deliberately scoped multi-page projects
 
 <p align="center">
-  <img src="docs/assets/readme/design-mode.png" alt="Open-OX Design Mode — click to edit" width="900" />
+  <img src="docs/assets/readme/workspace.png" alt="Open-OX workspace with the natural-language project composer and generated projects" width="960" />
 </p>
 
----
+### A recoverable agent runtime, not a prompt chain
 
-### 4. Preview that you can trust
+Open-OX does not squeeze an entire website into one oversized prompt. Every stage has structured input, durable files, and checkpoints. An interrupted run can skip completed work and resume from the latest verified stage instead of paying to regenerate everything.
 
-| Backend | When |
-|---------|------|
-| **Static export → Storage + `/site-previews` proxy** | Deterministic shareable URLs; default when Storage is configured |
-| **Per-site `next dev`** | HMR + Design Mode source instrumentation |
-| **E2B sandboxes** | Isolated cloud runtime — create / reconnect / rebuild |
+`Brief → Design intent → Plan → Design system → Architecture → Page agents → Typecheck → Build → Repair`
 
-Stable preview is part of the product contract — not an afterthought iframe.
-
----
-
-### 5. Workspace · Community · Remix
-
-Visibility is intentional — not “every login sees every project.”
-
-- **Workspace** — owner-private projects (folders included); home for create & edit  
-- **Publish Preview** — opt-in listing on **Community**; visitors get static preview only — never Studio / source edit rights  
-- **Allow Remix** — separate copy license (only while Publish Preview is on). Signed-in users Remix into a **new owned project** from the latest site snapshot (no secrets, no Studio chat), with lineage attribution  
-- Closing Publish Preview unlist immediately; existing remixes remain independent  
-
-> **Media placeholder — Community**  
-> `docs/assets/readme/community.png`
+- **Chrome-first architecture** — the Architect owns the shared shell, navigation, and page boundaries before Page Agents implement content, preventing every agent from inventing another header
+- **Autonomous tool loops** — Page Agents use `create / read / edit / generate_image` against a real workspace instead of returning a Markdown code dump
+- **Checkpoint recovery** — the design system, scaffold, and page artifacts become durable resume facts
+- **Async asset barrier** — code and image generation run concurrently; `await_images` guarantees assets reach disk before the build gate
+- **Observable event stream** — Studio receives node states, tool names, arguments, bounded results, touched files, and agent traces as work happens
 
 <p align="center">
-  <img src="docs/assets/readme/community.png" alt="Open-OX Community and Remix" width="900" />
+  <img src="docs/assets/readme/generate-progress.png" alt="Open-OX generation topology showing understand, plan, design, generate, compose, and verify stages" width="960" />
 </p>
 
----
+```mermaid
+flowchart TB
+    Brief["Natural-language Brief"] --> Intent["Intent Agent"]
+    Intent --> Plan["Project Plan"]
+    Intent --> Visual["Design Intent"]
+    Plan --> System["Design System"]
+    Visual --> System
+    System --> Architect["Architect Agent<br/>Chrome + page ownership"]
+    Architect --> PageAgent["Page Implement Agent"]
 
-### 6. Delivery — export & BYO Deploy
+    subgraph Runtime["Autonomous Tool Runtime"]
+        PageAgent --> Tools{"Tool Loop"}
+        Tools --> Files["create / read / edit"]
+        Tools --> Images["generate_image<br/>async jobs"]
+        Files --> Workspace["Real Next.js Workspace"]
+        Images --> Barrier["await_images Barrier"]
+        Workspace --> Barrier
+    end
 
-- **Project export** — take the real codebase; continue in your own repo  
-- **BYO Vercel Deploy** (ADR-0003)  
-  - OAuth Integration into **your** Vercel account & billing  
-  - Static `out/` upload via Files + Deployments APIs  
-  - First Deploy creates & binds a project; later Deploys reuse it  
-  - **Publish Preview ≠ Deploy** — discovery vs production are separate axes  
-  - Disconnect clears Open-OX tokens/bindings only — **never** deletes remote Vercel projects  
-- **Integrations settings** — connection, team, jump back to Studio  
+    Barrier --> Deps["Dependency Scan"]
+    Deps --> Typecheck["Language-service Typecheck"]
+    Typecheck -->|pass| Build["next build"]
+    Typecheck -->|diagnostics| Repair["Repair Agent"]
+    Build -->|failed| Repair
+    Repair --> Deps
+    Build -->|passed| Verify{"Repair happened?"}
+    Verify -->|no| Ready["Verified Project"]
+    Verify -->|yes| Skeptic["Skeptical Verifier"]
+    Skeptic -->|accepted| Ready
+    Skeptic -->|more evidence needed| Repair
 
-> **Media placeholder — Deploy**  
-> `docs/assets/readme/deploy.png`
+    Ready --> Preview["Local / Storage / E2B Preview"]
+    Ready --> Export["Export / BYO Vercel"]
 
-<p align="center">
-  <img src="docs/assets/readme/deploy.png" alt="Open-OX BYO Vercel Deploy" width="900" />
-</p>
+    Checkpoint[("Checkpoints")] -. resume .-> System
+    Checkpoint -. resume .-> Architect
+    Checkpoint -. resume .-> PageAgent
+    Intent -. persist .-> Checkpoint
+    System -. persist .-> Checkpoint
+    Workspace -. persist .-> Checkpoint
 
----
-
-### 7. Credits
-
-- Usage metered: LLM tokens → USD → **Credits** (generate / modify)  
-- Design Mode Direct Apply does **not** spend credits  
-- Free tier daily grant + monthly cap; Pro / packs via Stripe (`/pricing`)  
-- Transparent metering — no mystery deductions  
-
----
-
-## Architecture
-
-```text
-Browser · Studio UI
-   └─ Next.js API (SSE orchestration)
-        ├─ AI Flows
-        │    ├─ generate_project
-        │    └─ modify_project
-        ├─ Supabase (registry · RLS · Storage)
-        └─ Preview / Deploy
-             ├─ /site-previews · local next dev · E2B
-             └─ BYO Vercel OAuth → production URL
+    Studio["Studio SSE<br/>topology + logs + traces"]
+    Tools -. events .-> Studio
+    Typecheck -. events .-> Studio
+    Repair -. events .-> Studio
+    Preview -. state .-> Studio
 ```
 
-> **Media placeholder — Architecture**  
-> `docs/assets/readme/architecture.svg`
+### Modify Agent
+
+The first generation is only the starting point. Ask for a change in natural language and the Modify Agent reads the existing project, searches the codebase, edits the relevant files, and verifies the result.
+
+- Tool-driven read, search, edit, subagent, and build loop
+- Changes applied to the current project instead of regenerating it
+- Touched-file tracking, structured diffs, and modification history
+- Context bounded to relevant files and recent work
+- Image generation available when the requested change needs a real asset
+
+### Design Mode: browser selection, AST writeback
+
+Many visual editors leave changes in a runtime CSS layer. Open-OX instruments JSX with compile-time `file:line:col` coordinates, maps a browser selection back to source, applies the edit through a server-side JSX AST transform, and rebuilds the preview to verify it.
+
+- `data-ox-source` maps the selected DOM node precisely back to source
+- Deterministic color, typography, spacing, and radius edits become targeted AST mutations
+- Direct Apply is the only automatic write path; edits without source coordinates are rejected
+- Structural changes fall back to a user-confirmed Modify draft
+- Changes live in the real project and survive export
 
 <p align="center">
-  <img src="docs/assets/readme/architecture.svg" alt="Open-OX architecture" width="900" />
+  <img src="docs/assets/readme/design-mode.png" alt="Open-OX Design Mode mapping a selected preview element back to the modification workflow" width="960" />
 </p>
 
-| Path | Role |
-|------|------|
-| `ai/flows/generate_project` | End-to-end generation |
-| `ai/flows/modify_project` | Tool-loop modification |
-| `app/studio` | Studio UI — topology, trace, Design Mode |
-| `lib/staticSitePreview.ts` · `lib/previewMode.ts` · `lib/vercel/` | Preview backends & BYO Deploy |
-| `sites/` | Per-project workspaces |
-| `public/skills/` | Style skill packs |
-| `CONTEXT.md` · `docs/adr/` | Glossary & decisions |
+### Preview you can trust
 
----
+Open-OX treats preview as part of the product contract. Projects can run through local development, deterministic static previews, or isolated E2B environments depending on the workflow.
 
-## Stack
+- Local `next dev` with HMR and source instrumentation
+- Static export backed by storage for stable shareable previews
+- Isolated E2B sandbox creation, reconnection, and rebuild
+- Preview rebuild controls and visible runtime state
 
-| Layer | Choices |
-|-------|---------|
-| App | Next.js 16 · React 19 · TypeScript |
-| UI | Tailwind CSS v4 · shadcn / Radix · Framer Motion · Three.js |
-| Data | Supabase (Postgres + Storage + RLS) |
-| Preview | Storage static · local `next dev` · E2B |
-| Deploy | Vercel Integration OAuth |
-| Models | OpenAI-compatible APIs |
-| Observability | Langfuse · Studio SSE traces |
-| Billing | Stripe · Credits |
+### A compiler loop that does not trust the model
 
----
+Open-OX never treats “done” from the model as proof. After files land, the runtime scans imports, installs missing dependencies, runs language-service TypeScript checks over the generated boundary, and executes a real production build.
 
-## Design bets
+- Diagnostics identify the failing files so the Repair Agent sees only relevant source
+- Up to five incremental repair rounds fix the project without overwriting the whole site
+- Dependencies are rescanned after repair in case a patch introduced a new package
+- An independent skeptical verifier reviews the repair and can feed evidence back into another repair pass
+- Delivery requires agreement from the files on disk, the type system, and `next build`
 
-1. **Verifiable beats flashy** — if it does not build, preview, and diff cleanly, it is debt.  
-2. **Transparent beats black-box** — evaluate Open-OX by reading Studio traces.  
-3. **Modification is first-class** — generation ignites; Modify + Design Mode cruise.  
-4. **You own the artifact** — export the source; production lives on your Vercel.  
-5. **Constraint buys quality** — single-page by default; explicit multi-page IA stays minimal and build-gated.
+### Export and bring-your-own deployment
 
----
+The generated artifact belongs to you. Export the complete project or connect your own Vercel account and deploy to infrastructure you control.
 
-## In one line
+- Download the real project source
+- Vercel OAuth connection to your account and billing
+- First deploy creates and binds a project; later deploys reuse it
+- Preview publishing and production deployment remain separate
+- Disconnecting Open-OX never deletes the remote Vercel project
 
-**Open-OX = Intent × Design System × Multi-agent implement × Build self-heal × Transparent Studio × Community Remix × BYO Deploy.**
+<p align="center">
+  <img src="docs/assets/readme/deploy-success.png" alt="Open-OX Studio preview with the bring-your-own Vercel deployment control" width="960" />
+</p>
 
-Not another “AI writes a website” toy.  
-A **repeatable, auditable, shippable** production line for sites.
+### Credits and capability-gated integrations
 
----
+Generation and modification usage is metered transparently through Credits. Optional services only appear when configured, so the core product does not pretend unavailable capabilities exist.
 
-## Local setup
+- Token usage converted into understandable Credits
+- Free grants, subscriptions, and credit packs
+- Design Mode direct edits do not consume generation credits
+- Optional Stripe, Vercel, E2B, Langfuse, Ark, Feishu, Google, and Linux.do capabilities
 
-```bash
-cp .env.example .env.local
-# Fill the Core section (Supabase + OpenAI-compatible API + site URL)
-pnpm check:env
-pnpm dev
-```
+## How it works
 
-Optional features (Feishu / Google / Linux.do / Stripe / Vercel / E2B / Langfuse / Ark) are capability-gated — leave them unset and the matching UI stays off. See `.env.example` for the full matrix. Capability helpers live in `lib/env.ts`.
+1. **Describe** the site, audience, content, and visual direction.
+2. **Confirm** the brief and structure before expensive generation begins.
+3. **Watch** agents plan, design, implement, typecheck, build, and repair the project.
+4. **Refine** through conversation or precise Design Mode edits.
+5. **Preview, export, or deploy** without surrendering ownership of the source.
 
----
+## Built for
 
-## Docs
+- Founders validating and shipping a product site
+- Designers who want editable implementation rather than a static mockup
+- Developers who want an inspectable starting point instead of disposable generated HTML
+- Small teams that need a repeatable path from brief to production-ready website
 
-- Glossary — [`CONTEXT.md`](./CONTEXT.md)  
-- Architecture decisions — [`docs/adr/`](./docs/adr/)  
-- Product roadmap — [`docs/product-iteration-outline.md`](./docs/product-iteration-outline.md)  
-- PRDs — [`docs/product/`](./docs/product/)  
-- README media checklist — [`docs/assets/readme/PLACEHOLDERS.md`](./docs/assets/readme/PLACEHOLDERS.md)  
+## Product principles
 
-Issues and PRs welcome. Pipeline behavior changes deserve an ADR or product note — we treat *why* as part of the build.
+- **Verifiable beats flashy** — if it does not build, preview, and remain editable, it is not done.
+- **Transparent beats black-box** — pipeline state and agent work should be inspectable.
+- **Modification is first-class** — generation starts the project; iteration finishes the product.
+- **You own the artifact** — source code and production hosting remain portable.
+- **Constraints buy quality** — clear stages and build gates outperform unconstrained generation.
+
+## Explore the project
+
+- [Product roadmap](./docs/product-iteration-outline.md)
+- [Architecture decisions](./docs/adr/)
+- [Product requirements](./docs/product/)
+- [Domain glossary](./CONTEXT.md)
+- [Changelog](./app/[locale]/changelog/page.tsx)
+
+<p align="center"><strong>Think it. Build it. Run it.</strong></p>

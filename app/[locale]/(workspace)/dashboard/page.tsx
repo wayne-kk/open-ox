@@ -527,7 +527,7 @@ function ProjectCard({
         )}
       >
         {showCoverImage && coverSrc ? (
-          <>
+          <div className="absolute inset-0 overflow-hidden rounded-lg border border-foreground/10 bg-background/50 shadow-sm">
             {!coverLoaded ? (
               <div className="absolute inset-0 z-[1] animate-pulse bg-muted" aria-hidden />
             ) : null}
@@ -537,7 +537,7 @@ function ProjectCard({
               src={coverSrc}
               alt=""
               className={cn(
-                "ox-card-cover absolute inset-0 z-0 h-full w-full object-cover object-center",
+                "ox-card-cover ox-project-cover-image absolute inset-0 z-0 h-full w-full object-cover object-top",
                 isClickable && "ox-card-cover-zoom",
                 coverLoaded ? "opacity-100" : "opacity-0"
               )}
@@ -549,7 +549,7 @@ function ProjectCard({
                 setCoverLoaded(false);
               }}
             />
-          </>
+          </div>
         ) : (
           <>
             <div
@@ -1356,7 +1356,7 @@ function TrashedProjectCard({
         )}
       >
         {showCoverImage && coverSrc ? (
-          <>
+          <div className="absolute inset-0 overflow-hidden rounded-lg border border-foreground/10 bg-background/50 shadow-sm">
             {!coverLoaded ? (
               <div className="absolute inset-0 z-[1] animate-pulse bg-muted" aria-hidden />
             ) : null}
@@ -1366,7 +1366,7 @@ function TrashedProjectCard({
               src={coverSrc}
               alt=""
               className={cn(
-                "ox-card-cover absolute inset-0 z-0 h-full w-full object-cover object-center",
+                "ox-card-cover ox-project-cover-image absolute inset-0 z-0 h-full w-full object-cover object-top",
                 coverLoaded ? "opacity-100" : "opacity-0"
               )}
               loading="lazy"
@@ -1377,7 +1377,7 @@ function TrashedProjectCard({
                 setCoverLoaded(false);
               }}
             />
-          </>
+          </div>
         ) : (
           <>
             <div
@@ -2097,29 +2097,29 @@ function ProjectsPageContent() {
 
       <div className="relative z-[1]  mx-auto min-h-screen px-8 py-8 sm:px-6 md:py-10 lg:px-8">
         {!trashedOnly ? (
-        <section
-          id={WORKSPACE_PROMPT_ID}
-          className="relative mb-12 scroll-mt-4 overflow-hidden rounded-[32px] border border-border bg-muted/30 px-4 py-12 sm:px-8 sm:py-16 md:py-20 dark:bg-transparent"
-        >
-          <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 ox-prompt-hero-glow" />
-          <div className="mx-auto mb-8 max-w-3xl text-center sm:mb-10">
-            <h1 className="font-heading text-[28px] font-semibold tracking-tight text-foreground sm:text-[36px] md:text-[42px]">
-              今天想构建什么，{greetName}？
-            </h1>
-            <p className="mt-3 text-[14px] text-muted-foreground sm:text-[15px]">
-              描述你的想法，生成可运行的 website 站点
-            </p>
-          </div>
-          <Suspense
-            fallback={
-              <div className="mx-auto h-40 w-full max-w-4xl animate-pulse rounded-2xl border border-border bg-card" />
-            }
+          <section
+            id={WORKSPACE_PROMPT_ID}
+            className="relative mb-12 scroll-mt-4 overflow-hidden rounded-[32px] border border-border bg-muted/30 px-4 py-12 sm:px-8 sm:py-16 md:py-20 dark:bg-transparent"
           >
-            <HeroPrompt
-              showCreditsPromise={!loading && projects.length === 0 && !hasActiveQuery}
-            />
-          </Suspense>
-        </section>
+            <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 ox-prompt-hero-glow" />
+            <div className="mx-auto mb-8 max-w-3xl text-center sm:mb-10">
+              <h1 className="font-heading text-[28px] font-semibold tracking-tight text-foreground sm:text-[36px] md:text-[42px]">
+                今天想构建什么，{greetName}？
+              </h1>
+              <p className="mt-3 text-[14px] text-muted-foreground sm:text-[15px]">
+                描述你的想法，生成可运行的 website 站点
+              </p>
+            </div>
+            <Suspense
+              fallback={
+                <div className="mx-auto h-40 w-full max-w-4xl animate-pulse rounded-2xl border border-border bg-card" />
+              }
+            >
+              <HeroPrompt
+                showCreditsPromise={!loading && projects.length === 0 && !hasActiveQuery}
+              />
+            </Suspense>
+          </section>
         ) : null}
 
         <div className="mb-8 px-4">
@@ -2253,35 +2253,35 @@ function ProjectsPageContent() {
             >
               {trashedOnly
                 ? projects.map((project) => (
-                    <TrashedProjectCard
-                      key={project.id}
-                      project={project}
-                      busy={
-                        deletingId === project.id || restoringId === project.id
-                      }
-                      onRestore={() => void handleRestore(project.id)}
-                      onPurge={() => setPendingPurgeId(project.id)}
-                    />
-                  ))
+                  <TrashedProjectCard
+                    key={project.id}
+                    project={project}
+                    busy={
+                      deletingId === project.id || restoringId === project.id
+                    }
+                    onRestore={() => void handleRestore(project.id)}
+                    onPurge={() => setPendingPurgeId(project.id)}
+                  />
+                ))
                 : projects.map((project) => (
-                <ProjectCard
-                  key={project.id}
-                  project={project}
-                  onClick={() => openProject(project.id)}
-                  onDelete={() => handleDeleteClick(project.id)}
-                  deleting={deletingId === project.id || movingId === project.id}
-                  canDelete={
-                    !!authUser?.id &&
-                    (project.ownerUserId === authUser.id || isAdmin)
-                  }
-                  onPublishChange={handlePublishChange}
-                  folders={folders}
-                  onMove={(folderId) => void handleMoveProject(project.id, folderId)}
-                  allTags={tags}
-                  onTagsChange={handleProjectTagsChange}
-                  onFilterByTag={applyTagFilter}
-                />
-              ))}
+                  <ProjectCard
+                    key={project.id}
+                    project={project}
+                    onClick={() => openProject(project.id)}
+                    onDelete={() => handleDeleteClick(project.id)}
+                    deleting={deletingId === project.id || movingId === project.id}
+                    canDelete={
+                      !!authUser?.id &&
+                      (project.ownerUserId === authUser.id || isAdmin)
+                    }
+                    onPublishChange={handlePublishChange}
+                    folders={folders}
+                    onMove={(folderId) => void handleMoveProject(project.id, folderId)}
+                    allTags={tags}
+                    onTagsChange={handleProjectTagsChange}
+                    onFilterByTag={applyTagFilter}
+                  />
+                ))}
             </div>
             <div ref={loadMoreRef} className="flex min-h-14 items-center justify-center py-6">
               {loadingMore ? (

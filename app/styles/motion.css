@@ -21,6 +21,12 @@
   will-change: transform;
 }
 
+/* Dashboard screenshots read like a viewport: keep their header anchored while
+   the shared card hover motion adds depth. */
+.ox-project-cover-image {
+  transform-origin: center top;
+}
+
 .group\/card:hover .ox-card-cover-zoom,
 .group\/card:focus-within .ox-card-cover-zoom {
   transform: scale(1.045);
