@@ -325,6 +325,15 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
   let iterationsUsed = 0;
   let emptyStopRecoveries = 0;
   let deterministicRecoveries = 0;
+  let pendingComponentEditPath: string | null = null;
+
+  const runtimeTools = (): ChatCompletionTool[] => {
+    if (!pendingComponentEditPath) return toolsForPageBuildPhase(spec);
+    const latestPathEvent = spec.fileSession.events()
+      .filter((event) => event.path === pendingComponentEditPath)
+      .at(-1);
+    return latestPathEvent?.kind === "file_snapshot" ? [EDIT_TOOL] : [READ_TOOL];
+  };
 
   const executeFile = async (call: FileSessionCall): Promise<ToolResult> =>
     eventResult(await spec.fileSession.execute(call));
@@ -339,9 +348,16 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
     args: Record<string, unknown>,
     execute: () => Promise<ToolResult | string>,
   ): Promise<ToolResult | string> => {
-    const legal = toolsForPageBuildPhase(spec).some((tool) => tool.function.name === name);
+    const legal = runtimeTools().some((tool) => tool.function.name === name);
     if (!legal) return illegalCommand(name);
     const path = String(args.path ?? "");
+    if (
+      pendingComponentEditPath &&
+      (name === PAGE_TOOL.read || name === PAGE_TOOL.edit) &&
+      path !== pendingComponentEditPath
+    ) {
+      return illegalCommand(name);
+    }
     const requirement = spec.assetLifecycle?.inspect(spec.fileSession.artifacts())[0];
     if (
       requirement?.kind === "asset_reference" &&
@@ -358,9 +374,10 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
     }
     if (name === PAGE_TOOL.createComponent) {
       if (await spec.fileSession.loadIfExists(path)) {
+        pendingComponentEditPath = path;
         return {
-          success: true,
-          output: `${path} already exists. Continue with read_page_file, then edit_page_file.`,
+          success: false,
+          error: `FILE_ALREADY_EXISTS: ${path}. Creation is not allowed; continue with read_page_file, then edit_page_file.`,
           meta: { path, code: "EXISTING_ARTIFACT", retryable: true, transition: "snapshot_required" },
         };
       }
@@ -406,10 +423,14 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
             meta: { path, code: "EDIT_TEXT_NOT_FOUND", retryable: true },
           };
         }
-        return executeFile({
+        const result = await executeFile({
           name: "apply_file_patch",
           args: { path, baseRevision: String(args.baseRevision ?? ""), edits },
         });
+        if (result.success && pendingComponentEditPath === path) {
+          pendingComponentEditPath = null;
+        }
+        return result;
       }),
       [PAGE_TOOL.verify]: (args) => authorize(PAGE_TOOL.verify, args, () => executeFile({
         name: "verify_files",
@@ -431,7 +452,7 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
         }),
       } : {}),
     },
-    resolveToolsForIteration: () => toolsForPageBuildPhase(spec),
+    resolveToolsForIteration: runtimeTools,
     resolveToolChoiceForIteration: () => pageBuildDecision(spec).kind === "complete" ? "auto" : "required",
     resolveTaskStateForRound: () => pageBuildTaskState(spec),
     onMessage: (message) => spec.onEvent?.({ kind: "message", message }),
@@ -521,7 +542,7 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
             edits,
           },
         });
-      } else if (!requirement && toolsForPageBuildPhase(spec)[0]?.function.name === PAGE_TOOL.verify) {
+      } else if (!requirement && runtimeTools()[0]?.function.name === PAGE_TOOL.verify) {
         toolName = PAGE_TOOL.verify;
         result = await executeFile({ name: "verify_files", args: {} });
       } else {
@@ -550,7 +571,7 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
     emptyStopRecoveries,
     finalDecision: pageBuildDecision(spec),
     finalRequirement: spec.assetLifecycle?.inspect(spec.fileSession.artifacts())[0],
-    finalLegalTools: toolsForPageBuildPhase(spec).map((tool) => tool.function.name),
+    finalLegalTools: runtimeTools().map((tool) => tool.function.name),
     deterministicRecoveries,
   };
 }

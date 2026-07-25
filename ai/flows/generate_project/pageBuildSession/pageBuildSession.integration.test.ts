@@ -149,9 +149,23 @@ describe("runPageBuildSession", () => {
         content: "export function Existing() { return <div /> }",
       });
       expect(duplicateComponent).toEqual(expect.objectContaining({
-        success: true,
+        success: false,
+        error: expect.stringContaining("FILE_ALREADY_EXISTS"),
         meta: expect.objectContaining({ code: "EXISTING_ARTIFACT", retryable: true }),
       }));
+      expect(params.resolveToolsForIteration?.(2, params.tools).map((tool) => tool.function.name))
+        .toEqual(["read_page_file"]);
+      const snapshot = await params.executeToolOverrides.read_page_file({ path: existingComponent });
+      expect(params.resolveToolsForIteration?.(3, params.tools).map((tool) => tool.function.name))
+        .toEqual(["edit_page_file"]);
+      await params.executeToolOverrides.edit_page_file({
+        path: existingComponent,
+        baseRevision: snapshot.meta?.revision,
+        oldText: "return null",
+        newText: "return <div />",
+      });
+      expect(params.resolveToolsForIteration?.(4, params.tools).map((tool) => tool.function.name))
+        .toEqual(["create_page_component", "read_page_file", "edit_page_file", "verify_page_files"]);
       return { content: "", toolCalls: [] };
     });
 
@@ -161,7 +175,7 @@ describe("runPageBuildSession", () => {
       model: "gemini-3.6-flash", maxIterations: 8, fileSession, langfusePhase: "page.home",
     });
     expect(result.finalDecision).toEqual({ kind: "continue", reason: "continue building" });
-    expect(fileSession.writtenPaths()).toEqual([targetPath]);
+    expect(fileSession.writtenPaths()).toEqual([targetPath, existingComponent]);
     expect(fileSession.events().filter((event) => event.code === "FILE_ALREADY_EXISTS"))
       .toEqual([]);
   });

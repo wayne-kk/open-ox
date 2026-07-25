@@ -115,8 +115,8 @@ orchestrator-provided route, eliminating wrong-route and missing-path first writ
 Every tool call is authorized again at execution time against the current lifecycle. This protects
 the workspace even when a provider returns a tool that was not exposed for that iteration. An
 illegal command returns `ILLEGAL_LIFECYCLE_COMMAND` before `FileSession`, so it cannot consume the
-workspace failure budget. Once a path is present, a repeated component create is treated as a
-recoverable adoption transition; further changes require read plus a revision-safe local edit.
+workspace failure budget. Once a path is present, a repeated component create is rejected as a
+recoverable protocol error and the tool surface narrows to read plus a revision-safe local edit.
 
 ## 5. File mutation protocol
 
