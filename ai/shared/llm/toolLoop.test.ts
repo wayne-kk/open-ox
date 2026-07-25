@@ -826,4 +826,21 @@ describe("callLLMWithToolsFromMessages", () => {
     })).rejects.toThrow(/verify the model is compatible/i);
     expect(gateway.chatCompletion).toHaveBeenCalledTimes(1);
   });
+
+  it("does not misclassify an exhausted upstream-wrapped 400 as missing tool support", async () => {
+    gateway.chatCompletion.mockRejectedValue(
+      new Error(
+        'LLM HTTP 400 after 5 attempt(s): {"error":{"code":"bad_response_status_code","type":"upstream_error"}}',
+      ),
+    );
+    const result = callLLMWithToolsFromMessages({
+      messages: initialMessages(),
+      tools: [probeTool()],
+      model: "gemini-probe-model",
+      maxIterations: 1,
+      requireTools: true,
+    });
+    await expect(result).rejects.toThrow(/transient provider upstream failure/i);
+    await expect(result).rejects.not.toThrow(/verify the model is compatible/i);
+  });
 });

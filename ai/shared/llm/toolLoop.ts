@@ -390,6 +390,14 @@ export async function callLLMWithTools(params: {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const msgLower = msg.toLowerCase();
+      const upstreamWrappedFailure =
+        msgLower.includes("upstream_error") || msgLower.includes("bad_response_status_code");
+      if (upstreamWrappedFailure) {
+        throw new Error(
+          `Transient provider upstream failure after gateway retries. Model: ${model}. ` +
+            `Detail: ${msg.slice(0, 500)}`,
+        );
+      }
       const shouldDisableTools =
         activeTools.length > 0 &&
         (msg.includes("LLM HTTP 400") ||
@@ -706,6 +714,14 @@ export async function callLLMWithToolsFromMessages(params: {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const msgLower = msg.toLowerCase();
+      const upstreamWrappedFailure =
+        msgLower.includes("upstream_error") || msgLower.includes("bad_response_status_code");
+      if (upstreamWrappedFailure) {
+        throw new Error(
+          `Transient provider upstream failure after gateway retries. Model: ${model}. ` +
+            `Detail: ${msg.slice(0, 500)}`,
+        );
+      }
       if (msgLower.includes("insufficient completion budget")) {
         throw err;
       }

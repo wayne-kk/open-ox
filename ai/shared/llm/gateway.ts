@@ -8,6 +8,21 @@ import { createHash } from "node:crypto";
 
 const MIN_CONNECT_TIMEOUT_MS = 60_000;
 const REQUEST_TIMEOUT_MS = 300_000;
+const STANDARD_HTTP_RETRIES = 2;
+const UPSTREAM_WRAPPED_400_RETRIES = 4;
+
+export function httpRetryLimit(statusCode: number, bodyText: string): number {
+  const bodyLower = bodyText.toLowerCase();
+  if (
+    statusCode === 400 &&
+    (bodyLower.includes("upstream_error") || bodyLower.includes("bad_response_status_code"))
+  ) {
+    return UPSTREAM_WRAPPED_400_RETRIES;
+  }
+  return statusCode === 500 || statusCode === 502 || statusCode === 503
+    ? STANDARD_HTTP_RETRIES
+    : 0;
+}
 
 function parseTimeout(raw: string | undefined, fallback: number): number {
   if (!raw) return fallback;
@@ -41,7 +56,7 @@ function getApiConfig() {
 
 export async function chatCompletion(params: ChatCompletionParams): Promise<ChatCompletionResponse> {
   const { apiKey, baseURL } = getApiConfig();
-  const maxRetries = 2;
+  const maxRetries = UPSTREAM_WRAPPED_400_RETRIES;
   const provider = params.provider ?? resolveLlmProvider(params.model);
   const providerPayload = buildProviderPayload({ ...params, provider });
   validateProviderPayload(providerPayload, provider);
@@ -110,7 +125,7 @@ export async function chatCompletion(params: ChatCompletionParams): Promise<Chat
           error instanceof Error ? `${error.name}: ${error.message}` : String(error),
         output: undefined,
       });
-      if (attempt < maxRetries) {
+      if (attempt < STANDARD_HTTP_RETRIES) {
         const delay = 1000 * (attempt + 1);
         const message = error instanceof Error ? error.message : String(error);
         console.warn(
@@ -127,8 +142,8 @@ export async function chatCompletion(params: ChatCompletionParams): Promise<Chat
       const isUpstreamWrapped400 =
         statusCode === 400 &&
         (bodyLower.includes("upstream_error") || bodyLower.includes("bad_response_status_code"));
-      const isRetryable =
-        statusCode === 500 || statusCode === 502 || statusCode === 503 || isUpstreamWrapped400;
+      const retryLimit = httpRetryLimit(statusCode, bodyText);
+      const isRetryable = retryLimit > 0;
 
       lfGen?.end({
         metadata: { httpStatus: statusCode, retryable: isRetryable, attempt },
@@ -136,17 +151,21 @@ export async function chatCompletion(params: ChatCompletionParams): Promise<Chat
         output: { bodyPreview: bodyText.slice(0, 4000) },
       });
 
-      if (isRetryable && attempt < maxRetries) {
-        const delay = 1000 * (attempt + 1);
+      if (isRetryable && attempt < retryLimit) {
+        const delay = Math.min(8000, 1000 * (2 ** attempt));
         console.warn(
-          `[chatCompletion] HTTP ${statusCode}, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})...`
+          `[chatCompletion] HTTP ${statusCode}, retrying in ${delay}ms ` +
+            `(attempt ${attempt + 1}/${retryLimit}, upstreamWrapped400=${isUpstreamWrapped400})...`
         );
         await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
       }
 
       console.error(`[chatCompletion] HTTP ${statusCode} body=${bodyText}`);
-      throw new Error(`LLM HTTP ${statusCode}: ${bodyText}`);
+      throw new Error(
+        `LLM HTTP ${statusCode} after ${attempt + 1} attempt(s)` +
+          `${isUpstreamWrapped400 ? " (transient upstream wrapper exhausted)" : ""}: ${bodyText}`,
+      );
     }
 
     let parsed: ChatCompletionResponse;
