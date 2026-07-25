@@ -54,7 +54,7 @@ export type FileSessionCall =
 
 export interface FileSessionEvent {
   success: boolean;
-  kind: "file_created" | "file_snapshot" | "file_updated" | "files_verified" | "error";
+  kind: "file_created" | "file_loaded" | "file_snapshot" | "file_updated" | "files_verified" | "error";
   cached: boolean;
   path?: string;
   revision?: string;
@@ -97,7 +97,9 @@ interface FileRecord {
 export interface FileSession {
   tools(): ChatCompletionTool[];
   execute(call: unknown): Promise<FileSessionEvent>;
+  loadIfExists(path: string): Promise<boolean>;
   events(): FileSessionEvent[];
+  artifacts(): ReadonlyMap<string, FileSessionArtifact>;
   writtenPaths(): string[];
   currentDiagnostics(): readonly FileSessionDiagnostic[];
   stopDecision():
@@ -542,7 +544,28 @@ export function createFileSession(options: FileSessionOptions): FileSession {
       return fileSessionTools;
     },
     execute,
+    loadIfExists: async (path) => {
+      if (records.has(path)) return true;
+      if (!options.ownsPath(path)) return false;
+      const existing = await options.workspace.readIfExists(path);
+      if (!existing) return false;
+      records.set(path, { ...existing, diagnostics: [] });
+      emittedEvents.push({
+        success: true,
+        kind: "file_loaded",
+        cached: false,
+        path,
+        revision: existing.revision,
+      });
+      return true;
+    },
     events: () => [...emittedEvents],
+    artifacts: () => new Map(
+      [...records.entries()].map(([path, record]) => [
+        path,
+        { content: record.content, revision: record.revision },
+      ]),
+    ),
     writtenPaths: () =>
       [...records.keys()].filter((path) =>
         emittedEvents.some(

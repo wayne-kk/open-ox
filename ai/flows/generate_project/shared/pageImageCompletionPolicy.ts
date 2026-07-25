@@ -2,6 +2,7 @@ import ts from "typescript";
 import { existsSync } from "node:fs";
 import { resolve, sep } from "node:path";
 import type { FileSessionCompletionContext } from "@/ai/shared/fileSession/fileSession";
+import type { PageArtifactRequirement } from "@/ai/flows/generate_project/pageBuildSession/pageBuildSession";
 
 const PLACEHOLDER_HOSTS = [
   "picsum.photos",
@@ -307,16 +308,44 @@ function inspectImageReferences(
   };
 }
 
-export function pageImageCompletionReason(options: {
+interface PageImageInspectionOptions {
   sources: Record<string, string>;
   generatedPaths: string[];
   allowedRemoteUrls?: string[];
   assetExists(path: string): boolean;
-}): string | null {
+}
+
+interface PageImageRequirementResult {
+  requirement: PageArtifactRequirement;
+  reason: string;
+}
+
+function inspectPageImageRequirements(options: PageImageInspectionOptions): PageImageRequirementResult[] {
   const generated = new Set(options.generatedPaths);
   const allowedRemoteUrls = new Set(options.allowedRemoteUrls ?? []);
   const references = new Set<string>();
   const sinkReferences = new Set<string>();
+  const results: PageImageRequirementResult[] = [];
+  const pendingAssetViolations: Array<{
+    path: string;
+    reference: string;
+    reason: string;
+  }> = [];
+  const pendingDiagnostics: PageImageRequirementResult[] = [];
+  const assetRequirement = (
+    path: string,
+    reference: string,
+    reason: string,
+    nextAction: "generate_asset" | "edit_source",
+  ): PageImageRequirementResult => ({
+    requirement: {
+      kind: "asset_reference",
+      path,
+      reference,
+      nextAction,
+    },
+    reason,
+  });
 
   for (const [sourcePath, source] of Object.entries(options.sources)) {
     const inspection = inspectImageReferences(sourcePath, source);
@@ -325,40 +354,76 @@ export function pageImageCompletionReason(options: {
       references.add(reference);
       if (allowedRemoteUrls.has(reference)) continue;
       if (!isSafePublicImageReference(reference)) {
-        return `${sourcePath} uses invalid image asset path ${reference}. Image assets must remain under /images/.`;
+        pendingAssetViolations.push({ path: sourcePath, reference, reason: `${sourcePath} uses invalid image asset path ${reference}. Image assets must remain under /images/.` });
+        continue;
       }
       if (isPlaceholderReference(reference)) {
-        return `${sourcePath} still uses image placeholder ${reference}. Call generate_image, then replace the placeholder with the returned path.`;
+        pendingAssetViolations.push({ path: sourcePath, reference, reason: `${sourcePath} still uses image placeholder ${reference}. Call generate_image, then replace the placeholder with the returned path.` });
+        continue;
       }
       const remoteUrl = remoteUrlOf(reference);
       if (remoteUrl) {
-        return `${sourcePath} uses remote image ${reference}, which is not a user-provided URL. Call generate_image and use its returned path.`;
+        pendingAssetViolations.push({ path: sourcePath, reference, reason: `${sourcePath} uses remote image ${reference}, which is not a user-provided URL. Call generate_image and use its returned path.` });
+        continue;
       }
       if (
         reference.startsWith("/images/") &&
         !generated.has(reference) &&
         !options.assetExists(reference)
       ) {
-        return `${sourcePath} references missing image asset ${reference}. Call generate_image and use its returned path.`;
+        pendingAssetViolations.push({ path: sourcePath, reference, reason: `${sourcePath} references missing image asset ${reference}. Call generate_image and use its returned path.` });
       }
     }
     if (inspection.unverifiable.length > 0) {
-      return `${sourcePath} contains an image source that cannot be verified statically: ${inspection.unverifiable[0]}. Use a literal path returned by generate_image.`;
+      const message = `${sourcePath} contains an image source that cannot be verified statically: ${inspection.unverifiable[0]}. Use a literal path returned by generate_image.`;
+      pendingDiagnostics.push({
+        requirement: { kind: "source_diagnostic", path: sourcePath, message },
+        reason: message,
+      });
     }
   }
 
-  const unconsumed = [...generated].find((path) => !sinkReferences.has(path));
-  if (unconsumed) {
-    return `Generated image ${unconsumed} is not referenced by the current page revision. Patch the source to use the path returned by generate_image.`;
+  const unconsumed = [...generated].filter((path) => !sinkReferences.has(path));
+  for (const [index, violation] of pendingAssetViolations.entries()) {
+    results.push(assetRequirement(
+      violation.path,
+      violation.reference,
+      violation.reason,
+      index < unconsumed.length ? "edit_source" : "generate_asset",
+    ));
+  }
+  results.push(...pendingDiagnostics);
+  if (unconsumed.length > 0 && results.length === 0) {
+    const sourcePath = Object.keys(options.sources)[0] ?? "app/page.tsx";
+    results.push({
+      requirement: {
+        kind: "asset_reference",
+        path: sourcePath,
+        reference: unconsumed[0],
+        nextAction: "edit_source",
+      },
+      reason: `Generated image ${unconsumed[0]} is not referenced by the current page revision. Patch the source to use the path returned by generate_image.`,
+    });
   }
 
-  return null;
+  return results;
+}
+
+export function pageImageArtifactRequirements(
+  options: PageImageInspectionOptions,
+): readonly PageArtifactRequirement[] {
+  return inspectPageImageRequirements(options).map((result) => result.requirement);
+}
+
+export function pageImageCompletionReason(options: PageImageInspectionOptions): string | null {
+  return inspectPageImageRequirements(options)[0]?.reason ?? null;
 }
 
 export interface PageImageAssetSession {
   recordGeneratedAsset(path: string): void;
   generatedPaths(): string[];
   validateCompletion(context: FileSessionCompletionContext): string | null;
+  inspect(artifacts: FileSessionCompletionContext["artifacts"]): readonly PageArtifactRequirement[];
 }
 
 export function createPageImageAssetSession(options: {
@@ -366,18 +431,19 @@ export function createPageImageAssetSession(options: {
   assetExists(path: string): boolean;
 }): PageImageAssetSession {
   const generatedPaths = new Set<string>();
+  const inspectionOptions = (artifacts: FileSessionCompletionContext["artifacts"]): PageImageInspectionOptions => ({
+    sources: Object.fromEntries(
+      [...artifacts.entries()].map(([path, artifact]) => [path, artifact.content]),
+    ),
+    generatedPaths: [...generatedPaths],
+    allowedRemoteUrls: options.allowedRemoteUrls,
+    assetExists: options.assetExists,
+  });
   return {
     recordGeneratedAsset: (path) => generatedPaths.add(path),
     generatedPaths: () => [...generatedPaths],
-    validateCompletion: ({ artifacts }) =>
-      pageImageCompletionReason({
-        sources: Object.fromEntries(
-          [...artifacts.entries()].map(([path, artifact]) => [path, artifact.content]),
-        ),
-        generatedPaths: [...generatedPaths],
-        allowedRemoteUrls: options.allowedRemoteUrls,
-        assetExists: options.assetExists,
-      }),
+    validateCompletion: ({ artifacts }) => pageImageCompletionReason(inspectionOptions(artifacts)),
+    inspect: (artifacts) => pageImageArtifactRequirements(inspectionOptions(artifacts)),
   };
 }
 

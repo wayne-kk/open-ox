@@ -18,6 +18,10 @@ runPageBuildSession(spec): Promise<PageBuildSessionResult>
 tool-to-file-command translation, and stop decision. The Page Worker owns only composition:
 prompts, image policy, UI event projection, and final artifact validation.
 
+Image inspection and generation enter the Module through one `PageAssetLifecycle` Adapter. This
+keeps a requirement and the capability that satisfies it in one interface instead of coordinating
+independent optional callbacks.
+
 Provider-specific request shapes are owned by `ProviderAdapter`; workspace lifecycle and
 compare-and-swap writes are owned by `FileSession`. These three seams separate orchestration,
 provider protocol, and filesystem correctness.
@@ -78,10 +82,15 @@ Page Worker caller; this is the intended depth and locality.
 stateDiagram-v2
   [*] --> draft_target
   draft_target --> build: create_target_page succeeds
+  build --> asset_blocked: structured asset requirement
+  asset_blocked --> snapshot_required: generate_image succeeds
+  snapshot_required --> editable: read_page_file returns revision
+  editable --> verification_required: replace_page_file succeeds
+  verification_required --> complete: verify_page_files is clean
   build --> repair: verification reports diagnostics
   repair --> build: replacement is clean
-  build --> complete: deterministic postconditions pass
-  repair --> complete: deterministic postconditions pass
+  build --> verification_required: deterministic postconditions pass after mutation
+  repair --> verification_required: deterministic postconditions pass after mutation
   draft_target --> failed: terminal FileSession policy error
   build --> failed: terminal FileSession policy error
   repair --> failed: terminal FileSession policy error
@@ -92,12 +101,21 @@ Tool availability is an effect of state, not an instruction the model may ignore
 | Phase / condition | Exposed tools |
 |---|---|
 | `draft_target` | `create_target_page` only |
+| asset requirement needs an asset | `generate_image` only |
+| generated asset needs source edit | `read_page_file` only |
+| requirement source has a fresh revision | `replace_page_file` only |
+| current mutation needs verification | `verify_page_files` only |
 | target exists | `create_page_component`, `read_page_file`, `replace_page_file`, `verify_page_files`, optional `generate_image` |
 | fresh snapshot required | `read_page_file` only |
 | `complete` / `failed` | none |
 
 The target command intentionally has no `path` argument. `PageBuildSession` binds it to the
 orchestrator-provided route, eliminating wrong-route and missing-path first writes.
+Every tool call is authorized again at execution time against the current lifecycle. This protects
+the workspace even when a provider returns a tool that was not exposed for that iteration. An
+illegal command returns `ILLEGAL_LIFECYCLE_COMMAND` before `FileSession`, so it cannot consume the
+workspace failure budget. Once a path is present, its create command is permanently illegal;
+further changes require read plus revision-safe replacement.
 
 ## 5. File mutation protocol
 
@@ -177,7 +195,7 @@ different owners and different remediations.
 | target ownership | model supplies path | runtime binds target path |
 | orchestration state | split across prompt/callbacks | one PageBuildSession state machine |
 | edit protocol | model-generated text ranges | full-file replacement with revision CAS |
-| completion | callbacks and model stopping intertwined | `FileSession.stopDecision()` is authoritative |
+| completion | callbacks and model stopping intertwined | artifact requirements + `FileSession.stopDecision()` + post-mutation verification are authoritative |
 | context mode | rollout/legacy dependent | managed AgentContext for every Page session |
 | failed write history | large rejected source may recur | body omitted from projection; typed failure stays visible |
 | provider payload | generic gateway inference | provider-specific projection and validation |
@@ -189,7 +207,8 @@ different owners and different remediations.
 ## 10. Improvements
 
 1. **Correctness is executable.** First-round order, ownership, revision freshness, mutation limits,
-   and completion are runtime invariants rather than prompt compliance.
+   create-once semantics, asset-to-edit transitions, and completion are runtime invariants rather
+   than prompt compliance.
 2. **The Page Worker is shallower as a caller and the Module is deeper.** One call replaces direct
    ownership of the LLM loop, dynamic tools, file translation, recovery, and stop logic.
 3. **Provider differences are local.** Gemini quirks no longer leak into the Page Worker or generic

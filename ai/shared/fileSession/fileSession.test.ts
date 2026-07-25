@@ -23,6 +23,44 @@ function createSession() {
 }
 
 describe("FileSession", () => {
+  it("exposes canonical artifacts without leaking mutable session records", async () => {
+    const session = createFileSession({
+      owner: "test",
+      workspace: new InMemoryFileSessionWorkspace(),
+      ownsPath: (path) => path === "app/page.tsx",
+      requiredArtifacts: ["app/page.tsx"],
+    });
+    await session.execute({
+      name: "create_file",
+      args: { path: "app/page.tsx", content: "export default function Page() { return null }" },
+    });
+
+    const artifacts = session.artifacts();
+    expect(artifacts.get("app/page.tsx")).toEqual({
+      content: "export default function Page() { return null }",
+      revision: expect.stringMatching(/^sha256:/),
+    });
+    (artifacts as Map<string, unknown>).clear();
+    expect(session.artifacts().has("app/page.tsx")).toBe(true);
+  });
+
+  it("loads an existing owned artifact without recording a mutation", async () => {
+    const session = createFileSession({
+      owner: "test",
+      workspace: new InMemoryFileSessionWorkspace({
+        "app/page.tsx": "export default function Existing() { return null }",
+      }),
+      ownsPath: (path) => path === "app/page.tsx",
+      requiredArtifacts: ["app/page.tsx"],
+    });
+
+    expect(await session.loadIfExists("app/page.tsx")).toBe(true);
+    expect(session.artifacts().has("app/page.tsx")).toBe(true);
+    expect(session.writtenPaths()).toEqual([]);
+    expect(session.events()).toEqual([
+      expect.objectContaining({ kind: "file_loaded", path: "app/page.tsx" }),
+    ]);
+  });
   it("rejects malformed file commands before workspace access and permits recovery", async () => {
     const { session, workspace } = createSession();
     let mutationCalls = 0;

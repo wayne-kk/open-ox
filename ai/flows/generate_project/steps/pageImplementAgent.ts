@@ -251,7 +251,6 @@ export async function runPageImplementAgent(
     targetPath,
     componentRoot,
     workspace: new SiteFileSessionWorkspace(),
-    validateCompletion: imageAssets.validateCompletion,
   });
 
   const pageImageScope = `page-${componentRoot.slice("components/pages/".length)}`;
@@ -286,7 +285,10 @@ export async function runPageImplementAgent(
     model,
     ...(thinking ? { thinkingLevel: thinking } : {}),
     fileSession,
-    ...(imageTool ? { image: { tool: imageTool, execute: imageExecutor } } : {}),
+    assetLifecycle: {
+      inspect: imageAssets.inspect,
+      ...(imageTool ? { generation: { tool: imageTool, execute: imageExecutor } } : {}),
+    },
     onEvent: (event) => {
       if (event.kind === "message") {
         onMessage?.(event.message);

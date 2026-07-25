@@ -1,7 +1,43 @@
 import { describe, expect, it } from "vitest";
-import { pageImageCompletionReason } from "./pageImageCompletionPolicy";
+import { pageImageArtifactRequirements, pageImageCompletionReason } from "./pageImageCompletionPolicy";
 
 describe("pageImageCompletionReason", () => {
+  it("changes a placeholder requirement from asset generation to source editing", () => {
+    const options = {
+      sources: { "app/page.tsx": `<img src="https://picsum.photos/hero" />` },
+      assetExists: () => false,
+    };
+    expect(pageImageArtifactRequirements({ ...options, generatedPaths: [] })).toEqual([
+      expect.objectContaining({
+        kind: "asset_reference",
+        path: "app/page.tsx",
+        nextAction: "generate_asset",
+      }),
+    ]);
+    expect(pageImageArtifactRequirements({
+      ...options,
+      generatedPaths: ["/images/page-home-hero.png"],
+    })).toEqual([
+      expect.objectContaining({
+        kind: "asset_reference",
+        path: "app/page.tsx",
+        nextAction: "edit_source",
+      }),
+    ]);
+  });
+
+  it("consumes generated assets one requirement at a time", () => {
+    const requirements = pageImageArtifactRequirements({
+      sources: {
+        "app/page.tsx": `<><img src="https://picsum.photos/one" /><img src="https://picsum.photos/two" /></>`,
+      },
+      generatedPaths: ["/images/one.png"],
+      assetExists: () => false,
+    });
+    expect(requirements.map((requirement) =>
+      requirement.kind === "asset_reference" ? requirement.nextAction : requirement.kind
+    )).toEqual(["edit_source", "generate_asset"]);
+  });
   it("requires generate_image and source replacement when a page contains an image placeholder", () => {
     const placeholderSource = `
       import Image from "next/image";

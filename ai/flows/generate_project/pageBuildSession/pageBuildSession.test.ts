@@ -49,12 +49,15 @@ describe("PageBuildSession state machine", () => {
       name: "create_file",
       args: { path: spec.targetPath, content: "export default function Page() { return <main /> }" },
     });
-    const image = {
-      tool: { type: "function" as const, function: { name: "generate_image", parameters: { type: "object" } } },
-      execute: async () => ({ success: true, output: "/images/a.png" }),
+    const assetLifecycle = {
+      inspect: () => [],
+      generation: {
+        tool: { type: "function" as const, function: { name: "generate_image", parameters: { type: "object" } } },
+        execute: async () => ({ success: true, output: "/images/a.png" }),
+      },
     };
     expect(pageBuildPhase(spec)).toBe("build");
-    expect(toolsForPageBuildPhase({ ...spec, image }).map((tool) => tool.function.name)).toEqual([
+    expect(toolsForPageBuildPhase({ ...spec, assetLifecycle }).map((tool) => tool.function.name)).toEqual([
       "create_page_component", "read_page_file", "replace_page_file", "verify_page_files", "generate_image",
     ]);
   });

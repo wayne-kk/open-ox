@@ -1,11 +1,28 @@
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import type { ToolResult } from "@/ai/tools";
-import type { FileSession, FileSessionCall, FileSessionEvent } from "@/ai/shared/fileSession/fileSession";
+import type { FileSession, FileSessionArtifact, FileSessionCall, FileSessionEvent } from "@/ai/shared/fileSession/fileSession";
 import { callLLMWithToolsFromMessages } from "@/ai/shared/llm/toolLoop";
 import type { AgentToolCallRecord, ChatMessage } from "@/ai/shared/llm/types";
 import type { DurableTaskState } from "@/ai/shared/agentContext";
 
 export type PageBuildPhase = "draft_target" | "build" | "repair" | "complete" | "failed";
+
+export type PageArtifactRequirement =
+  | {
+      kind: "asset_reference";
+      path: string;
+      reference: string;
+      nextAction: "generate_asset" | "edit_source";
+    }
+  | { kind: "source_diagnostic"; path: string; message: string };
+
+export interface PageAssetLifecycle {
+  inspect(artifacts: ReadonlyMap<string, FileSessionArtifact>): readonly PageArtifactRequirement[];
+  generation?: {
+    tool: ChatCompletionTool;
+    execute(args: Record<string, unknown>): Promise<ToolResult | string>;
+  };
+}
 
 export type PageBuildEvent =
   | { kind: "message"; message: ChatMessage }
@@ -29,10 +46,7 @@ export interface PageBuildSessionSpec {
   thinkingLevel?: string;
   maxIterations: number;
   fileSession: FileSession;
-  image?: {
-    tool: ChatCompletionTool;
-    execute(args: Record<string, unknown>): Promise<ToolResult | string>;
-  };
+  assetLifecycle?: PageAssetLifecycle;
   onEvent?(event: PageBuildEvent): void;
   langfusePhase: string;
 }
@@ -43,6 +57,41 @@ export interface PageBuildSessionResult {
   iterationsUsed: number;
   emptyStopRecoveries: number;
   finalDecision: ReturnType<FileSession["stopDecision"]>;
+}
+
+function pageRevisionStatus(
+  events: readonly FileSessionEvent[],
+  hasArtifacts: boolean,
+) {
+  const latestMutation = events.findLastIndex(
+    (event) =>
+      event.kind === "file_created" ||
+      event.kind === "file_loaded" ||
+      event.kind === "file_updated",
+  );
+  const latestVerification = events.findLastIndex((event) => event.kind === "files_verified");
+  return {
+    latestMutation,
+    latestVerification,
+    needsVerification:
+      hasArtifacts && latestVerification < Math.max(latestMutation, 0),
+  };
+}
+
+function pageBuildDecision(
+  spec: Pick<PageBuildSessionSpec, "fileSession" | "assetLifecycle">,
+): ReturnType<FileSession["stopDecision"]> {
+  const decision = spec.fileSession.stopDecision();
+  if (decision.kind !== "complete") return decision;
+  if ((spec.assetLifecycle?.inspect(spec.fileSession.artifacts()).length ?? 0) > 0) {
+    return { kind: "continue", reason: "artifact requirements remain" };
+  }
+  return pageRevisionStatus(
+    spec.fileSession.events(),
+    spec.fileSession.artifacts().size > 0,
+  ).needsVerification
+    ? { kind: "continue", reason: "current page revision needs verification" }
+    : decision;
 }
 
 const functionTool = (
@@ -98,9 +147,16 @@ const REPLACE_TOOL = functionTool(
 
 const VERIFY_TOOL = functionTool(
   PAGE_TOOL.verify,
-  "Verify the current page files. Runtime completion is automatic when required artifacts are clean.",
-  { type: "object", properties: { paths: { type: "array", items: { type: "string" } } } },
+  "Verify every current page file. Runtime completion is automatic when required artifacts are clean.",
+  { type: "object", properties: {} },
 );
+
+function pageOwnsPath(
+  spec: Pick<PageBuildSessionSpec, "targetPath" | "componentRoot">,
+  path: string,
+): boolean {
+  return path === spec.targetPath || path.startsWith(`${spec.componentRoot}/`);
+}
 
 function eventResult(event: FileSessionEvent): ToolResult {
   return event.success
@@ -135,16 +191,16 @@ function pageToolActivity(
   return { activity: "other" };
 }
 
-export function pageBuildPhase(spec: Pick<PageBuildSessionSpec, "targetPath" | "fileSession">): PageBuildPhase {
-  const decision = spec.fileSession.stopDecision();
+export function pageBuildPhase(spec: Pick<PageBuildSessionSpec, "targetPath" | "fileSession" | "assetLifecycle">): PageBuildPhase {
+  const decision = pageBuildDecision(spec);
   if (decision.kind === "failed") return "failed";
   if (decision.kind === "complete") return "complete";
-  if (!spec.fileSession.writtenPaths().includes(spec.targetPath)) return "draft_target";
+  if (!spec.fileSession.artifacts().has(spec.targetPath)) return "draft_target";
   return spec.fileSession.currentDiagnostics().length > 0 ? "repair" : "build";
 }
 
 function pageBuildRuntimeState(
-  spec: Pick<PageBuildSessionSpec, "slug" | "targetPath" | "componentRoot" | "fileSession">,
+  spec: Pick<PageBuildSessionSpec, "slug" | "targetPath" | "componentRoot" | "fileSession" | "assetLifecycle">,
 ) {
   const latestMutations = new Map<string, { path: string; operation: string; revision?: string; outcome: "success" }>();
   for (const event of spec.fileSession.events()) {
@@ -158,7 +214,7 @@ function pageBuildRuntimeState(
   }
   return {
     phase: pageBuildPhase(spec),
-    decision: spec.fileSession.stopDecision(),
+    decision: pageBuildDecision(spec),
     target: latestEventForPath(spec.fileSession, spec.targetPath),
     writtenPaths: spec.fileSession.writtenPaths(),
     diagnostics: spec.fileSession.currentDiagnostics(),
@@ -168,9 +224,10 @@ function pageBuildRuntimeState(
 }
 
 export function pageBuildTaskState(
-  spec: Pick<PageBuildSessionSpec, "slug" | "targetPath" | "componentRoot" | "fileSession">,
+  spec: Pick<PageBuildSessionSpec, "slug" | "targetPath" | "componentRoot" | "fileSession" | "assetLifecycle">,
 ): DurableTaskState {
   const state = pageBuildRuntimeState(spec);
+  const requirement = spec.assetLifecycle?.inspect(spec.fileSession.artifacts())[0];
   return {
     goal: `Build route ${spec.slug}`,
     targetPaths: [spec.targetPath],
@@ -183,11 +240,14 @@ export function pageBuildTaskState(
       `phase=${state.phase}`,
       `next=${state.decision.kind === "continue" ? state.decision.reason : state.decision.kind}`,
       `ownership=${state.ownership}`,
+      ...(requirement
+        ? [`requirement=${JSON.stringify(requirement)}`]
+        : []),
     ],
   };
 }
 
-export function pageBuildStateCard(spec: Pick<PageBuildSessionSpec, "slug" | "targetPath" | "componentRoot" | "fileSession">): string {
+export function pageBuildStateCard(spec: Pick<PageBuildSessionSpec, "slug" | "targetPath" | "componentRoot" | "fileSession" | "assetLifecycle">): string {
   const state = pageBuildRuntimeState(spec);
   return [
     `[Page build state: ${spec.slug}]`,
@@ -200,16 +260,40 @@ export function pageBuildStateCard(spec: Pick<PageBuildSessionSpec, "slug" | "ta
   ].join("\n");
 }
 
-export function toolsForPageBuildPhase(spec: Pick<PageBuildSessionSpec, "targetPath" | "fileSession" | "image">): ChatCompletionTool[] {
+export function toolsForPageBuildPhase(spec: Pick<PageBuildSessionSpec, "targetPath" | "componentRoot" | "fileSession" | "assetLifecycle">): ChatCompletionTool[] {
   const phase = pageBuildPhase(spec);
   if (phase === "draft_target") return [CREATE_TARGET_TOOL];
   if (phase === "complete" || phase === "failed") return [];
+  const requirement = spec.assetLifecycle?.inspect(spec.fileSession.artifacts())[0];
+  if (requirement?.kind === "asset_reference") {
+    if (requirement.nextAction === "generate_asset") {
+      return spec.assetLifecycle?.generation ? [spec.assetLifecycle.generation.tool] : [];
+    }
+    const fileTools = new Set(spec.fileSession.tools().map((tool) => tool.function.name));
+    if (fileTools.size === 1 && fileTools.has("read_file_snapshot")) return [READ_TOOL];
+    const pathEvents = spec.fileSession.events().filter((event) => event.path === requirement.path);
+    const latestMutation = pathEvents.findLastIndex(
+      (event) => event.kind === "file_created" || event.kind === "file_updated",
+    );
+    const latestSnapshot = pathEvents.findLastIndex((event) => event.kind === "file_snapshot");
+    return latestSnapshot > latestMutation ? [REPLACE_TOOL] : [READ_TOOL];
+  }
+  if (
+    pageRevisionStatus(
+      spec.fileSession.events(),
+      spec.fileSession.artifacts().size > 0,
+    ).needsVerification &&
+    spec.fileSession.stopDecision().kind === "complete"
+  ) {
+    return [VERIFY_TOOL];
+  }
   const legal = new Set(spec.fileSession.tools().map((tool) => tool.function?.name));
   if (legal.size === 1 && legal.has("read_file_snapshot")) return [READ_TOOL];
-  return [CREATE_COMPONENT_TOOL, READ_TOOL, REPLACE_TOOL, VERIFY_TOOL, ...(spec.image ? [spec.image.tool] : [])];
+  return [CREATE_COMPONENT_TOOL, READ_TOOL, REPLACE_TOOL, VERIFY_TOOL, ...(spec.assetLifecycle?.generation ? [spec.assetLifecycle.generation.tool] : [])];
 }
 
 export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<PageBuildSessionResult> {
+  await spec.fileSession.loadIfExists(spec.targetPath);
   const messages = [...spec.initialMessages];
   let iterationsUsed = 0;
   let emptyStopRecoveries = 0;
@@ -217,9 +301,44 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
   const executeFile = async (call: FileSessionCall): Promise<ToolResult> =>
     eventResult(await spec.fileSession.execute(call));
 
+  const illegalCommand = (name: string): ToolResult => ({
+    success: false,
+    error: `ILLEGAL_LIFECYCLE_COMMAND: ${name} is not legal in the current page artifact state`,
+    meta: { code: "ILLEGAL_LIFECYCLE_COMMAND", retryable: true },
+  });
+  const authorize = async (
+    name: string,
+    args: Record<string, unknown>,
+    execute: () => Promise<ToolResult | string>,
+  ): Promise<ToolResult | string> => {
+    const legal = toolsForPageBuildPhase(spec).some((tool) => tool.function.name === name);
+    if (!legal) return illegalCommand(name);
+    const path = String(args.path ?? "");
+    const requirement = spec.assetLifecycle?.inspect(spec.fileSession.artifacts())[0];
+    if (
+      requirement?.kind === "asset_reference" &&
+      (name === PAGE_TOOL.read || name === PAGE_TOOL.replace) &&
+      path !== requirement.path
+    ) {
+      return illegalCommand(name);
+    }
+    if (
+      (name === PAGE_TOOL.createComponent || name === PAGE_TOOL.read || name === PAGE_TOOL.replace) &&
+      !pageOwnsPath(spec, path)
+    ) {
+      return illegalCommand(name);
+    }
+    if (name === PAGE_TOOL.createComponent) {
+      if (await spec.fileSession.loadIfExists(path)) {
+        return illegalCommand(name);
+      }
+    }
+    return execute();
+  };
+
   const { content, toolCalls } = await callLLMWithToolsFromMessages({
     messages,
-    tools: [CREATE_TARGET_TOOL, CREATE_COMPONENT_TOOL, READ_TOOL, REPLACE_TOOL, VERIFY_TOOL, ...(spec.image ? [spec.image.tool] : [])],
+    tools: [CREATE_TARGET_TOOL, CREATE_COMPONENT_TOOL, READ_TOOL, REPLACE_TOOL, VERIFY_TOOL, ...(spec.assetLifecycle?.generation ? [spec.assetLifecycle.generation.tool] : [])],
     temperature: 0.5,
     maxIterations: spec.maxIterations,
     completionProfile: "code",
@@ -228,34 +347,37 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
     model: spec.model,
     ...(spec.thinkingLevel ? { thinkingLevel: spec.thinkingLevel } : {}),
     executeToolOverrides: {
-      [PAGE_TOOL.createTarget]: (args) => executeFile({
+      [PAGE_TOOL.createTarget]: (args) => authorize(PAGE_TOOL.createTarget, args, () => executeFile({
         name: "create_file",
         args: { path: spec.targetPath, content: String(args.content ?? "") },
-      }),
-      [PAGE_TOOL.createComponent]: (args) => executeFile({
+      })),
+      [PAGE_TOOL.createComponent]: (args) => authorize(PAGE_TOOL.createComponent, args, () => executeFile({
         name: "create_file",
         args: { path: String(args.path ?? ""), content: String(args.content ?? "") },
-      }),
-      [PAGE_TOOL.read]: (args) => executeFile({
+      })),
+      [PAGE_TOOL.read]: (args) => authorize(PAGE_TOOL.read, args, () => executeFile({
         name: "read_file_snapshot",
         args: { path: String(args.path ?? "") },
-      }),
-      [PAGE_TOOL.replace]: (args) => executeFile({
+      })),
+      [PAGE_TOOL.replace]: (args) => authorize(PAGE_TOOL.replace, args, () => executeFile({
         name: "replace_file",
         args: {
           path: String(args.path ?? ""),
           baseRevision: String(args.baseRevision ?? ""),
           content: String(args.content ?? ""),
         },
-      }),
-      [PAGE_TOOL.verify]: (args) => executeFile({
+      })),
+      [PAGE_TOOL.verify]: (args) => authorize(PAGE_TOOL.verify, args, () => executeFile({
         name: "verify_files",
-        args: { paths: Array.isArray(args.paths) ? args.paths.map(String) : undefined },
-      }),
-      ...(spec.image ? { [PAGE_TOOL.image]: spec.image.execute } : {}),
+        args: {},
+      })),
+      ...(spec.assetLifecycle?.generation ? {
+        [PAGE_TOOL.image]: (args: Record<string, unknown>) =>
+          authorize(PAGE_TOOL.image, args, () => spec.assetLifecycle!.generation!.execute(args)),
+      } : {}),
     },
     resolveToolsForIteration: () => toolsForPageBuildPhase(spec),
-    resolveToolChoiceForIteration: () => spec.fileSession.stopDecision().kind === "complete" ? "auto" : "required",
+    resolveToolChoiceForIteration: () => pageBuildDecision(spec).kind === "complete" ? "auto" : "required",
     resolveTaskStateForRound: () => pageBuildTaskState(spec),
     onMessage: (message) => spec.onEvent?.({ kind: "message", message }),
     onAssistantRound: ({ iteration }) => {
@@ -268,7 +390,7 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
       ...pageToolActivity(info.name, info.args, spec.targetPath),
     }),
     onAssistantStop: ({ messages: history }) => {
-      const decision = spec.fileSession.stopDecision();
+      const decision = pageBuildDecision(spec);
       if (decision.kind === "complete" || emptyStopRecoveries >= 2) return false;
       emptyStopRecoveries += 1;
       const recovery: ChatMessage = {
@@ -279,7 +401,7 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
       spec.onEvent?.({ kind: "message", message: recovery });
       return true;
     },
-    shouldAbortAfterToolResults: () => spec.fileSession.stopDecision().kind !== "continue",
+    shouldAbortAfterToolResults: () => pageBuildDecision(spec).kind !== "continue",
     requireTools: true,
     onApproachingLimit: ({ messages: history }) => {
       const nudge: ChatMessage = {
@@ -297,6 +419,6 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
     toolCalls,
     iterationsUsed,
     emptyStopRecoveries,
-    finalDecision: spec.fileSession.stopDecision(),
+    finalDecision: pageBuildDecision(spec),
   };
 }
