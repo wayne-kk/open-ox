@@ -186,8 +186,16 @@ function pageToolActivity(
   name: string,
   args: Record<string, unknown>,
   targetPath: string,
+  result?: ToolResult | string,
 ): Pick<Extract<PageBuildEvent, { kind: "tool" }>, "activity" | "path"> {
   if (name === PAGE_TOOL.createTarget) return { activity: "write", path: targetPath };
+  if (
+    name === PAGE_TOOL.createComponent &&
+    typeof result === "object" &&
+    result.meta?.code === "EXISTING_ARTIFACT"
+  ) {
+    return { activity: "read", path: String(args.path ?? "") };
+  }
   if (name === PAGE_TOOL.createComponent || name === PAGE_TOOL.edit) {
     return { activity: "write", path: String(args.path ?? "") };
   }
@@ -375,10 +383,16 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
     if (name === PAGE_TOOL.createComponent) {
       if (await spec.fileSession.loadIfExists(path)) {
         pendingComponentEditPath = path;
+        const snapshot = await executeFile({ name: "read_file_snapshot", args: { path } });
         return {
-          success: false,
-          error: `FILE_ALREADY_EXISTS: ${path}. Creation is not allowed; continue with read_page_file, then edit_page_file.`,
-          meta: { path, code: "EXISTING_ARTIFACT", retryable: true, transition: "snapshot_required" },
+          ...snapshot,
+          output: `${path} already exists. Creation was not executed; use this snapshot with edit_page_file.`,
+          meta: {
+            ...snapshot.meta,
+            path,
+            code: "EXISTING_ARTIFACT",
+            transition: "editable",
+          },
         };
       }
     }
@@ -463,7 +477,7 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
     onToolCall: (info) => spec.onEvent?.({
       kind: "tool",
       ...info,
-      ...pageToolActivity(info.name, info.args, spec.targetPath),
+      ...pageToolActivity(info.name, info.args, spec.targetPath, info.result),
     }),
     onAssistantStop: ({ messages: history }) => {
       const decision = pageBuildDecision(spec);
