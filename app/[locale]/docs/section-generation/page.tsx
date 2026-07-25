@@ -75,8 +75,8 @@ export default function SectionGenerationPage() {
             <Code>runPageImplementAgent</Code>。
             <Code>plan_project</Code> 已为每页写入 <Code>pageDesignPlan</Code>（叙事、层级、约束），
             Agent 以 design-system、预读的 <Code>layout.tsx</Code> / <Code>globals.css</Code>、目录树与用户旨意为上下文，
-            自主决定拆分哪些组件文件，并以工具调用落盘；收尾必须调用{" "}
-            <Code>page_implementation_complete</Code>。
+            自主决定拆分哪些组件文件，并通过 <Code>PageBuildSession</Code> 的受限工具落盘。
+            完成由目标文件、图片要求、诊断与验证状态共同判定，不再使用模型主动调用的完成信号。
           </P>
         </section>
 
@@ -146,8 +146,16 @@ const pageOutcomes = await Promise.all(
         <section id="validation" className="scroll-mt-24">
           <H2>验证与重试</H2>
           <P>
-            Agent 工具写入的文件仍会经过统一的格式化（如 Prettier）；路由级错误主要由后续的{" "}
+            Page Agent 首轮只能创建运行时绑定的目标路由；后续工具随 Session 状态变化。
+            新组件使用 create-once 语义，已有文件须先 <Code>read_page_file</Code> 获取 revision，
+            再由 <Code>edit_page_file</Code> 做精确局部替换。每次写入仍会经过统一格式化，并由
+            <Code>verify_page_files</Code> 完成页面范围验证；路由级错误还会由后续的{" "}
             <Code>typecheck_generated</Code>、<Code>run_build</Code> 与 <Code>repair_build</Code> 捕获。
+          </P>
+          <P>
+            图片也属于完成条件：缺失的本地 <Code>/images/*</Code> 资源会按源码已声明的稳定路径生成；
+            远程占位图生成后只编辑对应引用。模型空响应时，Session 会保留完整待办状态并进行有界恢复，
+            避免把仍缺图片或未验证的页面误判为完成。
           </P>
           <Callout type="warn">
             这里的验证主要由 Agent 自身与后续构建网关承担；不要在页面 Agent 内重复跑完整{" "}

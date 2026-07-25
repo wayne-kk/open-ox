@@ -180,7 +180,7 @@ export default function DocsPage() {
           </div>
           <div className="min-w-0">
             <p className="font-heading text-[14px] font-semibold text-foreground group-hover:text-primary transition-colors">更新日志</p>
-            <p className="mt-0.5 text-[12px] leading-5 text-muted-foreground">至 v1.19：Chrome-first、Subagent、新人引导、Linux.do、Vibe 等。</p>
+            <p className="mt-0.5 text-[12px] leading-5 text-muted-foreground">至 v1.20：Page Build Session v2、多页生成恢复、Chrome-first、Subagent 等。</p>
           </div>
         </Link>
         <Link

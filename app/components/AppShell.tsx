@@ -33,6 +33,12 @@ import {
   resolveStartBuildAction,
   WORKSPACE_PROMPT_HASH,
 } from "@/lib/navigation/startBuild";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const SIDEBAR_COLLAPSED_KEY = "open-ox:app-sidebar-collapsed";
 const SIDEBAR_WIDTH_KEY = "open-ox:app-sidebar-width";
@@ -61,6 +67,27 @@ function focusWorkspacePrompt() {
   }
 }
 
+function CollapsedSidebarTooltip({
+  collapsed,
+  label,
+  children,
+}: {
+  collapsed: boolean;
+  label: string;
+  children: React.ReactElement;
+}) {
+  if (!collapsed) return children;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side="right" sideOffset={10}>
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function NavItem({
   href,
   label,
@@ -83,7 +110,7 @@ function NavItem({
   tourId?: string;
 }) {
   const className = cn(
-    "flex w-full items-center rounded-lg py-2 text-left text-[13px] font-medium transition-[padding,background-color,color,box-shadow,gap] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+    "flex w-full items-center rounded-lg py-2 text-left text-[13px] font-medium outline-none transition-[padding,background-color,color,box-shadow,gap] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] focus-visible:ring-2 focus-visible:ring-primary/45",
     collapsed ? "justify-center gap-0 px-0" : "gap-2.5 px-2.5",
     active
       ? "bg-primary/15 text-primary shadow-[var(--box-shadow-neon-sm)]"
@@ -108,33 +135,35 @@ function NavItem({
 
   if (onClick && !href) {
     return (
-      <button
-        type="button"
-        onClick={onClick}
-        className={className}
-        title={collapsed ? label : undefined}
-        aria-label={label}
-        {...tourProps}
-      >
-        {content}
-      </button>
+      <CollapsedSidebarTooltip collapsed={Boolean(collapsed)} label={label}>
+        <button
+          type="button"
+          onClick={onClick}
+          className={className}
+          aria-label={label}
+          {...tourProps}
+        >
+          {content}
+        </button>
+      </CollapsedSidebarTooltip>
     );
   }
 
   return (
-    <Link
-      href={href ?? "#"}
-      onClick={onClick}
-      className={className}
-      title={collapsed ? label : undefined}
-      aria-label={label}
-      {...(newTab
-        ? { target: "_blank", rel: "noopener noreferrer" }
-        : {})}
-      {...tourProps}
-    >
-      {content}
-    </Link>
+    <CollapsedSidebarTooltip collapsed={Boolean(collapsed)} label={label}>
+      <Link
+        href={href ?? "#"}
+        onClick={onClick}
+        className={className}
+        aria-label={label}
+        {...(newTab
+          ? { target: "_blank", rel: "noopener noreferrer" }
+          : {})}
+        {...tourProps}
+      >
+        {content}
+      </Link>
+    </CollapsedSidebarTooltip>
   );
 }
 
@@ -197,26 +226,28 @@ function SidebarBody({
           collapsed ? "justify-center py-3 pb-10" : "py-5 pr-10"
         )}
       >
-        <Link
-          href="/home"
-          onClick={onNavigate}
-          className={cn(
-            "group flex min-w-0 items-center overflow-hidden transition-[gap,justify-content] duration-300",
-            collapsed ? "w-full justify-center gap-0" : "gap-2.5"
-          )}
-          aria-label={t("homeAria")}
-        >
-          <BrandMark size={collapsed ? 24 : 28} className="transition-[width,height] duration-300" />
-          <span
+        <CollapsedSidebarTooltip collapsed={collapsed} label={t("homeAria")}>
+          <Link
+            href="/home"
+            onClick={onNavigate}
             className={cn(
-              "truncate font-heading text-[12px] font-bold tracking-[0.16em] text-foreground transition-[opacity,max-width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-              collapsed ? "pointer-events-none max-w-0 overflow-hidden opacity-0" : "max-w-[120px] opacity-100"
+              "group flex min-w-0 items-center overflow-hidden rounded-md outline-none transition-[gap,justify-content] duration-300 focus-visible:ring-2 focus-visible:ring-primary/45",
+              collapsed ? "w-full justify-center gap-0" : "gap-2.5"
             )}
-            aria-hidden={collapsed}
+            aria-label={t("homeAria")}
           >
-            OPEN-OX
-          </span>
-        </Link>
+            <BrandMark size={collapsed ? 24 : 28} className="transition-[width,height] duration-300" />
+            <span
+              className={cn(
+                "truncate font-heading text-[12px] font-bold tracking-[0.16em] text-foreground transition-[opacity,max-width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                collapsed ? "pointer-events-none max-w-0 overflow-hidden opacity-0" : "max-w-[120px] opacity-100"
+              )}
+              aria-hidden={collapsed}
+            >
+              OPEN-OX
+            </span>
+          </Link>
+        </CollapsedSidebarTooltip>
       </div>
 
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden px-2 pb-3">
@@ -238,31 +269,32 @@ function SidebarBody({
                 : "text-muted-foreground hover:bg-primary/5 hover:text-primary"
             )}
           >
-            <Link
-              href="/dashboard?mine=1&folder=all"
-              onClick={onNavigate}
-              title={collapsed ? t("myProjects") : undefined}
-              aria-label={t("myProjects")}
-              aria-current={onDashboardRoot ? "page" : undefined}
-              className={cn(
-                "flex min-w-0 flex-1 items-center py-2 text-[13px] font-medium transition-[gap,padding] duration-300",
-                collapsed ? "justify-center gap-0 px-0" : "gap-2.5 px-2.5"
-              )}
-            >
-              {onDashboardRoot ? (
-                <FolderOpen className="h-4 w-4 shrink-0 opacity-90" />
-              ) : (
-                <Folder className="h-4 w-4 shrink-0 opacity-90" />
-              )}
-              <span
+            <CollapsedSidebarTooltip collapsed={collapsed} label={t("myProjects")}>
+              <Link
+                href="/dashboard?mine=1&folder=all"
+                onClick={onNavigate}
+                aria-label={t("myProjects")}
+                aria-current={onDashboardRoot ? "page" : undefined}
                 className={cn(
-                  "truncate transition-[opacity,max-width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-                  collapsed ? "max-w-0 opacity-0" : "min-w-0 flex-1 opacity-100"
+                  "flex min-w-0 flex-1 items-center py-2 text-[13px] font-medium outline-none transition-[gap,padding] duration-300 focus-visible:ring-2 focus-visible:ring-primary/45",
+                  collapsed ? "justify-center gap-0 px-0" : "gap-2.5 px-2.5"
                 )}
               >
-                {t("myProjects")}
-              </span>
-            </Link>
+                {onDashboardRoot ? (
+                  <FolderOpen className="h-4 w-4 shrink-0 opacity-90" />
+                ) : (
+                  <Folder className="h-4 w-4 shrink-0 opacity-90" />
+                )}
+                <span
+                  className={cn(
+                    "truncate transition-[opacity,max-width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                    collapsed ? "max-w-0 opacity-0" : "min-w-0 flex-1 opacity-100"
+                  )}
+                >
+                  {t("myProjects")}
+                </span>
+              </Link>
+            </CollapsedSidebarTooltip>
             <button
               type="button"
               onClick={() => setFoldersOpen((v) => !v)}
@@ -422,6 +454,7 @@ export function AppSidebar({
   mobileOpen: boolean;
   onMobileOpenChange: (v: boolean) => void;
 }) {
+  const t = useTranslations("workspace");
   const { user, ready } = useAuthUser();
   const [folders, setFolders] = useState<ProjectFolder[]>([]);
   const [foldersOpen, setFoldersOpen] = useState(true);
@@ -544,23 +577,28 @@ export function AppSidebar({
           !resizing && "transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
         )}
       >
-        <button
-          type="button"
-          onClick={() => onCollapsedChange(!collapsed)}
-          className={cn(
-            "absolute z-20 rounded-sm p-1.5 text-muted-foreground transition-[top,left,right,transform,background-color,color] duration-300 hover:bg-primary/10 hover:text-primary hover:shadow-[var(--box-shadow-neon-sm)]",
-            collapsed
-              ? "left-1/2 top-12 -translate-x-1/2"
-              : "right-2 top-5 translate-x-0"
-          )}
-          aria-label={collapsed ? "展开侧栏" : "折叠侧栏"}
+        <CollapsedSidebarTooltip
+          collapsed={collapsed}
+          label={collapsed ? t("sidebarExpand") : t("sidebarCollapse")}
         >
-          {collapsed ? (
-            <PanelLeftOpen className="h-4 w-4" />
-          ) : (
-            <PanelLeftClose className="h-4 w-4" />
-          )}
-        </button>
+          <button
+            type="button"
+            onClick={() => onCollapsedChange(!collapsed)}
+            className={cn(
+              "absolute z-20 rounded-sm p-1.5 text-muted-foreground outline-none transition-[top,left,right,transform,background-color,color] duration-300 hover:bg-primary/10 hover:text-primary hover:shadow-[var(--box-shadow-neon-sm)] focus-visible:ring-2 focus-visible:ring-primary/45",
+              collapsed
+                ? "left-1/2 top-12 -translate-x-1/2"
+                : "right-2 top-5 translate-x-0"
+            )}
+            aria-label={collapsed ? t("sidebarExpand") : t("sidebarCollapse")}
+          >
+            {collapsed ? (
+              <PanelLeftOpen className="h-4 w-4" />
+            ) : (
+              <PanelLeftClose className="h-4 w-4" />
+            )}
+          </button>
+        </CollapsedSidebarTooltip>
         <div className="relative z-[1] min-h-0 flex-1 overflow-hidden">
           <SidebarBodySuspense
             collapsed={collapsed}
@@ -704,19 +742,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <AppSidebar
-        collapsed={collapsed}
-        onCollapsedChange={onCollapsedChange}
-        width={width}
-        onWidthChange={onWidthChange}
-        mobileOpen={mobileOpen}
-        onMobileOpenChange={setMobileOpen}
-      />
-      <div className="relative min-w-0 flex-1 overflow-x-hidden pt-12 md:pt-0">
-        <div className="relative z-[1]">{children}</div>
+    <TooltipProvider delayDuration={280} skipDelayDuration={120}>
+      <div className="flex min-h-screen bg-background">
+        <AppSidebar
+          collapsed={collapsed}
+          onCollapsedChange={onCollapsedChange}
+          width={width}
+          onWidthChange={onWidthChange}
+          mobileOpen={mobileOpen}
+          onMobileOpenChange={setMobileOpen}
+        />
+        <div className="relative min-w-0 flex-1 overflow-x-hidden pt-12 md:pt-0">
+          <div className="relative z-[1]">{children}</div>
+        </div>
       </div>
-    </div>
+    </TooltipProvider>
   );
 }
 

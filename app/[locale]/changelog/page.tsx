@@ -14,6 +14,20 @@ interface ChangeEntry {
 
 const CHANGELOG: ChangeEntry[] = [
   {
+    version: "v1.20",
+    date: "2026-07-25",
+    tag: "major",
+    title: "Page Build Session v2 · 多页生成稳定性",
+    body: "页面实现升级为显式状态机：每个 Page Agent 只看到当前阶段合法的操作，目标路由由运行时绑定，文件修改采用带 revision 的局部编辑。图片生成、验证与完成条件进入同一闭环，并补齐 Gemini 短暂上游错误及空响应恢复，降低多页生成中断和半成品页面。",
+    items: [
+      "PageBuildSession 统一管理阶段、工具门禁、上下文投影与停止条件；各页面仍保持隔离并行",
+      "文件协议改为 read_page_file → edit_page_file 精确替换 + revision 校验；重复创建组件自动转入已有文件编辑流程",
+      "本地 /images/* 路径可先在源码声明，再按同一路径生成资源；远程占位图只局部替换引用",
+      "未完成时自动要求验证；空 tool stop 可按明确的图片/引用/验证状态做有界恢复",
+      "Gemini 短暂 5xx / 429 使用退避重试，协议错误与模型能力错误分开归因",
+    ],
+  },
+  {
     version: "v1.19",
     date: "2026-07-17",
     tag: "major",

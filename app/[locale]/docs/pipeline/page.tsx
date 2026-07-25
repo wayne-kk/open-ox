@@ -74,7 +74,7 @@ const STEPS = [
     n: "08",
     name: "page_implement_agent ×M",
     type: "llm×M",
-    desc: "每页一个工具闭环，多页并行；只写页内容与页专属组件，不得改 layout/chrome/globals，不得复制全局 Nav/Footer。主区块须带 section id。",
+    desc: "每页一个 PageBuildSession 状态机，多页隔离并行；运行时按阶段收窄合法工具，以 revision-safe 局部编辑、图片闭环和强制验证决定完成。只写页内容与页专属组件。",
   },
   {
     n: "09",
@@ -196,6 +196,26 @@ await runChromeOptimizeStep(...); // link polish only
           <Callout>
             Scaffold 是全局壳的「单一拟定者」；Optimize 只校正链接与锚点。
             Page Agent 不得改 layout / chrome / globals，也不得在页内再造一套 Nav/Footer。
+          </Callout>
+          <H3>Page Build Session v2</H3>
+          <P>
+            每个 <Code>page_implement_agent</Code> 由独立的 <Code>PageBuildSession</Code>
+            管理。初始阶段只暴露 <Code>create_target_page</Code>，且目标路由由运行时绑定；
+            后续根据文件、图片与诊断状态动态开放创建组件、读取、局部编辑、生图或验证工具。
+            完成由产物要求与 <Code>FileSession</Code> 的停止决策共同判定，不依赖模型自行宣布结束。
+          </P>
+          <Pre>{`draft_target → create_target_page
+build        → create / read / edit / generate_image
+asset_blocked → generate_image → optional source edit
+verify       → verify_page_files → complete | repair`}</Pre>
+          <P>
+            修改已有文件时先读取规范化内容及 revision，再用 <Code>edit_page_file</Code>
+            提交精确的 oldText/newText。重复创建已存在的页内组件不会覆盖文件，而是返回快照并转入同一编辑流程。
+            页面声明缺失的 <Code>/images/*</Code> 本地路径后，生图会落到该稳定路径；远程占位图则只替换对应引用。
+          </P>
+          <Callout>
+            若模型在页面尚未完成时空响应，Session 会携带当前 requirement 与唯一合法操作继续请求；
+            对明确的生图、引用替换和验证步骤还可做有界确定性恢复。动态代码诊断仍交给 Agent 处理。
           </Callout>
         </section>
 
