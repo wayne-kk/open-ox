@@ -6,13 +6,13 @@
 
 ### 你必须做什么
 
-1. 用户消息已预读 `app/layout.tsx`、`app/globals.css`、目录树，并给出 Plan 的 **`chromeForm`**。**不要**对这些再 `read_file`/`list_dir`，除非需要某个具体 component 源码。
-2. **以 Plan 的 `chromeForm` 为契约**：实现对应壳结构。若 Plan 为 `unspecified`，根据 brief / 页面纲要**自行决定**一种合理壳（常见默认 `top-nav+footer`）并在 complete summary 写明。
-3. **壳必须拆到 `components/chrome/**`**：站点级 Nav / Navbar / Header、Sidebar、Footer、bottom tabs、App Shell 框架一律写在 chrome 下，再由 `app/layout.tsx` 挂载。**禁止**把这些留在 page 里。
-4. 落盘（`write_file`/`edit_file` 即自动 Prettier，**不要** `format_code`）：
+1. 用户消息已预读 `app/layout.tsx`、`app/globals.css`、目录树，并给出 Plan 的 **`chromeForm`**。不要尝试通用文件读取或目录扫描；本阶段只有运行时绑定的 Chrome 文件命令。
+2. **以 Plan 的 `chromeForm` 为契约**：实现对应壳结构。若 Plan 为 `unspecified`，根据 brief / 页面纲要**自行决定**一种合理壳，并在 `create_chrome_layout` 的 `chromeForm` 参数中声明。
+3. **全局壳必须拆到 `components/chrome/**`**：当形态包含 Nav / Navbar / Header、Sidebar、Footer、bottom tabs 或 App Shell 时，一律写在 chrome 下，再由 `app/layout.tsx` 挂载。`chromeForm=none` 可只保留极简 layout。**禁止**把全局壳留在 page 里。
+4. 落盘（Chrome 命令会自动格式化和验证）：
    - 更新 `app/layout.tsx`：挂载 chrome + `{children}`（即使 `chromeForm=none`，也要拥有 layout；可为极简壳/无营销导航，但仍是 Chrome 所有权）。
-   - 写出 **结构完整** 的 `components/chrome/**`：样式大致对齐 design-system，**链接可占位**（用 blueprint routes）。
-5. **必须**调用 `architect_scaffold_complete` 收尾（`chromeForm` 与最终落盘一致）。
+   - 若选择全局形态，写出 **结构完整** 的 `components/chrome/**`：样式大致对齐 design-system，**链接可占位**（用 blueprint routes）。
+5. 文件齐备后调用 `verify_chrome_files`。验证干净时运行时会自动完成；没有 completion tool。
 
 ### 你不能做什么
 
@@ -30,6 +30,6 @@
 ### 输出契约
 
 - `app/layout.tsx` 存在，`export default` 渲染 chrome + `{children}`。
-- layout 引用的 chrome 组件均已落盘于 `components/chrome/**`。
-- 壳形态与 complete 的 `chromeForm` 一致 —— 让 Page Agent 有 chrome 契约可读。
-- 最终一步：**`architect_scaffold_complete`**。
+- layout 引用的 chrome 组件均已落盘于 `components/chrome/**`；`chromeForm=none` 不强制创建组件。
+- 壳形态与 `create_chrome_layout` 声明的 `chromeForm` 一致 —— 让 Page Worker 有 chrome 契约可读。
+- 最终一步：**`verify_chrome_files`**。

@@ -4,53 +4,32 @@
  */
 import {
   composePromptBlocks,
-  formatSiteFile,
   loadGuardrail,
   loadStepPrompt,
   loadSystem,
-  readSiteFile,
 } from "../shared/files";
-import { callLLMWithToolsFromMessages } from "@/ai/shared/llm/toolLoop";
 import { LfToolPhase } from "@/lib/observability/langfuseGenerationCatalog";
 import type { ChatMessage } from "@/ai/shared/llm/types";
-import type { ToolResult } from "@/ai/tools";
-import { getSystemToolDefinitions } from "@/ai/tools/systemToolCatalog";
 import { getModelForStep, getThinkingLevelForStep } from "@/lib/config/models";
+import { SiteFileSessionWorkspace } from "@/ai/shared/fileSession/siteFileSessionWorkspace";
 import type { BuildStep, PlannedProjectBlueprint, StepTrace } from "../types";
 import { resolveChromeOptimizeAgentRuleIds } from "../shared/agentRuleBundles";
 import { buildUserVisionContent } from "../shared/userVisionContent";
 import {
   buildBlueprintPagesSummary,
   buildChromeAgentTrace,
-  buildChromeCompleteTool,
   buildChromeLinkSurveyBlock,
   buildChromeLinkSurveyFromDisk,
   buildChromePreReadBlock,
   buildChromePreReadContext,
   buildChromeProjectHeader,
-  CHROME_AGENT_TOOL_NAMES,
-  CHROME_AGENT_VISIBLE_TOOL_NAMES,
-  collectChromeFilesFromToolCalls,
+  emitChromeBuildProgress,
   truncateChromeAgentText,
 } from "../shared/chromeAgentCommon";
 import { resolveChromeForm } from "../shared/chromeForm";
+import { runChromeBuildSession } from "../chromeBuildSession/chromeBuildSession";
 
 export const CHROME_OPTIMIZE_AGENT_STEP = "chrome_optimize_agent";
-export const CHROME_OPTIMIZE_COMPLETE = "chrome_optimize_complete";
-
-const completeTool = buildChromeCompleteTool(
-  CHROME_OPTIMIZE_COMPLETE,
-  "MANDATORY — call exactly once after global chrome is written. " +
-    "Preconditions: components/chrome/** exist, app/layout.tsx mounts them and renders {children}, " +
-    "Nav/Footer hrefs match the Disk survey routes and section ids.",
-  {
-    linksCorrected: {
-      type: "array",
-      items: { type: "string" },
-      description: "List of hrefs you set (e.g. '/', '/pricing', '#features').",
-    },
-  }
-);
 
 export interface PageImplementSummary {
   slug: string;
@@ -113,7 +92,7 @@ export async function runChromeOptimizeAgent(
   const preRead = buildChromePreReadContext();
   const linkSurvey = buildChromeLinkSurveyFromDisk();
 
-  const userMessage = `## Create global chrome once (pages are already implemented)
+  const userMessage = `## Polish existing global chrome (pages are already implemented)
 
 ${buildChromeProjectHeader(blueprint)}
 
@@ -135,10 +114,9 @@ ${buildChromePreReadBlock(preRead)}
 ${truncateChromeAgentText(designSystem, 6_000)}
 
 ## Workflow
-1. **Polish only** — global chrome was already scaffolded (chrome-first). Fix Nav/Footer hrefs from the Disk survey; do **not** invent a second Navigation.
-2. Shell should already exist under \`components/chrome/**\` — polish hrefs only. Pass-through is screenshot-replicate only.
-3. Optional micro-polish (sticky / mobile menu) if budget remains.
-4. Call \`${CHROME_OPTIMIZE_COMPLETE}\` promptly (target ≤8 tool rounds).
+1. **Polish only** — global chrome was already scaffolded. Use \`read_chrome_file\` for an exact revision and \`replace_chrome_file\` for a full-file CAS replacement.
+2. You may modify only the existing Chrome paths adopted by the runtime; no create or generic write command exists.
+3. After a replacement, call \`verify_chrome_files\` immediately. If no change is needed, a clean verification completes the worker.
 
 Hard rules:
 - Do **not** re-survey page section components.
@@ -169,90 +147,46 @@ Hard rules:
     },
   ];
 
-  let optimizeComplete = false;
-  let completeSummary = "";
-  let chromeForm = resolveChromeForm({ chromeForm: scaffoldContext.chromeForm });
+  const chromeForm = resolveChromeForm({ chromeForm: scaffoldContext.chromeForm });
 
   const maxIterations = Math.max(
     6,
     Math.min(14, Number(process.env.CHROME_OPTIMIZE_AGENT_MAX_ITERATIONS ?? 10))
   );
 
-  const { content, toolCalls } = await callLLMWithToolsFromMessages({
-    messages,
-    tools: [...getSystemToolDefinitions([...CHROME_AGENT_TOOL_NAMES]), completeTool],
-    temperature: 0.35,
-    maxIterations,
-    completionProfile: "code",
-    contextSessionKind: "chrome",
+  const build = await runChromeBuildSession({
+    profile: "optimize",
+    chromeForm,
+    initialMessages: messages,
     model,
     ...(thinking ? { thinkingLevel: thinking } : {}),
-    executeToolOverrides: {
-      [CHROME_OPTIMIZE_COMPLETE]: async (
-        args: Record<string, unknown>
-      ): Promise<ToolResult> => {
-        optimizeComplete = true;
-        completeSummary = typeof args.summary === "string" ? args.summary.trim() : "";
-        chromeForm = resolveChromeForm({
-          chromeForm:
-            typeof args.chromeForm === "string" && args.chromeForm.trim()
-              ? args.chromeForm.trim()
-              : chromeForm,
-        });
-        return { success: true, output: "chrome_optimize_complete acknowledged" };
-      },
-    },
-    onMessage,
-    shouldAbortAfterToolResults: () => optimizeComplete,
-    onToolCall: ({ name, args, iteration }) => {
-      if (!onStep) return;
-      if (CHROME_AGENT_VISIBLE_TOOL_NAMES.has(name)) {
-        const filePath = String(args.path ?? "");
-        onStep({
-          step: `chrome_optimize_agent_tool:${name}:${iteration}`,
-          status: "ok",
-          detail: `${name.replace("_", " ")}: ${filePath}`,
-          timestamp: Date.now(),
-          duration: 0,
-        });
+    maxIterations,
+    workspace: new SiteFileSessionWorkspace(),
+    existingChromePaths: linkSurvey.chromeFiles.map((file) => file.path),
+    onEvent: (event) => {
+      if (event.kind === "message") {
+        onMessage?.(event.message);
+        return;
       }
-      const detail =
-        name === "read_file" || name === "list_dir" || name === "search_code"
-          ? `reading ${String(args.path ?? args.query ?? "").split("/").pop() || "..."}`
-          : name === "write_file" || name === "edit_file"
-            ? `writing ${String(args.path ?? "").split("/").pop() || "..."}`
-            : name === "install_package"
-              ? `installing ${String(args.package_name ?? args.packageName ?? "")}`
-              : undefined;
-      if (detail) {
-        onStep({
-          step: CHROME_OPTIMIZE_AGENT_STEP,
-          status: "active",
-          detail: `[iter ${iteration + 1}/${maxIterations}] ${detail}`,
-          timestamp: Date.now(),
-          duration: 0,
-        });
-      }
-    },
-    onApproachingLimit: ({ messages: msgs }) => {
-      const nudge: ChatMessage = {
-        role: "system",
-        content:
-          `[Iteration Budget] Finish chrome NOW:\n` +
-          `1. Ensure layout mounts chrome and Nav/Footer hrefs match the Disk survey.\n` +
-          `2. Call \`${CHROME_OPTIMIZE_COMPLETE}\` — do not read more page components.`,
-      };
-      msgs.push(nudge);
-      onMessage?.(nudge);
+      emitChromeBuildProgress({
+        event,
+        stepId: CHROME_OPTIMIZE_AGENT_STEP,
+        maxIterations,
+        onStep,
+      });
     },
     langfusePhase: LfToolPhase.chromeOptimize,
   });
-
-  if (readSiteFile("app/layout.tsx")) {
-    await formatSiteFile("app/layout.tsx");
+  const { content, toolCalls } = build;
+  if (build.finalDecision.kind !== "complete") {
+    throw new Error(
+      `chrome_optimize_agent stopped after ${build.iterationsUsed}/${maxIterations} iterations: ` +
+        `${build.finalDecision.kind === "continue" ? build.finalDecision.reason : build.finalDecision.error}. ` +
+        `Empty-stop recoveries: ${build.emptyStopRecoveries}/2. Model: ${model}, tool calls: ${toolCalls.length}.`,
+    );
   }
-
-  const writtenFiles = collectChromeFilesFromToolCalls(toolCalls);
+  const completeSummary = content || "Existing Chrome artifacts verified.";
+  const writtenFiles = new Set(build.writtenPaths);
   const trace = buildChromeAgentTrace({
     blueprint,
     chromeForm,

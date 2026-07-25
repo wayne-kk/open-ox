@@ -1,22 +1,9 @@
 import { existsSync, readdirSync, statSync } from "fs";
 import { join, relative } from "path";
-import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { getSiteRoot } from "@/ai/tools/system/common";
 import { listSiteTree, readSiteFile } from "./files";
-import type { PlannedProjectBlueprint, StepTrace } from "../types";
-
-export const CHROME_AGENT_TOOL_NAMES = [
-  "read_file",
-  "write_file",
-  "edit_file",
-  "list_dir",
-  "search_code",
-  "format_code",
-  "read_lints",
-  "think",
-  "install_package",
-  "revert_file",
-] as const;
+import type { BuildStep, PlannedProjectBlueprint, StepTrace } from "../types";
+import type { ChromeBuildEvent } from "../chromeBuildSession/chromeBuildSession";
 
 /** Form / widget ids that must not become Nav anchors. */
 const ANCHOR_ID_NOISE = new Set([
@@ -186,6 +173,45 @@ export function buildChromeLinkSurveyFromDisk(): ChromeLinkSurvey {
   return { routes, sectionIds, chromeFiles };
 }
 
+/** Existing Chrome source paths used to bind create/adopt ownership at session start. */
+export function buildChromeFilePathsFromDisk(): string[] {
+  return walkSiteRelativeFiles("components/chrome", {
+    match: (rel) => rel.endsWith(".tsx") || rel.endsWith(".ts"),
+  });
+}
+
+export function emitChromeBuildProgress(params: {
+  event: ChromeBuildEvent;
+  stepId: string;
+  maxIterations: number;
+  onStep?: (step: BuildStep) => void;
+}): void {
+  const { event, stepId, maxIterations, onStep } = params;
+  if (event.kind !== "tool" || !onStep) return;
+  const cached = typeof event.result === "object" && event.result.meta?.cached === true;
+  if (event.activity === "write" && event.path && !cached) {
+    onStep({
+      step: `${stepId}_file:${event.path}`,
+      status: typeof event.result === "string" || event.result.success ? "ok" : "error",
+      detail: `${event.name.replaceAll("_", " ")}: ${event.path}`,
+      timestamp: Date.now(),
+      duration: 0,
+    });
+  }
+  if (event.activity === "read" || event.activity === "write") {
+    onStep({
+      step: stepId,
+      status: "active",
+      detail:
+        `[iter ${event.iteration + 1}/${maxIterations}] ` +
+        `${event.activity === "read" ? "reading" : "writing"} ` +
+        `${event.path?.split("/").pop() || "..."}`,
+      timestamp: Date.now(),
+      duration: 0,
+    });
+  }
+}
+
 export function buildChromeLinkSurveyBlock(survey: ChromeLinkSurvey): string {
   const routesBlock =
     survey.routes.length === 0
@@ -225,12 +251,6 @@ Hard constraint from this survey:
 - Do **not** modify any \`app/**/page.tsx\` (layout excepted).
 - Do **not** change chrome form / mount a second shell — polish links only.`;
 }
-
-export const CHROME_AGENT_VISIBLE_TOOL_NAMES = new Set([
-  "write_file",
-  "edit_file",
-  "install_package",
-]);
 
 export function truncateChromeAgentText(text: string, max: number): string {
   if (text.length <= max) return text;
@@ -340,21 +360,6 @@ ${preRead.componentsTree}
 \`\`\``;
 }
 
-export function collectChromeFilesFromToolCalls(
-  toolCalls: { name: string; args: Record<string, unknown> }[]
-): Set<string> {
-  const writtenFiles = new Set<string>(["app/layout.tsx"]);
-  for (const call of toolCalls) {
-    if (call.name === "write_file" || call.name === "edit_file") {
-      const path = typeof call.args.path === "string" ? call.args.path : "";
-      if (path && (path.startsWith("app/") || path.startsWith("components/"))) {
-        writtenFiles.add(path);
-      }
-    }
-  }
-  return writtenFiles;
-}
-
 export function buildChromeAgentTrace(params: {
   blueprint: PlannedProjectBlueprint;
   chromeForm: string;
@@ -401,37 +406,6 @@ export function buildChromeAgentTrace(params: {
       systemPrompt: truncateChromeAgentText(systemPrompt, 4000),
       userMessage: truncateChromeAgentText(userMessage, 4000),
       rawResponse: truncateChromeAgentText(content, 8000),
-    },
-  };
-}
-
-export function buildChromeCompleteTool(
-  toolName: string,
-  description: string,
-  extraProperties?: Record<string, unknown>
-): ChatCompletionTool {
-  return {
-    type: "function",
-    function: {
-      name: toolName,
-      description,
-      parameters: {
-        type: "object",
-        properties: {
-          summary: {
-            type: "string",
-            description:
-              "Brief summary (2–4 sentences): what you did, files touched, key decisions.",
-          },
-          chromeForm: {
-            type: "string",
-            description:
-              "Chrome family actually written: 'top-nav+footer' | 'top-nav' | 'sidebar' | 'bottom-tabs' | 'none'. Never 'page-local'.",
-          },
-          ...extraProperties,
-        },
-        required: ["summary", "chromeForm"],
-      },
     },
   };
 }

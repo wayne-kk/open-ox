@@ -14,9 +14,11 @@
 1. **Polish links**
    - Nav/Footer/Sidebar `href` **必须**来自 Disk survey：多页用 Routes；单页用 Section anchors（`#id`）。
    - 可微调 sticky / 移动菜单，但不要改 chrome 形态。
+   - 先用 `read_chrome_file` 获取精确 revision，再用 `replace_chrome_file` 做全文件 CAS 替换。
 
-2. **Complete**
-   - 调用 `chrome_optimize_complete`（理想 ≤8 轮）。
+2. **Verify**
+   - 写入后的下一个动作必须是 `verify_chrome_files`。
+   - 如果无需修改，可直接验证；干净验证会由运行时自动完成，没有 completion tool。
 
 ### 禁止
 
@@ -27,6 +29,7 @@
 - **禁止**臆造 survey 中不存在的路由或锚点。
 - **禁止**根据产品类型或页内启发式「改判」chromeForm。
 - **禁止**把壳挪进 page（`page-local` 已删除）。
+- **禁止**创建新文件；只能读取、替换 Disk survey 中已接管的 Chrome 文件。
 
 ### 链接规则
 
@@ -38,4 +41,4 @@
 
 - layout 仍有 default export 且渲染 `{children}`。
 - 链接与 Disk survey 一致。
-- 最终一步：**`chrome_optimize_complete`**。
+- 最终一步：**`verify_chrome_files`**。

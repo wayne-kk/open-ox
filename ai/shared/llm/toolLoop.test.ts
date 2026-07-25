@@ -269,6 +269,53 @@ describe("callLLMWithToolsFromMessages", () => {
     expect(result.toolCalls[1]?.result).toMatchObject({ success: false });
   });
 
+  it("serializes Chrome stateful calls even when a provider returns them in one response", async () => {
+    const executionOrder: string[] = [];
+    gateway.chatCompletion
+      .mockResolvedValueOnce({
+        ...response({ finishReason: "tool_calls", content: null }),
+        choices: [{
+          index: 0,
+          finish_reason: "tool_calls",
+          message: {
+            role: "assistant",
+            content: null,
+            tool_calls: [
+              { id: "read", function: { name: "read_chrome_file", arguments: "{}" } },
+              { id: "replace", function: { name: "replace_chrome_file", arguments: "{}" } },
+            ],
+          },
+        }],
+      })
+      .mockResolvedValueOnce(response({ finishReason: "stop", content: "done" }));
+
+    await callLLMWithToolsFromMessages({
+      messages: initialMessages(),
+      tools: [
+        { ...probeTool(), function: { ...probeTool().function, name: "read_chrome_file" } },
+        { ...probeTool(), function: { ...probeTool().function, name: "replace_chrome_file" } },
+      ],
+      model: "probe-model",
+      maxIterations: 2,
+      completionProfile: "code",
+      parallelToolCalls: false,
+      executeToolOverrides: {
+        read_chrome_file: async () => {
+          executionOrder.push("read:start");
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          executionOrder.push("read:end");
+          return "read";
+        },
+        replace_chrome_file: async () => {
+          executionOrder.push("replace");
+          return "replaced";
+        },
+      },
+    });
+
+    expect(executionOrder).toEqual(["read:start", "read:end", "replace"]);
+  });
+
   it("allows a caller to recover an empty assistant stop and require another round", async () => {
     gateway.chatCompletion
       .mockResolvedValueOnce(response({ finishReason: "stop", content: null }))

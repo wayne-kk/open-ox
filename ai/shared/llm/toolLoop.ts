@@ -39,6 +39,9 @@ const SOURCE_MUTATION_TOOL_NAMES = new Set([
   "create_target_page",
   "create_page_component",
   "replace_page_file",
+  "create_chrome_layout",
+  "create_chrome_component",
+  "replace_chrome_file",
 ]);
 
 function estimateTextTokens(value: string): number {
@@ -854,7 +857,15 @@ export async function callLLMWithToolsFromMessages(params: {
  * `tool_calls` batch, the whole batch falls back to serial execution
  * to preserve the previous safe semantics.
  */
-const SERIAL_ONLY_TOOLS = new Set<string>(["install_package", "exec_shell"]);
+const SERIAL_ONLY_TOOLS = new Set<string>([
+  "install_package",
+  "exec_shell",
+  "create_chrome_layout",
+  "create_chrome_component",
+  "read_chrome_file",
+  "replace_chrome_file",
+  "verify_chrome_files",
+]);
 
 interface ParsedToolCall {
   id: string;
