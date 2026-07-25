@@ -143,11 +143,9 @@ export function pageBuildPhase(spec: Pick<PageBuildSessionSpec, "targetPath" | "
   return spec.fileSession.currentDiagnostics().length > 0 ? "repair" : "build";
 }
 
-export function pageBuildTaskState(
+function pageBuildRuntimeState(
   spec: Pick<PageBuildSessionSpec, "slug" | "targetPath" | "componentRoot" | "fileSession">,
-): DurableTaskState {
-  const phase = pageBuildPhase(spec);
-  const decision = spec.fileSession.stopDecision();
+) {
   const latestMutations = new Map<string, { path: string; operation: string; revision?: string; outcome: "success" }>();
   for (const event of spec.fileSession.events()) {
     if (!event.path || (event.kind !== "file_created" && event.kind !== "file_updated")) continue;
@@ -159,33 +157,46 @@ export function pageBuildTaskState(
     });
   }
   return {
+    phase: pageBuildPhase(spec),
+    decision: spec.fileSession.stopDecision(),
+    target: latestEventForPath(spec.fileSession, spec.targetPath),
+    writtenPaths: spec.fileSession.writtenPaths(),
+    diagnostics: spec.fileSession.currentDiagnostics(),
+    mutations: [...latestMutations.values()],
+    ownership: `${spec.targetPath}, ${spec.componentRoot}/**`,
+  };
+}
+
+export function pageBuildTaskState(
+  spec: Pick<PageBuildSessionSpec, "slug" | "targetPath" | "componentRoot" | "fileSession">,
+): DurableTaskState {
+  const state = pageBuildRuntimeState(spec);
+  return {
     goal: `Build route ${spec.slug}`,
     targetPaths: [spec.targetPath],
-    mutations: [...latestMutations.values()],
-    unresolvedDiagnostics: spec.fileSession.currentDiagnostics().map((diagnostic) => ({
+    mutations: state.mutations,
+    unresolvedDiagnostics: state.diagnostics.map((diagnostic) => ({
       path: diagnostic.path,
       summary: diagnostic.message,
     })),
     decisions: [
-      `phase=${phase}`,
-      `next=${decision.kind === "continue" ? decision.reason : decision.kind}`,
-      `ownership=${spec.targetPath}, ${spec.componentRoot}/**`,
+      `phase=${state.phase}`,
+      `next=${state.decision.kind === "continue" ? state.decision.reason : state.decision.kind}`,
+      `ownership=${state.ownership}`,
     ],
   };
 }
 
 export function pageBuildStateCard(spec: Pick<PageBuildSessionSpec, "slug" | "targetPath" | "componentRoot" | "fileSession">): string {
-  const phase = pageBuildPhase(spec);
-  const target = latestEventForPath(spec.fileSession, spec.targetPath);
-  const decision = spec.fileSession.stopDecision();
+  const state = pageBuildRuntimeState(spec);
   return [
     `[Page build state: ${spec.slug}]`,
-    `phase: ${phase}`,
+    `phase: ${state.phase}`,
     `target: ${spec.targetPath}`,
-    `target_revision: ${target?.revision ?? "missing"}`,
-    `written_paths: ${spec.fileSession.writtenPaths().join(", ") || "none"}`,
-    `next: ${decision.kind === "continue" ? decision.reason : decision.kind}`,
-    `ownership: ${spec.targetPath}, ${spec.componentRoot}/**`,
+    `target_revision: ${state.target?.revision ?? "missing"}`,
+    `written_paths: ${state.writtenPaths.join(", ") || "none"}`,
+    `next: ${state.decision.kind === "continue" ? state.decision.reason : state.decision.kind}`,
+    `ownership: ${state.ownership}`,
   ].join("\n");
 }
 
