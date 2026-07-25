@@ -47,6 +47,25 @@ describe("buildProviderPayload", () => {
     expect(parameters.properties.line.type).toBe("integer");
   });
 
+  it("drops empty Gemini assistant turns without tool calls", () => {
+    const payload = buildProviderPayload({
+      ...base,
+      messages: [
+        { role: "system", content: "You are helpful." },
+        { role: "user", content: "Build" },
+        { role: "assistant", content: "" },
+        { role: "user", content: "Continue" },
+      ],
+    });
+
+    expect(payload.messages).toEqual([
+      { role: "system", content: "You are helpful." },
+      { role: "user", content: "Build" },
+      { role: "user", content: "Continue" },
+    ]);
+    expect(() => validateProviderPayload(payload, "gemini-compatible")).not.toThrow();
+  });
+
   it("preserves supported OpenAI request controls", () => {
     const payload = buildProviderPayload({ ...base, model: "gpt-probe", provider: "openai" });
     expect(payload.tool_choice).toBe("required");

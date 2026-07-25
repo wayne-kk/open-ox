@@ -49,9 +49,20 @@ function normalizeMessage(message: ChatMessage): ChatMessage {
   return { ...message };
 }
 
+function isEmptyAssistantTurn(message: ChatMessage): boolean {
+  if (message.role !== "assistant" || (message.tool_calls?.length ?? 0) > 0) return false;
+  if (message.content === null) return true;
+  if (typeof message.content === "string") return message.content.trim().length === 0;
+  return message.content.length === 0 || message.content.every(
+    (part) => part.type === "text" && part.text.trim().length === 0,
+  );
+}
+
 function geminiMessages(messages: readonly ChatMessage[]): ChatMessage[] {
   let conversationStarted = false;
-  return messages.map(normalizeMessage).map((message) => {
+  return messages.map(normalizeMessage).filter(
+    (message) => !isEmptyAssistantTurn(message),
+  ).map((message) => {
     if (message.role !== "system") {
       conversationStarted = true;
       return message;
@@ -121,6 +132,9 @@ export function validateProviderPayload(payload: ProviderPayload, provider: LlmP
   }
   if (provider === "gemini-compatible" && last?.role === "assistant") {
     throw new Error("PROVIDER_PROTOCOL_INVALID: request ends with an assistant/model turn");
+  }
+  if (provider === "gemini-compatible" && payload.messages.some(isEmptyAssistantTurn)) {
+    throw new Error("PROVIDER_PROTOCOL_INVALID: Gemini-compatible history contains an empty assistant/model turn");
   }
   const pendingCalls = new Map<string, string>();
   const seenCallIds = new Set<string>();
