@@ -1,7 +1,6 @@
 /**
  * Per-route UI via multi-turn system tools (Cursor-style), without a fixed section manifest.
  */
-import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import {
   composePromptBlocks,
   loadGuardrail,
@@ -9,10 +8,8 @@ import {
   loadSystem,
   readSiteFile,
 } from "../shared/files";
-import { callLLMWithToolsFromMessages } from "@/ai/shared/llm/toolLoop";
 import { lfPageImplementPhaseSlug } from "@/lib/observability/langfuseGenerationCatalog";
 import type { ChatMessage } from "@/ai/shared/llm/types";
-import type { ToolResult } from "@/ai/tools";
 import { getSystemToolDefinitions } from "@/ai/tools/systemToolCatalog";
 import { createRequiredImageExecutor } from "@/ai/tools/system/generateImageTool";
 import type { PendingImage } from "@/ai/tools/system/generateImageTool";
@@ -50,8 +47,6 @@ import {
 import { resolvePageAgentMaxIterations } from "../shared/pageAgentToolLoop";
 import {
   createFileSession,
-  fileSessionTools,
-  type FileSessionCall,
   type FileSessionWorkspace,
 } from "@/ai/shared/fileSession/fileSession";
 import { SiteFileSessionWorkspace } from "@/ai/shared/fileSession/siteFileSessionWorkspace";
@@ -60,6 +55,7 @@ import {
   createPageImageAssetSession,
   createPublicImageAssetExists,
 } from "../shared/pageImageCompletionPolicy";
+import { runPageBuildSession } from "../pageBuildSession/pageBuildSession";
 
 function truncate(text: string, max: number): string {
   if (text.length <= max) return text;
@@ -125,7 +121,7 @@ export function createPageFileSession(options: {
   });
 }
 
-const VISIBLE_TOOL_NAMES = new Set(["create_file", "apply_file_patch"]);
+const VISIBLE_TOOL_NAMES = new Set(["create_target_page", "create_page_component", "replace_page_file"]);
 
 export interface RunPageImplementAgentParams {
   page: PlannedPageBlueprint;
@@ -282,101 +278,28 @@ export async function runPageImplementAgent(
       ? buildGenerateImageToolForPageAgent(userImageCount)
       : getSystemToolDefinitions(["generate_image"])[0];
 
-  const fullPageTools: ChatCompletionTool[] = [
-    ...fileSessionTools,
-    ...(imageTool ? [imageTool] : []),
-  ];
   const maxIterations = resolvePageAgentMaxIterations();
-  let emptyStopRecoveries = 0;
-  let iterationsUsed = 0;
-  const executeFileCommand = async (
-    name: FileSessionCall["name"],
-    args: Record<string, unknown>,
-  ): Promise<ToolResult> => {
-    const event = await fileSession.execute({ name, args });
-    if (!event.success) {
-      console.warn(
-        `[page_implement_agent:${page.slug}] file command failed ` +
-          `iteration=${iterationsUsed} tool=${name} path=${event.path ?? "(none)"} ` +
-          `code=${event.code ?? "UNKNOWN"} retryable=${event.retryable ?? false} ` +
-          `error=${event.error ?? "Unknown error"}`,
-      );
-    }
-    return event.success
-      ? {
-          success: true,
-          output: JSON.stringify(event),
-          meta: {
-            path: event.path,
-            revision: event.revision,
-            eventKind: event.kind,
-            cached: event.cached,
-          },
-        }
-      : {
-          success: false,
-          error: `${event.code}: ${event.error}`,
-          meta: {
-            path: event.path,
-            code: event.code,
-            retryable: event.retryable,
-            eventKind: event.kind,
-          },
-        };
-  };
-
-  const { content, toolCalls } = await callLLMWithToolsFromMessages({
-    messages,
-    tools: fullPageTools,
-    temperature: 0.5,
+  const build = await runPageBuildSession({
+    slug: page.slug,
+    targetPath,
+    componentRoot,
+    initialMessages: messages,
     maxIterations,
-    completionProfile: "code",
     model,
     ...(thinking ? { thinkingLevel: thinking } : {}),
-    executeToolOverrides: {
-      create_file: (args) => executeFileCommand("create_file", args),
-      read_file_snapshot: (args) => executeFileCommand("read_file_snapshot", args),
-      apply_file_patch: (args) => executeFileCommand("apply_file_patch", args),
-      verify_files: (args) => executeFileCommand("verify_files", args),
-      generate_image: imageExecutor,
-    },
-    resolveToolsForIteration: (_iteration, defaults) => {
-      const legalFileToolNames = new Set(
-        fileSession.tools().map((tool) => tool.function?.name),
-      );
-      return defaults.filter(
-        (tool) =>
-          tool.function?.name === "generate_image" ||
-          legalFileToolNames.has(tool.function?.name),
-      );
-    },
-    resolveToolChoiceForIteration: () =>
-      fileSession.stopDecision().kind === "complete" ? "auto" : "required",
-    onMessage,
-    onAssistantRound: ({ iteration }) => {
-      iterationsUsed = Math.max(iterationsUsed, iteration + 1);
-    },
-    onAssistantStop: ({ messages: msgs }) => {
-      const decision = fileSession.stopDecision();
-      if (decision.kind === "complete" || emptyStopRecoveries >= 2) return false;
-      emptyStopRecoveries += 1;
-      const nudge: ChatMessage = {
-        role: "user",
-        content:
-          `[File session recovery ${emptyStopRecoveries}/2] ${decision.kind === "continue" ? decision.reason : decision.error}. ` +
-          `Use create_file for a missing path, or read_file_snapshot then apply_file_patch for an existing path.`,
-      };
-      msgs.push(nudge);
-      onMessage?.(nudge);
-      return true;
-    },
-    shouldAbortAfterToolResults: () => fileSession.stopDecision().kind !== "continue",
-    requireTools: true,
-    onToolCall: ({ name, args, iteration, result }) => {
+    fileSession,
+    ...(imageTool ? { image: { tool: imageTool, execute: imageExecutor } } : {}),
+    onEvent: (event) => {
+      if (event.kind === "message") {
+        onMessage?.(event.message);
+        return;
+      }
+      if (event.kind !== "tool" || !onStep) return;
+      const { name, args, iteration, result } = event;
       if (!onStep) return;
       const cached = typeof result === "object" && result.meta?.cached === true;
       if (VISIBLE_TOOL_NAMES.has(name) && !cached) {
-        const filePath = String(args.path ?? "");
+        const filePath = name === "create_target_page" ? targetPath : String(args.path ?? "");
         const succeeded = typeof result === "string" || result.success;
         onStep({
           step: `page_agent_file:${page.slug}:${filePath}`,
@@ -389,15 +312,15 @@ export async function runPageImplementAgent(
         });
       }
       const detail =
-        name === "read_file_snapshot"
+        name === "read_page_file"
           ? `reading ${
               String(args.path ?? "")
                 .split("/")
                 .pop() || "..."
             }`
-          : name === "create_file" || name === "apply_file_patch"
+          : name === "create_target_page" || name === "create_page_component" || name === "replace_page_file"
             ? `writing ${
-                String(args.path ?? "")
+                (name === "create_target_page" ? targetPath : String(args.path ?? ""))
                   .split("/")
                   .pop() || "..."
               }`
@@ -412,22 +335,16 @@ export async function runPageImplementAgent(
         });
       }
     },
-    onApproachingLimit: ({ messages: msgs }) => {
-      const nudge: ChatMessage = {
-        role: "system",
-        content:
-          `[Iteration Budget] You have used most of your available tool-calling rounds. ` +
-          `Wrap up now:\n` +
-          `Ensure \`${targetPath}\` is implemented and clean. Use verify_files; completion is automatic. ` +
-          `Do not start new files or features.`,
-      };
-      msgs.push(nudge);
-      onMessage?.(nudge);
-    },
     langfusePhase: lfPageImplementPhaseSlug(page.slug),
   });
+  const {
+    content,
+    toolCalls,
+    iterationsUsed,
+    emptyStopRecoveries,
+    finalDecision,
+  } = build;
 
-  const finalDecision = fileSession.stopDecision();
   if (finalDecision.kind !== "complete") {
     throw new Error(
       `page_implement_agent:${page.slug}: stopped after ${iterationsUsed}/${maxIterations} iterations ` +

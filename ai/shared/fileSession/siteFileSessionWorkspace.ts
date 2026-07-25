@@ -1,6 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname, extname } from "path";
-import ts from "typescript";
 import { getSiteRoot } from "@/ai/tools/system/common";
 import { tryFormatSource } from "@/ai/tools/system/prettierFormat";
 import {
@@ -24,17 +23,25 @@ function diagnosticsOf(path: string, diagnostics: Array<{ message: string; line?
   return diagnostics.map((diagnostic) => ({ path, ...diagnostic }));
 }
 
-function applyEdits(content: string, path: string, edits: FileSessionTextEdit[]): string {
-  const source = ts.createSourceFile(
-    path,
-    content,
-    ts.ScriptTarget.Latest,
-    true,
-    path.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-  );
+export function applyFileSessionEdits(content: string, edits: FileSessionTextEdit[]): string {
+  const lineStarts = [0];
+  for (let index = 0; index < content.length; index += 1) {
+    if (content[index] === "\n") lineStarts.push(index + 1);
+  }
+  const offset = (line: number, character: number): number => {
+    if (!Number.isSafeInteger(line) || !Number.isSafeInteger(character) || line < 0 || character < 0) {
+      throw new Error("INVALID_PATCH_RANGE");
+    }
+    const start = lineStarts[line];
+    if (start === undefined) throw new Error("INVALID_PATCH_RANGE");
+    const rawEnd = line + 1 < lineStarts.length ? lineStarts[line + 1]! - 1 : content.length;
+    const end = rawEnd > start && content[rawEnd - 1] === "\r" ? rawEnd - 1 : rawEnd;
+    if (character > end - start) throw new Error("INVALID_PATCH_RANGE");
+    return start + character;
+  };
   const offsets = edits.map(({ range, newText }) => ({
-    start: source.getPositionOfLineAndCharacter(range.start.line, range.start.character),
-    end: source.getPositionOfLineAndCharacter(range.end.line, range.end.character),
+    start: offset(range.start.line, range.start.character),
+    end: offset(range.end.line, range.end.character),
     newText,
   })).sort((a, b) => b.start - a.start);
   for (const edit of offsets) {
@@ -94,7 +101,7 @@ export class SiteFileSessionWorkspace implements FileSessionWorkspace {
     const current = await this.read(path);
     if (current.revision !== baseRevision) throw new Error("STALE_REVISION");
     const fullPath = this.fullPath(path);
-    const next = applyEdits(current.content, path, edits);
+    const next = applyFileSessionEdits(current.content, edits);
     const formatted = await tryFormatSource(next, fullPath, extname(fullPath));
     // Compare immediately before commit so concurrent page workers cannot overwrite a newer revision.
     const beforeCommit = readFileSync(fullPath, "utf-8");

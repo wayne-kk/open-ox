@@ -33,13 +33,11 @@ const SOURCE_MUTATION_TOOL_NAMES = new Set([
   "edit_file",
   "create_file",
   "apply_file_patch",
+  "replace_file",
+  "create_target_page",
+  "create_page_component",
+  "replace_page_file",
 ]);
-const CODE_TOOL_CALL_POLICY: ChatMessage = {
-  role: "system",
-  content:
-    "[Tool-call policy] Read-only tools may be called in parallel. " +
-    "When using write_file or edit_file, make exactly one source mutation call in that response.",
-};
 
 function estimateTextTokens(value: string): number {
   let asciiCharacters = 0;
@@ -449,6 +447,8 @@ export async function callLLMWithToolsFromMessages(params: {
   completionProfile?: ToolLoopCompletionProfile;
   /** Typed context identity used by staged AgentContext rollout. */
   contextSessionKind?: ContextSessionKind;
+  /** Managed sessions always use AgentContext; rollout sessions follow environment flags. */
+  contextMode?: "rollout" | "managed";
   /** When false, the model may only call one tool per turn. */
   parallelToolCalls?: boolean;
   model?: string;
@@ -549,7 +549,8 @@ export async function callLLMWithToolsFromMessages(params: {
   );
   const configuredModel = getAllModels().find((candidate) => candidate.id === model);
   const contextSessionKind = params.contextSessionKind ?? "page";
-  const agentContext = params.completionProfile && isAgentContextV2Enabled(contextSessionKind)
+  const agentContext = params.completionProfile &&
+    (params.contextMode === "managed" || isAgentContextV2Enabled(contextSessionKind))
     ? createAgentContext(
         {
           sessionId: `${phase}:${crypto.randomUUID()}`,
@@ -593,7 +594,7 @@ export async function callLLMWithToolsFromMessages(params: {
     }
 
     let roundCompletionMaxTokens: number | undefined;
-    const requestRound = async (lengthRetry: boolean) => {
+    const requestRound = async (lengthRetry: boolean, providerArgumentRetry = false) => {
       await syncContext();
       const projection = agentContext
         ? await agentContext.project({
@@ -614,10 +615,7 @@ export async function callLLMWithToolsFromMessages(params: {
         : lengthRetry || params.completionProfile === "code"
           ? compactToolHistoryForRequest(messages, params.completionProfile === "code")
           : messages;
-      const requestMessages =
-        params.completionProfile === "code"
-          ? [...compactedMessages, CODE_TOOL_CALL_POLICY]
-          : compactedMessages;
+      const requestMessages = compactedMessages;
       assertRequestEndsWithValidTurn(requestMessages);
       roundCompletionMaxTokens = projection?.maxCompletionTokens ?? resolveCompletionMaxTokens(
         params.completionProfile, model, requestMessages, activeTools,
@@ -629,24 +627,25 @@ export async function callLLMWithToolsFromMessages(params: {
         ...(roundCompletionMaxTokens
           ? { max_tokens: roundCompletionMaxTokens }
           : {}),
-        ...(lengthRetry
+        ...(!providerArgumentRetry && lengthRetry
           ? { parallel_tool_calls: false }
-          : params.parallelToolCalls === false
+          : !providerArgumentRetry && params.parallelToolCalls === false
             ? { parallel_tool_calls: false }
             : {}),
         tools: activeTools.length > 0 ? activeTools : undefined,
-        tool_choice: activeTools.length > 0 ? toolChoice : undefined,
-        ...(lengthRetry
+        tool_choice: activeTools.length > 0 && !providerArgumentRetry ? toolChoice : undefined,
+        ...(!providerArgumentRetry && lengthRetry
           ? { thinking_level: "minimal" }
-          : params.thinkingLevel
+          : !providerArgumentRetry && params.thinkingLevel
             ? { thinking_level: params.thinkingLevel }
             : {}),
         langfuseGenerationName: `${lfToolAgentRound(phase, iteration)}${
-          lengthRetry ? ".length_retry_1" : ""
+          lengthRetry ? ".length_retry_1" : providerArgumentRetry ? ".provider_argument_retry_1" : ""
         }`,
         langfuseGenerationMetadata: {
           iteration: iteration + 1,
           lengthRetry: lengthRetry ? 1 : 0,
+          providerArgumentRetry: providerArgumentRetry ? 1 : 0,
           ...params.langfuseGenerationMetadata,
         },
       });
@@ -710,7 +709,29 @@ export async function callLLMWithToolsFromMessages(params: {
           msgLower.includes("upstream_error") ||
           msgLower.includes("bad_response_status_code"));
 
-      if (shouldDisableTools) {
+      const explicitlyRejectsTools =
+        /(?:tools?|function(?: declaration| calling)?|tool schema).{0,80}(?:not supported|unsupported|invalid)/i.test(msg) ||
+        /(?:not supported|unsupported|invalid).{0,80}(?:tools?|function(?: declaration| calling)?|tool schema)/i.test(msg);
+
+      const genericInvalidArgument =
+        shouldDisableTools &&
+        !explicitlyRejectsTools &&
+        (msgLower.includes("invalid_argument") || msgLower.includes("invalid argument"));
+
+      if (genericInvalidArgument) {
+        try {
+          res = await requestRound(false, true);
+          // Continue the normal response path with tools intact. This retry
+          // strips only optional compatibility-layer request parameters.
+        } catch (retryError) {
+          const retryMessage = retryError instanceof Error ? retryError.message : String(retryError);
+          throw new Error(
+            `Provider rejected request arguments after one minimal retry. ` +
+              `Model: ${model}. Detail: ${retryMessage.slice(0, 500)}`,
+          );
+        }
+      } else if (shouldDisableTools) {
+
         if (requireTools) {
           throw new Error(
             `Model "${model}" rejected the tool-calling payload (HTTP 400). ` +
@@ -723,8 +744,9 @@ export async function callLLMWithToolsFromMessages(params: {
         );
         activeTools = [];
         continue;
+      } else {
+        throwClassifiedLLMError(err, model);
       }
-      throwClassifiedLLMError(err, model);
     }
 
     const message = res.choices[0]?.message;

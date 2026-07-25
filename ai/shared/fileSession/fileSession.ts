@@ -46,6 +46,10 @@ export type FileSessionCall =
       name: "apply_file_patch";
       args: { path: string; baseRevision: string; edits: FileSessionTextEdit[] };
     }
+  | {
+      name: "replace_file";
+      args: { path: string; baseRevision: string; content: string };
+    }
   | { name: "verify_files"; args: { paths?: string[] } };
 
 export interface FileSessionEvent {
@@ -210,6 +214,18 @@ function parseFileSessionCall(value: unknown): ParseResult {
       },
     };
   }
+  if (value.name === "replace_file") {
+    if (!nonEmptyString(args.baseRevision)) {
+      return { success: false, path: args.path, error: "replace_file.baseRevision must be a non-empty string" };
+    }
+    if (typeof args.content !== "string" || args.content.length === 0) {
+      return { success: false, path: args.path, error: "replace_file.content must be a non-empty string" };
+    }
+    return {
+      success: true,
+      call: { name: value.name, args: { path: args.path, baseRevision: args.baseRevision, content: args.content } },
+    };
+  }
   return { success: false, path, error: `Unknown file command: ${value.name}` };
 }
 
@@ -228,7 +244,7 @@ export function createFileSession(options: FileSessionOptions): FileSession {
   const executeCore = async (call: FileSessionCall): Promise<FileSessionEvent> => {
     const digest = commandDigest(call);
     const cacheableMutation =
-      call.name === "create_file" || call.name === "apply_file_patch";
+      call.name === "create_file" || call.name === "apply_file_patch" || call.name === "replace_file";
     const cached = cacheableMutation ? cachedCalls.get(digest) : undefined;
     if (cached) return { ...cached, cached: true };
 
@@ -271,7 +287,7 @@ export function createFileSession(options: FileSessionOptions): FileSession {
       return event;
     }
 
-    if (call.name === "apply_file_patch") {
+    if (call.name === "apply_file_patch" || call.name === "replace_file") {
       const record = records.get(call.args.path);
       if (
         needsSnapshot.has(call.args.path) ||
@@ -295,11 +311,9 @@ export function createFileSession(options: FileSessionOptions): FileSession {
         terminalError = `Mutation limit exceeded for ${call.args.path}`;
         return { success: false, kind: "error", cached: false, path: call.args.path, code: "MUTATION_LIMIT", error: terminalError, retryable: false };
       }
-      const mutation = await options.workspace.patch(
-        call.args.path,
-        call.args.baseRevision,
-        call.args.edits,
-      );
+      const mutation = call.name === "replace_file"
+        ? await options.workspace.createOrReplace(call.args.path, call.args.content, call.args.baseRevision)
+        : await options.workspace.patch(call.args.path, call.args.baseRevision, call.args.edits);
       records.set(call.args.path, {
         content: mutation.content,
         revision: mutation.revision,
@@ -606,6 +620,22 @@ export const fileSessionTools: ChatCompletionTool[] = [
           },
         },
         required: ["path", "baseRevision", "edits"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "replace_file",
+      description: "Replace a session-owned file atomically against an exact snapshot revision.",
+      parameters: {
+        type: "object",
+        properties: {
+          path: { type: "string" },
+          baseRevision: { type: "string" },
+          content: { type: "string" },
+        },
+        required: ["path", "baseRevision", "content"],
       },
     },
   },

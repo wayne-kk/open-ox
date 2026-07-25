@@ -172,6 +172,44 @@ function compactCompletedMutations(events: readonly ContextEvent[]): EventProjec
     }
   }
 
+  // Failed mutations remain visible, but carrying a rejected full source body
+  // forward is not recovery context. Keep the target/error/next action and
+  // leave the attempted payload in canonical event history.
+  for (const event of events) {
+    if (event.kind !== "assistant_tool_calls" || omitted.has(event.id) || event.calls.length === 0) continue;
+    const results = event.calls.map((call) => resultsByCallId.get(call.id));
+    const mutationBatch = results.every((result) => result && semanticsFor(result).effect === "mutate");
+    const hasFailure = results.some((result) => result && semanticsFor(result).outcome === "failure");
+    const oversized = event.calls.some((call) => call.argumentsJson.length > 8_000);
+    if (!mutationBatch || !hasFailure || !oversized || results.some((result) => !result)) continue;
+    const operations = event.calls.map((call, index) => {
+      const result = results[index]!;
+      const args = result.arguments && typeof result.arguments === "object"
+        ? result.arguments as Record<string, unknown>
+        : {};
+      const parsedResult = parsedValue(result.result);
+      const error = parsedResult && typeof parsedResult === "object"
+        ? String((parsedResult as Record<string, unknown>).error ?? "mutation rejected")
+        : "mutation rejected";
+      return `${call.name}${typeof args.path === "string" ? ` ${args.path}` : ""}: ${error.slice(0, 500)}`;
+    });
+    summaries.push({
+      sequence: event.sequence,
+      message: {
+        role: "system",
+        content: `[Failed tool operation] ${operations.join("; ")}. Attempted source payload omitted; read the canonical workspace before retrying.`,
+      },
+    });
+    omitted.add(event.id);
+    summarized.add(event.id);
+    removedPayloadBytes += JSON.stringify(event).length;
+    for (const result of results) {
+      omitted.add(result!.id);
+      summarized.add(result!.id);
+      removedPayloadBytes += JSON.stringify(result).length;
+    }
+  }
+
   const readResultsByResource = new Map<string, Array<Extract<ContextEvent, { kind: "tool_result" }>>>();
   for (const event of events) {
     if (

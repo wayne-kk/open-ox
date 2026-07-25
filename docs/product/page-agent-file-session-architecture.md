@@ -1,6 +1,6 @@
 # Page Agent File Session Architecture
 
-**Status:** Proposed  
+**Status:** FileSession implemented; Page orchestration superseded by [Page Build Session v2](page-build-session-v2-architecture.md)
 **Date:** 2026-07-24  
 **Research:** [Agent file-editing protocols](../research/agent-file-editing-protocols-20260724.md)
 

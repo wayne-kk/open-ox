@@ -1,9 +1,14 @@
 import type { ToolResult } from "@/ai/tools";
 import type { ToolSemantics } from "./types";
 
-const MUTATIONS = new Set(["create_file", "write_file", "apply_file_patch", "edit_file"]);
-const OBSERVATIONS = new Set(["read_file", "read_file_snapshot", "search_code", "list_dir", "glob"]);
-const VERIFICATIONS = new Set(["verify_files", "typecheck", "lint"]);
+const MUTATIONS = new Set([
+  "create_file", "write_file", "apply_file_patch", "edit_file", "replace_file",
+  "create_target_page", "create_page_component", "replace_page_file",
+]);
+const OBSERVATIONS = new Set([
+  "read_file", "read_file_snapshot", "read_page_file", "search_code", "list_dir", "glob",
+]);
+const VERIFICATIONS = new Set(["verify_files", "verify_page_files", "typecheck", "lint"]);
 const TRANSITIONS = new Set(["yield_to_user", "commit_generate"]);
 
 function parsed(value: ToolResult | string): unknown {

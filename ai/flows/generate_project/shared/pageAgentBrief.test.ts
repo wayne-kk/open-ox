@@ -43,10 +43,13 @@ describe("pageAgentBrief", () => {
     expect(msg).toContain("chrome-first");
     expect(msg).toContain("site-wide Nav/Navbar/Header/Sidebar/Footer");
     expect(msg).toContain("bottom tab bars");
-    expect(msg).toContain("Use `create_file` once per path");
-    expect(msg).toContain("create page-local components");
-    expect(msg).toContain("Create `app/page.tsx` no later than your third mutation");
-    expect(msg).toContain("read its current snapshot and apply the smallest patch");
+    expect(msg).toContain("first available action is `create_target_page`");
+    expect(msg).toContain("runtime binds it to `app/page.tsx`");
+    expect(msg).toContain("`create_page_component`");
+    expect(msg).toContain("`read_page_file`");
+    expect(msg).toContain("`replace_page_file`");
+    expect(msg).toContain("`verify_page_files`");
+    expect(msg).not.toContain("no later than your third mutation");
     expect(msg).not.toContain("parallel `write_file`");
     expect(msg).not.toContain(PAGE_AGENT_HERO_SKILL_PATH);
     expect(msg.length).toBeLessThan(4_500);

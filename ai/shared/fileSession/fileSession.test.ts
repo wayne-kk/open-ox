@@ -211,6 +211,31 @@ describe("FileSession", () => {
     expect(session.stopDecision()).toEqual({ kind: "complete" });
   });
 
+  it("replaces a file atomically against a fresh snapshot revision", async () => {
+    const { session, workspace } = createSession();
+    await session.execute({
+      name: "create_file",
+      args: { path: "app/page.tsx", content: "export default () => <main>Old</main>" },
+    });
+    const blind = await session.execute({
+      name: "replace_file",
+      args: { path: "app/page.tsx", baseRevision: "sha256:stale", content: "new" },
+    });
+    expect(blind).toMatchObject({ success: false, code: "STALE_REVISION" });
+
+    const snapshot = await session.execute({ name: "read_file_snapshot", args: { path: "app/page.tsx" } });
+    const replaced = await session.execute({
+      name: "replace_file",
+      args: {
+        path: "app/page.tsx",
+        baseRevision: snapshot.revision!,
+        content: "export default () => <main>New</main>",
+      },
+    });
+    expect(replaced).toMatchObject({ success: true, kind: "file_updated" });
+    expect((await workspace.read("app/page.tsx")).content).toContain("New");
+  });
+
   it("excludes read-only records from completion validation", async () => {
     const workspace = new InMemoryFileSessionWorkspace({
       "app/page.tsx": "export default () => <main>Ready</main>",

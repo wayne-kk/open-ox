@@ -205,7 +205,7 @@ plan_project 的输出为每个 section 准备 traits 化的设计约束（layou
 
 页面 Agent 的 system 由 `frontend`、`steps/pageImplementAgent.md` 以及 `shared/agentRuleBundles.ts` 定义的 **有序 `loadGuardrail(id)` 列表** 叠加（`tailwindMappingGuide`、`section.default`、`skillIntegrationContract`、`project.*`、`outputTsx`、`framerMotionVariants` 等）。Architect Agent 使用另一组规则 id（含 `section.navigation`）。可选通过环境变量 `PAGE_IMPLEMENT_AGENT_EXTRA_RULES` / `ARCHITECT_AGENT_EXTRA_RULES` 追加规则 id。
 
-User 消息侧注入设计系统、预读的 `layout.tsx` / `globals.css` / 目录树、页级 `pageDesignPlan`，以及（若存在）**Hero skill** 全文。Agent 必须以 **`page_implementation_complete`** 工具调用结束；全局 `next build` / 修复由流水线统一调度。
+User 消息侧注入设计系统、预读的 `layout.tsx` / `globals.css` / 目录树、页级 `pageDesignPlan`，以及（若存在）**Hero skill** 全文。每个 worker 通过 [`PageBuildSession`](product/page-build-session-v2-architecture.md) 执行运行时状态机：首阶段只开放 `create_target_page`，目标写入后才开放页内组件、revision-safe 替换、校验与生图。Page 会话强制使用 managed AgentContext；完成由 `FileSession.stopDecision()` 根据目标产物、诊断和图片契约确定，不依赖模型 completion tool。全局 `next build` / 修复仍由流水线统一调度。
 
 文件命名：Agent 产出的组件可按 `{scope}_{ComponentName}Section.tsx` 约定，scope 来自页面 slug，避免多页同名冲突。
 

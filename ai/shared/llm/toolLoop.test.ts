@@ -263,7 +263,7 @@ describe("callLLMWithToolsFromMessages", () => {
     ).toBeUndefined();
     expect(
       gateway.chatCompletion.mock.calls[0]?.[0].messages.at(-1)?.content,
-    ).toContain("Read-only tools may be called in parallel");
+    ).toBe("Create a complete implementation.");
     expect(writeExecutions).toBe(1);
     expect(result.toolCalls).toHaveLength(2);
     expect(result.toolCalls[1]?.result).toMatchObject({ success: false });
@@ -729,5 +729,53 @@ describe("callLLMWithToolsFromMessages", () => {
 
     await expect(result).rejects.toThrow(/invalid conversation history/i);
     await expect(result).rejects.not.toThrow(/verify the model is compatible/i);
+  });
+
+  it("does not misclassify a generic provider INVALID_ARGUMENT as missing tool support", async () => {
+    gateway.chatCompletion.mockRejectedValue(
+      new Error(
+        'LLM HTTP 400: {"error":{"code":400,"message":"Provider API error: Request contains an invalid argument.","param":"INVALID_ARGUMENT"}}',
+      ),
+    );
+
+    const result = callLLMWithToolsFromMessages({
+      messages: initialMessages(),
+      tools: [probeTool()],
+      model: "gemini-probe-model",
+      maxIterations: 1,
+      requireTools: true,
+    });
+
+    await expect(result).rejects.toThrow(/Request contains an invalid argument/i);
+    await expect(result).rejects.not.toThrow(/verify the model is compatible/i);
+  });
+
+  it("retries generic INVALID_ARGUMENT once without optional provider parameters", async () => {
+    gateway.chatCompletion
+      .mockRejectedValueOnce(new Error("LLM HTTP 400: INVALID_ARGUMENT: Request contains an invalid argument"))
+      .mockImplementationOnce(async (params: ChatCompletionParams) => {
+        expect(params.tools).toHaveLength(1);
+        expect(params.tool_choice).toBeUndefined();
+        expect(params.parallel_tool_calls).toBeUndefined();
+        expect(params.thinking_level).toBeUndefined();
+        return response({ finishReason: "stop", content: "recovered" });
+      });
+
+    await expect(callLLMWithToolsFromMessages({
+      messages: initialMessages(), tools: [probeTool()], model: "gemini-probe-model",
+      maxIterations: 1, requireTools: true, thinkingLevel: "high", parallelToolCalls: false,
+    })).resolves.toEqual({ content: "recovered", toolCalls: [] });
+    expect(gateway.chatCompletion).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports compatibility only when the provider explicitly rejects tools", async () => {
+    gateway.chatCompletion.mockRejectedValue(
+      new Error("LLM HTTP 400: function calling is not supported by this model"),
+    );
+    await expect(callLLMWithToolsFromMessages({
+      messages: initialMessages(), tools: [probeTool()], model: "plain-model",
+      maxIterations: 1, requireTools: true,
+    })).rejects.toThrow(/verify the model is compatible/i);
+    expect(gateway.chatCompletion).toHaveBeenCalledTimes(1);
   });
 });

@@ -3,6 +3,8 @@ import { getLangfuseGenerationParent } from "@/lib/observability/langfuseTracing
 import { OXGEN_PREFIX } from "@/lib/observability/langfuseGenerationCatalog";
 import { recordLlmUsage } from "@/lib/billing/usageContext";
 import { Agent, request } from "undici";
+import { buildProviderPayload, resolveLlmProvider, validateProviderPayload } from "./providerAdapter";
+import { createHash } from "node:crypto";
 
 const MIN_CONNECT_TIMEOUT_MS = 60_000;
 const REQUEST_TIMEOUT_MS = 300_000;
@@ -40,6 +42,12 @@ function getApiConfig() {
 export async function chatCompletion(params: ChatCompletionParams): Promise<ChatCompletionResponse> {
   const { apiKey, baseURL } = getApiConfig();
   const maxRetries = 2;
+  const provider = params.provider ?? resolveLlmProvider(params.model);
+  const providerPayload = buildProviderPayload({ ...params, provider });
+  validateProviderPayload(providerPayload, provider);
+  const toolSchemaHash = providerPayload.tools?.length
+    ? createHash("sha256").update(JSON.stringify(providerPayload.tools)).digest("hex").slice(0, 16)
+    : undefined;
 
   const modelParameters: Record<string, string | number> = {};
   if (params.temperature !== undefined) modelParameters.temperature = params.temperature;
@@ -56,10 +64,17 @@ export async function chatCompletion(params: ChatCompletionParams): Promise<Chat
         ? lfParent.generation({
             name: generationName,
             model: params.model,
-            input: messagesForObservation(params.messages),
+            input: messagesForObservation(providerPayload.messages),
             metadata: {
               attempt,
-              hasTools: Boolean(params.tools?.length),
+              provider,
+              hasTools: Boolean(providerPayload.tools?.length),
+              toolSchemaHash,
+              toolChoice: providerPayload.tool_choice ?? "omitted",
+              parallelToolCalls: providerPayload.parallel_tool_calls ?? "omitted",
+              thinkingLevel: providerPayload.thinking_level ?? "omitted",
+              lastRole: providerPayload.messages.at(-1)?.role,
+              payloadBytes: Buffer.byteLength(JSON.stringify(providerPayload), "utf8"),
               ...params.langfuseGenerationMetadata,
             },
             modelParameters:
@@ -67,22 +82,7 @@ export async function chatCompletion(params: ChatCompletionParams): Promise<Chat
           })
         : null;
 
-    const payload = JSON.stringify({
-      model: params.model,
-      messages: params.messages,
-      temperature: params.temperature,
-      ...(params.max_tokens ? { max_tokens: params.max_tokens } : {}),
-      ...(params.thinking_level ? { thinking_level: params.thinking_level } : {}),
-      ...(params.tools
-        ? {
-          tools: params.tools,
-          tool_choice: params.tool_choice ?? "auto",
-          ...(params.parallel_tool_calls !== undefined
-            ? { parallel_tool_calls: params.parallel_tool_calls }
-            : {}),
-        }
-        : {}),
-    });
+    const payload = JSON.stringify(providerPayload);
 
     let statusCode: number;
     let bodyText: string;

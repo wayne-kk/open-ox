@@ -106,16 +106,16 @@ ${layoutContractBlock}
 ${userProvidedFileHint}${userProvidedImagesBlock}
 
 ## Instructions
-1. **Implement this route only**: Other routes are handled by separate Page Agents. Use \`create_file\` once per path. To change an existing session file, call \`read_file_snapshot\` and then \`apply_file_patch\` with its exact revision.
-2. **Create each file once**: You may create page-local components under \`${componentRoot}/**\` before the route when their imports need to exist first. After each successful create, continue to the next required file. Create \`${targetPath}\` no later than your third mutation.
+1. **Implement this route only; create the target first**: Other routes are handled by separate Page Agents. Your first available action is \`create_target_page\`; the runtime binds it to \`${targetPath}\`, so submit only the complete TSX source.
+2. **Build after the target exists**: The runtime then exposes \`create_page_component\` for new files under \`${componentRoot}/**\`. Create each path once. To revise an owned file, call \`read_page_file\`, then \`replace_page_file\` with the returned exact revision and complete replacement content.
 3. **User images**: Use listed https URLs as remote \`src\`; each URL at most once.${
     userImageCount > 0
       ? ` ${userImageCount} user URL(s) — assign all before \`generate_image\` for extras.`
       : " Use \`generate_image\` only when you need visuals without user URLs."
   }
-4. **Fix & finish**: Call \`verify_files\`. When diagnostics name a file, read its current snapshot and apply the smallest patch. If owned source contains an image placeholder or a missing \`/images/*\` asset, completion is blocked until you call \`generate_image\` and patch the source to use its returned path. Completion is decided automatically; there is no completion signal tool. Formatting is automatic.
+4. **Fix & finish**: Call \`verify_page_files\`. When diagnostics name a file, use \`read_page_file\` and \`replace_page_file\` against the fresh revision. If owned source contains an image placeholder or a missing \`/images/*\` asset, completion is blocked until you call \`generate_image\` and replace the source so it uses the returned path. Completion is decided automatically; there is no completion signal tool. Formatting is automatic.
 
-Do not repeat a successful create command or recreate a path to revise it.
+Do not repeat a successful create command or recreate a path to revise it. Image tools are unavailable until the target page exists.
 
 Do not write another route or any component outside \`${componentRoot}/**\`.`;
 }

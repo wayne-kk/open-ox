@@ -248,4 +248,33 @@ describe("AgentContext", () => {
       summary: "invalid", policyVersion: "v1",
     } }])).rejects.toThrow(/INVALID_CONDENSATION/);
   });
+
+  it("keeps failed mutation recovery semantics without replaying a rejected source payload", async () => {
+    const store = new InMemoryContextEventStore();
+    const context = createAgentContext(
+      { sessionId: "page:duplicate-create", sessionKind: "page", policyVersion: "v1" },
+      { eventStore: store },
+    );
+    const source = "SOURCE_PAYLOAD".repeat(2_000);
+    await context.append([
+      { kind: "instruction", scope: "system", content: "Build." },
+      { kind: "user_message", content: "Continue." },
+      { kind: "assistant_tool_calls", content: null, calls: [{
+        id: "duplicate", name: "create_target_page", argumentsJson: JSON.stringify({ content: source }),
+      }] },
+      {
+        kind: "tool_result", callId: "duplicate", toolName: "create_target_page",
+        arguments: { path: "app/page.tsx", content: source },
+        result: { success: false, error: "FILE_ALREADY_CREATED" },
+      },
+      { kind: "user_message", content: "Repair it." },
+    ]);
+    const projection = await context.project({
+      model: { id: "gemini", provider: "gemini-compatible", contextWindow: 128_000 },
+      tools: [], toolChoice: "auto", completionProfile: "code", pressure: "normal",
+    });
+    expect(JSON.stringify(projection.messages)).not.toContain(source);
+    expect(JSON.stringify(projection.messages)).toContain("FILE_ALREADY_CREATED");
+    expect(JSON.stringify(await store.read("page:duplicate-create"))).toContain(source);
+  });
 });

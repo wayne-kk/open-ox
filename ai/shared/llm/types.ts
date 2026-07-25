@@ -1,6 +1,8 @@
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import type { ToolResult } from "@/ai/tools";
 
+export type LlmProvider = "openai" | "anthropic" | "gemini-compatible";
+
 export type ChatMessageContent =
   | string
   | null
@@ -40,6 +42,7 @@ export interface ChatCompletionResponse {
 
 export interface ChatCompletionParams {
   model: string;
+  provider?: LlmProvider;
   messages: ChatMessage[];
   temperature?: number;
   max_tokens?: number;
