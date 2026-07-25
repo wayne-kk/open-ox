@@ -38,7 +38,7 @@ describe("pageImageCompletionReason", () => {
       requirement.kind === "asset_reference" ? requirement.nextAction : requirement.kind
     )).toEqual(["edit_source", "generate_asset"]);
   });
-  it("requires generate_image and source replacement when a page contains an image placeholder", () => {
+  it("requires generate_image and a local edit when a page contains an image placeholder", () => {
     const placeholderSource = `
       import Image from "next/image";
       export function Hero() {
@@ -67,6 +67,21 @@ describe("pageImageCompletionReason", () => {
         assetExists: () => false,
       }),
     ).toBeNull();
+  });
+
+  it("keeps a missing declared local path in generation state without source editing", () => {
+    const requirement = pageImageArtifactRequirements({
+      sources: { "app/page.tsx": `<img src="/images/home-hero.png" alt="Hero" />` },
+      generatedPaths: ["/images/unrelated.png"],
+      assetExists: () => false,
+    })[0];
+
+    expect(requirement).toEqual({
+      kind: "asset_reference",
+      path: "app/page.tsx",
+      reference: "/images/home-hero.png",
+      nextAction: "generate_asset",
+    });
   });
 
   it("accepts exact user URLs and existing local assets but rejects other remote or invented paths", () => {

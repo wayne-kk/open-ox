@@ -143,14 +143,14 @@ describe("runPageBuildSession", () => {
       ]);
       expect(params.resolveTaskStateForRound?.().decisions).toContain("phase=build");
       expect(params.resolveToolsForIteration?.(1, params.tools).map((tool) => tool.function.name))
-        .toEqual(["create_page_component", "read_page_file", "replace_page_file", "verify_page_files"]);
+        .toEqual(["create_page_component", "read_page_file", "edit_page_file", "verify_page_files"]);
       const duplicateComponent = await params.executeToolOverrides.create_page_component({
         path: existingComponent,
         content: "export function Existing() { return <div /> }",
       });
       expect(duplicateComponent).toEqual(expect.objectContaining({
-        success: false,
-        error: expect.stringContaining("ILLEGAL_LIFECYCLE_COMMAND"),
+        success: true,
+        meta: expect.objectContaining({ code: "EXISTING_ARTIFACT", retryable: true }),
       }));
       return { content: "", toolCalls: [] };
     });
@@ -248,19 +248,21 @@ describe("runPageBuildSession", () => {
       }));
       let snapshot = await params.executeToolOverrides.read_page_file({ path: targetPath });
       expect(params.resolveToolsForIteration?.(3, params.tools).map((tool) => tool.function.name))
-        .toEqual(["replace_page_file"]);
-      await params.executeToolOverrides.replace_page_file({
+        .toEqual(["edit_page_file"]);
+      await params.executeToolOverrides.edit_page_file({
         path: targetPath,
         baseRevision: "sha256:stale",
-        content: source.replace(placeholder, generatedPath!),
+        oldText: placeholder,
+        newText: generatedPath!,
       });
       expect(params.resolveToolsForIteration?.(4, params.tools).map((tool) => tool.function.name))
         .toEqual(["read_page_file"]);
       snapshot = await params.executeToolOverrides.read_page_file({ path: targetPath });
-      await params.executeToolOverrides.replace_page_file({
+      await params.executeToolOverrides.edit_page_file({
         path: targetPath,
         baseRevision: snapshot.meta?.revision,
-        content: source.replace(placeholder, generatedPath!),
+        oldText: placeholder,
+        newText: generatedPath!,
       });
       expect(params.resolveToolsForIteration?.(5, params.tools).map((tool) => tool.function.name))
         .toEqual(["verify_page_files"]);
@@ -303,5 +305,71 @@ describe("runPageBuildSession", () => {
     expect(result.finalDecision).toEqual({ kind: "complete" });
     expect(fileSession.events().filter((event) => event.code === "FILE_ALREADY_CREATED"))
       .toEqual([]);
+  });
+
+  it("generates a declared local image at its stable path without editing source", async () => {
+    const targetPath = "app/page.tsx";
+    const imagePath = "/images/home-hero.png";
+    const source = `export default function Page() { return <img src="${imagePath}" /> }`;
+    let generated = false;
+    let generationArgs: Record<string, unknown> | undefined;
+    const fileSession = createFileSession({
+      owner: "page:home",
+      workspace: new InMemoryFileSessionWorkspace(),
+      ownsPath: (path) => path === targetPath,
+      requiredArtifacts: [targetPath],
+    });
+    const imageTool = {
+      type: "function" as const,
+      function: { name: "generate_image", parameters: { type: "object", properties: {} } },
+    };
+
+    loop.call.mockImplementationOnce(async (params: ToolLoopParams) => {
+      await params.executeToolOverrides.create_target_page({ content: source });
+      expect(params.resolveToolsForIteration?.(1, params.tools).map((tool) => tool.function.name))
+        .toEqual(["generate_image"]);
+      await params.executeToolOverrides.generate_image({
+        filename: "model-chosen-name",
+        prompt: "A precise editorial hero image",
+      });
+      expect(generationArgs).toMatchObject({ filename: "home-hero" });
+      expect(params.resolveToolsForIteration?.(2, params.tools).map((tool) => tool.function.name))
+        .toEqual(["verify_page_files"]);
+      await params.executeToolOverrides.verify_page_files({});
+      return { content: "", toolCalls: [] };
+    });
+
+    const result = await runPageBuildSession({
+      slug: "home",
+      targetPath,
+      componentRoot: "components/pages/home",
+      initialMessages: [{ role: "user", content: "Build" }],
+      model: "gemini-3.6-flash",
+      maxIterations: 6,
+      fileSession,
+      assetLifecycle: {
+        inspect: () => generated ? [] : [{
+          kind: "asset_reference",
+          path: targetPath,
+          reference: imagePath,
+          nextAction: "generate_asset",
+        }],
+        generation: {
+          tool: imageTool,
+          execute: async (args) => {
+            generationArgs = args;
+            generated = true;
+            return { success: true, output: imagePath, meta: { path: imagePath } };
+          },
+        },
+      },
+      langfusePhase: "page.home",
+    });
+
+    expect(result.finalDecision).toEqual({ kind: "complete" });
+    expect(fileSession.artifacts().get(targetPath)?.content).toBe(source);
+    expect(fileSession.events().filter((event) =>
+      event.kind === "file_snapshot" || event.kind === "file_updated"
+    )).toEqual([]);
   });
 });

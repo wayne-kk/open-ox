@@ -330,6 +330,7 @@ function inspectPageImageRequirements(options: PageImageInspectionOptions): Page
     path: string;
     reference: string;
     reason: string;
+    requiresExactAssetPath: boolean;
   }> = [];
   const pendingDiagnostics: PageImageRequirementResult[] = [];
   const assetRequirement = (
@@ -356,16 +357,16 @@ function inspectPageImageRequirements(options: PageImageInspectionOptions): Page
       references.add(reference);
       if (allowedRemoteUrls.has(reference)) continue;
       if (!isSafePublicImageReference(reference)) {
-        pendingAssetViolations.push({ path: sourcePath, reference, reason: `${sourcePath} uses invalid image asset path ${reference}. Image assets must remain under /images/.` });
+        pendingAssetViolations.push({ path: sourcePath, reference, reason: `${sourcePath} uses invalid image asset path ${reference}. Image assets must remain under /images/.`, requiresExactAssetPath: false });
         continue;
       }
       if (isPlaceholderReference(reference)) {
-        pendingAssetViolations.push({ path: sourcePath, reference, reason: `${sourcePath} still uses image placeholder ${reference}. Call generate_image, then replace the placeholder with the returned path.` });
+        pendingAssetViolations.push({ path: sourcePath, reference, reason: `${sourcePath} still uses image placeholder ${reference}. Call generate_image, then edit only this reference to the returned path.`, requiresExactAssetPath: false });
         continue;
       }
       const remoteUrl = remoteUrlOf(reference);
       if (remoteUrl) {
-        pendingAssetViolations.push({ path: sourcePath, reference, reason: `${sourcePath} uses remote image ${reference}, which is not a user-provided URL. Call generate_image and use its returned path.` });
+        pendingAssetViolations.push({ path: sourcePath, reference, reason: `${sourcePath} uses remote image ${reference}, which is not a user-provided URL. Call generate_image, then edit only this reference to the returned path.`, requiresExactAssetPath: false });
         continue;
       }
       if (
@@ -373,7 +374,7 @@ function inspectPageImageRequirements(options: PageImageInspectionOptions): Page
         !generated.has(reference) &&
         !options.assetExists(reference)
       ) {
-        pendingAssetViolations.push({ path: sourcePath, reference, reason: `${sourcePath} references missing image asset ${reference}. Call generate_image and use its returned path.` });
+        pendingAssetViolations.push({ path: sourcePath, reference, reason: `${sourcePath} references missing image asset ${reference}. Call generate_image for that exact declared path; the source is already correct and must not be edited.`, requiresExactAssetPath: true });
       }
     }
     if (inspection.unverifiable.length > 0) {
@@ -391,8 +392,8 @@ function inspectPageImageRequirements(options: PageImageInspectionOptions): Page
       violation.path,
       violation.reference,
       violation.reason,
-      index < unconsumed.length ? "edit_source" : "generate_asset",
-      unconsumed[index],
+      !violation.requiresExactAssetPath && index < unconsumed.length ? "edit_source" : "generate_asset",
+      !violation.requiresExactAssetPath ? unconsumed[index] : undefined,
     ));
   }
   results.push(...pendingDiagnostics);

@@ -3,7 +3,7 @@ import type { ToolSemantics } from "./types";
 
 const MUTATIONS = new Set([
   "create_file", "write_file", "apply_file_patch", "edit_file", "replace_file",
-  "create_target_page", "create_page_component", "replace_page_file",
+  "create_target_page", "create_page_component", "edit_page_file", "replace_page_file",
 ]);
 const OBSERVATIONS = new Set([
   "read_file", "read_file_snapshot", "read_page_file", "search_code", "list_dir", "glob",

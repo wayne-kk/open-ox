@@ -261,7 +261,6 @@ export async function runPageImplementAgent(
   } = createRequiredImageExecutor(
     pageImageScope,
     {
-      filenamePrefix: pageImageScope,
       onGeneratedAsset: (asset) => imageAssets.recordGeneratedAsset(asset.publicPath),
     },
   );
@@ -300,9 +299,10 @@ export async function runPageImplementAgent(
       const cached = typeof result === "object" && result.meta?.cached === true;
       if (activity === "write" && eventPath && !cached) {
         const succeeded = typeof result === "string" || result.success;
+        const retryable = typeof result === "object" && result.meta?.retryable === true;
         onStep({
           step: `page_agent_file:${page.slug}:${eventPath}`,
-          status: succeeded ? "ok" : "error",
+          status: succeeded ? "ok" : retryable ? "active" : "error",
           detail: succeeded
             ? `[${page.slug}] ${name.replace("_", " ")}: ${eventPath}`
             : `[${page.slug}] ${name.replace("_", " ")} rejected: ${eventPath}`,

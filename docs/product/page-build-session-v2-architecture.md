@@ -83,12 +83,13 @@ stateDiagram-v2
   [*] --> draft_target
   draft_target --> build: create_target_page succeeds
   build --> asset_blocked: structured asset requirement
-  asset_blocked --> snapshot_required: generate_image succeeds
+  asset_blocked --> verification_required: declared local asset generated at exact path
+  asset_blocked --> snapshot_required: remote placeholder asset generated
   snapshot_required --> editable: read_page_file returns revision
-  editable --> verification_required: replace_page_file succeeds
+  editable --> verification_required: edit_page_file succeeds
   verification_required --> complete: verify_page_files is clean
   build --> repair: verification reports diagnostics
-  repair --> build: replacement is clean
+  repair --> build: local edit is clean
   build --> verification_required: deterministic postconditions pass after mutation
   repair --> verification_required: deterministic postconditions pass after mutation
   draft_target --> failed: terminal FileSession policy error
@@ -103,9 +104,9 @@ Tool availability is an effect of state, not an instruction the model may ignore
 | `draft_target` | `create_target_page` only |
 | asset requirement needs an asset | `generate_image` only |
 | generated asset needs source edit | `read_page_file` only |
-| requirement source has a fresh revision | `replace_page_file` only |
+| requirement source has a fresh revision | `edit_page_file` only |
 | current mutation needs verification | `verify_page_files` only |
-| target exists | `create_page_component`, `read_page_file`, `replace_page_file`, `verify_page_files`, optional `generate_image` |
+| target exists | `create_page_component`, `read_page_file`, `edit_page_file`, `verify_page_files`, optional `generate_image` |
 | fresh snapshot required | `read_page_file` only |
 | `complete` / `failed` | none |
 
@@ -114,23 +115,28 @@ orchestrator-provided route, eliminating wrong-route and missing-path first writ
 Every tool call is authorized again at execution time against the current lifecycle. This protects
 the workspace even when a provider returns a tool that was not exposed for that iteration. An
 illegal command returns `ILLEGAL_LIFECYCLE_COMMAND` before `FileSession`, so it cannot consume the
-workspace failure budget. Once a path is present, its create command is permanently illegal;
-further changes require read plus revision-safe replacement.
+workspace failure budget. Once a path is present, a repeated component create is treated as a
+recoverable adoption transition; further changes require read plus a revision-safe local edit.
 
 ## 5. File mutation protocol
 
 Page v2 does not ask the model to calculate UTF-16 patch coordinates. A revision flow is used:
 
 1. `read_page_file(path)` returns canonical content and `sha256` revision.
-2. The model produces complete replacement content.
-3. `replace_page_file(path, baseRevision, content)` performs compare-and-swap.
+2. The model identifies exact old and new source text.
+3. `edit_page_file(path, baseRevision, oldText, newText)` performs a revision-checked local patch.
 4. Formatting and scoped diagnostics produce a new canonical revision.
 5. A stale revision narrows the next tool surface to `read_page_file`.
 
-`FileSession` still supports patch commands for other profiles, but Page v2 uses full-file
-replacement because generated page files are bounded and provider-generated text coordinates were
-the source of `Debug Failure. False expression.` failures. The revision check preserves concurrent
-write safety without making the model reproduce editor internals.
+The model never calculates editor coordinates. `PageBuildSession` resolves the exact text against
+the canonical snapshot and converts it to `FileSession` patch ranges. This avoids full-file rewrite
+collisions while preserving revision checks and keeping provider-generated coordinates out of the
+protocol.
+
+Image assets have two distinct lifecycles. A declared local reference such as
+`/images/home-hero.png` is already valid source: `generate_image` is bound to that exact filename and
+no source mutation occurs. A forbidden remote placeholder is different: after generation, only that
+reference is changed through the read/edit protocol.
 
 ## 6. Provider protocol
 

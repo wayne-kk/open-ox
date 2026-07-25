@@ -6,7 +6,7 @@
 
 1. **Bootstrap 已注入**：上一条已预加载完整 **`design-system.md`**、layout、globals、目录树、user-provided（若有）。**不要**尝试再次读取或枚举这些路径。
 2. **先创建目标页（Act）**：初始阶段唯一可用动作是 `create_target_page`。运行时已绑定目标路径，你只需提交完整 TSX；成功后才会开放组件、读取、替换、校验与生图工具。
-3. **扩展与修复**：新建页内组件用 `create_page_component`，每个路径只创建一次。调用 `verify_page_files` 获取诊断；修改已有文件时，先 `read_page_file` 获取当前 content/revision，再用同一 revision 调用 `replace_page_file` 提交完整新内容。**写入即 Prettier**——不要 `format_code`。
+3. **扩展与修复**：新建页内组件用 `create_page_component`，每个路径只创建一次。调用 `verify_page_files` 获取诊断；修改已有文件时，先 `read_page_file` 获取当前 content/revision，再用同一 revision 调用 `edit_page_file` 提交精确 oldText/newText。**写入即 Prettier**——不要 `format_code`。
 4. **收尾**：目标文件有效且诊断清零后，运行时会自动完成，无需模型发送完成信号。
 
 ### 审美权威（短）
@@ -28,7 +28,7 @@
    - 若存在 `components/shared/**` 契约 stub，list/detail 卡片优先复用，勿另起一套。
 6. **质量习惯**：写入文件已自动 Prettier，无需手动 `format_code`；缺依赖时用 `install_package`。
 7. **用户内容与配图**：若 bootstrap 含 user-provided 内容或 URL，**必须**用这些 https URL 作远程 `src`。每张用户图 URL 最多用一次。不要用 `generate_image` 顶替用户照片。
-8. **图片占位必须落地**：若页面源码出现占位图服务、placeholder 路径或不存在的 `/images/*` 路径，必须调用 `generate_image`，再用 `read_page_file` + `replace_page_file` 把工具返回路径写回源码；未引用的生图结果不算完成。
+8. **图片路径先声明再落地**：创建 Section 时直接写最终稳定路径（如 `/images/home-hero.png`），随后调用 `generate_image`，运行时会把图片写到该路径，源码无需再次修改。仅当源码原本是远程占位图时，才用 `read_page_file` + `edit_page_file` 局部替换该引用。
 
 ### 禁止
 
@@ -37,7 +37,7 @@
 - **不要修改** `app/globals.css`、`app/layout.tsx` 或 `components/chrome/**`。
 - **不要**在页面内容区复制全局导航 / 页脚。
 - **不要调用 `format_code`**。
-- 不要对已成功创建的路径再次调用创建工具；使用 `read_page_file` + `replace_page_file` 修改。
+- 不要对已成功创建的路径再次调用创建工具；使用 `read_page_file` + `edit_page_file` 局部修改。
 
 ### 完成方式
 

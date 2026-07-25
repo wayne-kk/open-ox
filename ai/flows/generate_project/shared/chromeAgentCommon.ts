@@ -190,9 +190,11 @@ export function emitChromeBuildProgress(params: {
   if (event.kind !== "tool" || !onStep) return;
   const cached = typeof event.result === "object" && event.result.meta?.cached === true;
   if (event.activity === "write" && event.path && !cached) {
+    const succeeded = typeof event.result === "string" || event.result.success;
+    const retryable = typeof event.result === "object" && event.result.meta?.retryable === true;
     onStep({
       step: `${stepId}_file:${event.path}`,
-      status: typeof event.result === "string" || event.result.success ? "ok" : "error",
+      status: succeeded ? "ok" : retryable ? "active" : "error",
       detail: `${event.name.replaceAll("_", " ")}: ${event.path}`,
       timestamp: Date.now(),
       duration: 0,

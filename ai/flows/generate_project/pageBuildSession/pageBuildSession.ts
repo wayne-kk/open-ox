@@ -109,7 +109,7 @@ const PAGE_TOOL = {
   createTarget: "create_target_page",
   createComponent: "create_page_component",
   read: "read_page_file",
-  replace: "replace_page_file",
+  edit: "edit_page_file",
   verify: "verify_page_files",
   image: "generate_image",
 } as const;
@@ -136,17 +136,18 @@ const READ_TOOL = functionTool(
   { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
 );
 
-const REPLACE_TOOL = functionTool(
-  PAGE_TOOL.replace,
-  "Replace an owned page file atomically against the exact revision returned by read_page_file.",
+const EDIT_TOOL = functionTool(
+  PAGE_TOOL.edit,
+  "Edit exact source text in an owned page file against the revision returned by read_page_file.",
   {
     type: "object",
     properties: {
       path: { type: "string" },
       baseRevision: { type: "string" },
-      content: { type: "string" },
+      oldText: { type: "string" },
+      newText: { type: "string" },
     },
-    required: ["path", "baseRevision", "content"],
+    required: ["path", "baseRevision", "oldText", "newText"],
   },
 );
 
@@ -187,7 +188,7 @@ function pageToolActivity(
   targetPath: string,
 ): Pick<Extract<PageBuildEvent, { kind: "tool" }>, "activity" | "path"> {
   if (name === PAGE_TOOL.createTarget) return { activity: "write", path: targetPath };
-  if (name === PAGE_TOOL.createComponent || name === PAGE_TOOL.replace) {
+  if (name === PAGE_TOOL.createComponent || name === PAGE_TOOL.edit) {
     return { activity: "write", path: String(args.path ?? "") };
   }
   if (name === PAGE_TOOL.read) return { activity: "read", path: String(args.path ?? "") };
@@ -285,7 +286,7 @@ export function toolsForPageBuildPhase(spec: Pick<PageBuildSessionSpec, "targetP
       (event) => event.kind === "file_created" || event.kind === "file_updated",
     );
     const latestSnapshot = pathEvents.findLastIndex((event) => event.kind === "file_snapshot");
-    return latestSnapshot > latestMutation ? [REPLACE_TOOL] : [READ_TOOL];
+    return latestSnapshot > latestMutation ? [EDIT_TOOL] : [READ_TOOL];
   }
   if (
     pageRevisionStatus(
@@ -298,7 +299,24 @@ export function toolsForPageBuildPhase(spec: Pick<PageBuildSessionSpec, "targetP
   }
   const legal = new Set(spec.fileSession.tools().map((tool) => tool.function?.name));
   if (legal.size === 1 && legal.has("read_file_snapshot")) return [READ_TOOL];
-  return [CREATE_COMPONENT_TOOL, READ_TOOL, REPLACE_TOOL, VERIFY_TOOL, ...(spec.assetLifecycle?.generation ? [spec.assetLifecycle.generation.tool] : [])];
+  return [CREATE_COMPONENT_TOOL, READ_TOOL, EDIT_TOOL, VERIFY_TOOL, ...(spec.assetLifecycle?.generation ? [spec.assetLifecycle.generation.tool] : [])];
+}
+
+function exactTextEdits(content: string, oldText: string, newText: string) {
+  if (!oldText) return [];
+  const offsets: number[] = [];
+  for (let offset = content.indexOf(oldText); offset >= 0; offset = content.indexOf(oldText, offset + oldText.length)) {
+    offsets.push(offset);
+  }
+  const position = (offset: number) => {
+    const prefix = content.slice(0, offset);
+    const lines = prefix.split("\n");
+    return { line: lines.length - 1, character: lines.at(-1)?.length ?? 0 };
+  };
+  return offsets.map((offset) => ({
+    range: { start: position(offset), end: position(offset + oldText.length) },
+    newText,
+  }));
 }
 
 export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<PageBuildSessionResult> {
@@ -327,20 +345,24 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
     const requirement = spec.assetLifecycle?.inspect(spec.fileSession.artifacts())[0];
     if (
       requirement?.kind === "asset_reference" &&
-      (name === PAGE_TOOL.read || name === PAGE_TOOL.replace) &&
+      (name === PAGE_TOOL.read || name === PAGE_TOOL.edit) &&
       path !== requirement.path
     ) {
       return illegalCommand(name);
     }
     if (
-      (name === PAGE_TOOL.createComponent || name === PAGE_TOOL.read || name === PAGE_TOOL.replace) &&
+      (name === PAGE_TOOL.createComponent || name === PAGE_TOOL.read || name === PAGE_TOOL.edit) &&
       !pageOwnsPath(spec, path)
     ) {
       return illegalCommand(name);
     }
     if (name === PAGE_TOOL.createComponent) {
       if (await spec.fileSession.loadIfExists(path)) {
-        return illegalCommand(name);
+        return {
+          success: true,
+          output: `${path} already exists. Continue with read_page_file, then edit_page_file.`,
+          meta: { path, code: "EXISTING_ARTIFACT", retryable: true, transition: "snapshot_required" },
+        };
       }
     }
     return execute();
@@ -348,7 +370,7 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
 
   const { content, toolCalls } = await callLLMWithToolsFromMessages({
     messages,
-    tools: [CREATE_TARGET_TOOL, CREATE_COMPONENT_TOOL, READ_TOOL, REPLACE_TOOL, VERIFY_TOOL, ...(spec.assetLifecycle?.generation ? [spec.assetLifecycle.generation.tool] : [])],
+    tools: [CREATE_TARGET_TOOL, CREATE_COMPONENT_TOOL, READ_TOOL, EDIT_TOOL, VERIFY_TOOL, ...(spec.assetLifecycle?.generation ? [spec.assetLifecycle.generation.tool] : [])],
     temperature: 0.5,
     maxIterations: spec.maxIterations,
     completionProfile: "code",
@@ -369,21 +391,44 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
         name: "read_file_snapshot",
         args: { path: String(args.path ?? "") },
       })),
-      [PAGE_TOOL.replace]: (args) => authorize(PAGE_TOOL.replace, args, () => executeFile({
-        name: "replace_file",
-        args: {
-          path: String(args.path ?? ""),
-          baseRevision: String(args.baseRevision ?? ""),
-          content: String(args.content ?? ""),
-        },
-      })),
+      [PAGE_TOOL.edit]: (args) => authorize(PAGE_TOOL.edit, args, async () => {
+        const path = String(args.path ?? "");
+        const oldText = String(args.oldText ?? "");
+        const edits = exactTextEdits(
+          spec.fileSession.artifacts().get(path)?.content ?? "",
+          oldText,
+          String(args.newText ?? ""),
+        );
+        if (edits.length === 0) {
+          return {
+            success: false,
+            error: `EDIT_TEXT_NOT_FOUND: ${oldText}`,
+            meta: { path, code: "EDIT_TEXT_NOT_FOUND", retryable: true },
+          };
+        }
+        return executeFile({
+          name: "apply_file_patch",
+          args: { path, baseRevision: String(args.baseRevision ?? ""), edits },
+        });
+      }),
       [PAGE_TOOL.verify]: (args) => authorize(PAGE_TOOL.verify, args, () => executeFile({
         name: "verify_files",
         args: {},
       })),
       ...(spec.assetLifecycle?.generation ? {
-        [PAGE_TOOL.image]: (args: Record<string, unknown>) =>
-          authorize(PAGE_TOOL.image, args, () => spec.assetLifecycle!.generation!.execute(args)),
+        [PAGE_TOOL.image]: (args: Record<string, unknown>) => authorize(PAGE_TOOL.image, args, () => {
+          const requirement = spec.assetLifecycle?.inspect(spec.fileSession.artifacts())[0];
+          const declaredPath = requirement?.kind === "asset_reference" &&
+              requirement.nextAction === "generate_asset" &&
+              requirement.reference.startsWith("/images/")
+            ? requirement.reference.split(/[?#]/, 1)[0]
+            : null;
+          const filename = declaredPath?.slice("/images/".length).replace(/\.[^.]+$/, "");
+          return spec.assetLifecycle!.generation!.execute({
+            ...args,
+            ...(filename ? { filename } : {}),
+          });
+        }),
       } : {}),
     },
     resolveToolsForIteration: () => toolsForPageBuildPhase(spec),
@@ -454,24 +499,28 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
         requirement.nextAction === "edit_source" &&
         requirement.replacement
       ) {
-        toolName = PAGE_TOOL.replace;
+        toolName = PAGE_TOOL.edit;
         const snapshot = await spec.fileSession.execute({
           name: "read_file_snapshot",
           args: { path: requirement.path },
         });
         if (!snapshot.success || !snapshot.content || !snapshot.revision) break;
-        const replacement = snapshot.content.split(requirement.reference).join(requirement.replacement);
-        if (replacement === snapshot.content) break;
+        const edits = exactTextEdits(snapshot.content, requirement.reference, requirement.replacement);
+        if (edits.length === 0) break;
         args = {
           path: requirement.path,
           baseRevision: snapshot.revision,
-          content: replacement,
+          oldText: requirement.reference,
+          newText: requirement.replacement,
         };
-        result = await executeFile({ name: "replace_file", args: args as {
-          path: string;
-          baseRevision: string;
-          content: string;
-        } });
+        result = await executeFile({
+          name: "apply_file_patch",
+          args: {
+            path: requirement.path,
+            baseRevision: snapshot.revision,
+            edits,
+          },
+        });
       } else if (!requirement && toolsForPageBuildPhase(spec)[0]?.function.name === PAGE_TOOL.verify) {
         toolName = PAGE_TOOL.verify;
         result = await executeFile({ name: "verify_files", args: {} });

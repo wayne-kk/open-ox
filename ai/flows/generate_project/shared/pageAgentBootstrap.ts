@@ -103,7 +103,7 @@ The pipeline loaded the references below **before your first tool turn**. They d
 
 **Design system:** full \`${PAGE_AGENT_DESIGN_SYSTEM_PATH}\` is injected below (including Visual Contract / Bold Factor when present). Follow it for tokens, signatures, surfaces, and typography.
 
-**Act now:** use the initial \`create_target_page\` action. After the target exists, use \`create_page_component\` for new page-local files and \`read_page_file\` + \`replace_page_file\` for revisions. Do not re-read the bootstrap paths below.
+**Act now:** use the initial \`create_target_page\` action. After the target exists, use \`create_page_component\` for new page-local files and \`read_page_file\` + \`edit_page_file\` for local revisions. Do not re-read the bootstrap paths below.
 
 ### Tree: \`app/\`
 \`\`\`
@@ -123,7 +123,7 @@ ${fileSections.join("\n\n")}`;
     `- ${PAGE_AGENT_LAYOUT_PATH} (chrome already mounted — content only)`,
     `- ${PAGE_AGENT_GLOBALS_PATH}`,
     ...(params.hasUserProvidedContent ? [`- ${USER_PROVIDED_CONTENT_PATH}`] : []),
-    "Continue with create_target_page. After the target exists, use create_page_component for new files and read_page_file then replace_page_file for revisions. Completion is automatic after required artifacts are valid.",
+    "Continue with create_target_page. After the target exists, use create_page_component for new files and read_page_file then edit_page_file for local revisions. Completion is automatic after required artifacts are valid.",
   ].join("\n");
 
   return { bootstrappedPaths, message, compactSummary };

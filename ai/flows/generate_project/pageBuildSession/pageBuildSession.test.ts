@@ -43,7 +43,7 @@ describe("PageBuildSession state machine", () => {
     expect(pageBuildStateCard(spec)).toContain("target_revision: missing");
   });
 
-  it("opens component, revision replacement, verification, and image actions after target creation", async () => {
+  it("opens component, revision edit, verification, and image actions after target creation", async () => {
     const spec = fixture(true);
     await spec.fileSession.execute({
       name: "create_file",
@@ -58,7 +58,7 @@ describe("PageBuildSession state machine", () => {
     };
     expect(pageBuildPhase(spec)).toBe("build");
     expect(toolsForPageBuildPhase({ ...spec, assetLifecycle }).map((tool) => tool.function.name)).toEqual([
-      "create_page_component", "read_page_file", "replace_page_file", "verify_page_files", "generate_image",
+      "create_page_component", "read_page_file", "edit_page_file", "verify_page_files", "generate_image",
     ]);
   });
 

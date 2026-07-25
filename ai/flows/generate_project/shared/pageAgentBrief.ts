@@ -107,13 +107,13 @@ ${userProvidedFileHint}${userProvidedImagesBlock}
 
 ## Instructions
 1. **Implement this route only; create the target first**: Other routes are handled by separate Page Workers. Your first available action is \`create_target_page\`; the runtime binds it to \`${targetPath}\`, so submit only the complete TSX source.
-2. **Build after the target exists**: The runtime then exposes \`create_page_component\` for new files under \`${componentRoot}/**\`. Create each path once. To revise an owned file, call \`read_page_file\`, then \`replace_page_file\` with the returned exact revision and complete replacement content.
+2. **Build after the target exists**: The runtime then exposes \`create_page_component\` for new files under \`${componentRoot}/**\`. Create each path once. To revise an owned file, call \`read_page_file\`, then \`edit_page_file\` with the returned exact revision plus exact old/new text.
 3. **User images**: Use listed https URLs as remote \`src\`; each URL at most once.${
     userImageCount > 0
       ? ` ${userImageCount} user URL(s) — assign all before \`generate_image\` for extras.`
       : " Use \`generate_image\` only when you need visuals without user URLs."
   }
-4. **Fix & finish**: Call \`verify_page_files\`. When diagnostics name a file, use \`read_page_file\` and \`replace_page_file\` against the fresh revision. If owned source contains an image placeholder or a missing \`/images/*\` asset, completion is blocked until you call \`generate_image\` and replace the source so it uses the returned path. Completion is decided automatically; there is no completion signal tool. Formatting is automatic.
+4. **Images, fixes & finish**: Declare final stable local paths such as \`/images/home-hero.png\` directly in source, then call \`generate_image\`; the runtime writes the asset to that declared path, so do not edit the source afterward. Only a forbidden remote/placeholder reference requires \`read_page_file\` + \`edit_page_file\`. Call \`verify_page_files\`; diagnostics are repaired with the same read/edit sequence. Completion is automatic. Formatting is automatic.
 
 Do not repeat a successful create command or recreate a path to revise it. Image tools are unavailable until the target page exists.
 

@@ -47,7 +47,8 @@ describe("pageAgentBrief", () => {
     expect(msg).toContain("runtime binds it to `app/page.tsx`");
     expect(msg).toContain("`create_page_component`");
     expect(msg).toContain("`read_page_file`");
-    expect(msg).toContain("`replace_page_file`");
+    expect(msg).toContain("`edit_page_file`");
+    expect(msg).not.toContain("`replace_page_file`");
     expect(msg).toContain("`verify_page_files`");
     expect(msg).not.toContain("no later than your third mutation");
     expect(msg).not.toContain("parallel `write_file`");

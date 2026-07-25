@@ -38,6 +38,7 @@ const SOURCE_MUTATION_TOOL_NAMES = new Set([
   "replace_file",
   "create_target_page",
   "create_page_component",
+  "edit_page_file",
   "replace_page_file",
   "create_chrome_layout",
   "create_chrome_component",
