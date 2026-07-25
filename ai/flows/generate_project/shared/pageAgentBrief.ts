@@ -106,7 +106,7 @@ ${layoutContractBlock}
 ${userProvidedFileHint}${userProvidedImagesBlock}
 
 ## Instructions
-1. **Implement this route only; create the target first**: Other routes are handled by separate Page Agents. Your first available action is \`create_target_page\`; the runtime binds it to \`${targetPath}\`, so submit only the complete TSX source.
+1. **Implement this route only; create the target first**: Other routes are handled by separate Page Workers. Your first available action is \`create_target_page\`; the runtime binds it to \`${targetPath}\`, so submit only the complete TSX source.
 2. **Build after the target exists**: The runtime then exposes \`create_page_component\` for new files under \`${componentRoot}/**\`. Create each path once. To revise an owned file, call \`read_page_file\`, then \`replace_page_file\` with the returned exact revision and complete replacement content.
 3. **User images**: Use listed https URLs as remote \`src\`; each URL at most once.${
     userImageCount > 0

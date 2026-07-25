@@ -748,6 +748,7 @@ describe("callLLMWithToolsFromMessages", () => {
 
     await expect(result).rejects.toThrow(/Request contains an invalid argument/i);
     await expect(result).rejects.not.toThrow(/verify the model is compatible/i);
+    expect(gateway.chatCompletion).toHaveBeenCalledTimes(1);
   });
 
   it("retries generic INVALID_ARGUMENT once without optional provider parameters", async () => {
@@ -762,7 +763,7 @@ describe("callLLMWithToolsFromMessages", () => {
       });
 
     await expect(callLLMWithToolsFromMessages({
-      messages: initialMessages(), tools: [probeTool()], model: "gemini-probe-model",
+      messages: initialMessages(), tools: [probeTool()], model: "openai-probe-model",
       maxIterations: 1, requireTools: true, thinkingLevel: "high", parallelToolCalls: false,
     })).resolves.toEqual({ content: "recovered", toolCalls: [] });
     expect(gateway.chatCompletion).toHaveBeenCalledTimes(2);

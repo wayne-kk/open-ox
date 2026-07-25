@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createFileSession, InMemoryFileSessionWorkspace } from "@/ai/shared/fileSession/fileSession";
+import {
+  createFileSession,
+  InMemoryFileSessionWorkspace,
+  type FileSessionDiagnostic,
+  type FileSessionMutationResult,
+} from "@/ai/shared/fileSession/fileSession";
 import { pageBuildPhase, pageBuildStateCard, toolsForPageBuildPhase } from "./pageBuildSession";
 
 function fixture(holdCompletion = false) {
@@ -14,6 +19,20 @@ function fixture(holdCompletion = false) {
     ...(holdCompletion ? { validateCompletion: () => "assets pending" } : {}),
   });
   return { slug: "home", targetPath, componentRoot, fileSession };
+}
+
+class DiagnosticWorkspace extends InMemoryFileSessionWorkspace {
+  override async createOrReplace(
+    path: string,
+    content: string,
+    expectedRevision?: string,
+  ): Promise<FileSessionMutationResult> {
+    const result = await super.createOrReplace(path, content, expectedRevision);
+    const diagnostics: FileSessionDiagnostic[] = content.includes("BROKEN")
+      ? [{ path, message: "broken source" }]
+      : [];
+    return { ...result, diagnostics };
+  }
 }
 
 describe("PageBuildSession state machine", () => {
@@ -51,5 +70,32 @@ describe("PageBuildSession state machine", () => {
       args: { path: spec.targetPath, baseRevision: "sha256:stale", content: "export default () => null" },
     });
     expect(toolsForPageBuildPhase(spec).map((tool) => tool.function.name)).toEqual(["read_page_file"]);
+  });
+
+  it("returns from repair to build after the current diagnostics are cleared", async () => {
+    const targetPath = "app/page.tsx";
+    const fileSession = createFileSession({
+      owner: "page:home",
+      workspace: new DiagnosticWorkspace(),
+      ownsPath: (path) => path === targetPath,
+      requiredArtifacts: [targetPath],
+      validateCompletion: () => "assets pending",
+    });
+    const spec = { slug: "home", targetPath, componentRoot: "components/pages/home", fileSession };
+    await fileSession.execute({
+      name: "create_file",
+      args: { path: targetPath, content: "BROKEN export default function Page() { return null }" },
+    });
+    expect(pageBuildPhase(spec)).toBe("repair");
+    const snapshot = await fileSession.execute({ name: "read_file_snapshot", args: { path: targetPath } });
+    await fileSession.execute({
+      name: "replace_file",
+      args: {
+        path: targetPath,
+        baseRevision: snapshot.revision!,
+        content: "export default function Page() { return null }",
+      },
+    });
+    expect(pageBuildPhase(spec)).toBe("build");
   });
 });

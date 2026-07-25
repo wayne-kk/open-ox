@@ -27,14 +27,11 @@ describe("runPageBuildSession", () => {
         content: "export default function Page() { return <main /> }",
       });
       expect(result.success).toBe(true);
-      params.compactMessagesBeforeRound({
-        iteration: 1,
-        maxIterations: 8,
-        messages: params.messages,
-      });
-      expect(params.messages.at(-1)).toMatchObject({ role: "user" });
-      expect(params.messages.at(-1)?.content).toContain(`written_paths: ${targetPath}`);
-      expect(params.messages.at(-1)?.content).not.toContain("target_revision: missing");
+      expect(params.resolveTaskStateForRound?.().targetPaths).toEqual([targetPath]);
+      expect(params.resolveTaskStateForRound?.().mutations).toEqual([
+        expect.objectContaining({ path: targetPath, revision: expect.stringMatching(/^sha256:/) }),
+      ]);
+      expect(params.resolveTaskStateForRound?.().decisions).toContain("phase=build");
       expect(params.resolveToolsForIteration?.(1, params.tools).map((tool) => tool.function.name))
         .toEqual(["create_page_component", "read_page_file", "replace_page_file", "verify_page_files"]);
       return { content: "", toolCalls: [] };

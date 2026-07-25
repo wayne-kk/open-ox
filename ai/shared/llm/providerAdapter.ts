@@ -122,16 +122,41 @@ export function validateProviderPayload(payload: ProviderPayload, provider: LlmP
   if (provider === "gemini-compatible" && last?.role === "assistant") {
     throw new Error("PROVIDER_PROTOCOL_INVALID: request ends with an assistant/model turn");
   }
+  const pendingCalls = new Map<string, string>();
+  const seenCallIds = new Set<string>();
   for (const message of payload.messages) {
+    if (message.role !== "tool" && pendingCalls.size > 0) {
+      throw new Error(
+        `PROVIDER_PROTOCOL_INVALID: missing tool result for ${[...pendingCalls.keys()].join(", ")}`,
+      );
+    }
     if (message.role === "tool" && typeof message.content !== "string") {
       throw new Error("PROVIDER_PROTOCOL_INVALID: tool content must be a string");
     }
+    if (message.role === "tool") {
+      if (typeof message.tool_call_id !== "string" || !pendingCalls.has(message.tool_call_id)) {
+        throw new Error(`PROVIDER_PROTOCOL_INVALID: orphan tool result ${message.tool_call_id ?? "<missing>"}`);
+      }
+      pendingCalls.delete(message.tool_call_id);
+      continue;
+    }
     if (message.role !== "assistant" || !Array.isArray(message.tool_calls)) continue;
     for (const raw of message.tool_calls) {
-      const fn = raw && typeof raw === "object" ? (raw as Record<string, unknown>).function : undefined;
+      const call = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
+      const fn = call.function;
       if (!fn || typeof fn !== "object" || typeof (fn as Record<string, unknown>).arguments !== "string") {
         throw new Error("PROVIDER_PROTOCOL_INVALID: tool arguments must be a JSON string");
       }
+      if (typeof call.id !== "string" || seenCallIds.has(call.id)) {
+        throw new Error(`PROVIDER_PROTOCOL_INVALID: duplicate or missing tool call id ${String(call.id)}`);
+      }
+      seenCallIds.add(call.id);
+      pendingCalls.set(call.id, String((fn as Record<string, unknown>).name ?? ""));
     }
+  }
+  if (pendingCalls.size > 0) {
+    throw new Error(
+      `PROVIDER_PROTOCOL_INVALID: missing tool result for ${[...pendingCalls.keys()].join(", ")}`,
+    );
   }
 }

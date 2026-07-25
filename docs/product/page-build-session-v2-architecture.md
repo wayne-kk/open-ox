@@ -127,7 +127,10 @@ For Gemini-compatible models it:
 For OpenAI-compatible models it preserves supported controls. The gateway no longer silently adds
 `tool_choice: auto`; omission is a deliberate provider decision. Langfuse records provider,
 tool-schema hash, effective controls, final role, and payload bytes so an `INVALID_ARGUMENT` can be
-diagnosed against the actual wire contract.
+diagnosed against the actual wire contract. Because Gemini requests are already normalized on the
+first attempt, a generic Gemini `INVALID_ARGUMENT` is surfaced immediately instead of performing a
+wire-identical “minimal” retry; optional-control retry remains available only where it changes the
+provider payload.
 
 ## 7. Context architecture
 
@@ -138,9 +141,9 @@ Retention rules:
 
 | Information | Canonical log | Model projection |
 |---|---|---|
-| current Page state card | retained | pinned |
+| Page durable task state | every revision retained | only the latest `task_state` event is pinned |
 | latest required snapshot/revision | retained | pinned while needed |
-| successful source mutation body | retained in canonical event history | replaced by path/revision receipt |
+| successful source mutation body | retained in canonical event history | replaced by tool/path/revision receipt |
 | oversized failed mutation body | retained in canonical event history | omitted; error, target, and recovery action retained |
 | resolved diagnostics | retained | collapsed to a typed receipt |
 | stale reads/search output | retained | dropped when superseded |
@@ -223,6 +226,7 @@ different owners and different remediations.
 ### Route D — context projection seam
 
 - Force managed AgentContext for Page sessions.
+- Append structured `task_state` revisions and project only the newest one.
 - Keep source payloads in canonical history and omit reproducible/resolved bodies at projection time.
 - Preserve current state, unresolved diagnostics, revisions, and protocol atomicity.
 

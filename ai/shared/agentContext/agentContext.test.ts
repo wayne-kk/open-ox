@@ -96,6 +96,7 @@ describe("AgentContext", () => {
 
     expect(JSON.stringify(projection.messages)).not.toContain(source);
     expect(JSON.stringify(projection.messages)).toContain("create_file app/profile/page.tsx: succeeded");
+    expect(JSON.stringify(projection.messages)).toContain("sha256:profile");
     expect(projection.compaction.stages).toContain("mutation_receipts");
 
     const canonical = await eventStore.read("page:profile");
@@ -276,5 +277,26 @@ describe("AgentContext", () => {
     expect(JSON.stringify(projection.messages)).not.toContain(source);
     expect(JSON.stringify(projection.messages)).toContain("FILE_ALREADY_CREATED");
     expect(JSON.stringify(await store.read("page:duplicate-create"))).toContain(source);
+  });
+
+  it("projects only the latest durable task state", async () => {
+    const context = createAgentContext(
+      { sessionId: "page:state", sessionKind: "page", policyVersion: "v1" },
+      { eventStore: new InMemoryContextEventStore() },
+    );
+    await context.append([
+      { kind: "instruction", scope: "system", content: "Build." },
+      { kind: "user_message", content: "Create home." },
+      { kind: "task_state", state: { decisions: ["phase=draft_target", "revision=missing"] } },
+      { kind: "task_state", state: { decisions: ["phase=build", "revision=sha256:new"] } },
+    ]);
+    const projection = await context.project({
+      model: { id: "probe", provider: "openai", contextWindow: 128_000 },
+      tools: [], toolChoice: "auto", completionProfile: "code", pressure: "normal",
+    });
+    expect(JSON.stringify(projection.messages)).not.toContain("draft_target");
+    expect(JSON.stringify(projection.messages)).not.toContain("revision=missing");
+    expect(JSON.stringify(projection.messages)).toContain("phase=build");
+    expect(projection.compaction.stages).toContain("typed_checkpoint");
   });
 });

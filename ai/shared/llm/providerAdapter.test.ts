@@ -62,4 +62,35 @@ describe("buildProviderPayload", () => {
     expect(() => validateProviderPayload(payload, "gemini-compatible"))
       .toThrow(/ends with an assistant\/model turn/i);
   });
+
+  it("rejects orphan and missing tool results before network I/O", () => {
+    const orphan = buildProviderPayload({
+      ...base,
+      messages: [
+        { role: "system", content: "Build" },
+        { role: "user", content: "Continue" },
+        { role: "tool", tool_call_id: "unknown", content: "ok" },
+      ],
+    });
+    expect(() => validateProviderPayload(orphan, "gemini-compatible"))
+      .toThrow(/orphan tool result/i);
+
+    const missing = buildProviderPayload({
+      ...base,
+      model: "gpt-probe",
+      provider: "openai",
+      messages: [
+        { role: "system", content: "Build" },
+        { role: "user", content: "Continue" },
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [{ id: "pending", type: "function", function: { name: "write", arguments: "{}" } }],
+        },
+        { role: "user", content: "Continue anyway" },
+      ],
+    });
+    expect(() => validateProviderPayload(missing, "openai"))
+      .toThrow(/missing tool result/i);
+  });
 });

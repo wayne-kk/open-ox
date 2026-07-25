@@ -99,6 +99,7 @@ export interface FileSession {
   execute(call: unknown): Promise<FileSessionEvent>;
   events(): FileSessionEvent[];
   writtenPaths(): string[];
+  currentDiagnostics(): readonly FileSessionDiagnostic[];
   stopDecision():
     | { kind: "continue"; reason: string }
     | { kind: "complete" }
@@ -550,6 +551,7 @@ export function createFileSession(options: FileSessionOptions): FileSession {
             (event.kind === "file_created" || event.kind === "file_updated"),
         ),
       ),
+    currentDiagnostics: () => [...records.values()].flatMap((record) => record.diagnostics),
     stopDecision,
   };
 }

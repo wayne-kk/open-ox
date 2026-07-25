@@ -121,8 +121,6 @@ export function createPageFileSession(options: {
   });
 }
 
-const VISIBLE_TOOL_NAMES = new Set(["create_target_page", "create_page_component", "replace_page_file"]);
-
 export interface RunPageImplementAgentParams {
   page: PlannedPageBlueprint;
   designSystem: string;
@@ -295,36 +293,24 @@ export async function runPageImplementAgent(
         return;
       }
       if (event.kind !== "tool" || !onStep) return;
-      const { name, args, iteration, result } = event;
+      const { name, iteration, result, activity, path: eventPath } = event;
       if (!onStep) return;
       const cached = typeof result === "object" && result.meta?.cached === true;
-      if (VISIBLE_TOOL_NAMES.has(name) && !cached) {
-        const filePath = name === "create_target_page" ? targetPath : String(args.path ?? "");
+      if (activity === "write" && eventPath && !cached) {
         const succeeded = typeof result === "string" || result.success;
         onStep({
-          step: `page_agent_file:${page.slug}:${filePath}`,
+          step: `page_agent_file:${page.slug}:${eventPath}`,
           status: succeeded ? "ok" : "error",
           detail: succeeded
-            ? `[${page.slug}] ${name.replace("_", " ")}: ${filePath}`
-            : `[${page.slug}] ${name.replace("_", " ")} rejected: ${filePath}`,
+            ? `[${page.slug}] ${name.replace("_", " ")}: ${eventPath}`
+            : `[${page.slug}] ${name.replace("_", " ")} rejected: ${eventPath}`,
           timestamp: Date.now(),
           duration: 0,
         });
       }
-      const detail =
-        name === "read_page_file"
-          ? `reading ${
-              String(args.path ?? "")
-                .split("/")
-                .pop() || "..."
-            }`
-          : name === "create_target_page" || name === "create_page_component" || name === "replace_page_file"
-            ? `writing ${
-                (name === "create_target_page" ? targetPath : String(args.path ?? ""))
-                  .split("/")
-                  .pop() || "..."
-              }`
-            : undefined;
+      const detail = activity === "read" || activity === "write"
+        ? `${activity === "read" ? "reading" : "writing"} ${eventPath?.split("/").pop() || "..."}`
+        : undefined;
       if (detail) {
         onStep({
           step: agentStepName,

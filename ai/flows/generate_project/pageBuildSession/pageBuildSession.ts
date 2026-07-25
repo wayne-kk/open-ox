@@ -3,13 +3,22 @@ import type { ToolResult } from "@/ai/tools";
 import type { FileSession, FileSessionCall, FileSessionEvent } from "@/ai/shared/fileSession/fileSession";
 import { callLLMWithToolsFromMessages } from "@/ai/shared/llm/toolLoop";
 import type { AgentToolCallRecord, ChatMessage } from "@/ai/shared/llm/types";
+import type { DurableTaskState } from "@/ai/shared/agentContext";
 
 export type PageBuildPhase = "draft_target" | "build" | "repair" | "complete" | "failed";
 
 export type PageBuildEvent =
   | { kind: "message"; message: ChatMessage }
   | { kind: "assistant_round"; iteration: number }
-  | { kind: "tool"; name: string; args: Record<string, unknown>; iteration: number; result: ToolResult | string };
+  | {
+      kind: "tool";
+      name: string;
+      args: Record<string, unknown>;
+      iteration: number;
+      result: ToolResult | string;
+      activity: "read" | "write" | "verify" | "image" | "other";
+      path?: string;
+    };
 
 export interface PageBuildSessionSpec {
   slug: string;
@@ -42,14 +51,23 @@ const functionTool = (
   parameters: Record<string, unknown>,
 ): ChatCompletionTool => ({ type: "function", function: { name, description, parameters } });
 
+const PAGE_TOOL = {
+  createTarget: "create_target_page",
+  createComponent: "create_page_component",
+  read: "read_page_file",
+  replace: "replace_page_file",
+  verify: "verify_page_files",
+  image: "generate_image",
+} as const;
+
 const CREATE_TARGET_TOOL = functionTool(
-  "create_target_page",
+  PAGE_TOOL.createTarget,
   "Create the required target page. The runtime owns its path; provide only complete TSX source.",
   { type: "object", properties: { content: { type: "string" } }, required: ["content"] },
 );
 
 const CREATE_COMPONENT_TOOL = functionTool(
-  "create_page_component",
+  PAGE_TOOL.createComponent,
   "Create one page-local component below the assigned component root.",
   {
     type: "object",
@@ -59,13 +77,13 @@ const CREATE_COMPONENT_TOOL = functionTool(
 );
 
 const READ_TOOL = functionTool(
-  "read_page_file",
+  PAGE_TOOL.read,
   "Read the canonical content and revision of an owned page file before replacement.",
   { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
 );
 
 const REPLACE_TOOL = functionTool(
-  "replace_page_file",
+  PAGE_TOOL.replace,
   "Replace an owned page file atomically against the exact revision returned by read_page_file.",
   {
     type: "object",
@@ -79,7 +97,7 @@ const REPLACE_TOOL = functionTool(
 );
 
 const VERIFY_TOOL = functionTool(
-  "verify_page_files",
+  PAGE_TOOL.verify,
   "Verify the current page files. Runtime completion is automatic when required artifacts are clean.",
   { type: "object", properties: { paths: { type: "array", items: { type: "string" } } } },
 );
@@ -102,12 +120,58 @@ function latestEventForPath(session: FileSession, path: string): FileSessionEven
   return session.events().findLast((event) => event.path === path);
 }
 
+function pageToolActivity(
+  name: string,
+  args: Record<string, unknown>,
+  targetPath: string,
+): Pick<Extract<PageBuildEvent, { kind: "tool" }>, "activity" | "path"> {
+  if (name === PAGE_TOOL.createTarget) return { activity: "write", path: targetPath };
+  if (name === PAGE_TOOL.createComponent || name === PAGE_TOOL.replace) {
+    return { activity: "write", path: String(args.path ?? "") };
+  }
+  if (name === PAGE_TOOL.read) return { activity: "read", path: String(args.path ?? "") };
+  if (name === PAGE_TOOL.verify) return { activity: "verify" };
+  if (name === PAGE_TOOL.image) return { activity: "image" };
+  return { activity: "other" };
+}
+
 export function pageBuildPhase(spec: Pick<PageBuildSessionSpec, "targetPath" | "fileSession">): PageBuildPhase {
   const decision = spec.fileSession.stopDecision();
   if (decision.kind === "failed") return "failed";
   if (decision.kind === "complete") return "complete";
   if (!spec.fileSession.writtenPaths().includes(spec.targetPath)) return "draft_target";
-  return spec.fileSession.events().some((event) => event.diagnostics?.length) ? "repair" : "build";
+  return spec.fileSession.currentDiagnostics().length > 0 ? "repair" : "build";
+}
+
+export function pageBuildTaskState(
+  spec: Pick<PageBuildSessionSpec, "slug" | "targetPath" | "componentRoot" | "fileSession">,
+): DurableTaskState {
+  const phase = pageBuildPhase(spec);
+  const decision = spec.fileSession.stopDecision();
+  const latestMutations = new Map<string, { path: string; operation: string; revision?: string; outcome: "success" }>();
+  for (const event of spec.fileSession.events()) {
+    if (!event.path || (event.kind !== "file_created" && event.kind !== "file_updated")) continue;
+    latestMutations.set(event.path, {
+      path: event.path,
+      operation: event.kind,
+      ...(event.revision ? { revision: event.revision } : {}),
+      outcome: "success",
+    });
+  }
+  return {
+    goal: `Build route ${spec.slug}`,
+    targetPaths: [spec.targetPath],
+    mutations: [...latestMutations.values()],
+    unresolvedDiagnostics: spec.fileSession.currentDiagnostics().map((diagnostic) => ({
+      path: diagnostic.path,
+      summary: diagnostic.message,
+    })),
+    decisions: [
+      `phase=${phase}`,
+      `next=${decision.kind === "continue" ? decision.reason : decision.kind}`,
+      `ownership=${spec.targetPath}, ${spec.componentRoot}/**`,
+    ],
+  };
 }
 
 export function pageBuildStateCard(spec: Pick<PageBuildSessionSpec, "slug" | "targetPath" | "componentRoot" | "fileSession">): string {
@@ -135,8 +199,7 @@ export function toolsForPageBuildPhase(spec: Pick<PageBuildSessionSpec, "targetP
 }
 
 export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<PageBuildSessionResult> {
-  let lastStateCard = pageBuildStateCard(spec);
-  const messages = [...spec.initialMessages, { role: "user" as const, content: lastStateCard }];
+  const messages = [...spec.initialMessages];
   let iterationsUsed = 0;
   let emptyStopRecoveries = 0;
 
@@ -154,19 +217,19 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
     model: spec.model,
     ...(spec.thinkingLevel ? { thinkingLevel: spec.thinkingLevel } : {}),
     executeToolOverrides: {
-      create_target_page: (args) => executeFile({
+      [PAGE_TOOL.createTarget]: (args) => executeFile({
         name: "create_file",
         args: { path: spec.targetPath, content: String(args.content ?? "") },
       }),
-      create_page_component: (args) => executeFile({
+      [PAGE_TOOL.createComponent]: (args) => executeFile({
         name: "create_file",
         args: { path: String(args.path ?? ""), content: String(args.content ?? "") },
       }),
-      read_page_file: (args) => executeFile({
+      [PAGE_TOOL.read]: (args) => executeFile({
         name: "read_file_snapshot",
         args: { path: String(args.path ?? "") },
       }),
-      replace_page_file: (args) => executeFile({
+      [PAGE_TOOL.replace]: (args) => executeFile({
         name: "replace_file",
         args: {
           path: String(args.path ?? ""),
@@ -174,28 +237,25 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
           content: String(args.content ?? ""),
         },
       }),
-      verify_page_files: (args) => executeFile({
+      [PAGE_TOOL.verify]: (args) => executeFile({
         name: "verify_files",
         args: { paths: Array.isArray(args.paths) ? args.paths.map(String) : undefined },
       }),
-      ...(spec.image ? { generate_image: spec.image.execute } : {}),
+      ...(spec.image ? { [PAGE_TOOL.image]: spec.image.execute } : {}),
     },
     resolveToolsForIteration: () => toolsForPageBuildPhase(spec),
     resolveToolChoiceForIteration: () => spec.fileSession.stopDecision().kind === "complete" ? "auto" : "required",
-    compactMessagesBeforeRound: ({ messages: history }) => {
-      const currentStateCard = pageBuildStateCard(spec);
-      if (currentStateCard === lastStateCard) return;
-      lastStateCard = currentStateCard;
-      const stateMessage: ChatMessage = { role: "user", content: currentStateCard };
-      history.push(stateMessage);
-      spec.onEvent?.({ kind: "message", message: stateMessage });
-    },
+    resolveTaskStateForRound: () => pageBuildTaskState(spec),
     onMessage: (message) => spec.onEvent?.({ kind: "message", message }),
     onAssistantRound: ({ iteration }) => {
       iterationsUsed = Math.max(iterationsUsed, iteration + 1);
       spec.onEvent?.({ kind: "assistant_round", iteration });
     },
-    onToolCall: (info) => spec.onEvent?.({ kind: "tool", ...info }),
+    onToolCall: (info) => spec.onEvent?.({
+      kind: "tool",
+      ...info,
+      ...pageToolActivity(info.name, info.args, spec.targetPath),
+    }),
     onAssistantStop: ({ messages: history }) => {
       const decision = spec.fileSession.stopDecision();
       if (decision.kind === "complete" || emptyStopRecoveries >= 2) return false;

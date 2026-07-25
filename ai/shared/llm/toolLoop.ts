@@ -13,7 +13,9 @@ import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { lfToolAgentRound } from "@/lib/observability/langfuseGenerationCatalog";
 import { createAgentContext, InMemoryContextEventStore, isAgentContextV2Enabled } from "@/ai/shared/agentContext";
 import type { ContextSessionKind } from "@/ai/shared/agentContext";
+import type { DurableTaskState } from "@/ai/shared/agentContext";
 import { legacyMessagesToEvents } from "@/ai/shared/agentContext/legacyMessages";
+import { resolveLlmProvider } from "./providerAdapter";
 
 export type ToolLoopToolChoice = "required" | "auto" | "none";
 export type ToolLoopCompletionProfile = "control" | "code";
@@ -449,6 +451,8 @@ export async function callLLMWithToolsFromMessages(params: {
   contextSessionKind?: ContextSessionKind;
   /** Managed sessions always use AgentContext; rollout sessions follow environment flags. */
   contextMode?: "rollout" | "managed";
+  /** Latest server-owned state. Managed AgentContext keeps only the newest projection. */
+  resolveTaskStateForRound?: () => DurableTaskState;
   /** When false, the model may only call one tool per turn. */
   parallelToolCalls?: boolean;
   model?: string;
@@ -562,6 +566,7 @@ export async function callLLMWithToolsFromMessages(params: {
     : undefined;
   let syncedMessageCount = 0;
   let lastProjectionThroughEventId: string | undefined;
+  let lastTaskStateJson: string | undefined;
 
   const syncContext = async () => {
     if (!agentContext || syncedMessageCount >= messages.length) return;
@@ -596,6 +601,14 @@ export async function callLLMWithToolsFromMessages(params: {
     let roundCompletionMaxTokens: number | undefined;
     const requestRound = async (lengthRetry: boolean, providerArgumentRetry = false) => {
       await syncContext();
+      const taskState = params.resolveTaskStateForRound?.();
+      if (agentContext && taskState) {
+        const taskStateJson = JSON.stringify(taskState);
+        if (taskStateJson !== lastTaskStateJson) {
+          await agentContext.append([{ kind: "task_state", state: taskState }]);
+          lastTaskStateJson = taskStateJson;
+        }
+      }
       const projection = agentContext
         ? await agentContext.project({
             model: {
@@ -719,6 +732,11 @@ export async function callLLMWithToolsFromMessages(params: {
         (msgLower.includes("invalid_argument") || msgLower.includes("invalid argument"));
 
       if (genericInvalidArgument) {
+        if (resolveLlmProvider(model) === "gemini-compatible") {
+          throw new Error(
+            `Provider rejected the normalized Gemini-compatible payload. Model: ${model}. Detail: ${msg.slice(0, 500)}`,
+          );
+        }
         try {
           res = await requestRound(false, true);
           // Continue the normal response path with tools intact. This retry

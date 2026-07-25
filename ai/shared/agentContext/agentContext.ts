@@ -80,7 +80,38 @@ interface EventProjection {
   removedPayloadBytes: number;
   usedMutationReceipts: boolean;
   usedSupersededObservations: boolean;
+  usedTypedCheckpoint: boolean;
   usedCondensation: boolean;
+}
+
+function nestedResultRecord(
+  event: Extract<ContextEvent, { kind: "tool_result" }>,
+): { root: Record<string, unknown>; output: Record<string, unknown>; meta: Record<string, unknown> } {
+  const parsed = parsedValue(event.result);
+  const root = parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : {};
+  const outputValue = parsedValue(root.output);
+  const output = outputValue && typeof outputValue === "object"
+    ? outputValue as Record<string, unknown>
+    : {};
+  const meta = root.meta && typeof root.meta === "object"
+    ? root.meta as Record<string, unknown>
+    : {};
+  return { root, output, meta };
+}
+
+function mutationIdentity(
+  event: Extract<ContextEvent, { kind: "tool_result" }>,
+  parsedArgs: Record<string, unknown>,
+): { path?: string; revision?: string } {
+  const args = event.arguments && typeof event.arguments === "object"
+    ? event.arguments as Record<string, unknown>
+    : {};
+  const { output, meta } = nestedResultRecord(event);
+  const path = [args.path, parsedArgs.path, meta.path, output.path]
+    .find((value): value is string => typeof value === "string" && value.length > 0);
+  const revision = [meta.revision, output.revision]
+    .find((value): value is string => typeof value === "string" && value.length > 0);
+  return { ...(path ? { path } : {}), ...(revision ? { revision } : {}) };
 }
 
 function compactCompletedMutations(events: readonly ContextEvent[]): EventProjection {
@@ -101,6 +132,13 @@ function compactCompletedMutations(events: readonly ContextEvent[]): EventProjec
     if (!forgottenByCondensation.has(event.id) || event.kind === "condensation") continue;
     omitted.add(event.id);
     removedPayloadBytes += JSON.stringify(event).length;
+  }
+
+  const taskStates = events.filter((event) => event.kind === "task_state");
+  for (const state of taskStates.slice(0, -1)) {
+    if (omitted.has(state.id)) continue;
+    omitted.add(state.id);
+    removedPayloadBytes += JSON.stringify(state).length;
   }
 
   // Condensation can only remove whole provider protocol units.
@@ -139,21 +177,16 @@ function compactCompletedMutations(events: readonly ContextEvent[]): EventProjec
 
     const operations = event.calls.map((call, index) => {
       const result = results[index]!;
-      const args = result.arguments && typeof result.arguments === "object"
-        ? result.arguments as Record<string, unknown>
-        : {};
       let parsedArgs: Record<string, unknown> = {};
       try {
         parsedArgs = JSON.parse(call.argumentsJson) as Record<string, unknown>;
       } catch {
         // The canonical payload remains available; the receipt can omit malformed details.
       }
-      const path = typeof args.path === "string"
-        ? args.path
-        : typeof parsedArgs.path === "string"
-          ? parsedArgs.path
-          : undefined;
-      return `${call.name}${path ? ` ${path}` : ""}: succeeded`;
+      const identity = mutationIdentity(result, parsedArgs);
+      return `${call.name}${identity.path ? ` ${identity.path}` : ""}: succeeded${
+        identity.revision ? ` @ ${identity.revision}` : ""
+      }`;
     });
     summaries.push({
       sequence: event.sequence,
@@ -184,14 +217,12 @@ function compactCompletedMutations(events: readonly ContextEvent[]): EventProjec
     if (!mutationBatch || !hasFailure || !oversized || results.some((result) => !result)) continue;
     const operations = event.calls.map((call, index) => {
       const result = results[index]!;
-      const args = result.arguments && typeof result.arguments === "object"
-        ? result.arguments as Record<string, unknown>
-        : {};
+      const identity = mutationIdentity(result, {});
       const parsedResult = parsedValue(result.result);
       const error = parsedResult && typeof parsedResult === "object"
         ? String((parsedResult as Record<string, unknown>).error ?? "mutation rejected")
         : "mutation rejected";
-      return `${call.name}${typeof args.path === "string" ? ` ${args.path}` : ""}: ${error.slice(0, 500)}`;
+      return `${call.name}${identity.path ? ` ${identity.path}` : ""}: ${error.slice(0, 500)}`;
     });
     summaries.push({
       sequence: event.sequence,
@@ -257,6 +288,7 @@ function compactCompletedMutations(events: readonly ContextEvent[]): EventProjec
     removedPayloadBytes,
     usedMutationReceipts: summarized.size > 0,
     usedSupersededObservations,
+    usedTypedCheckpoint: taskStates.length > 1,
     usedCondensation: forgottenByCondensation.size > 0,
   };
 }
@@ -487,6 +519,7 @@ export function createAgentContext(
           stages: [
             ...(eventProjection.usedMutationReceipts ? ["mutation_receipts" as const] : []),
             ...(eventProjection.usedSupersededObservations ? ["superseded_observations" as const] : []),
+            ...(eventProjection.usedTypedCheckpoint ? ["typed_checkpoint" as const] : []),
             ...(truncated.changed ? ["truncate_reproducible_output" as const] : []),
             ...(eventProjection.usedCondensation ? ["semantic_condensation" as const] : []),
           ],
