@@ -1,7 +1,8 @@
 # Page Build Session v2 Architecture
 
-**Status:** Implemented  
-**Date:** 2026-07-25  
+**Status:** Implemented
+
+**Date:** 2026-07-25
 **Scope:** Generate pipeline `page_implement_agent`
 
 ## 1. Decision
