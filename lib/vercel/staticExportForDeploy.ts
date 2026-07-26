@@ -21,6 +21,7 @@ import {
 } from "@/lib/previewShared";
 import { prepareProjectDirForStaticExport } from "@/lib/staticSitePreview";
 import { envForNextWebpackChild } from "@/lib/nextWebpackChildEnv";
+import { applyProjectArtifactBranding } from "@/lib/branding/applyProjectArtifactBranding";
 
 const execFileAsync = promisify(execFile);
 
@@ -126,7 +127,9 @@ export async function buildStaticExportForVercelDeploy(
   const filesFp = await computeProjectFingerprint(projectId);
   const force = options?.force === true;
   if (!force && (await canReuse(projectDir, filesFp))) {
-    return { outDir: path.join(projectDir, "out"), reused: true };
+    const outDir = path.join(projectDir, "out");
+    await applyProjectArtifactBranding(outDir, projectId, undefined, "vercel_deploy");
+    return { outDir, reused: true };
   }
 
   await runRootStaticExportBuild(projectDir, nm.preferWebpackBuild);
@@ -136,6 +139,7 @@ export async function buildStaticExportForVercelDeploy(
   } catch {
     throw new Error("[vercelDeploy] No out/index.html after production static export");
   }
+  await applyProjectArtifactBranding(outDir, projectId, undefined, "vercel_deploy");
   await writeStamp(projectDir, {
     filesFingerprint: filesFp,
     basePath: VERCEL_DEPLOY_BASE_PATH_MARKER,

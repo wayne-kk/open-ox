@@ -15,6 +15,7 @@ import {
   studioCapabilityReasonLabel,
   type CapabilityDecision,
 } from "@/lib/studio/capabilities";
+import { ProjectBrandingControl } from "@/app/components/ProjectBrandingControl";
 
 type DeployStatus = "queued" | "building" | "uploading" | "ready" | "error";
 
@@ -394,6 +395,11 @@ export function StudioDeployMenu({
             </button>
           </div>
         )}
+        {hydrated ? (
+          <div className="mt-3">
+            <ProjectBrandingControl projectId={projectId} />
+          </div>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );

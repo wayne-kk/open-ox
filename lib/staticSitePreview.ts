@@ -66,6 +66,7 @@ import {
   getStoragePreviewBasePath as previewBasePath,
   isDedicatedPreviewOrigin,
 } from "@/lib/previewOrigin";
+import { applyProjectArtifactBranding } from "@/lib/branding/applyProjectArtifactBranding";
 
 export { contentTypeForRelPath, resolveProxiedContentType };
 
@@ -759,6 +760,7 @@ export async function syncStaticSitePreview(
           const aggregateKey = `${filesFp}:${originFp}`;
           const outDir = path.join(projectDir, "out");
           await rewriteExportedPublicPathsInOutDir(outDir, basePath);
+          await applyProjectArtifactBranding(outDir, projectId, storage, "publish_preview");
           await uploadOutDir(storage, projectId, outDir);
           // Mark synced before deleting local out/ — otherwise a late failure leaves Storage
           // populated while static_preview_synced_at stays null (health used to false-down).

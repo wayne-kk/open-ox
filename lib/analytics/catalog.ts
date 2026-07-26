@@ -19,6 +19,10 @@ export const AnalyticsEventName = {
   onboardingGeneratePreviewReady: "onboarding_generate_preview_ready",
   onboardingDesignComplete: "onboarding_design_complete",
   firstModifySend: "first_modify_send",
+  brandBadgeImpression: "brand_badge_impression",
+  brandBadgeCollapse: "brand_badge_collapse",
+  brandBadgeClick: "brand_badge_click",
+  brandRemovalPurchase: "brand_removal_purchase",
 } as const;
 
 export type AnalyticsEventName =

@@ -12,6 +12,7 @@ import {
   studioCapabilityReasonLabel,
   type CapabilityDecision,
 } from "@/lib/studio/capabilities";
+import { ProjectBrandingControl } from "@/app/components/ProjectBrandingControl";
 
 export type ProjectPublishState = {
   publishPreview: boolean;
@@ -308,11 +309,14 @@ export function StudioPublishMenu({
           </p>
         </div>
         {open ? (
-          <ProjectPublishToggles
-            projectId={projectId}
-            initial={initial}
-            onStateChange={(s) => setPublished(s.publishPreview)}
-          />
+          <div className="space-y-2">
+            <ProjectPublishToggles
+              projectId={projectId}
+              initial={initial}
+              onStateChange={(s) => setPublished(s.publishPreview)}
+            />
+            <ProjectBrandingControl projectId={projectId} />
+          </div>
         ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
