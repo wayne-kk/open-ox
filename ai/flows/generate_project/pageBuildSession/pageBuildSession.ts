@@ -148,8 +148,11 @@ function pageToolActivity(
   return { activity: "other" };
 }
 
-function pageFindings(spec: Pick<PageBuildSessionSpec, "fileSession" | "assetLifecycle">): AgentWorkspaceFinding[] {
-  return (spec.assetLifecycle?.inspect(spec.fileSession.artifacts()) ?? []).map((requirement) => {
+function pageFindings(
+  assetLifecycle: PageAssetLifecycle | undefined,
+  artifacts: ReadonlyMap<string, FileSessionArtifact>,
+): AgentWorkspaceFinding[] {
+  return (assetLifecycle?.inspect(artifacts) ?? []).map((requirement) => {
     if (requirement.kind === "source_diagnostic") {
       return {
         code: "UNVERIFIABLE_SOURCE",
@@ -194,7 +197,7 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
   let emptyStopRecoveries = 0;
   let deterministicRecoveries = 0;
   const executeImage = async (args: Record<string, unknown>) => {
-    const requirement = spec.assetLifecycle?.inspect(spec.fileSession.artifacts())[0];
+    const requirement = spec.assetLifecycle?.inspect(spec.fileSession.snapshot().artifacts)[0];
     const declaredPath = requirement?.kind === "asset_reference" &&
         requirement.nextAction === "generate_asset" &&
         requirement.reference.startsWith("/images/")
@@ -209,13 +212,19 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
   const runtime = createAgentWorkspaceRuntime({
     fileSession: spec.fileSession,
     profile: {
+      projection: {
+        label: `Page build state: ${spec.slug}`,
+        goal: `Build route ${spec.slug}`,
+        targetPaths: [spec.targetPath],
+        ownership: `${spec.targetPath}, ${spec.componentRoot}/**`,
+      },
       primaryArtifact: {
         path: spec.targetPath,
         requireSessionWriteWhenInvalid: true,
         isValid: spec.isPrimaryArtifactValid ?? ((content) =>
           content.trim().length > 0 && !content.includes("Preparing your site")),
       },
-      inspectFindings: () => pageFindings(spec),
+      inspectFindings: (artifacts) => pageFindings(spec.assetLifecycle, artifacts),
     },
     externalActions: spec.assetLifecycle?.generation
       ? { [PAGE_TOOL.image]: executeImage }
@@ -226,44 +235,11 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
   const runtimeTools = (): ChatCompletionTool[] =>
     toolsForCapabilities(runtime.plan().capabilities, spec.assetLifecycle);
   const runtimeStateCard = (): string => {
-    const plan = runtime.plan();
-    return [
-      `[Page build state: ${spec.slug}]`,
-      `target: ${spec.targetPath}`,
-      `written_paths: ${spec.fileSession.writtenPaths().join(", ") || "none"}`,
-      `next: ${plan.decision.kind === "continue" ? plan.decision.reason : plan.decision.kind}`,
-      `blocking_finding: ${plan.finding ? JSON.stringify(plan.finding) : "none"}`,
-      `legal_tools: ${runtimeTools().map((tool) => tool.function.name).join(", ") || "none"}`,
-      `ownership: ${spec.targetPath}, ${spec.componentRoot}/**`,
-    ].join("\n");
+    const projection = runtime.project();
+    const legalTools = runtimeTools().map((tool) => tool.function.name).join(", ") || "none";
+    return `${projection.contextCard}\nlegal_tools: ${legalTools}`;
   };
-  const runtimeTaskState = (): DurableTaskState => {
-    const plan = runtime.plan();
-    const mutations = new Map<string, NonNullable<DurableTaskState["mutations"]>[number]>();
-    for (const event of spec.fileSession.events()) {
-      if (!event.path || (event.kind !== "file_created" && event.kind !== "file_updated")) continue;
-      mutations.set(event.path, {
-        path: event.path,
-        operation: event.kind,
-        ...(event.revision ? { revision: event.revision } : {}),
-        outcome: "success",
-      });
-    }
-    return {
-      goal: `Build route ${spec.slug}`,
-      targetPaths: [spec.targetPath],
-      mutations: [...mutations.values()],
-      unresolvedDiagnostics: spec.fileSession.currentDiagnostics().map((diagnostic) => ({
-        path: diagnostic.path,
-        summary: diagnostic.message,
-      })),
-      decisions: [
-        `ownership=${spec.targetPath}, ${spec.componentRoot}/**`,
-        `next=${plan.decision.kind === "continue" ? plan.decision.reason : plan.decision.kind}`,
-        ...(plan.finding ? [`finding=${JSON.stringify(plan.finding)}`] : []),
-      ],
-    };
-  };
+  const runtimeTaskState = (): DurableTaskState => runtime.project().taskState;
 
   const { content, toolCalls } = await callLLMWithToolsFromMessages({
     messages,
@@ -351,7 +327,7 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
     for (let recovery = 0; recovery < 8; recovery += 1) {
       const before = runtime.plan().decision;
       if (before.kind !== "continue") break;
-      const requirement = spec.assetLifecycle?.inspect(spec.fileSession.artifacts())
+      const requirement = spec.assetLifecycle?.inspect(spec.fileSession.snapshot().artifacts)
         .find((candidate) => candidate.kind === "asset_reference");
       let result: ToolResult | string | null = null;
       let toolName = "";
@@ -424,7 +400,7 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
     emptyStopRecoveries,
     finalDecision: runtime.plan().decision,
     finalRequirement: runtime.plan().finding?.blocking
-      ? spec.assetLifecycle?.inspect(spec.fileSession.artifacts())
+      ? spec.assetLifecycle?.inspect(spec.fileSession.snapshot().artifacts)
         .find((requirement) => requirement.kind === "asset_reference")
       : undefined,
     finalLegalTools: runtimeTools().map((tool) => tool.function.name),

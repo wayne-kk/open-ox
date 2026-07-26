@@ -342,7 +342,7 @@ export async function runPageImplementAgent(
     throw new Error(
       `page_implement_agent:${page.slug}: stopped after ${iterationsUsed}/${maxIterations} iterations ` +
         `without completing ${targetPath}: ${finalDecision.kind === "continue" ? finalDecision.reason : finalDecision.error}. ` +
-        `Successful target write: ${fileSession.writtenPaths().includes(targetPath) ? "yes" : "no"}. ` +
+        `Successful target write: ${fileSession.snapshot().writtenPaths.includes(targetPath) ? "yes" : "no"}. ` +
         `Requirement: ${finalRequirement ? JSON.stringify(finalRequirement) : "none"}. ` +
         `Legal tools: ${finalLegalTools.join(",") || "none"}. ` +
         `Deterministic recoveries: ${deterministicRecoveries}. ` +
@@ -366,7 +366,7 @@ export async function runPageImplementAgent(
         `("Preparing your site…") after the agent signaled completion`,
     );
   }
-  const writtenPaths = fileSession.writtenPaths();
+  const writtenPaths = [...fileSession.snapshot().writtenPaths];
 
   const trace: StepTrace = {
     input: {

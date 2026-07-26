@@ -23,6 +23,43 @@ function createSession() {
 }
 
 describe("FileSession", () => {
+  it("projects structured workspace state without requiring event interpretation", async () => {
+    const { session } = createSession();
+    await session.loadIfExists("app/page.tsx");
+    await session.execute({
+      name: "create_file",
+      args: {
+        path: "app/page.tsx",
+        content: "export default () => <main>Ready</main>",
+      },
+    });
+
+    const state = session.snapshot();
+    expect(state).toMatchObject({
+      writtenPaths: ["app/page.tsx"],
+      needsVerification: true,
+      decision: { kind: "complete" },
+      mutations: [{ path: "app/page.tsx", operation: "file_created" }],
+    });
+    expect(state.access.get("app/page.tsx")).toBe("read_required");
+    expect(state.prerequisite).toBeUndefined();
+    expect(state.artifacts.get("app/page.tsx")?.content).toContain("Ready");
+  });
+
+  it("projects a stale revision as a structured read prerequisite", async () => {
+    const { session } = createSession();
+    await session.loadIfExists("app/page.tsx");
+    await session.execute({
+      name: "apply_file_patch",
+      args: { path: "app/page.tsx", baseRevision: "sha256:stale", edits: [] },
+    });
+
+    expect(session.snapshot().prerequisite).toEqual({
+      kind: "read_required",
+      path: "app/page.tsx",
+    });
+  });
+
   it("exposes canonical artifacts without leaking mutable session records", async () => {
     const session = createFileSession({
       owner: "test",

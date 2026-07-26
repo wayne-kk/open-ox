@@ -86,6 +86,7 @@ The new seam is `AgentWorkspaceRuntime`.
 interface AgentWorkspaceRuntime {
   initialize(): Promise<void>;
   plan(): AgentWorkspacePlan;
+  project(): AgentWorkspaceProjection;
   execute(intent: AgentWorkspaceIntent): Promise<ToolResult | string>;
 }
 ```
@@ -243,15 +244,10 @@ required for sharing the Runtime with Chrome or other coding workers.
    strategy Module.
 3. Image analysis remains Page-specific, which is intentional. Its output contract should migrate
    fully from `PageArtifactRequirement` to `AgentWorkspaceFinding` to remove the final translation.
-4. Context and progress projection still reads `FileSession` events directly in the Page Implement
-   Role Worker Adapter. A follow-up should expose a structured Runtime projection so UI/context
-   state cannot drift from the capability plan.
-5. `AgentWorkspaceRuntime` still derives some state from `FileSession.events()` and `tools()`.
-   `FileSession` should eventually expose a structured snapshot and capability interface instead of
-   requiring its consumer to recognize event and tool names.
-6. Chrome still has its own build-session controller. It should adopt `AgentWorkspaceRuntime` only
+4. Chrome still has its own build-session controller and remains the compatibility consumer of
+   deprecated `FileSession` event/getter interfaces. It should adopt `AgentWorkspaceRuntime` only
    after this Page migration is stable in production.
-7. Model-facing tool names remain Page-specific compatibility aliases.
+5. Model-facing tool names remain Page-specific compatibility aliases.
 
 ## 11. Recommended next steps
 
@@ -289,23 +285,25 @@ architecture. Their blocking findings were resolved in this version:
 4. Repository terminology now consistently identifies this pipeline component as the Page
    Implement Role Worker.
 
-The reviewers also identified the structured FileSession snapshot and Runtime-owned context
-projection improvements recorded in section 10. Those are real follow-up architecture work, but do
-not leave an unexecutable lifecycle state in this migration.
+The structured FileSession snapshot and Runtime-owned context projection identified by the first
+review are now implemented. `FileSessionSnapshot.prerequisite` replaces prose parsing,
+`planFromSnapshot` keeps plan and projection atomic, and the Runtime produces the model context card
+and durable task state. The Page Implement Role Worker Adapter no longer interprets FileSession
+events or completion reason strings.
 
 ## 14. Verification results
 
 Focused verification after the review fixes:
 
 - 5 test files passed;
-- 45 tests passed across `AgentWorkspaceRuntime`, `FileSession`, the site workspace Adapter, the
+- 48 tests passed across `AgentWorkspaceRuntime`, `FileSession`, the site workspace Adapter, the
   Page Build Session integration, and the Page Implement Role Worker;
 - TypeScript passed with `tsc --noEmit`.
 
 Full regression verification was run once because this change affects the core generation flow:
 
 - 199 test files passed;
-- 1010 tests passed;
+- 1013 tests passed;
 - ESLint and `git diff --check` passed.
 
 Vite still reports two pre-existing missing source-map warnings for generated JavaScript under

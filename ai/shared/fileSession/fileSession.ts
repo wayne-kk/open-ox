@@ -88,6 +88,21 @@ export interface FileSessionCompletionContext {
   artifacts: ReadonlyMap<string, FileSessionArtifact>;
 }
 
+export interface FileSessionSnapshot {
+  artifacts: ReadonlyMap<string, FileSessionArtifact>;
+  writtenPaths: readonly string[];
+  diagnostics: readonly FileSessionDiagnostic[];
+  access: ReadonlyMap<string, "read_required" | "edit_ready">;
+  prerequisite?: { kind: "read_required"; path: string };
+  mutations: readonly {
+    path: string;
+    operation: "file_created" | "file_updated";
+    revision?: string;
+  }[];
+  needsVerification: boolean;
+  decision: ReturnType<FileSession["stopDecision"]>;
+}
+
 interface FileRecord {
   content: string;
   revision: string;
@@ -96,13 +111,19 @@ interface FileRecord {
 
 export interface FileSession {
   ownsPath(path: string): boolean;
+  snapshot(): FileSessionSnapshot;
   tools(): ChatCompletionTool[];
   execute(call: unknown): Promise<FileSessionEvent>;
   loadIfExists(path: string): Promise<boolean>;
+  /** @deprecated Use snapshot(). Event history remains for audit and legacy adapters. */
   events(): FileSessionEvent[];
+  /** @deprecated Use snapshot().artifacts. */
   artifacts(): ReadonlyMap<string, FileSessionArtifact>;
+  /** @deprecated Use snapshot().writtenPaths. */
   writtenPaths(): string[];
+  /** @deprecated Use snapshot().diagnostics. */
   currentDiagnostics(): readonly FileSessionDiagnostic[];
+  /** @deprecated Use snapshot().decision. */
   stopDecision():
     | { kind: "continue"; reason: string }
     | { kind: "complete" }
@@ -543,8 +564,64 @@ export function createFileSession(options: FileSessionOptions): FileSession {
     return { kind: "complete" };
   };
 
+  const snapshot = (): FileSessionSnapshot => {
+    const artifacts = new Map(
+      [...records.entries()].map(([path, record]) => [
+        path,
+        { content: record.content, revision: record.revision },
+      ]),
+    );
+    const writtenPaths = [...records.keys()].filter((path) =>
+      emittedEvents.some(
+        (event) =>
+          event.path === path &&
+          (event.kind === "file_created" || event.kind === "file_updated"),
+      )
+    );
+    const latestMutation = emittedEvents.findLastIndex((event) =>
+      event.kind === "file_created" ||
+      event.kind === "file_loaded" ||
+      event.kind === "file_updated"
+    );
+    const latestVerification = emittedEvents.findLastIndex(
+      (event) => event.kind === "files_verified",
+    );
+    const mutations = new Map<string, FileSessionSnapshot["mutations"][number]>();
+    for (const event of emittedEvents) {
+      if (
+        !event.path ||
+        (event.kind !== "file_created" && event.kind !== "file_updated")
+      ) continue;
+      mutations.set(event.path, {
+        path: event.path,
+        operation: event.kind,
+        ...(event.revision ? { revision: event.revision } : {}),
+      });
+    }
+    return {
+      artifacts,
+      writtenPaths,
+      diagnostics: [...records.values()].flatMap((record) => record.diagnostics),
+      access: new Map(
+        [...records.keys()].map((path) => [
+          path,
+          editableSnapshots.has(path) && !needsSnapshot.has(path)
+            ? "edit_ready" as const
+            : "read_required" as const,
+        ]),
+      ),
+      ...([...needsSnapshot][0]
+        ? { prerequisite: { kind: "read_required" as const, path: [...needsSnapshot][0] } }
+        : {}),
+      mutations: [...mutations.values()],
+      needsVerification: latestMutation >= 0 && latestVerification < latestMutation,
+      decision: stopDecision(),
+    };
+  };
+
   return {
     ownsPath: options.ownsPath,
+    snapshot,
     tools: () => {
       if (terminalError) return [];
       if (needsSnapshot.size > 0) {
@@ -571,21 +648,9 @@ export function createFileSession(options: FileSessionOptions): FileSession {
       return true;
     },
     events: () => [...emittedEvents],
-    artifacts: () => new Map(
-      [...records.entries()].map(([path, record]) => [
-        path,
-        { content: record.content, revision: record.revision },
-      ]),
-    ),
-    writtenPaths: () =>
-      [...records.keys()].filter((path) =>
-        emittedEvents.some(
-          (event) =>
-            event.path === path &&
-            (event.kind === "file_created" || event.kind === "file_updated"),
-        ),
-      ),
-    currentDiagnostics: () => [...records.values()].flatMap((record) => record.diagnostics),
+    artifacts: () => snapshot().artifacts,
+    writtenPaths: () => [...snapshot().writtenPaths],
+    currentDiagnostics: () => [...snapshot().diagnostics],
     stopDecision,
   };
 }

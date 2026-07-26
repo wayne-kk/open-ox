@@ -4,6 +4,7 @@ import type {
   FileSessionArtifact,
   FileSessionCall,
   FileSessionEvent,
+  FileSessionSnapshot,
 } from "@/ai/shared/fileSession/fileSession";
 
 export interface AgentWorkspaceFinding {
@@ -17,6 +18,12 @@ export interface AgentWorkspaceFinding {
 }
 
 export interface AgentWorkspaceProfile {
+  projection?: {
+    label: string;
+    goal: string;
+    targetPaths: readonly string[];
+    ownership: string;
+  };
   primaryArtifact?: {
     path: string;
     requireSessionWriteWhenInvalid?: boolean;
@@ -60,7 +67,33 @@ export interface AgentWorkspacePlan {
 export interface AgentWorkspaceRuntime {
   initialize(): Promise<void>;
   plan(): AgentWorkspacePlan;
+  project(): AgentWorkspaceProjection;
   execute(intent: AgentWorkspaceIntent): Promise<ToolResult | string>;
+}
+
+export interface AgentWorkspaceProjection {
+  plan: AgentWorkspacePlan;
+  artifacts: readonly { path: string; revision: string }[];
+  writtenPaths: readonly string[];
+  diagnostics: readonly { path: string; message: string }[];
+  mutations: readonly {
+    path: string;
+    operation: "file_created" | "file_updated";
+    revision?: string;
+  }[];
+  contextCard: string;
+  taskState: {
+    goal: string;
+    targetPaths: readonly string[];
+    mutations: readonly {
+      path: string;
+      operation: "file_created" | "file_updated";
+      revision?: string;
+      outcome: "success";
+    }[];
+    unresolvedDiagnostics: readonly { path: string; summary: string }[];
+    decisions: readonly string[];
+  };
 }
 
 type ExternalAction = (args: Record<string, unknown>) => Promise<ToolResult | string>;
@@ -92,17 +125,6 @@ function eventResult(event: FileSessionEvent): ToolResult {
           eventKind: event.kind,
         },
       };
-}
-
-function revisionNeedsVerification(events: readonly FileSessionEvent[]): boolean {
-  const latestMutation = events.findLastIndex(
-    (event) =>
-      event.kind === "file_created" ||
-      event.kind === "file_loaded" ||
-      event.kind === "file_updated",
-  );
-  if (latestMutation < 0) return false;
-  return events.findLastIndex((event) => event.kind === "files_verified") < latestMutation;
 }
 
 function exactTextEdits(content: string, oldText: string, newText: string) {
@@ -140,6 +162,7 @@ export function createAgentWorkspaceRuntime(options: {
 
   const findingPlan = (
     finding: AgentWorkspaceFinding,
+    workspace: FileSessionSnapshot,
   ): AgentWorkspacePlan | null => {
     if (!finding.blocking) return null;
     if (!finding.resolution) {
@@ -173,7 +196,7 @@ export function createAgentWorkspaceRuntime(options: {
       };
     }
     const path = finding.resolution.path;
-    if (!fileSession.ownsPath(path) || !fileSession.artifacts().has(path)) {
+    if (!fileSession.ownsPath(path) || !workspace.artifacts.has(path)) {
       return {
         decision: {
           kind: "failed",
@@ -183,25 +206,17 @@ export function createAgentWorkspaceRuntime(options: {
         finding,
       };
     }
-    const pathEvents = fileSession.events().filter((event) => event.path === path);
-    const latestMutation = pathEvents.findLastIndex(
-      (event) =>
-        event.kind === "file_created" ||
-        event.kind === "file_loaded" ||
-        event.kind === "file_updated",
-    );
-    const latestSnapshot = pathEvents.findLastIndex((event) => event.kind === "file_snapshot");
     return {
       decision: { kind: "continue", reason: finding.message },
-      capabilities: latestSnapshot > latestMutation
+      capabilities: workspace.access.get(path) === "edit_ready"
         ? [{ kind: "edit", path }]
         : [{ kind: "read", path }],
       finding,
     };
   };
 
-  const plan = (): AgentWorkspacePlan => {
-    const fileDecision = fileSession.stopDecision();
+  const planFromSnapshot = (workspace: FileSessionSnapshot): AgentWorkspacePlan => {
+    const fileDecision = workspace.decision;
     if (fileDecision.kind === "failed") {
       return { decision: fileDecision, capabilities: [] };
     }
@@ -209,16 +224,16 @@ export function createAgentWorkspaceRuntime(options: {
     const primary = profile.primaryArtifact;
     if (
       primary?.requireSessionWriteWhenInvalid &&
-      fileSession.artifacts().has(primary.path) &&
-      !primary.isValid(fileSession.artifacts().get(primary.path)!.content) &&
-      !fileSession.writtenPaths().includes(primary.path)
+      workspace.artifacts.has(primary.path) &&
+      !primary.isValid(workspace.artifacts.get(primary.path)!.content) &&
+      !workspace.writtenPaths.includes(primary.path)
     ) {
       return {
         decision: fileDecision,
         capabilities: [{ kind: "create_primary", path: primary.path }],
       };
     }
-    if (primary && !fileSession.artifacts().has(primary.path)) {
+    if (primary && !workspace.artifacts.has(primary.path)) {
       return {
         decision: fileDecision.kind === "complete"
           ? { kind: "continue", reason: `${primary.path} is missing` }
@@ -227,15 +242,16 @@ export function createAgentWorkspaceRuntime(options: {
       };
     }
 
-    const fileTools = new Set(fileSession.tools().map((tool) => tool.function.name));
-    if (fileTools.size === 1 && fileTools.has("read_file_snapshot")) {
+    if (workspace.prerequisite?.kind === "read_required") {
       return {
         decision: fileDecision.kind === "complete"
           ? { kind: "continue", reason: `${prerequisite.kind === "read_required" ? prerequisite.path : "file"} needs a fresh snapshot` }
           : fileDecision,
         capabilities: [{
           kind: "read",
-          ...(prerequisite.kind === "read_required" ? { path: prerequisite.path } : {}),
+          ...(prerequisite.kind === "read_required"
+            ? { path: prerequisite.path }
+            : { path: workspace.prerequisite.path }),
         }],
       };
     }
@@ -247,14 +263,14 @@ export function createAgentWorkspaceRuntime(options: {
       };
     }
 
-    for (const finding of profile.inspectFindings(fileSession.artifacts())) {
-      const findingResult = findingPlan(finding);
+    for (const finding of profile.inspectFindings(workspace.artifacts)) {
+      const findingResult = findingPlan(finding, workspace);
       if (findingResult) return findingResult;
     }
 
     if (
       fileDecision.kind === "complete" &&
-      (revisionNeedsVerification(fileSession.events()) || externalMutationNeedsVerification)
+      (workspace.needsVerification || externalMutationNeedsVerification)
     ) {
       return {
         decision: { kind: "continue", reason: "current workspace revision needs verification" },
@@ -278,6 +294,7 @@ export function createAgentWorkspaceRuntime(options: {
       ],
     };
   };
+  const plan = (): AgentWorkspacePlan => planFromSnapshot(fileSession.snapshot());
 
   const illegalIntent = (intent: AgentWorkspaceIntent): ToolResult => ({
     success: false,
@@ -292,6 +309,60 @@ export function createAgentWorkspaceRuntime(options: {
       }
     },
     plan,
+    project: () => {
+      const workspace = fileSession.snapshot();
+      const currentPlan = planFromSnapshot(workspace);
+      const projection = profile.projection ?? {
+        label: "Workspace state",
+        goal: "Complete the assigned workspace task",
+        targetPaths: profile.primaryArtifact ? [profile.primaryArtifact.path] : [],
+        ownership: "configured workspace paths",
+      };
+      const capabilities = currentPlan.capabilities.map((capability) =>
+        capability.kind === "external" ? capability.capability : capability.kind
+      );
+      const decisions = [
+        `ownership=${projection.ownership}`,
+        `next=${currentPlan.decision.kind === "continue"
+          ? currentPlan.decision.reason
+          : currentPlan.decision.kind}`,
+        ...(currentPlan.finding ? [`finding=${JSON.stringify(currentPlan.finding)}`] : []),
+      ];
+      return {
+        plan: currentPlan,
+        artifacts: [...workspace.artifacts.entries()].map(([path, artifact]) => ({
+          path,
+          revision: artifact.revision,
+        })),
+        writtenPaths: workspace.writtenPaths,
+        diagnostics: workspace.diagnostics.map(({ path, message }) => ({ path, message })),
+        mutations: workspace.mutations,
+        contextCard: [
+          `[${projection.label}]`,
+          `target: ${projection.targetPaths.join(", ") || "none"}`,
+          `written_paths: ${workspace.writtenPaths.join(", ") || "none"}`,
+          `next: ${currentPlan.decision.kind === "continue"
+            ? currentPlan.decision.reason
+            : currentPlan.decision.kind}`,
+          `blocking_finding: ${currentPlan.finding ? JSON.stringify(currentPlan.finding) : "none"}`,
+          `legal_capabilities: ${capabilities.join(", ") || "none"}`,
+          `ownership: ${projection.ownership}`,
+        ].join("\n"),
+        taskState: {
+          goal: projection.goal,
+          targetPaths: projection.targetPaths,
+          mutations: workspace.mutations.map((mutation) => ({
+            ...mutation,
+            outcome: "success" as const,
+          })),
+          unresolvedDiagnostics: workspace.diagnostics.map(({ path, message }) => ({
+            path,
+            summary: message,
+          })),
+          decisions,
+        },
+      };
+    },
     execute: async (intent) => {
       const currentPlan = plan();
       const legal = currentPlan.capabilities.some((capability) => {
@@ -348,7 +419,7 @@ export function createAgentWorkspaceRuntime(options: {
       }
       if (intent.kind === "edit") {
         const edits = exactTextEdits(
-          fileSession.artifacts().get(intent.path)?.content ?? "",
+          fileSession.snapshot().artifacts.get(intent.path)?.content ?? "",
           intent.oldText,
           intent.newText,
         );

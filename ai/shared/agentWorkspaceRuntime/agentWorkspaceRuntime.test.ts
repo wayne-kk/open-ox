@@ -48,6 +48,21 @@ function fixture(options: {
 }
 
 describe("AgentWorkspaceRuntime", () => {
+  it("projects plan and workspace progress through the Runtime interface", async () => {
+    const { runtime, primaryPath } = fixture({
+      initial: { ["app/page.tsx"]: "export default () => <main>Ready</main>" },
+    });
+    await runtime.initialize();
+
+    expect(runtime.project()).toMatchObject({
+      plan: { decision: { kind: "continue" }, capabilities: [{ kind: "verify" }] },
+      writtenPaths: [],
+      artifacts: [{ path: primaryPath, revision: expect.stringMatching(/^sha256:/) }],
+      mutations: [],
+      diagnostics: [],
+    });
+  });
+
   it("keeps an invalid loaded primary artifact in the create-primary capability", async () => {
     const { runtime, workspace, primaryPath } = fixture({
       initial: {
