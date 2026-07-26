@@ -126,11 +126,90 @@ function inspectImageReferences(
       ?.candidate;
     return declaration?.initializer ?? null;
   };
-  const resolveExpression = (
+  const unwrapExpression = (expression: ts.Expression): ts.Expression => {
+    let current = expression;
+    while (
+      ts.isParenthesizedExpression(current) ||
+      ts.isAsExpression(current) ||
+      ts.isTypeAssertionExpression(current) ||
+      ts.isSatisfiesExpression(current)
+    ) {
+      current = current.expression;
+    }
+    return current;
+  };
+  const mapCollectionFor = (identifier: ts.Identifier): ts.Expression | null => {
+    let current: ts.Node | undefined = identifier.parent;
+    while (current && !ts.isSourceFile(current)) {
+      if (ts.isArrowFunction(current) || ts.isFunctionExpression(current)) {
+        const bindsIdentifier = current.parameters.some(
+          (parameter) => ts.isIdentifier(parameter.name) && parameter.name.text === identifier.text,
+        );
+        if (
+          bindsIdentifier &&
+          ts.isCallExpression(current.parent) &&
+          current.parent.arguments.includes(current) &&
+          ts.isPropertyAccessExpression(current.parent.expression) &&
+          current.parent.expression.name.text === "map"
+        ) {
+          return current.parent.expression.expression;
+        }
+        return null;
+      }
+      current = current.parent;
+    }
+    return null;
+  };
+  const memberPath = (
+    expression: ts.PropertyAccessExpression,
+  ): { root: ts.Expression; properties: string[] } => {
+    const properties: string[] = [];
+    let current: ts.Expression = expression;
+    while (ts.isPropertyAccessExpression(current)) {
+      properties.unshift(current.name.text);
+      current = current.expression;
+    }
+    return { root: current, properties };
+  };
+  const resolveValueAtPath = (
+    value: ts.Expression,
+    properties: readonly string[],
+    addValue: (value: string) => void,
+    seen: Set<string>,
+  ): boolean => {
+    const unwrapped = unwrapExpression(value);
+    if (ts.isIdentifier(unwrapped)) {
+      const bindingKey = `${unwrapped.text}:${unwrapped.pos}:${properties.join(".")}`;
+      if (seen.has(bindingKey)) return false;
+      const initializer = bindingInitializer(unwrapped);
+      return initializer
+        ? resolveValueAtPath(initializer, properties, addValue, new Set([...seen, bindingKey]))
+        : false;
+    }
+    if (ts.isArrayLiteralExpression(unwrapped)) {
+      return unwrapped.elements.length > 0 && unwrapped.elements.every(
+        (element) => ts.isExpression(element) &&
+          resolveValueAtPath(element, properties, addValue, seen),
+      );
+    }
+    if (properties.length === 0) {
+      return resolveExpression(unwrapped, addValue, seen);
+    }
+    if (!ts.isObjectLiteralExpression(unwrapped)) return false;
+    const [propertyName, ...remaining] = properties;
+    const property = unwrapped.properties.find(
+      (candidate): candidate is ts.PropertyAssignment =>
+        ts.isPropertyAssignment(candidate) && fieldName(candidate.name) === propertyName,
+    );
+    return property
+      ? resolveValueAtPath(property.initializer, remaining, addValue, seen)
+      : false;
+  };
+  function resolveExpression(
     expression: ts.Expression,
     addValue: (value: string) => void = addReference,
     seen = new Set<string>(),
-  ): boolean => {
+  ): boolean {
     if (ts.isStringLiteralLike(expression)) {
       addValue(expression.text);
       return true;
@@ -169,14 +248,22 @@ function inspectImageReferences(
       }
       return resolveExpression(expression.expression, addValue, seen);
     }
-    if (ts.isPropertyAccessExpression(expression) && ts.isIdentifier(expression.expression)) {
-      const initializer = bindingInitializer(expression.expression);
-      if (initializer && ts.isObjectLiteralExpression(initializer)) {
-        const property = initializer.properties.find(
-          (candidate): candidate is ts.PropertyAssignment =>
-            ts.isPropertyAssignment(candidate) && fieldName(candidate.name) === expression.name.text,
-        );
-        if (property) return resolveExpression(property.initializer, addValue, seen);
+    if (ts.isPropertyAccessExpression(expression)) {
+      const { root, properties } = memberPath(expression);
+      if (ts.isIdentifier(root)) {
+        const collection = mapCollectionFor(root);
+        if (collection) {
+          const collectionInitializer = ts.isIdentifier(collection)
+            ? bindingInitializer(collection)
+            : collection;
+          if (collectionInitializer) {
+            return resolveValueAtPath(collectionInitializer, properties, addValue, seen);
+          }
+        }
+        const initializer = bindingInitializer(root);
+        if (initializer) {
+          return resolveValueAtPath(initializer, properties, addValue, seen);
+        }
       }
       return false;
     }
@@ -187,7 +274,7 @@ function inspectImageReferences(
       );
     }
     return false;
-  };
+  }
   const isImageValue = (node: ts.StringLiteralLike): boolean => {
     const parent = node.parent;
     if (ts.isJsxAttribute(parent)) {
@@ -216,6 +303,12 @@ function inspectImageReferences(
       current = current.parent;
     }
     return null;
+  };
+  const isRuntimeImageBinding = (expression: ts.Expression): boolean => {
+    const unwrapped = unwrapExpression(expression);
+    return ts.isIdentifier(unwrapped) ||
+      ts.isPropertyAccessExpression(unwrapped) ||
+      ts.isElementAccessExpression(unwrapped);
   };
   const visit = (node: ts.Node): void => {
     if (ts.isStringLiteralLike(node) && isImageValue(node)) {
@@ -265,7 +358,9 @@ function inspectImageReferences(
               }
             : (value) => addReference(value, true),
         );
-        if (!resolved) unverifiable.add(node.initializer.expression.getText(sourceFile));
+        if (!resolved && !isRuntimeImageBinding(node.initializer.expression)) {
+          unverifiable.add(node.initializer.expression.getText(sourceFile));
+        }
       }
     }
     if (

@@ -202,6 +202,42 @@ describe("pageImageCompletionReason", () => {
     ).toContain("placeholder");
   });
 
+  it("resolves nested image fields through static map callback bindings", () => {
+    const source = `
+      const items = [
+        { product: { image: "/images/product-one.png" } },
+        { product: { image: "/images/product-two.png" } },
+      ];
+      export default () => items.map((item) => <img src={item.product.image} />);
+    `;
+    expect(pageImageCompletionReason({
+      sources: { "app/page.tsx": source },
+      generatedPaths: ["/images/product-one.png", "/images/product-two.png"],
+      assetExists: () => false,
+    })).toBeNull();
+  });
+
+  it("still rejects placeholders resolved through nested map callback bindings", () => {
+    const source = `
+      const items = [{ product: { image: "https://picsum.photos/product" } }];
+      export default () => items.map((item) => <img src={item.product.image} />);
+    `;
+    expect(pageImageCompletionReason({
+      sources: { "app/page.tsx": source },
+      generatedPaths: [],
+      assetExists: () => false,
+    })).toContain("placeholder");
+  });
+
+  it("allows runtime-only nested image bindings without inventing a source edit", () => {
+    const source = `export default ({ item }) => <img src={item.product.image} />;`;
+    expect(pageImageCompletionReason({
+      sources: { "app/page.tsx": source },
+      generatedPaths: [],
+      assetExists: () => false,
+    })).toBeNull();
+  });
+
   it("requires every successfully generated asset to be referenced", () => {
     expect(
       pageImageCompletionReason({
@@ -390,11 +426,22 @@ describe("pageImageCompletionReason", () => {
     }
   });
 
-  it("rejects image expressions that cannot be verified statically", () => {
+  it("allows ordinary runtime image bindings", () => {
     for (const source of [
       `import { HERO } from "./assets"; export default () => <img src={HERO} />;`,
-      `const getHero = () => "https://picsum.photos/1200/800"; export default () => <img src={getHero()} />;`,
       `const config = getConfig(); export default () => <img src={config.image} />;`,
+    ]) {
+      expect(pageImageCompletionReason({
+        sources: { "app/page.tsx": source },
+        generatedPaths: [],
+        assetExists: () => false,
+      })).toBeNull();
+    }
+  });
+
+  it("rejects computed image expressions that cannot be verified statically", () => {
+    for (const source of [
+      `const getHero = () => "https://picsum.photos/1200/800"; export default () => <img src={getHero()} />;`,
       "const slug = 'hero'; export default () => <img src={`/images/${slug}.png`} />;",
     ]) {
       expect(
