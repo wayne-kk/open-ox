@@ -22,7 +22,7 @@ export type ToolLoopCompletionProfile = "control" | "code";
 
 const TOOL_LOOP_COMPLETION_TOKENS: Record<ToolLoopCompletionProfile, number> = {
   control: 8_192,
-  code: 16_384,
+  code: 65_536,
 };
 const LENGTH_RETRY_TOOL_CONTENT_MAX_CHARS = 24_000;
 const PROACTIVE_OLD_TOOL_CONTENT_MAX_CHARS = 500;

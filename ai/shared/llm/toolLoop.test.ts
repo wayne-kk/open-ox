@@ -59,7 +59,7 @@ describe("callLLMWithToolsFromMessages", () => {
   it("gives code-writing rounds a sufficient completion budget", async () => {
     gateway.chatCompletion.mockImplementation(
       async (params: ChatCompletionParams) =>
-        (params.max_tokens ?? 0) >= 16_384
+        (params.max_tokens ?? 0) >= 65_536
           ? response({ finishReason: "stop", content: "done" })
           : response({ finishReason: "length", content: null }),
     );
@@ -141,7 +141,7 @@ describe("callLLMWithToolsFromMessages", () => {
         completionProfile: "code",
       }),
     ).resolves.toEqual({ content: "done", toolCalls: [] });
-    expect(gateway.chatCompletion.mock.calls[0]?.[0].max_tokens).toBe(16_384);
+    expect(gateway.chatCompletion.mock.calls[0]?.[0].max_tokens).toBe(65_536);
   });
 
   it("refuses to send a request when the real completion budget is unusably small", async () => {
@@ -493,7 +493,7 @@ describe("callLLMWithToolsFromMessages", () => {
         langfusePhase: "page_implement.test",
       }),
     ).rejects.toThrow(
-      /phase=page_implement\.test.*model=probe-model.*iteration=0.*max_tokens=16384.*prompt_tokens=12000.*completion_tokens=16384.*reasoning_tokens=7000/,
+      /phase=page_implement\.test.*model=probe-model.*iteration=0.*max_tokens=65536.*prompt_tokens=12000.*completion_tokens=16384.*reasoning_tokens=7000/,
     );
     expect(gateway.chatCompletion).toHaveBeenCalledTimes(3);
   });
