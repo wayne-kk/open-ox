@@ -43,8 +43,8 @@ describe("pageAgentBrief", () => {
     expect(msg).toContain("chrome-first");
     expect(msg).toContain("site-wide Nav/Navbar/Header/Sidebar/Footer");
     expect(msg).toContain("bottom tab bars");
-    expect(msg).toContain("first available action is `create_target_page`");
-    expect(msg).toContain("runtime binds it to `app/page.tsx`");
+    expect(msg).toContain("Decide whether to split the page into Sections first");
+    expect(msg).toContain("final `app/page.tsx` assembly");
     expect(msg).toContain("`create_page_component`");
     expect(msg).toContain("`read_page_file`");
     expect(msg).toContain("`edit_page_file`");

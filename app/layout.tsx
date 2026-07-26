@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { getSiteOrigin } from "@/lib/seo/siteUrl";
 
@@ -33,6 +33,13 @@ export const metadata: Metadata = {
       "baidu-site-verification": "codeva-EvYxD6iL9T",
     },
   },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 /**

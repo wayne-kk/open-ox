@@ -115,7 +115,7 @@ ${userProvidedFileHint}${userProvidedImagesBlock}
   }
 4. **Images, fixes & finish**: Declare final stable local paths such as \`/images/home-hero.png\` directly in source, then call \`generate_image\`; the runtime writes the asset to that declared path, so do not edit the source afterward. Only a forbidden remote/placeholder reference requires \`read_page_file\` + \`edit_page_file\`. Call \`verify_page_files\`; diagnostics are repaired with the same read/edit sequence. Completion is automatic. Formatting is automatic.
 
-Do not repeat a successful create command or recreate a path to revise it. Image tools are unavailable until the target page exists.
+Do not repeat a successful create command or recreate a path to revise it. Finish by calling \`page_implementation_complete\` with a concise summary. Image tools are unavailable until the target page exists.
 
 Do not write another route or any component outside \`${componentRoot}/**\`.`;
 }

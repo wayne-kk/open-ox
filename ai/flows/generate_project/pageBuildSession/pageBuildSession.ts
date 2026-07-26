@@ -125,6 +125,7 @@ const VERIFY_TOOL = functionTool(
   { type: "object", properties: {} },
 );
 
+
 function pageToolActivity(
   name: string,
   args: Record<string, unknown>,

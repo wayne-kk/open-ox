@@ -88,50 +88,58 @@ Open-OX 没有把整站生成塞进一个超级 Prompt。每个阶段都有结�
 
 ```mermaid
 flowchart TB
-    Brief["Natural-language Brief"] --> Intent["Intent Agent"]
-    Intent --> Plan["Project Plan"]
-    Intent --> Visual["Design Intent"]
-    Plan --> System["Design System"]
-    Visual --> System
-    System --> Architect["Architect Agent<br/>Chrome + page ownership"]
-    Architect --> PageAgent["Page Implement Agent"]
+    subgraph Understand["01 · UNDERSTAND & DESIGN"]
+        direction LR
+        Brief["Natural-language Brief"] --> Intent["Intent Agent"]
+        Intent --> Plan["Project Plan"]
+        Intent --> Visual["Design Intent"]
+        Plan --> System["Design System"]
+        Visual --> System
+    end
 
-    subgraph Runtime["Autonomous Tool Runtime"]
-        PageAgent --> Tools{"Tool Loop"}
-        Tools --> Files["create / read / edit"]
-        Tools --> Images["generate_image<br/>async jobs"]
-        Files --> Workspace["Real Next.js Workspace"]
-        Images --> Barrier["await_images Barrier"]
+    subgraph Runtime["02 · AGENT RUNTIME"]
+        direction LR
+        Architect["Architect<br/>shared chrome"] --> Agent["Page Agent"]
+        Agent --> Tools{"Tool loop"}
+        Tools --> Code["read · create · edit"]
+        Tools --> Assets["generate_image"]
+        Code --> Workspace["Next.js workspace"]
+        Assets --> Barrier["await_images"]
         Workspace --> Barrier
     end
 
-    Barrier --> Deps["Dependency Scan"]
-    Deps --> Typecheck["Language-service Typecheck"]
-    Typecheck -->|pass| Build["next build"]
-    Typecheck -->|diagnostics| Repair["Repair Agent"]
-    Build -->|failed| Repair
-    Repair --> Deps
-    Build -->|passed| Verify{"Repair happened?"}
-    Verify -->|no| Ready["Verified Project"]
-    Verify -->|yes| Skeptic["Skeptical Verifier"]
-    Skeptic -->|accepted| Ready
-    Skeptic -->|more evidence needed| Repair
+    subgraph Verify["03 · COMPILE & VERIFY"]
+        direction LR
+        Dependencies["Dependency scan"] --> Types["TypeScript check"]
+        Types --> Build["next build"]
+        Types -->|diagnostics| Repair["Repair Agent"]
+        Build -->|failed| Repair
+        Repair --> Dependencies
+        Build -->|passed| Review["Skeptical verifier"]
+        Review -->|retry| Repair
+        Review -->|accepted| Ready["Verified project"]
+    end
 
-    Ready --> Preview["Local / Storage / E2B Preview"]
-    Ready --> Export["Export / BYO Vercel"]
+    subgraph Deliver["04 · PREVIEW & DELIVER"]
+        direction LR
+        Preview["Local · Storage · E2B"]
+        Export["Project export · BYO Vercel"]
+    end
 
-    Checkpoint[("Checkpoints")] -. resume .-> System
-    Checkpoint -. resume .-> Architect
-    Checkpoint -. resume .-> PageAgent
-    Intent -. persist .-> Checkpoint
-    System -. persist .-> Checkpoint
-    Workspace -. persist .-> Checkpoint
+    System --> Architect
+    Barrier --> Dependencies
+    Ready --> Preview
+    Ready --> Export
 
-    Studio["Studio SSE<br/>topology + logs + traces"]
-    Tools -. events .-> Studio
-    Typecheck -. events .-> Studio
-    Repair -. events .-> Studio
-    Preview -. state .-> Studio
+    classDef core fill:#ede9fe,stroke:#7c3aed,color:#18181b,stroke-width:1.5px;
+    classDef action fill:#ecfeff,stroke:#0891b2,color:#18181b,stroke-width:1.5px;
+    classDef gate fill:#fef3c7,stroke:#d97706,color:#18181b,stroke-width:1.5px;
+    classDef success fill:#dcfce7,stroke:#16a34a,color:#18181b,stroke-width:1.5px;
+
+    class Brief,Intent,Plan,Visual,System,Architect,Agent core;
+    class Tools,Code,Assets,Workspace,Barrier,Dependencies action;
+    class Types,Build,Repair,Review gate;
+    class Ready,Preview,Export success;
 ```
 
 ### Modify Agent

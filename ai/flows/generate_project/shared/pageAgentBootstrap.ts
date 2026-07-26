@@ -123,7 +123,7 @@ ${fileSections.join("\n\n")}`;
     `- ${PAGE_AGENT_LAYOUT_PATH} (chrome already mounted — content only)`,
     `- ${PAGE_AGENT_GLOBALS_PATH}`,
     ...(params.hasUserProvidedContent ? [`- ${USER_PROVIDED_CONTENT_PATH}`] : []),
-    "Continue with create_target_page. After the target exists, use create_page_component for new files and read_page_file then edit_page_file for local revisions. Completion is automatic after required artifacts are valid.",
+    "Continue with create_target_page. After the target exists, use create_page_component for new files and read_page_file then edit_page_file for local revisions. Finish with page_implementation_complete after the page is ready.",
   ].join("\n");
 
   return { bootstrappedPaths, message, compactSummary };

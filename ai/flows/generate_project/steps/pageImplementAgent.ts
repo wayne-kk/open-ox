@@ -10,8 +10,6 @@ import {
 } from "../shared/files";
 import { lfPageImplementPhaseSlug } from "@/lib/observability/langfuseGenerationCatalog";
 import type { ChatMessage } from "@/ai/shared/llm/types";
-import { getSystemToolDefinitions } from "@/ai/tools/systemToolCatalog";
-import { createRequiredImageExecutor } from "@/ai/tools/system/generateImageTool";
 import type { PendingImage } from "@/ai/tools/system/generateImageTool";
 import { getModelForStep, getThinkingLevelForStep } from "@/lib/config/models";
 import { slugToPageComponentRoot, slugToPagePath } from "../shared/paths";
@@ -34,11 +32,7 @@ import {
   userProvidedContentFileHint,
   userProvidedContentImagesBlock,
 } from "../shared/userProvidedContentContext";
-import {
-  buildGenerateImageToolForPageAgent,
-  guardGenerateImageExecutor,
-  listUserProvidedImageUrls,
-} from "../shared/userProvidedImageEnforcement";
+import { listUserProvidedImageUrls } from "../shared/userProvidedImageEnforcement";
 import { buildPageAgentUserMessage } from "../shared/pageAgentBrief";
 import {
   buildPageAgentBootstrap,
@@ -50,11 +44,6 @@ import {
   type FileSessionWorkspace,
 } from "@/ai/shared/fileSession/fileSession";
 import { SiteFileSessionWorkspace } from "@/ai/shared/fileSession/siteFileSessionWorkspace";
-import { getSiteRoot } from "@/ai/tools/system/common";
-import {
-  createPageImageAssetSession,
-  createPublicImageAssetExists,
-} from "../shared/pageImageCompletionPolicy";
 import { runPageBuildSession } from "../pageBuildSession/pageBuildSession";
 
 function truncate(text: string, max: number): string {
@@ -241,37 +230,12 @@ export async function runPageImplementAgent(
     messages.push({ role: "user", content: bootstrap.message });
   }
 
-  const imageAssets = createPageImageAssetSession({
-    allowedRemoteUrls: userImageUrls,
-    assetExists: createPublicImageAssetExists(getSiteRoot()),
-  });
   const fileSession = createPageFileSession({
     slug: page.slug,
     targetPath,
     componentRoot,
     workspace: new SiteFileSessionWorkspace(),
   });
-
-  const pageImageScope = `page-${componentRoot.slice("components/pages/".length)}`;
-  const {
-    executor: baseImageExecutor,
-    generatedImages: pendingImages,
-    attempts: imageAttempts,
-  } = createRequiredImageExecutor(
-    pageImageScope,
-    {
-      onGeneratedAsset: (asset) => imageAssets.recordGeneratedAsset(asset.publicPath),
-    },
-  );
-  const imageExecutor = guardGenerateImageExecutor(
-    baseImageExecutor,
-    userImageUrls,
-  );
-
-  const imageTool =
-    userImageCount > 0
-      ? buildGenerateImageToolForPageAgent(userImageCount)
-      : getSystemToolDefinitions(["generate_image"])[0];
 
   const maxIterations = resolvePageAgentMaxIterations();
   const build = await runPageBuildSession({
@@ -285,10 +249,7 @@ export async function runPageImplementAgent(
     fileSession,
     isPrimaryArtifactValid: (content) =>
       pageImplementationIncompleteReason(content, targetPath) === null,
-    assetLifecycle: {
-      inspect: imageAssets.inspect,
-      ...(imageTool ? { generation: { tool: imageTool, execute: imageExecutor } } : {}),
-    },
+    // Image generation is intentionally disconnected while the Page workflow is simplified.
     onEvent: (event) => {
       if (event.kind === "message") {
         onMessage?.(event.message);
@@ -300,10 +261,11 @@ export async function runPageImplementAgent(
       const cached = typeof result === "object" && result.meta?.cached === true;
       if (activity === "write" && eventPath && !cached) {
         const succeeded = typeof result === "string" || result.success;
-        const retryable = typeof result === "object" && result.meta?.retryable === true;
         onStep({
           step: `page_agent_file:${page.slug}:${eventPath}`,
-          status: succeeded ? "ok" : retryable ? "active" : "error",
+          // A tool result is terminal for this file operation. Retryability
+          // affects the next agent action, not the UI lifecycle of this one.
+          status: succeeded ? "ok" : "error",
           detail: succeeded
             ? `[${page.slug}] ${name.replace("_", " ")}: ${eventPath}`
             : `[${page.slug}] ${name.replace("_", " ")} rejected: ${eventPath}`,
@@ -377,13 +339,7 @@ export async function runPageImplementAgent(
       completeSummary,
       assistantTail: truncate(content, 2000),
       toolInvocations: toolCalls.length,
-      imageAttempts: imageAttempts.map(({ filename, publicPath, success, error, durationMs }) => ({
-        filename,
-        publicPath,
-        success,
-        error,
-        durationMs,
-      })),
+      imageAttempts: [],
     },
     llmCall: {
       model,
@@ -398,8 +354,8 @@ export async function runPageImplementAgent(
     pagePath: targetPath,
     writtenPaths,
     trace,
-    pendingImages,
-    imageAttempts,
+    pendingImages: [],
+    imageAttempts: [],
     summary: completeSummary || content.slice(0, 500) || "ok",
     toolCallRecords: toolCalls.length,
   };

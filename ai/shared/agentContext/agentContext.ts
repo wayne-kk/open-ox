@@ -12,7 +12,7 @@ import type {
 } from "./types";
 import { inferToolSemantics } from "./toolSemantics";
 
-const COMPLETION_RESERVES = { control: 8_192, code: 16_384 } as const;
+const COMPLETION_RESERVES = { control: 8_192, code: 65_536 } as const;
 const SAFETY_RESERVE = 1_024;
 const MIN_COMPLETION_TOKENS = 1_024;
 const VISION_TOKEN_ESTIMATE = { low: 1_024, auto: 2_048, high: 4_096 } as const;

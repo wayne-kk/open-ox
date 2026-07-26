@@ -43,7 +43,7 @@ describe("AgentContext", () => {
       pressure: "normal",
     });
 
-    expect(projection.maxCompletionTokens).toBe(16_384);
+    expect(projection.maxCompletionTokens).toBe(65_536);
     expect(projection.messages.map((message) => message.role)).toEqual([
       "system",
       "user",
@@ -217,7 +217,7 @@ describe("AgentContext", () => {
     await expect(context.project({
       model: { id: "small", provider: "openai", contextWindow: 12_000 },
       tools: [], toolChoice: "auto", completionProfile: "code", pressure: "normal",
-    })).rejects.toThrow(/CONTEXT_EXHAUSTED.*completion_reserve=16384/);
+    })).rejects.toThrow(/CONTEXT_EXHAUSTED.*completion_reserve=65536/);
   });
 
   it("rejects duplicate tool results before they enter the canonical log", async () => {
