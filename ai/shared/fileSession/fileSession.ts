@@ -95,6 +95,7 @@ interface FileRecord {
 }
 
 export interface FileSession {
+  ownsPath(path: string): boolean;
   tools(): ChatCompletionTool[];
   execute(call: unknown): Promise<FileSessionEvent>;
   loadIfExists(path: string): Promise<boolean>;
@@ -543,6 +544,7 @@ export function createFileSession(options: FileSessionOptions): FileSession {
   };
 
   return {
+    ownsPath: options.ownsPath,
     tools: () => {
       if (terminalError) return [];
       if (needsSnapshot.size > 0) {

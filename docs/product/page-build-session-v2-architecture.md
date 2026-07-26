@@ -1,6 +1,10 @@
 # Page Build Session v2 Architecture
 
-**Status:** Implemented
+**Status:** Superseded on 2026-07-26
+
+This design is retained as migration history. The Page-specific lifecycle controller described
+below has been replaced by the hybrid generic Runtime documented in
+[`page-agent-hybrid-runtime-migration-20260726.md`](./page-agent-hybrid-runtime-migration-20260726.md).
 
 **Date:** 2026-07-25
 **Scope:** Generate pipeline `page_implement_agent`

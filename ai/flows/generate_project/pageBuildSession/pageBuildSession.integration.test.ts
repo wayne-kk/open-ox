@@ -184,7 +184,7 @@ describe("runPageBuildSession", () => {
       expect(params.resolveTaskStateForRound?.().mutations).toEqual([
         expect.objectContaining({ path: targetPath, revision: expect.stringMatching(/^sha256:/) }),
       ]);
-      expect(params.resolveTaskStateForRound?.().decisions).toContain("phase=build");
+      expect(params.resolveTaskStateForRound?.().decisions).toContain("next=continue building");
       expect(params.resolveToolsForIteration?.(1, params.tools).map((tool) => tool.function.name))
         .toEqual(["create_page_component", "read_page_file", "edit_page_file", "verify_page_files"]);
       const duplicateComponent = await params.executeToolOverrides.create_page_component({
@@ -287,7 +287,7 @@ describe("runPageBuildSession", () => {
       const duplicate = await params.executeToolOverrides.create_target_page({ content: source });
       expect(duplicate).toEqual(expect.objectContaining({
         success: false,
-        error: expect.stringContaining("ILLEGAL_LIFECYCLE_COMMAND"),
+        error: expect.stringContaining("ILLEGAL_CAPABILITY"),
       }));
 
       await params.executeToolOverrides.generate_image({});
@@ -298,7 +298,7 @@ describe("runPageBuildSession", () => {
       });
       expect(wrongSnapshot).toEqual(expect.objectContaining({
         success: false,
-        error: expect.stringContaining("ILLEGAL_LIFECYCLE_COMMAND"),
+        error: expect.stringContaining("ILLEGAL_CAPABILITY"),
       }));
       let snapshot = await params.executeToolOverrides.read_page_file({ path: targetPath });
       expect(params.resolveToolsForIteration?.(3, params.tools).map((tool) => tool.function.name))
@@ -425,5 +425,45 @@ describe("runPageBuildSession", () => {
     expect(fileSession.events().filter((event) =>
       event.kind === "file_snapshot" || event.kind === "file_updated"
     )).toEqual([]);
+  });
+
+  it("does not turn an unverifiable runtime image binding into a blocking edit", async () => {
+    const targetPath = "app/page.tsx";
+    const source = "export default ({ item }) => <img src={item.product.image} />";
+    const fileSession = createFileSession({
+      owner: "page:home",
+      workspace: new InMemoryFileSessionWorkspace(),
+      ownsPath: (path) => path === targetPath,
+      requiredArtifacts: [targetPath],
+    });
+    loop.call.mockImplementationOnce(async (params: ToolLoopParams) => {
+      await params.executeToolOverrides.create_target_page({ content: source });
+      expect(params.resolveToolsForIteration?.(1, params.tools).map((tool) => tool.function.name))
+        .toEqual(["verify_page_files"]);
+      await params.executeToolOverrides.verify_page_files({});
+      return { content: "", toolCalls: [] };
+    });
+
+    const result = await runPageBuildSession({
+      slug: "home",
+      targetPath,
+      componentRoot: "components/pages/home",
+      initialMessages: [{ role: "user", content: "Build" }],
+      model: "gemini-3.6-flash",
+      maxIterations: 4,
+      fileSession,
+      assetLifecycle: {
+        inspect: () => [{
+          kind: "source_diagnostic",
+          path: targetPath,
+          message: "item.product.image cannot be verified statically",
+        }],
+      },
+      langfusePhase: "page.home",
+    });
+
+    expect(result.finalDecision).toEqual({ kind: "complete" });
+    expect(result.finalRequirement).toBeUndefined();
+    expect(result.finalLegalTools).toEqual([]);
   });
 });

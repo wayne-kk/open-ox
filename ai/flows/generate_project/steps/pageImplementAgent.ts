@@ -284,6 +284,8 @@ export async function runPageImplementAgent(
     model,
     ...(thinking ? { thinkingLevel: thinking } : {}),
     fileSession,
+    isPrimaryArtifactValid: (content) =>
+      pageImplementationIncompleteReason(content, targetPath) === null,
     assetLifecycle: {
       inspect: imageAssets.inspect,
       ...(imageTool ? { generation: { tool: imageTool, execute: imageExecutor } } : {}),
