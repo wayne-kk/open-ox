@@ -84,6 +84,22 @@ describe("pageImageCompletionReason", () => {
     });
   });
 
+  it("accepts a generated asset already referenced at its declared local path", () => {
+    expect(pageImageArtifactRequirements({
+      sources: { "app/page.tsx": `<img src="/images/creator-avatar-1.png" alt="Creator" />` },
+      generatedPaths: ["/images/creator-avatar-1.png"],
+      assetExists: () => false,
+    })).toEqual([]);
+  });
+
+  it("does not turn an unused generated asset into a self-replacement edit", () => {
+    expect(pageImageArtifactRequirements({
+      sources: { "app/page.tsx": "export default () => <main>Ready</main>" },
+      generatedPaths: ["/images/unused.png"],
+      assetExists: () => false,
+    })).toEqual([]);
+  });
+
   it("accepts exact user URLs and existing local assets but rejects other remote or invented paths", () => {
     const userUrl = "https://cdn.example.com/user-provided.jpg";
     expect(
@@ -238,17 +254,17 @@ describe("pageImageCompletionReason", () => {
     })).toBeNull();
   });
 
-  it("requires every successfully generated asset to be referenced", () => {
+  it("does not require an unused generated alternative to be referenced", () => {
     expect(
       pageImageCompletionReason({
         sources: { "app/page.tsx": `<img src="/images/first.png" alt="Hero" />` },
         generatedPaths: ["/images/first.png", "/images/unused.png"],
         assetExists: () => false,
       }),
-    ).toContain("/images/unused.png");
+    ).toBeNull();
   });
 
-  it("does not count an unused image variable as consuming a generated asset", () => {
+  it("does not make generated asset bookkeeping a page completion requirement", () => {
     expect(
       pageImageCompletionReason({
         sources: {
@@ -257,7 +273,7 @@ describe("pageImageCompletionReason", () => {
         generatedPaths: ["/images/generated.png"],
         assetExists: () => false,
       }),
-    ).toContain("not referenced by the current page revision");
+    ).toBeNull();
   });
 
   it("counts inline style and stylesheet URLs as real image sinks", () => {

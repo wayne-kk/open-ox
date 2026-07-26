@@ -419,7 +419,6 @@ function inspectPageImageRequirements(options: PageImageInspectionOptions): Page
   const generated = new Set(options.generatedPaths);
   const allowedRemoteUrls = new Set(options.allowedRemoteUrls ?? []);
   const references = new Set<string>();
-  const sinkReferences = new Set<string>();
   const results: PageImageRequirementResult[] = [];
   const pendingAssetViolations: Array<{
     path: string;
@@ -447,7 +446,6 @@ function inspectPageImageRequirements(options: PageImageInspectionOptions): Page
 
   for (const [sourcePath, source] of Object.entries(options.sources)) {
     const inspection = inspectImageReferences(sourcePath, source);
-    for (const reference of inspection.sinkReferences) sinkReferences.add(reference);
     for (const reference of inspection.references) {
       references.add(reference);
       if (allowedRemoteUrls.has(reference)) continue;
@@ -481,7 +479,7 @@ function inspectPageImageRequirements(options: PageImageInspectionOptions): Page
     }
   }
 
-  const unconsumed = [...generated].filter((path) => !sinkReferences.has(path));
+  const unconsumed = [...generated].filter((path) => !references.has(path));
   for (const [index, violation] of pendingAssetViolations.entries()) {
     results.push(assetRequirement(
       violation.path,
@@ -492,20 +490,6 @@ function inspectPageImageRequirements(options: PageImageInspectionOptions): Page
     ));
   }
   results.push(...pendingDiagnostics);
-  if (unconsumed.length > 0 && results.length === 0) {
-    const sourcePath = Object.keys(options.sources)[0] ?? "app/page.tsx";
-    results.push({
-      requirement: {
-        kind: "asset_reference",
-        path: sourcePath,
-        reference: unconsumed[0],
-        nextAction: "edit_source",
-        replacement: unconsumed[0],
-      },
-      reason: `Generated image ${unconsumed[0]} is not referenced by the current page revision. Patch the source to use the path returned by generate_image.`,
-    });
-  }
-
   return results;
 }
 
