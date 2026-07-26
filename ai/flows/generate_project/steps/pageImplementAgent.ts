@@ -10,7 +10,11 @@ import {
 } from "../shared/files";
 import { lfPageImplementPhaseSlug } from "@/lib/observability/langfuseGenerationCatalog";
 import type { ChatMessage } from "@/ai/shared/llm/types";
-import type { PendingImage } from "@/ai/tools/system/generateImageTool";
+import { getSystemToolDefinitions } from "@/ai/tools/systemToolCatalog";
+import {
+  createRequiredImageExecutor,
+  type PendingImage,
+} from "@/ai/tools/system/generateImageTool";
 import { getModelForStep, getThinkingLevelForStep } from "@/lib/config/models";
 import { slugToPageComponentRoot, slugToPagePath } from "../shared/paths";
 import type {
@@ -32,7 +36,11 @@ import {
   userProvidedContentFileHint,
   userProvidedContentImagesBlock,
 } from "../shared/userProvidedContentContext";
-import { listUserProvidedImageUrls } from "../shared/userProvidedImageEnforcement";
+import {
+  buildGenerateImageToolForPageAgent,
+  guardGenerateImageExecutor,
+  listUserProvidedImageUrls,
+} from "../shared/userProvidedImageEnforcement";
 import { buildPageAgentUserMessage } from "../shared/pageAgentBrief";
 import {
   buildPageAgentBootstrap,
@@ -44,6 +52,11 @@ import {
   type FileSessionWorkspace,
 } from "@/ai/shared/fileSession/fileSession";
 import { SiteFileSessionWorkspace } from "@/ai/shared/fileSession/siteFileSessionWorkspace";
+import { getSiteRoot } from "@/ai/tools/system/common";
+import {
+  createPageImageAssetSession,
+  createPublicImageAssetExists,
+} from "../shared/pageImageCompletionPolicy";
 import { runPageBuildSession } from "../pageBuildSession/pageBuildSession";
 
 function truncate(text: string, max: number): string {
@@ -230,12 +243,29 @@ export async function runPageImplementAgent(
     messages.push({ role: "user", content: bootstrap.message });
   }
 
+  const imageAssets = createPageImageAssetSession({
+    allowedRemoteUrls: userImageUrls,
+    assetExists: createPublicImageAssetExists(getSiteRoot()),
+  });
   const fileSession = createPageFileSession({
     slug: page.slug,
     targetPath,
     componentRoot,
     workspace: new SiteFileSessionWorkspace(),
   });
+
+  const pageImageScope = `page-${componentRoot.slice("components/pages/".length)}`;
+  const {
+    executor: baseImageExecutor,
+    generatedImages: pendingImages,
+    attempts: imageAttempts,
+  } = createRequiredImageExecutor(pageImageScope, {
+    onGeneratedAsset: (asset) => imageAssets.recordGeneratedAsset(asset.publicPath),
+  });
+  const imageExecutor = guardGenerateImageExecutor(baseImageExecutor, userImageUrls);
+  const imageTool = userImageCount > 0
+    ? buildGenerateImageToolForPageAgent(userImageCount)
+    : getSystemToolDefinitions(["generate_image"])[0];
 
   const maxIterations = resolvePageAgentMaxIterations();
   const build = await runPageBuildSession({
@@ -247,9 +277,13 @@ export async function runPageImplementAgent(
     model,
     ...(thinking ? { thinkingLevel: thinking } : {}),
     fileSession,
+    explicitCompletion: true,
     isPrimaryArtifactValid: (content) =>
       pageImplementationIncompleteReason(content, targetPath) === null,
-    // Image generation is intentionally disconnected while the Page workflow is simplified.
+    assetLifecycle: {
+      inspect: imageAssets.inspect,
+      ...(imageTool ? { generation: { tool: imageTool, execute: imageExecutor } } : {}),
+    },
     onEvent: (event) => {
       if (event.kind === "message") {
         onMessage?.(event.message);
@@ -339,7 +373,13 @@ export async function runPageImplementAgent(
       completeSummary,
       assistantTail: truncate(content, 2000),
       toolInvocations: toolCalls.length,
-      imageAttempts: [],
+      imageAttempts: imageAttempts.map(({ filename, publicPath, success, error, durationMs }) => ({
+        filename,
+        publicPath,
+        success,
+        error,
+        durationMs,
+      })),
     },
     llmCall: {
       model,
@@ -354,8 +394,8 @@ export async function runPageImplementAgent(
     pagePath: targetPath,
     writtenPaths,
     trace,
-    pendingImages: [],
-    imageAttempts: [],
+    pendingImages,
+    imageAttempts,
     summary: completeSummary || content.slice(0, 500) || "ok",
     toolCallRecords: toolCalls.length,
   };

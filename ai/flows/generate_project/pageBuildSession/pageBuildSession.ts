@@ -51,6 +51,7 @@ export interface PageBuildSessionSpec {
   maxIterations: number;
   fileSession: FileSession;
   isPrimaryArtifactValid?(content: string): boolean;
+  explicitCompletion?: boolean;
   assetLifecycle?: PageAssetLifecycle;
   onEvent?(event: PageBuildEvent): void;
   langfusePhase: string;
@@ -123,6 +124,12 @@ const VERIFY_TOOL = functionTool(
   PAGE_TOOL.verify,
   "Verify every current page file. Runtime completion is automatic when required artifacts are clean.",
   { type: "object", properties: {} },
+);
+
+const COMPLETE_TOOL = functionTool(
+  "page_implementation_complete",
+  "Finish after the target page is a thin assembly layer, reusable page components are extracted, and verification is clean.",
+  { type: "object", properties: { summary: { type: "string" } }, required: ["summary"] },
 );
 
 
@@ -225,6 +232,7 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
         isValid: spec.isPrimaryArtifactValid ?? ((content) =>
           content.trim().length > 0 && !content.includes("Preparing your site")),
       },
+      explicitCompletion: spec.explicitCompletion,
       inspectFindings: (artifacts) => pageFindings(spec.assetLifecycle, artifacts),
     },
     externalActions: spec.assetLifecycle?.generation
@@ -232,9 +240,19 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
       : {},
   });
   await runtime.initialize();
+  let completedByAgent = false;
+  const completionReady = () => {
+    const snapshot = spec.fileSession.snapshot();
+    return snapshot.decision.kind === "complete" &&
+      !snapshot.needsVerification &&
+      snapshot.diagnostics.length === 0;
+  };
 
   const runtimeTools = (): ChatCompletionTool[] =>
-    toolsForCapabilities(runtime.plan().capabilities, spec.assetLifecycle);
+    [
+      ...toolsForCapabilities(runtime.plan().capabilities, spec.assetLifecycle),
+      ...(spec.explicitCompletion && completionReady() ? [COMPLETE_TOOL] : []),
+    ];
   const runtimeStateCard = (): string => {
     const projection = runtime.project();
     const legalTools = runtimeTools().map((tool) => tool.function.name).join(", ") || "none";
@@ -244,7 +262,7 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
 
   const { content, toolCalls } = await callLLMWithToolsFromMessages({
     messages,
-    tools: [CREATE_TARGET_TOOL, CREATE_COMPONENT_TOOL, READ_TOOL, EDIT_TOOL, VERIFY_TOOL, ...(spec.assetLifecycle?.generation ? [spec.assetLifecycle.generation.tool] : [])],
+    tools: [CREATE_TARGET_TOOL, CREATE_COMPONENT_TOOL, READ_TOOL, EDIT_TOOL, VERIFY_TOOL, ...(spec.explicitCompletion ? [COMPLETE_TOOL] : []), ...(spec.assetLifecycle?.generation ? [spec.assetLifecycle.generation.tool] : [])],
     temperature: 0.5,
     maxIterations: spec.maxIterations,
     completionProfile: "code",
@@ -275,6 +293,17 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
         newText: String(args.newText ?? ""),
       }),
       [PAGE_TOOL.verify]: () => runtime.execute({ kind: "verify" }),
+      page_implementation_complete: async (args) => {
+        if (!completionReady()) {
+          return {
+            success: false,
+            error: "Page files must be valid and cleanly verified before completion",
+            meta: { code: "VERIFICATION_REQUIRED", retryable: true },
+          };
+        }
+        completedByAgent = true;
+        return { success: true, output: String(args.summary ?? "Page implementation complete") };
+      },
       ...(spec.assetLifecycle?.generation ? {
         [PAGE_TOOL.image]: (args: Record<string, unknown>) => runtime.execute({
           kind: "external",
@@ -284,7 +313,7 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
       } : {}),
     },
     resolveToolsForIteration: runtimeTools,
-    resolveToolChoiceForIteration: () => runtime.plan().decision.kind === "complete" ? "auto" : "required",
+    resolveToolChoiceForIteration: () => spec.explicitCompletion || runtime.plan().decision.kind !== "complete" ? "required" : "auto",
     resolveTaskStateForRound: runtimeTaskState,
     onMessage: (message) => spec.onEvent?.({ kind: "message", message }),
     onAssistantRound: ({ iteration }) => {
@@ -298,7 +327,11 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
     }),
     onAssistantStop: ({ messages: history }) => {
       const decision = runtime.plan().decision;
-      if (decision.kind === "complete" || emptyStopRecoveries >= 2) return false;
+      if (
+        (spec.explicitCompletion ? completedByAgent : decision.kind === "complete") ||
+        decision.kind === "failed" ||
+        emptyStopRecoveries >= 2
+      ) return false;
       emptyStopRecoveries += 1;
       const recovery: ChatMessage = {
         role: "user",
@@ -311,7 +344,9 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
       spec.onEvent?.({ kind: "message", message: recovery });
       return true;
     },
-    shouldAbortAfterToolResults: () => runtime.plan().decision.kind !== "continue",
+    shouldAbortAfterToolResults: () => spec.explicitCompletion
+      ? completedByAgent || runtime.plan().decision.kind === "failed"
+      : runtime.plan().decision.kind !== "continue",
     requireTools: true,
     onApproachingLimit: ({ messages: history }) => {
       const nudge: ChatMessage = {
@@ -411,7 +446,9 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
     toolCalls,
     iterationsUsed,
     emptyStopRecoveries,
-    finalDecision: runtime.plan().decision,
+    finalDecision: spec.explicitCompletion && completedByAgent
+      ? { kind: "complete" }
+      : runtime.plan().decision,
     finalRequirement: runtime.plan().finding?.blocking
       ? spec.assetLifecycle?.inspect(spec.fileSession.snapshot().artifacts)
         .find((requirement) => requirement.kind === "asset_reference")

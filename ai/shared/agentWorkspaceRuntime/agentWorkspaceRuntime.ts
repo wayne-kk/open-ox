@@ -29,6 +29,8 @@ export interface AgentWorkspaceProfile {
     requireSessionWriteWhenInvalid?: boolean;
     isValid(content: string): boolean;
   };
+  /** Keep editing capabilities open after file validity for agent-driven refactoring. */
+  explicitCompletion?: boolean;
   inspectFindings(
     artifacts: ReadonlyMap<string, FileSessionArtifact>,
   ): readonly AgentWorkspaceFinding[];
@@ -277,6 +279,21 @@ export function createAgentWorkspaceRuntime(options: {
     for (const finding of profile.inspectFindings(workspace.artifacts)) {
       const findingResult = findingPlan(finding, workspace);
       if (findingResult) return findingResult;
+    }
+
+    if (fileDecision.kind === "complete" && profile.explicitCompletion) {
+      return {
+        decision: { kind: "continue", reason: "workspace is valid; awaiting explicit completion" },
+        capabilities: [
+          { kind: "create" },
+          { kind: "read" },
+          { kind: "edit" },
+          { kind: "verify" },
+          ...Object.keys(externalActions).map(
+            (capability): AgentWorkspaceCapability => ({ kind: "external", capability }),
+          ),
+        ],
+      };
     }
 
     if (
