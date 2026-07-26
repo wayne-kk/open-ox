@@ -85,6 +85,64 @@ describe("runPageBuildSession", () => {
     expect(result.deterministicRecoveries).toBe(3);
   });
 
+  it("recovers an edit-ready asset finding without issuing an illegal read", async () => {
+    const targetPath = "app/page.tsx";
+    const placeholder = "https://images.unsplash.com/photo.jpg";
+    const replacement = "/images/video-cover-1.png";
+    const fileSession = createFileSession({
+      owner: "page:home",
+      workspace: new InMemoryFileSessionWorkspace(),
+      ownsPath: (path) => path === targetPath,
+      requiredArtifacts: [targetPath],
+    });
+    loop.call.mockImplementationOnce(async (params: ToolLoopParams) => {
+      await params.executeToolOverrides.create_target_page({
+        content: `export default () => <img src="${placeholder}" />`,
+      });
+      await params.executeToolOverrides.read_page_file({ path: targetPath });
+      expect(params.resolveToolsForIteration?.(2, params.tools).map((tool) => tool.function.name))
+        .toEqual(["edit_page_file"]);
+      const history: ToolLoopParams["messages"] = [];
+      params.onAssistantStop?.({
+        iteration: 2,
+        message: { role: "assistant", content: "" },
+        messages: history,
+      });
+      params.onAssistantStop?.({
+        iteration: 3,
+        message: { role: "assistant", content: "" },
+        messages: history,
+      });
+      return { content: "", toolCalls: [] };
+    });
+
+    const result = await runPageBuildSession({
+      slug: "home",
+      targetPath,
+      componentRoot: "components/pages/home",
+      initialMessages: [{ role: "user", content: "Build" }],
+      model: "gemini-3.6-flash",
+      maxIterations: 96,
+      fileSession,
+      assetLifecycle: {
+        inspect: (artifacts) => artifacts.get(targetPath)?.content.includes(placeholder)
+          ? [{
+              kind: "asset_reference",
+              path: targetPath,
+              reference: placeholder,
+              nextAction: "edit_source",
+              replacement,
+            }]
+          : [],
+      },
+      langfusePhase: "page.home",
+    });
+
+    expect(result.finalDecision).toEqual({ kind: "complete" });
+    expect(result.deterministicRecoveries).toBe(2);
+    expect(fileSession.snapshot().artifacts.get(targetPath)?.content).toContain(replacement);
+  });
+
   it("adopts an existing target through edit semantics instead of exposing create", async () => {
     const targetPath = "app/page.tsx";
     const existing = "export default function Page() { return <main>BROKEN</main> }";

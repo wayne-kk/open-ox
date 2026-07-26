@@ -356,18 +356,30 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
         requirement.replacement
       ) {
         toolName = PAGE_TOOL.edit;
-        const snapshot = await runtime.execute({ kind: "read", path: requirement.path });
-        if (typeof snapshot === "string" || !snapshot.success || !snapshot.meta?.revision) break;
+        const capabilities = runtime.plan().capabilities;
+        let baseRevision: string | undefined;
+        if (capabilities.some((capability) =>
+          capability.kind === "read" && capability.path === requirement.path
+        )) {
+          const snapshot = await runtime.execute({ kind: "read", path: requirement.path });
+          if (typeof snapshot === "string" || !snapshot.success || !snapshot.meta?.revision) break;
+          baseRevision = String(snapshot.meta.revision);
+        } else if (capabilities.some((capability) =>
+          capability.kind === "edit" && capability.path === requirement.path
+        )) {
+          baseRevision = spec.fileSession.snapshot().artifacts.get(requirement.path)?.revision;
+        }
+        if (!baseRevision) break;
         args = {
           path: requirement.path,
-          baseRevision: snapshot.meta.revision,
+          baseRevision,
           oldText: requirement.reference,
           newText: requirement.replacement,
         };
         result = await runtime.execute({
           kind: "edit",
           path: requirement.path,
-          baseRevision: String(snapshot.meta.revision),
+          baseRevision,
           oldText: requirement.reference,
           newText: requirement.replacement,
         });
