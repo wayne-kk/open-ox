@@ -700,12 +700,16 @@ export async function callLLMWithToolsFromMessages(params: {
         });
       };
       await observeResponse(res);
-      if (res.choices[0]?.finish_reason === "length") {
+      for (let lengthRecovery = 0;
+        res.choices[0]?.finish_reason === "length" && lengthRecovery < 2;
+        lengthRecovery += 1
+      ) {
         const recoveryNudge: ChatMessage = {
           role: "system",
           content:
-            "[Output recovery] The previous response was truncated. Make one small tool call only. " +
-            "Do not repeat completed work or add explanatory prose; split large writes across later rounds.",
+            `[Output recovery ${lengthRecovery + 1}/2] The previous response was truncated. ` +
+            "Make exactly one small tool call only. Do not repeat completed work or add explanatory prose; " +
+            "split large writes across later rounds.",
         };
         messages.push(recoveryNudge);
         emit?.(recoveryNudge);

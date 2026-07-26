@@ -495,7 +495,7 @@ describe("callLLMWithToolsFromMessages", () => {
     ).rejects.toThrow(
       /phase=page_implement\.test.*model=probe-model.*iteration=0.*max_tokens=16384.*prompt_tokens=12000.*completion_tokens=16384.*reasoning_tokens=7000/,
     );
-    expect(gateway.chatCompletion).toHaveBeenCalledTimes(2);
+    expect(gateway.chatCompletion).toHaveBeenCalledTimes(3);
   });
 
   it("compacts oversized tool history before retrying", async () => {
