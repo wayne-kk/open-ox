@@ -263,6 +263,17 @@ export function createAgentWorkspaceRuntime(options: {
       };
     }
 
+    const diagnostic = workspace.diagnostics[0];
+    if (diagnostic && fileSession.ownsPath(diagnostic.path) &&
+      workspace.artifacts.has(diagnostic.path)) {
+      return {
+        decision: { kind: "continue", reason: diagnostic.message },
+        capabilities: workspace.access.get(diagnostic.path) === "edit_ready"
+          ? [{ kind: "edit", path: diagnostic.path }]
+          : [{ kind: "read", path: diagnostic.path }],
+      };
+    }
+
     for (const finding of profile.inspectFindings(workspace.artifacts)) {
       const findingResult = findingPlan(finding, workspace);
       if (findingResult) return findingResult;

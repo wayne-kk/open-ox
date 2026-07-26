@@ -83,6 +83,22 @@ describe("AgentWorkspaceRuntime", () => {
     expect(runtime.plan().capabilities).toEqual([{ kind: "verify" }]);
   });
 
+  it("narrows source diagnostics to read then edit for the affected artifact", async () => {
+    const { runtime, workspace, primaryPath } = fixture({
+      initial: { ["app/page.tsx"]: "export default () => <main>Ready</main>" },
+    });
+    workspace.verify = async () => new Map([[primaryPath, [{
+      path: primaryPath,
+      message: "JSX diagnostic requires a source repair",
+    }]]]);
+    await runtime.initialize();
+    await runtime.execute({ kind: "verify" });
+
+    expect(runtime.plan().capabilities).toEqual([{ kind: "read", path: primaryPath }]);
+    await runtime.execute({ kind: "read", path: primaryPath });
+    expect(runtime.plan().capabilities).toEqual([{ kind: "edit", path: primaryPath }]);
+  });
+
   it("normalizes create for an existing artifact into a snapshot and focused edit", async () => {
     const componentPath = "components/pages/home/Hero.tsx";
     const { runtime, workspace } = fixture({
