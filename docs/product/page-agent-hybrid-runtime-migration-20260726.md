@@ -122,6 +122,11 @@ Runtime intervention is limited to stable invariants:
 - a blocking Finding must have an executable resolution;
 - a changed revision must be verified before completion.
 
+Mutation count is not a Page completion invariant. The Page Implement Role Worker is bounded by its
+tool-loop iteration budget, revision safety, verification, and failure budgets; it does not impose a
+fixed per-file edit count. `FileSession.maxMutationsPerFile` is an opt-in policy for workers whose
+domain explicitly requires one.
+
 ## 6. Finding contract
 
 Analyzers no longer directly control tools. Page maps analyzer output into the generic Finding model:
@@ -284,6 +289,9 @@ architecture. Their blocking findings were resolved in this version:
    `edit_ready`) instead of two nullable path variables.
 4. Repository terminology now consistently identifies this pipeline component as the Page
    Implement Role Worker.
+5. The legacy four-mutation Page limit was removed. It counted primary creation plus edits and could
+   terminate a valid repair sequence after only three edits. FileSession now enforces a mutation
+   cap only when a caller explicitly configures that policy.
 
 The structured FileSession snapshot and Runtime-owned context projection identified by the first
 review are now implemented. `FileSessionSnapshot.prerequisite` replaces prose parsing,
@@ -295,15 +303,15 @@ events or completion reason strings.
 
 Focused verification after the review fixes:
 
-- 5 test files passed;
-- 48 tests passed across `AgentWorkspaceRuntime`, `FileSession`, the site workspace Adapter, the
+- 4 test files passed;
+- 46 focused tests passed across `AgentWorkspaceRuntime`, `FileSession`, the
   Page Build Session integration, and the Page Implement Role Worker;
 - TypeScript passed with `tsc --noEmit`.
 
 Full regression verification was run once because this change affects the core generation flow:
 
 - 199 test files passed;
-- 1013 tests passed;
+- 1015 tests passed;
 - ESLint and `git diff --check` passed.
 
 Vite still reports two pre-existing missing source-map warnings for generated JavaScript under

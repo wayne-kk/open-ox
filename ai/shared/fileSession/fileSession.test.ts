@@ -451,6 +451,70 @@ describe("FileSession", () => {
     expect(await workspace.readText("components/pages/home/Hero.tsx")).toContain("Welcome");
   });
 
+  it("allows repeated revision-safe edits when no mutation policy is configured", async () => {
+    const session = createFileSession({
+      owner: "page:home",
+      workspace: new InMemoryFileSessionWorkspace(),
+      ownsPath: (path) => path === "app/page.tsx",
+      requiredArtifacts: ["app/page.tsx"],
+    });
+    await session.execute({
+      name: "create_file",
+      args: { path: "app/page.tsx", content: "export default () => <main>0</main>" },
+    });
+
+    for (let version = 1; version <= 5; version += 1) {
+      const snapshot = await session.execute({
+        name: "read_file_snapshot",
+        args: { path: "app/page.tsx" },
+      });
+      const result = await session.execute({
+        name: "apply_file_patch",
+        args: {
+          path: "app/page.tsx",
+          baseRevision: snapshot.revision!,
+          edits: [{
+            range: { start: { line: 0, character: 27 }, end: { line: 0, character: 28 } },
+            newText: String(version),
+          }],
+        },
+      });
+      expect(result).toMatchObject({ success: true, kind: "file_updated" });
+    }
+
+    expect(session.snapshot().decision).toEqual({ kind: "complete" });
+  });
+
+  it("enforces a mutation policy only when the caller explicitly configures one", async () => {
+    const session = createFileSession({
+      owner: "bounded-worker",
+      workspace: new InMemoryFileSessionWorkspace(),
+      ownsPath: (path) => path === "app/page.tsx",
+      requiredArtifacts: ["app/page.tsx"],
+      maxMutationsPerFile: 1,
+    });
+    await session.execute({
+      name: "create_file",
+      args: { path: "app/page.tsx", content: "export default () => <main>0</main>" },
+    });
+    const snapshot = await session.execute({
+      name: "read_file_snapshot",
+      args: { path: "app/page.tsx" },
+    });
+
+    expect(await session.execute({
+      name: "apply_file_patch",
+      args: {
+        path: "app/page.tsx",
+        baseRevision: snapshot.revision!,
+        edits: [{
+          range: { start: { line: 0, character: 27 }, end: { line: 0, character: 28 } },
+          newText: "1",
+        }],
+      },
+    })).toMatchObject({ success: false, code: "MUTATION_LIMIT", retryable: false });
+  });
+
   it("derives completion from required artifacts instead of a model completion call", async () => {
     const { session } = createSession();
     expect(session.stopDecision()).toMatchObject({ kind: "continue" });

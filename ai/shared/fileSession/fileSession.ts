@@ -332,7 +332,10 @@ export function createFileSession(options: FileSessionOptions): FileSession {
           retryable: true,
         };
       }
-      if ((mutationCounts.get(call.args.path) ?? 0) >= (options.maxMutationsPerFile ?? 4)) {
+      if (
+        options.maxMutationsPerFile !== undefined &&
+        (mutationCounts.get(call.args.path) ?? 0) >= options.maxMutationsPerFile
+      ) {
         terminalError = `Mutation limit exceeded for ${call.args.path}`;
         return { success: false, kind: "error", cached: false, path: call.args.path, code: "MUTATION_LIMIT", error: terminalError, retryable: false };
       }

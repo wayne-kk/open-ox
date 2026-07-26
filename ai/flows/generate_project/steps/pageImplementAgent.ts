@@ -116,7 +116,6 @@ export function createPageFileSession(options: {
       pageImplementationIncompleteReason(content, path),
     validateCompletion: options.validateCompletion,
     maxFiles: 8,
-    maxMutationsPerFile: 4,
     maxConsecutiveFailuresPerFile: 2,
   });
 }
