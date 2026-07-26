@@ -16,6 +16,7 @@ export function ConditionalNav() {
   if (pathname.startsWith("/studio/") || pathname.startsWith("/auth")) return null;
   if (pathname.startsWith("/projects/")) return null;
   if (pathname === "/dashboard") return null;
+  if (pathname === "/maintenance") return null;
   // Workspace settings share AppShell — hide marketing top nav (same as dashboard).
   if (pathname.startsWith("/settings")) return null;
   if (pathname === "/community" && ready && user) return null;

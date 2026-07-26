@@ -34,6 +34,10 @@ import {
   WORKSPACE_PROMPT_HASH,
 } from "@/lib/navigation/startBuild";
 import {
+  getProjectCreationMaintenanceStatus,
+  PROJECT_CREATION_MAINTENANCE_PATH,
+} from "@/lib/projectCreationMaintenance";
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -199,8 +203,12 @@ function SidebarBody({
   const onDashboardRoot =
     onDashboard && !onPublished && !onTrashed && isRootFolderParam(folderParam);
 
-  const handleStartBuild = () => {
+  const handleStartBuild = async () => {
     onNavigate?.();
+    if (await getProjectCreationMaintenanceStatus()) {
+      router.push(PROJECT_CREATION_MAINTENANCE_PATH);
+      return;
+    }
     const action = resolveStartBuildAction({ pathname, onTrashed });
     if (action.type === "focus") {
       focusWorkspacePrompt();
@@ -255,7 +263,7 @@ function SidebarBody({
           label={t("startBuild")}
           icon={Sparkles}
           collapsed={collapsed}
-          onClick={handleStartBuild}
+          onClick={() => void handleStartBuild()}
           tourId="workspace-start-build"
         />
 

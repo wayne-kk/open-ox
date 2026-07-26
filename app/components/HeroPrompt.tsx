@@ -11,6 +11,10 @@ import { captureAppReturnTo } from "@/lib/navigation/appBack";
 import { resolveFolderIdFromSearchParam } from "@/lib/projectFolders";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
+import {
+  getProjectCreationMaintenanceStatus,
+  PROJECT_CREATION_MAINTENANCE_PATH,
+} from "@/lib/projectCreationMaintenance";
 
 /** Survives redirect to /auth so we can resume POST /api/projects after login. */
 const PENDING_BUILD_KEY = "open-ox:pending-project-build";
@@ -205,6 +209,11 @@ export function HeroPrompt({ showCreditsPromise = false }: HeroPromptProps) {
   const submit = async () => {
     const built = composeUserPrompt({ v: 1, value, chips, folderId });
     if (!built || submitting) return;
+
+    if (await getProjectCreationMaintenanceStatus()) {
+      router.push(PROJECT_CREATION_MAINTENANCE_PATH);
+      return;
+    }
 
     const supabase = createSupabaseBrowserClient();
     const {

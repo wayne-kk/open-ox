@@ -26,6 +26,10 @@ import {
 } from "@/lib/generation/intentGuideLifecycle";
 import { canAfford } from "@/lib/billing/account";
 import { isCreditsEnabled, MIN_GENERATE_CREDITS } from "@/lib/billing/credits";
+import {
+  PROJECT_CREATION_MAINTENANCE_RESPONSE,
+} from "@/lib/projectCreationMaintenance";
+import { isProjectCreationMaintenance } from "@/lib/projectCreationMaintenance.server";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -47,6 +51,13 @@ export async function POST(req: Request) {
       typeof body.resumeFromCheckpoint === "boolean" &&
       body.resumeFromCheckpoint;
     const preCreatedProjectId: string | undefined = body.projectId;
+    if (
+      !retryProjectId &&
+      !preCreatedProjectId &&
+      (await isProjectCreationMaintenance())
+    ) {
+      return NextResponse.json(PROJECT_CREATION_MAINTENANCE_RESPONSE, { status: 503 });
+    }
     const enableIntentGuide = shouldEnableIntentGuideForGeneration({
       retryProjectId,
       requested:

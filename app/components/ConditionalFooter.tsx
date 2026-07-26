@@ -15,6 +15,7 @@ export function ConditionalFooter() {
   if (pathname.startsWith("/studio/") || pathname.startsWith("/auth")) return null;
   if (pathname.startsWith("/projects/")) return null;
   if (pathname === "/dashboard") return null;
+  if (pathname === "/maintenance") return null;
   if (pathname.startsWith("/settings")) return null;
   if (pathname === "/community" && ready && user) return null;
 

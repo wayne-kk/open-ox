@@ -7,6 +7,10 @@ import {
   listTagsByProjectIds,
   normalizeGallerySearchQuery,
 } from "@/lib/tagManager";
+import {
+  PROJECT_CREATION_MAINTENANCE_RESPONSE,
+} from "@/lib/projectCreationMaintenance";
+import { isProjectCreationMaintenance } from "@/lib/projectCreationMaintenance.server";
 
 /**
  * GET /api/projects — current user's Workspace projects only.
@@ -69,6 +73,9 @@ export async function POST(req: Request) {
     const session = await getSessionUser();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
+    }
+    if (await isProjectCreationMaintenance()) {
+      return NextResponse.json(PROJECT_CREATION_MAINTENANCE_RESPONSE, { status: 503 });
     }
     const { supabase: db, user } = session;
 

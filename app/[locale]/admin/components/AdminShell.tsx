@@ -14,6 +14,7 @@ import {
   LayoutDashboard,
   ListOrdered,
   Megaphone,
+  SlidersHorizontal,
   Settings2,
   Shield,
   Users,
@@ -58,6 +59,7 @@ const NAV_GROUPS: Array<{ label: string; items: AdminNavItem[] }> = [
     label: "系统",
     items: [
       { href: "/admin/models", label: "模型配置", icon: Settings2 },
+      { href: "/admin/system/settings", label: "系统设置", icon: SlidersHorizontal },
       { href: "/admin/system/queue", label: "队列", icon: ListOrdered },
       { href: "/admin/system/alerts", label: "告警", icon: AlertTriangle },
     ],
