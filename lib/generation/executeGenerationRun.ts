@@ -29,6 +29,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { GenerationRunRow } from "./types";
 import { upsertBuildStepByName } from "./foldStepEvents";
 import { classifyGenerationRunCompletion } from "./intentGuideLifecycle";
+import { loadLastGenerationEventSequence } from "./eventSequence";
 
 /** Pre-commit intent rounds are stored as `intent_agent` on the project row; the pipeline replaces `build_steps` at the end — preserve those steps so Studio can restore the dialogue. */
 function mergeIntentAgentStepsIntoFinal(
@@ -101,6 +102,8 @@ export async function executeGenerationRun(args: {
   let liveStepsTimer: ReturnType<typeof setTimeout> | null = null;
 
   try {
+    eventSeq = await loadLastGenerationEventSequence(admin, generationRunUuid);
+
     const { data: runState } = await admin
       .from("generation_runs")
       .select("status")
