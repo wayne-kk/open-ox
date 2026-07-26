@@ -9,6 +9,7 @@ import {
   createInlineGenerationLease,
   shouldRunInlineGeneration,
 } from "./executorMode";
+import { notifyGenerationRunQueued } from "./generationQueue";
 
 /** Returns queued/running run id for project, if any */
 export async function getActiveQueuedOrRunningRunId(
@@ -34,6 +35,18 @@ export type EnqueueGenerationInput = {
   resumeFromCheckpoint: boolean;
   payload: GenerationRunPayloadBody;
 };
+
+async function notifyStandaloneGenerationRun(runId: string): Promise<void> {
+  try {
+    await notifyGenerationRunQueued(runId);
+  } catch (error) {
+    // The database row is durable; the worker's recovery scan will republish it.
+    console.error(
+      `[enqueueGenerationJob] Redis wake-up failed for ${runId}; recovery scan will retry`,
+      error,
+    );
+  }
+}
 
 /**
  * Enqueue background generation or attach to existing queued/running run for same project.
@@ -76,6 +89,9 @@ export async function enqueueGenerationJob(input: EnqueueGenerationInput): Promi
       currentGenerationRunId: runId,
       buildSteps: intentOnly,
     });
+    if (!runInline && existing.status === "queued") {
+      await notifyStandaloneGenerationRun(runId);
+    }
     return { runId, attached: true, shouldScheduleInline };
   }
 
@@ -111,6 +127,10 @@ export async function enqueueGenerationJob(input: EnqueueGenerationInput): Promi
     /** Drop previous run’s pipeline steps so polling/UI doesn’t show stale phases. */
     buildSteps: intentOnly,
   });
+
+  if (!runInline) {
+    await notifyStandaloneGenerationRun(runId);
+  }
 
   trackServerAnalyticsEventFireAndForget({
     userId: ownerUserId,

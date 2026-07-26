@@ -6,6 +6,7 @@
 # Prepares a PM2 host (no Docker required for daily deploys):
 #   - Node 20 + corepack/pnpm
 #   - pm2 (global)
+#   - Redis (localhost-only BullMQ backend)
 #   - Playwright OS deps + CJK fonts
 #   - APP_DIR ownership for the deploy user
 set -euo pipefail
@@ -80,7 +81,21 @@ apt-get install -y --no-install-recommends \
   xvfb \
   build-essential \
   python3 \
+  redis-server \
   "${ATK_PKGS[@]}"
+
+# BullMQ requires noeviction. Redis remains private to this single-host stack.
+sed -i \
+  -e 's/^bind .*/bind 127.0.0.1 ::1/' \
+  -e 's/^protected-mode .*/protected-mode yes/' \
+  -e 's/^# *maxmemory-policy .*/maxmemory-policy noeviction/' \
+  -e 's/^maxmemory-policy .*/maxmemory-policy noeviction/' \
+  -e 's/^appendonly .*/appendonly yes/' \
+  /etc/redis/redis.conf
+systemctl enable redis-server
+systemctl restart redis-server
+redis-cli ping | grep -q PONG
+echo "==> Redis: localhost:6379 (AOF, noeviction)"
 
 # ── Node 20（优先 npmmirror 二进制，避免 deb.nodesource.com 在 CN 超时）────────
 install_node_from_npmmirror() {

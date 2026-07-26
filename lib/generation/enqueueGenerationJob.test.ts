@@ -5,6 +5,9 @@ const { getProject, updateProjectStatus } = vi.hoisted(() => ({
   getProject: vi.fn().mockResolvedValue(null),
   updateProjectStatus: vi.fn().mockResolvedValue(undefined),
 }));
+const { notifyGenerationRunQueued } = vi.hoisted(() => ({
+  notifyGenerationRunQueued: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock("@/lib/projectManager", () => ({
   getProject,
@@ -13,6 +16,7 @@ vi.mock("@/lib/projectManager", () => ({
 vi.mock("@/lib/analytics/serverEvents", () => ({
   trackServerAnalyticsEventFireAndForget: vi.fn(),
 }));
+vi.mock("./generationQueue", () => ({ notifyGenerationRunQueued }));
 
 import { enqueueGenerationJob } from "./enqueueGenerationJob";
 
@@ -106,6 +110,7 @@ describe("enqueueGenerationJob", () => {
     );
     expect(insert.mock.calls[0]?.[0]).not.toHaveProperty("lease_owner");
     expect(result.shouldScheduleInline).toBe(false);
+    expect(notifyGenerationRunQueued).toHaveBeenCalledWith("run-1");
   });
 
   it("atomically leases an older queued run when inline mode attaches", async () => {
@@ -155,5 +160,40 @@ describe("enqueueGenerationJob", () => {
     expect(insert).not.toHaveBeenCalled();
     expect(update).not.toHaveBeenCalled();
     expect(result.shouldScheduleInline).toBe(false);
+    expect(notifyGenerationRunQueued).not.toHaveBeenCalled();
+  });
+
+  it("re-publishes a wake-up signal when attaching to a queued worker run", async () => {
+    vi.stubEnv("OPEN_OX_INLINE_GENERATION", "0");
+    const { db } = dbHarness([{ id: "queued-run", status: "queued" }]);
+
+    await enqueueGenerationJob({
+      db,
+      projectId: "project-1",
+      ownerUserId: "user-1",
+      kind: "resume",
+      resumeFromCheckpoint: true,
+      payload,
+    });
+
+    expect(notifyGenerationRunQueued).toHaveBeenCalledWith("queued-run");
+  });
+
+  it("keeps a durable queued run successful when Redis is temporarily unavailable", async () => {
+    vi.stubEnv("OPEN_OX_INLINE_GENERATION", "0");
+    notifyGenerationRunQueued.mockRejectedValueOnce(new Error("Redis unavailable"));
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const { db } = dbHarness();
+
+    await expect(
+      enqueueGenerationJob({
+        db,
+        projectId: "project-1",
+        ownerUserId: "user-1",
+        kind: "new",
+        resumeFromCheckpoint: false,
+        payload,
+      }),
+    ).resolves.toMatchObject({ runId: "run-1", attached: false });
   });
 });

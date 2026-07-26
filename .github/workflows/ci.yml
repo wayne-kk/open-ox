@@ -128,6 +128,7 @@ jobs:
             echo "VERCEL_CLIENT_SECRET=${{ secrets.VERCEL_CLIENT_SECRET }}"
             echo "VERCEL_INTEGRATION_SLUG=${{ secrets.VERCEL_INTEGRATION_SLUG }}"
             echo "VERCEL_TOKEN_ENCRYPTION_KEY=${{ secrets.VERCEL_TOKEN_ENCRYPTION_KEY }}"
+            echo "REDIS_URL=redis://127.0.0.1:6379"
           } > .env.production
 
       - name: Setup SSH agent

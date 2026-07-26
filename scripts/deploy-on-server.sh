@@ -143,6 +143,14 @@ else
 fi
 echo "==> app deps done in $(elapsed "$T0")"
 
+echo "==> generation queue preflight $(ts)"
+if ! pnpm exec tsx scripts/check-generation-queue-prereqs.ts; then
+  echo "ERROR: generation queue prerequisites are not ready."
+  echo "  1) Install/start Redis: sudo OPEN_OX_DEPLOY_USER=$(id -un) bash $APP_DIR/scripts/server-setup.sh"
+  echo "  2) Apply supabase/migrations/040_claim_generation_run_by_id.sql"
+  exit 1
+fi
+
 TEMPLATE_DIR="sites/template"
 TEMPLATE_LOCK_HASH="$(hash_file "$TEMPLATE_DIR/pnpm-lock.yaml")"
 TEMPLATE_STAMP=".open-ox/deploy-template-lock.sha256"

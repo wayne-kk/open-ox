@@ -29,6 +29,12 @@ deploy-on-server.sh
          └── open-ox-screenshot      (Playwright HTTP :3921)
 ```
 
+生成任务由 Redis/BullMQ 即时唤醒 Worker；Supabase `generation_runs` 保留持久状态，
+Worker 启动及低频恢复扫描会补发遗漏任务。首次升级到此版本前，先重新运行一次
+`server-setup.sh` 安装仅监听 `127.0.0.1:6379` 的 Redis，再应用
+`supabase/migrations/040_claim_generation_run_by_id.sql`。部署脚本会在构建和 PM2
+reload 前验证 Redis `PING` 与该 RPC；任一缺失都会停止部署，避免半升级。
+
 封面 / 参考页截图由 **Screenshot Service** 完成；Next 只发本机 HTTP（`OPEN_OX_SCREENSHOT_URL`，默认 `http://127.0.0.1:3921`）。鉴权：`OPEN_OX_SCREENSHOT_SECRET` 或回退 `OPEN_OX_PREVIEW_CAPTURE_SECRET`。
 
 本地开发另开终端：`pnpm screenshot:dev`（与 `pnpm dev` 并行）。
@@ -79,6 +85,7 @@ pm2 startup   # 按提示做开机自启
 pm2 save
 curl -sS http://127.0.0.1:3000/health
 curl -sS http://127.0.0.1:3921/health
+redis-cli ping   # PONG
 ```
 
 ---

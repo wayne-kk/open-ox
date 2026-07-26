@@ -9,12 +9,20 @@
 import { existsSync, readFileSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
+import { Queue, Worker } from "bullmq";
 
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 import { createResilientFetch } from "@/lib/supabase/resilientFetch";
 import { executeGenerationRun } from "@/lib/generation/executeGenerationRun";
+import {
+  createGenerationRedisConnection,
+  GENERATION_QUEUE_NAME,
+} from "@/lib/generation/generationQueue";
 import { shouldRunStandaloneGenerationWorker } from "@/lib/generation/inlineGeneration";
-import type { GenerationRunRow } from "@/lib/generation/types";
+import {
+  claimGenerationRunById,
+  loadRecoverableGenerationRunIds,
+} from "@/lib/generation/workerQueue";
 
 /**
  * Load `.env*` into `process.env` without overriding existing keys.
@@ -57,14 +65,13 @@ const LEASE_SECONDS = Math.max(
   60,
   Number.parseInt(process.env.OPEN_OX_GENERATION_LEASE_SECONDS ?? "240", 10) || 240
 );
-const POLL_MS = Math.max(
-  300,
-  Number.parseInt(process.env.OPEN_OX_GENERATION_POLL_MS ?? "500", 10) || 500
+const RECOVERY_MS = Math.max(
+  30_000,
+  Number.parseInt(
+    process.env.OPEN_OX_GENERATION_RECOVERY_MS ?? "300000",
+    10,
+  ) || 300_000,
 );
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 function supabaseHost(): string {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -76,20 +83,13 @@ function supabaseHost(): string {
   }
 }
 
-function formatRpcError(error: unknown): string {
-  if (!error || typeof error !== "object") return String(error);
-  const row = error as { message?: string; details?: string; hint?: string; code?: string };
-  const parts = [row.message, row.details, row.hint, row.code].filter(Boolean);
-  return parts.join(" | ") || "unknown RPC error";
-}
-
 async function verifySupabaseReachable(
   admin: ReturnType<typeof createSupabaseServiceRoleClient>
 ): Promise<boolean> {
   try {
     const { error } = await admin.from("generation_runs").select("id").limit(1);
     if (error) {
-      console.error("[generation-worker] Supabase ping failed:", formatRpcError(error));
+      console.error("[generation-worker] Supabase ping failed:", error.message);
       return false;
     }
     return true;
@@ -138,7 +138,7 @@ export async function runWorkerLoop(signal: AbortSignal): Promise<void> {
     global: { fetch: createResilientFetch(3) },
   });
   console.info(
-    `[generation-worker] started id=${WORKER_ID} lease=${LEASE_SECONDS}s poll=${POLL_MS}ms supabase=${supabaseHost()}`
+    `[generation-worker] started id=${WORKER_ID} lease=${LEASE_SECONDS}s queue=redis recovery=${RECOVERY_MS}ms supabase=${supabaseHost()}`,
   );
 
   const reachable = await verifySupabaseReachable(admin);
@@ -149,64 +149,85 @@ export async function runWorkerLoop(signal: AbortSignal): Promise<void> {
     );
   }
 
-  let consecutiveFailures = 0;
+  const queueConnection = createGenerationRedisConnection();
+  const workerConnection = createGenerationRedisConnection({ worker: true });
+  const queue = new Queue<{ runId: string }>(GENERATION_QUEUE_NAME, {
+    connection: queueConnection,
+  });
 
-  while (!signal.aborted) {
-    let rows: unknown;
-    let error: unknown;
+  const recover = async () => {
+    const runIds = await loadRecoverableGenerationRunIds(admin);
+    if (runIds.length === 0) return;
+    await queue.addBulk(
+      runIds.map((runId) => ({
+        name: "execute",
+        data: { runId },
+        opts: {
+          jobId: runId,
+          attempts: 5,
+          backoff: { type: "exponential" as const, delay: 1_000 },
+          removeOnComplete: true,
+          removeOnFail: true,
+        },
+      })),
+    );
+    console.info(`[generation-worker] recovered ${runIds.length} database run(s)`);
+  };
 
-    try {
-      const result = await admin.rpc("claim_next_generation_run", {
-        p_worker: WORKER_ID,
-        p_lease_seconds: LEASE_SECONDS,
+  const worker = new Worker<{ runId: string }>(
+    GENERATION_QUEUE_NAME,
+    async (job) => {
+      const row = await claimGenerationRunById(admin, {
+        runId: job.data.runId,
+        workerId: WORKER_ID,
+        leaseSeconds: LEASE_SECONDS,
       });
-      rows = result.data;
-      error = result.error;
-    } catch (err) {
-      error = err;
-      rows = null;
-    }
+      if (!row) return;
 
-    if (error) {
-      consecutiveFailures += 1;
-      const msg =
-        error instanceof Error
-          ? error.cause instanceof Error
-            ? `${error.message} — ${error.cause.message}`
-            : error.message
-          : formatRpcError(error);
-      console.error(`[generation-worker] claim failed (${consecutiveFailures}):`, msg);
-      const backoff = Math.min(POLL_MS * consecutiveFailures, 15_000);
-      await sleep(backoff);
-      continue;
-    }
+      const hbTimer = setInterval(() => {
+        void heartbeat(admin, row.id).catch((err) =>
+          console.warn("[generation-worker] heartbeat failed:", err),
+        );
+      }, Math.max(30_000, (LEASE_SECONDS * 1000) / 2));
+      try {
+        await executeGenerationRun({
+          admin,
+          run: row,
+          workerHostname: WORKER_ID,
+        });
+      } finally {
+        clearInterval(hbTimer);
+      }
+    },
+    { connection: workerConnection, concurrency: 1 },
+  );
 
-    consecutiveFailures = 0;
+  worker.on("failed", (job, err) => {
+    console.error(
+      `[generation-worker] job ${job?.id ?? "unknown"} failed:`,
+      err.message,
+    );
+  });
+  worker.on("error", (err) => {
+    console.error("[generation-worker] Redis worker error:", err.message);
+  });
 
-    const row = Array.isArray(rows) ? (rows[0] as GenerationRunRow | undefined) : undefined;
-    if (!row?.id) {
-      await sleep(POLL_MS);
-      continue;
-    }
+  await recover();
+  const recoveryTimer = setInterval(() => {
+    void recover().catch((err) =>
+      console.error("[generation-worker] recovery scan failed:", err),
+    );
+  }, RECOVERY_MS);
 
-    const hbTimer = setInterval(() => {
-      void heartbeat(admin, row.id).catch((err) =>
-        console.warn("[generation-worker] heartbeat failed:", err)
-      );
-    }, Math.max(30_000, (LEASE_SECONDS * 1000) / 2));
+  await new Promise<void>((resolve) => {
+    if (signal.aborted) return resolve();
+    signal.addEventListener("abort", () => resolve(), { once: true });
+  });
 
-    try {
-      await executeGenerationRun({
-        admin,
-        run: row,
-        workerHostname: WORKER_ID,
-      });
-    } catch (err) {
-      console.error("[generation-worker] execute failed:", err);
-    } finally {
-      clearInterval(hbTimer);
-    }
-  }
+  clearInterval(recoveryTimer);
+  await worker.close();
+  await queue.close();
+  await Promise.allSettled([workerConnection.quit(), queueConnection.quit()]);
 }
 
 const ac = new AbortController();
