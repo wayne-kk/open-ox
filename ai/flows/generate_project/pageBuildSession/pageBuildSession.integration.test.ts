@@ -117,6 +117,49 @@ describe("runPageBuildSession", () => {
     expect(result.finalDecision).toEqual({ kind: "complete" });
   });
 
+  it("keeps a loaded default stub in draft_target and replaces it through create_target_page", async () => {
+    const targetPath = "app/page.tsx";
+    const stub = "export default function Page() { return <main>Preparing your site…</main> }";
+    const implemented = "export default function Page() { return <main>Ready</main> }";
+    const workspace = new InMemoryFileSessionWorkspace({ [targetPath]: stub });
+    const fileSession = createFileSession({
+      owner: "page:home",
+      workspace,
+      ownsPath: (path) => path === targetPath,
+      requiredArtifacts: [targetPath],
+      replaceableBaselinePaths: [targetPath],
+      validateArtifact: (_path, content) =>
+        content.includes("Preparing your site") ? "default stub" : null,
+    });
+    loop.call.mockImplementationOnce(async (params: ToolLoopParams) => {
+      expect(params.resolveToolsForIteration?.(0, params.tools).map((tool) => tool.function.name))
+        .toEqual(["create_target_page"]);
+      const created = await params.executeToolOverrides.create_target_page({ content: implemented });
+      expect(created.success).toBe(true);
+      expect(params.resolveToolsForIteration?.(1, params.tools).map((tool) => tool.function.name))
+        .toEqual(["verify_page_files"]);
+      await params.executeToolOverrides.verify_page_files({});
+      return { content: "", toolCalls: [] };
+    });
+
+    const result = await runPageBuildSession({
+      slug: "home",
+      targetPath,
+      componentRoot: "components/pages/home",
+      initialMessages: [{ role: "user", content: "Build" }],
+      model: "gemini-3.6-flash",
+      maxIterations: 4,
+      fileSession,
+      langfusePhase: "page.home",
+    });
+
+    expect(result.finalDecision).toEqual({ kind: "complete" });
+    expect(fileSession.writtenPaths()).toContain(targetPath);
+    expect((await workspace.read(targetPath)).content).toBe(implemented);
+    expect(fileSession.events().filter((event) => event.code === "FILE_ALREADY_CREATED"))
+      .toEqual([]);
+  });
+
   it("enforces target-first tools and opens the build phase only after the target write", async () => {
     const targetPath = "app/page.tsx";
     const existingComponent = "components/pages/home/Existing.tsx";

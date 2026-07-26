@@ -377,7 +377,14 @@ export function createFileSession(options: FileSessionOptions): FileSession {
       return event;
     }
 
-    if (records.has(call.args.path)) {
+    const loadedReplaceableBaseline =
+      records.has(call.args.path) &&
+      replaceable.has(call.args.path) &&
+      !emittedEvents.some((event) =>
+        event.path === call.args.path &&
+        (event.kind === "file_created" || event.kind === "file_updated")
+      );
+    if (records.has(call.args.path) && !loadedReplaceableBaseline) {
       return {
         success: false,
         kind: "error",
@@ -389,7 +396,9 @@ export function createFileSession(options: FileSessionOptions): FileSession {
       };
     }
 
-    const existing = await options.workspace.readIfExists(call.args.path);
+    const existing = loadedReplaceableBaseline
+      ? records.get(call.args.path)!
+      : await options.workspace.readIfExists(call.args.path);
     if (existing && !replaceable.has(call.args.path)) {
       return {
         success: false,

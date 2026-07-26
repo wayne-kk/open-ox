@@ -210,6 +210,12 @@ export function pageBuildPhase(spec: Pick<PageBuildSessionSpec, "targetPath" | "
   if (decision.kind === "failed") return "failed";
   if (decision.kind === "complete") return "complete";
   if (!spec.fileSession.artifacts().has(spec.targetPath)) return "draft_target";
+  if (
+    !spec.fileSession.writtenPaths().includes(spec.targetPath) &&
+    spec.fileSession.stopDecision().kind !== "complete"
+  ) {
+    return "draft_target";
+  }
   return spec.fileSession.currentDiagnostics().length > 0 ? "repair" : "build";
 }
 
