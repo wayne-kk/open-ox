@@ -11,9 +11,10 @@ import { syncLocalProjectFingerprint } from "@/lib/previewFingerprintDb";
 import { getSessionUser } from "@/lib/auth/session";
 import { requireOwnedProject } from "@/lib/auth/projectAccess";
 import { getSiteRoot } from "@/lib/projectManager";
-import { ensureProjectSourcesOnDisk } from "@/lib/storage";
+import { ensureProjectSourcesOnDisk, uploadFullProject } from "@/lib/storage";
 import { getBoardRunStore } from "@/lib/modify/boardRun/fileBoardRunStore";
 import { isBoardRunBlocking } from "@/lib/modify/boardRun/isBoardRunBlocking";
+import { captureProjectVersion } from "@/lib/projectVersions";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -92,6 +93,12 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   try {
     await syncLocalProjectFingerprint(db, id);
+    await uploadFullProject(id);
+    await captureProjectVersion(id, {
+      sourceKind: "design_mode",
+      summary: "Design Mode 修改",
+      verificationStatus: "unknown",
+    });
   } catch {
     /* non-fatal */
   }

@@ -57,6 +57,8 @@ type ConnectionState = {
 type Team = { id: string; name: string; slug?: string };
 
 type DeployStatus = "queued" | "building" | "uploading" | "ready" | "error";
+type DeploymentFreshness = "never_deployed" | "up_to_date" | "updates_available" | "unknown";
+type ProjectVersion = { id: string; versionNumber: number; summary: string | null };
 
 type DeployRow = {
   projectId: string;
@@ -68,6 +70,12 @@ type DeployRow = {
   lastError: string | null;
   lastDeployedAt: string | null;
   deployId: string | null;
+  freshness: DeploymentFreshness;
+  deployedVersionId: string | null;
+  currentVersion: ProjectVersion | null;
+  deployedVersion: ProjectVersion | null;
+  workingCopyHasChanges: boolean;
+  versionCapturePending: boolean;
 };
 
 const ERROR_COPY: Record<string, string> = {
@@ -373,6 +381,7 @@ function DeployRowCard({
     teamName,
   });
   const hasError = row.status === "error" && Boolean(row.lastError);
+  const hasUpdates = row.freshness === "updates_available";
   const helpLinks = hasError
     ? deployHelpLinks({ error: row.lastError, teamSlug })
     : [];
@@ -394,6 +403,9 @@ function DeployRowCard({
               {inProgress ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
               {statusLabel(row.status)}
             </span>
+            {hasUpdates && !inProgress ? (
+              <span className="text-[11px] font-medium text-amber-200/90">有更新</span>
+            ) : null}
           </div>
 
           {row.productionUrl ? (
@@ -412,7 +424,11 @@ function DeployRowCard({
 
           {row.lastDeployedAt ? (
             <p className="text-[11px] text-muted-foreground/50">
+              {row.deployedVersion ? `线上 v${row.deployedVersion.versionNumber} · ` : ""}
               {new Date(row.lastDeployedAt).toLocaleString()}
+              {hasUpdates && row.currentVersion
+                ? ` · 当前 v${row.currentVersion.versionNumber}`
+                : ""}
             </p>
           ) : null}
 
@@ -452,11 +468,11 @@ function DeployRowCard({
           ) : null}
           <button
             type="button"
-            disabled={busyRow || inProgress}
+            disabled={busyRow || inProgress || row.versionCapturePending}
             onClick={onRedeploy}
             className={cn(
               "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] transition-colors",
-              busyRow || inProgress
+              busyRow || inProgress || row.versionCapturePending
                 ? "cursor-not-allowed text-muted-foreground/50"
                 : "bg-primary/14 text-primary hover:bg-primary/20"
             )}
@@ -466,7 +482,13 @@ function DeployRowCard({
             ) : (
               <Rocket className="h-3 w-3" />
             )}
-            Deploy
+            {row.versionCapturePending
+              ? "版本保存中"
+              : row.workingCopyHasChanges
+              ? "保存版本并发布"
+              : hasUpdates
+                ? "发布更新"
+                : "重新发布"}
           </button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -622,16 +644,17 @@ export function IntegrationsSettingsClient() {
   const anyInProgress = deployments.some(
     (d) => d.status != null && IN_PROGRESS.includes(d.status)
   );
+  const anyVersionPending = deployments.some((d) => d.versionCapturePending);
 
   useEffect(() => {
-    if (!state.connected || !anyInProgress) return;
+    if (!state.connected || (!anyInProgress && !anyVersionPending)) return;
     const timer = window.setInterval(() => {
       void refreshDeployments().catch(() => {
         /* ignore transient poll errors */
       });
     }, 2500);
     return () => window.clearInterval(timer);
-  }, [state.connected, anyInProgress, refreshDeployments]);
+  }, [state.connected, anyInProgress, anyVersionPending, refreshDeployments]);
 
   const disconnect = async () => {
     setBusy(true);
@@ -657,13 +680,19 @@ export function IntegrationsSettingsClient() {
     }
   };
 
-  const redeploy = async (projectId: string, projectName: string) => {
+  const redeploy = async (
+    projectId: string,
+    projectName: string,
+    versionId: string | null
+  ) => {
     setRedeployingId(projectId);
     setError(null);
     try {
       const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/deploy`, {
         method: "POST",
         credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ versionId }),
       });
       const body = (await res.json().catch(() => ({}))) as {
         error?: string;
@@ -844,7 +873,13 @@ export function IntegrationsSettingsClient() {
                       teamSlug={teamSlug}
                       teamName={state.defaultTeamName}
                       busyRow={redeployingId === row.projectId}
-                      onRedeploy={() => void redeploy(row.projectId, row.projectName)}
+                      onRedeploy={() =>
+                        void redeploy(
+                          row.projectId,
+                          row.projectName,
+                          row.workingCopyHasChanges ? null : row.currentVersion?.id ?? null
+                        )
+                      }
                     />
                   ))}
                 </ul>

@@ -13,6 +13,7 @@ import {
 import { parseSseDataLine } from "@/lib/transport/agentStreamSse";
 import { trackEvent } from "@/lib/analytics/client";
 import { toClientHistoryPayload } from "@/ai/flows/modify_project/history/modifyHistoryTurn";
+import { notifyProjectSourceChanged } from "@/lib/projectVersionEvents";
 import type { BoardRun, BoardTaskInput } from "@/lib/modify/boardRun/boardRunTypes";
 import { isBoardRunBlocking } from "@/lib/modify/boardRun/isBoardRunBlocking";
 import {
@@ -1897,6 +1898,7 @@ export function useBuildStudio(initialProjectId?: string | null, initialPrompt?:
         }
 
         setCodeWorkspaceEpoch((n) => n + 1);
+        notifyProjectSourceChanged(projectId);
 
         if (autoPreviewAfterBuildRef.current) {
           // Storage backend: share in-flight sync with post-modify pipeline (no force).

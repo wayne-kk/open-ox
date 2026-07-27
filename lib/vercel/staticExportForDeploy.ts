@@ -16,7 +16,9 @@ import { withSiteBuildLock } from "@/lib/siteBuildLock";
 import { getSiteRoot } from "@/lib/projectManager";
 import { ensureProjectSourcesOnDisk } from "@/lib/storage";
 import {
+  computeProjectDirFingerprint,
   computeProjectFingerprint,
+  ensureGlobalErrorFromTemplateInDir,
   ensureGlobalErrorFromTemplateForProject,
 } from "@/lib/previewShared";
 import { prepareProjectDirForStaticExport } from "@/lib/staticSitePreview";
@@ -111,7 +113,7 @@ async function runRootStaticExportBuild(
 export async function buildStaticExportForVercelDeploy(
   projectId: string,
   options?: { force?: boolean }
-): Promise<{ outDir: string; reused: boolean }> {
+): Promise<{ outDir: string; reused: boolean; sourceFingerprint: string }> {
   const projectDir = getSiteRoot(projectId);
   await ensureProjectSourcesOnDisk(projectId);
   try {
@@ -129,7 +131,7 @@ export async function buildStaticExportForVercelDeploy(
   if (!force && (await canReuse(projectDir, filesFp))) {
     const outDir = path.join(projectDir, "out");
     await applyProjectArtifactBranding(outDir, projectId, undefined, "vercel_deploy");
-    return { outDir, reused: true };
+    return { outDir, reused: true, sourceFingerprint: filesFp };
   }
 
   await runRootStaticExportBuild(projectDir, nm.preferWebpackBuild);
@@ -145,5 +147,22 @@ export async function buildStaticExportForVercelDeploy(
     basePath: VERCEL_DEPLOY_BASE_PATH_MARKER,
     builtAt: new Date().toISOString(),
   });
-  return { outDir, reused: false };
+  return { outDir, reused: false, sourceFingerprint: filesFp };
+}
+
+/** Build an immutable version materialized outside the live Studio workspace. */
+export async function buildVersionStaticExportForVercelDeploy(params: {
+  projectDir: string;
+  brandingProjectId: string;
+}): Promise<{ outDir: string; sourceFingerprint: string }> {
+  const { projectDir, brandingProjectId } = params;
+  const sourceFingerprint = await computeProjectDirFingerprint(projectDir);
+  await ensureGlobalErrorFromTemplateInDir(projectDir);
+  await prepareProjectDirForStaticExport(projectDir);
+  const nm = await ensureProjectNodeModules(projectDir);
+  await runRootStaticExportBuild(projectDir, nm.preferWebpackBuild);
+  const outDir = path.join(projectDir, "out");
+  await fs.access(path.join(outDir, "index.html"));
+  await applyProjectArtifactBranding(outDir, brandingProjectId, undefined, "vercel_deploy");
+  return { outDir, sourceFingerprint };
 }

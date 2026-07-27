@@ -13,7 +13,7 @@ import path from "path";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import archiver from "archiver";
 import AdmZip from "adm-zip";
-import { computeProjectFingerprint } from "./previewShared";
+import { collectProjectSourceFiles, computeProjectFingerprint } from "./previewShared";
 import { getSavedFingerprint, parseProjectsFilesHash } from "./previewFingerprintDb";
 import { isPreparingSiteHomePageStub } from "./preparingSiteHomePageStub";
 import { getProjectFilesStorageClient } from "./projectFilesStorageClient";
@@ -205,7 +205,7 @@ async function collectProjectFiles(dir: string, base: string): Promise<string[]>
   return files;
 }
 
-async function buildProjectZipBuffer(projectRoot: string, relativePaths: string[]): Promise<Buffer> {
+export async function buildProjectZipBuffer(projectRoot: string, relativePaths: string[]): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     const archive = archiver("zip", { zlib: { level: 6 } });
@@ -230,12 +230,30 @@ async function buildProjectZipBuffer(projectRoot: string, relativePaths: string[
   });
 }
 
+/** Build the canonical source archive used by immutable project versions. */
+export async function buildCurrentProjectSnapshotZip(projectId: string): Promise<Buffer> {
+  const projectRoot = getSiteRoot(projectId);
+  const files = await collectProjectSourceFiles(projectRoot);
+  return buildProjectZipBuffer(projectRoot, files);
+}
+
 async function downloadStorageBlob(storagePath: string): Promise<Blob | null> {
   const { data, error } = await getProjectFilesStorageClient().storage.from(BUCKET).download(storagePath);
   if (error || !data) {
     return null;
   }
   return data;
+}
+
+export async function downloadProjectStorageBuffer(storagePath: string): Promise<Buffer> {
+  const blob = await downloadStorageBlob(storagePath);
+  if (!blob) throw new Error(`[storage] Snapshot not found: ${storagePath}`);
+  return Buffer.from(await blob.arrayBuffer());
+}
+
+export async function deleteProjectStorageObject(storagePath: string): Promise<void> {
+  const { error } = await getProjectFilesStorageClient().storage.from(BUCKET).remove([storagePath]);
+  if (error) throw new Error(`[storage] Failed to remove ${storagePath}: ${error.message}`);
 }
 
 async function fetchSnapshotManifestParsed(projectId: string): Promise<SnapshotManifestJson | null> {
