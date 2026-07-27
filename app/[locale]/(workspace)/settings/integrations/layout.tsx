@@ -8,11 +8,15 @@ export async function generateMetadata({
   params: Promise<{ locale: string }>;
 }): Promise<Metadata> {
   return {
-    title: productPageTitle("dashboard", (await params).locale),
+    title: productPageTitle("integrations", (await params).locale),
     robots: { index: false, follow: false },
   };
 }
 
-export default function DashboardLayout({ children }: { children: ReactNode }) {
+export default function IntegrationsLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
   return children;
 }

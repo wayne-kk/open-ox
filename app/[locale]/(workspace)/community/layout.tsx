@@ -7,12 +7,9 @@ export async function generateMetadata({
 }: {
   params: Promise<{ locale: string }>;
 }): Promise<Metadata> {
-  return {
-    title: productPageTitle("dashboard", (await params).locale),
-    robots: { index: false, follow: false },
-  };
+  return { title: productPageTitle("community", (await params).locale) };
 }
 
-export default function DashboardLayout({ children }: { children: ReactNode }) {
+export default function CommunityLayout({ children }: { children: ReactNode }) {
   return children;
 }

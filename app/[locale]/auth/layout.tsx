@@ -7,12 +7,13 @@ export async function generateMetadata({
 }: {
   params: Promise<{ locale: string }>;
 }): Promise<Metadata> {
+  const { locale } = await params;
   return {
-    title: productPageTitle("dashboard", (await params).locale),
+    title: productPageTitle("auth", locale),
     robots: { index: false, follow: false },
   };
 }
 
-export default function DashboardLayout({ children }: { children: ReactNode }) {
+export default function AuthLayout({ children }: { children: ReactNode }) {
   return children;
 }

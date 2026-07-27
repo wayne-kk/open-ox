@@ -4,8 +4,21 @@ import { use, useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useTranslations } from "next-intl";
-import { GitBranch, History, Monitor, RefreshCw, ExternalLink, PanelLeftClose, PanelLeftOpen, FileCode2, ImagePlus, Loader2, MousePointer2, X } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
+import {
+  GitBranch,
+  History,
+  Monitor,
+  RefreshCw,
+  ExternalLink,
+  PanelLeftClose,
+  PanelLeftOpen,
+  FileCode2,
+  ImagePlus,
+  Loader2,
+  MousePointer2,
+  X,
+} from "lucide-react";
 import { AppBackButton } from "@/app/components/AppBackButton";
 import { BrandMark } from "@/app/components/BrandMark";
 import { StudioPublishMenu } from "@/app/components/ProjectPublishPanel";
@@ -25,6 +38,7 @@ import { ProjectCodePanel } from "@/app/[locale]/studio/components/ProjectCodePa
 import { useDesignMode } from "@/app/[locale]/studio/hooks/useDesignMode";
 import { filterPipelineSteps } from "@/app/[locale]/studio/lib/pipelineSteps";
 import type { ModifyPreviewSlot } from "@/app/[locale]/studio/lib/modifyHistoryView";
+import { studioPageTitle } from "@/lib/seo/productTitles";
 import { isCodeChangeTurn } from "@/app/[locale]/studio/lib/modifyHistoryView";
 import { ProductTour } from "@/components/onboarding";
 import { trackEvent } from "@/lib/analytics/client";
@@ -45,7 +59,10 @@ import {
   type CapabilityDecision,
 } from "@/lib/studio/capabilities";
 
-function capabilityTitle(decision: CapabilityDecision, whenAllowed?: string): string | undefined {
+function capabilityTitle(
+  decision: CapabilityDecision,
+  whenAllowed?: string,
+): string | undefined {
   if (decision.allowed) return whenAllowed;
   return studioCapabilityReasonLabel(decision.reason);
 }
@@ -56,16 +73,30 @@ function formatMs(ms: number): string {
 }
 
 function StudioInner({ projectId }: { projectId: string }) {
+  const locale = useLocale();
   const tOnboarding = useTranslations("onboarding");
   const router = useRouter();
   const searchParams = useSearchParams();
   const studio = useBuildStudio(projectId);
-  const { loading, response, elapsed, rightPanel, setRightPanel,
-    previewUrl, previewState, previewError, previewVersion, startPreview, iframeRef, projectLoading,
+  const {
+    loading,
+    response,
+    elapsed,
+    rightPanel,
+    setRightPanel,
+    previewUrl,
+    previewState,
+    previewError,
+    previewVersion,
+    startPreview,
+    iframeRef,
+    projectLoading,
     projectNotFound,
-    autoPreviewAfterBuild, setAutoPreviewAfterBuild,
+    autoPreviewAfterBuild,
+    setAutoPreviewAfterBuild,
     bumpPreviewAfterDirectPatch,
-    remixedFromTitle, remixedFromOwnerUsername,
+    remixedFromTitle,
+    remixedFromOwnerUsername,
     capabilities,
   } = studio;
   const justRemixed = searchParams.get("remixed") === "1";
@@ -99,36 +130,58 @@ function StudioInner({ projectId }: { projectId: string }) {
     modifying: studio.modifying,
     error: studio.response?.error ?? studio.modifyError,
   });
+  useEffect(() => {
+    const error = studio.response?.error ?? studio.modifyError;
+    const state = error
+      ? "attention"
+      : studio.loading || studio.modifying
+        ? "generating"
+        : undefined;
+    document.title = studioPageTitle(studio.projectName, locale, state);
+  }, [
+    locale,
+    studio.loading,
+    studio.modifying,
+    studio.modifyError,
+    studio.projectName,
+    studio.response?.error,
+  ]);
   const buildSteps = response?.buildSteps ?? [];
   const pipelineSteps = filterPipelineSteps(buildSteps);
   const awaitingIntentInput = Boolean(
     response?.intentAgent &&
     response.intentAgent.status !== "commit_generate" &&
     pipelineSteps.length === 0 &&
-    !loading
+    !loading,
   );
   const [conversationCollapsed, setConversationCollapsed] = useState(false);
   const hasGeneratedProject = capabilities.history.allowed;
   const [coverCaptureBusy, setCoverCaptureBusy] = useState(false);
   const previewContainerRef = useRef<HTMLDivElement | null>(null);
   const [coverCaptureHint, setCoverCaptureHint] = useState<string | null>(null);
-  const [leftPaneView, setLeftPaneView] = useState<"conversation" | "changes">("conversation");
+  const [leftPaneView, setLeftPaneView] = useState<"conversation" | "changes">(
+    "conversation",
+  );
   const [previewSlot, setPreviewSlot] = useState<ModifyPreviewSlot>({
     mode: "live",
     fromIndex: null,
   });
-  const [changesFocusIndex, setChangesFocusIndex] = useState<number | null>(null);
+  const [changesFocusIndex, setChangesFocusIndex] = useState<number | null>(
+    null,
+  );
   const [codePanelMounted, setCodePanelMounted] = useState(false);
   /** Keep the live preview iframe mounted across Topology/Code tab switches (avoid reload black flash). */
   const [previewFrameMounted, setPreviewFrameMounted] = useState(false);
   /** Src key that last looked painted — compared to current src so URL/version bumps never race a late reset. */
-  const [loadedPreviewSrcKey, setLoadedPreviewSrcKey] = useState<string | null>(null);
+  const [loadedPreviewSrcKey, setLoadedPreviewSrcKey] = useState<string | null>(
+    null,
+  );
 
-  const previewIframeSrc =
-    previewUrl
-      ? `${previewUrl}${previewUrl.includes("?") ? "&" : "?"}v=${previewVersion}`
-      : null;
-  const previewSrcKey = previewIframeSrc ?? (previewUrl ? `${previewUrl}_${previewVersion}` : null);
+  const previewIframeSrc = previewUrl
+    ? `${previewUrl}${previewUrl.includes("?") ? "&" : "?"}v=${previewVersion}`
+    : null;
+  const previewSrcKey =
+    previewIframeSrc ?? (previewUrl ? `${previewUrl}_${previewVersion}` : null);
   const previewDocumentReady =
     Boolean(previewSrcKey) && loadedPreviewSrcKey === previewSrcKey;
   const previewPainted =
@@ -149,7 +202,8 @@ function StudioInner({ projectId }: { projectId: string }) {
    */
   const studioTourReady =
     !loading && (previewPainted || hasGeneratedProject || onboardingDebug);
-  const showProductTour = onboarding.ready && onboarding.showTour && studioTourReady;
+  const showProductTour =
+    onboarding.ready && onboarding.showTour && studioTourReady;
   const generateStartedTrackedRef = useRef(false);
   const stepViewTrackedRef = useRef(false);
   const previewReadyTrackedRef = useRef(false);
@@ -159,7 +213,8 @@ function StudioInner({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     if (onboarding.prefs.generateDone) generateDoneMarkedRef.current = true;
-    if (onboarding.prefs.firstModifySendDone) firstModifyTrackedRef.current = true;
+    if (onboarding.prefs.firstModifySendDone)
+      firstModifyTrackedRef.current = true;
     if (onboarding.prefs.designModeDone) designAutoEnabledRef.current = true;
   }, [
     onboarding.prefs.generateDone,
@@ -256,7 +311,12 @@ function StudioInner({ projectId }: { projectId: string }) {
     if (generateStartedTrackedRef.current) return;
     generateStartedTrackedRef.current = true;
     trackEvent("onboarding_generate_started");
-  }, [showOnboardingChrome, onboarding.prefs.generateDone, loading, pipelineSteps.length]);
+  }, [
+    showOnboardingChrome,
+    onboarding.prefs.generateDone,
+    loading,
+    pipelineSteps.length,
+  ]);
 
   // Preview ready → step 1 + auto Design Mode
   useEffect(() => {
@@ -305,7 +365,7 @@ function StudioInner({ projectId }: { projectId: string }) {
         void startPreview();
       }
     },
-    [setRightPanel, projectId, previewState, startPreview]
+    [setRightPanel, projectId, previewState, startPreview],
   );
 
   const studioTourSteps = useMemo(
@@ -333,7 +393,7 @@ function StudioInner({ projectId }: { projectId: string }) {
         finishTitle: tOnboarding("tourFinishTitle"),
         finishBody: tOnboarding("tourFinishBody"),
       }),
-    [tOnboarding]
+    [tOnboarding],
   );
 
   useEffect(() => {
@@ -357,7 +417,8 @@ function StudioInner({ projectId }: { projectId: string }) {
    * every subresource finishes — iframe `load` alone leaves the spinner up too long.
    */
   useEffect(() => {
-    if (previewState !== "ready" || !previewSrcKey || !previewFrameMounted) return;
+    if (previewState !== "ready" || !previewSrcKey || !previewFrameMounted)
+      return;
     if (loadedPreviewSrcKey === previewSrcKey) return;
 
     const frame = iframeRef.current;
@@ -484,7 +545,7 @@ function StudioInner({ projectId }: { projectId: string }) {
       });
       setChangesFocusIndex(historyIndex);
     },
-    [setRightPanel, studio.modifyHistory]
+    [setRightPanel, studio.modifyHistory],
   );
 
   const showCurrentPreview = useCallback(
@@ -498,11 +559,13 @@ function StudioInner({ projectId }: { projectId: string }) {
         void startPreview();
       }
     },
-    [previewState, projectId, setRightPanel, startPreview]
+    [previewState, projectId, setRightPanel, startPreview],
   );
 
   const detailsRecord =
-    previewSlot.mode === "details" ? studio.modifyHistory[previewSlot.historyIndex] ?? null : null;
+    previewSlot.mode === "details"
+      ? (studio.modifyHistory[previewSlot.historyIndex] ?? null)
+      : null;
   const codeChangeCount = studio.modifyHistory.filter(isCodeChangeTurn).length;
 
   useEffect(() => {
@@ -529,7 +592,9 @@ function StudioInner({ projectId }: { projectId: string }) {
     setCoverCaptureBusy(true);
     setCoverCaptureHint(null);
     try {
-      const res = await fetch(`/api/projects/${projectId}/cover/capture`, { method: "POST" });
+      const res = await fetch(`/api/projects/${projectId}/cover/capture`, {
+        method: "POST",
+      });
       const data = (await res.json().catch(() => ({}))) as {
         error?: string;
         code?: string;
@@ -544,7 +609,9 @@ function StudioInner({ projectId }: { projectId: string }) {
         return;
       }
       if (res.status === 503) {
-        setCoverCaptureHint("服务端未配置封面截图（需要 SUPABASE_SERVICE_ROLE_KEY）");
+        setCoverCaptureHint(
+          "服务端未配置封面截图（需要 SUPABASE_SERVICE_ROLE_KEY）",
+        );
         return;
       }
       if (res.status !== 202 && res.status !== 409) {
@@ -587,7 +654,9 @@ function StudioInner({ projectId }: { projectId: string }) {
         }
         if (step.verdict === "failed") {
           setCoverCaptureHint(
-            step.errorHint ? `封面截取失败：${step.errorHint}` : "封面截取失败，请重试"
+            step.errorHint
+              ? `封面截取失败：${step.errorHint}`
+              : "封面截取失败，请重试",
           );
           return;
         }
@@ -607,7 +676,9 @@ function StudioInner({ projectId }: { projectId: string }) {
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,color-mix(in_oklab,var(--primary)_14%,transparent),transparent_28%)]" />
         <div className="relative z-10 flex flex-col items-center gap-4">
           <HamsterLoader size="sm" className="translate-x-1" />
-          <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Loading project...</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-muted-foreground">
+            Loading project...
+          </p>
         </div>
       </main>
     );
@@ -655,25 +726,30 @@ function StudioInner({ projectId }: { projectId: string }) {
                     <div className="flex items-center gap-1.5 rounded-full border border-primary/25 bg-primary/8 px-3 py-1">
                       <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
                       <span className="font-mono text-[10px] text-primary tracking-[0.15em]">
-                        {pipelineSteps.length > 0 ? "BUILDING" : "THINKING"} · {formatMs(elapsed)}
+                        {pipelineSteps.length > 0 ? "BUILDING" : "THINKING"} ·{" "}
+                        {formatMs(elapsed)}
                       </span>
                     </div>
                   ) : response?.error ? (
                     <div className="flex items-center gap-1.5 rounded-full border border-red-400/25 bg-red-400/8 px-3 py-1">
                       <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
-                      <span className="font-mono text-[10px] text-red-400 tracking-[0.15em]">FAILED</span>
+                      <span className="font-mono text-[10px] text-red-400 tracking-[0.15em]">
+                        FAILED
+                      </span>
                     </div>
                   ) : awaitingIntentInput ? (
                     <div className="flex items-center gap-1.5 rounded-full border border-amber-400/25 bg-amber-400/8 px-3 py-1">
                       <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                      <span className="font-mono text-[10px] text-amber-300 tracking-[0.15em]">AWAITING INPUT</span>
+                      <span className="font-mono text-[10px] text-amber-300 tracking-[0.15em]">
+                        AWAITING INPUT
+                      </span>
                     </div>
                   ) : response ? (
                     <div className="flex items-center gap-1.5 rounded-full border border-green-400/25 bg-green-400/8 px-3 py-1">
                       <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
                       <span className="font-mono text-[10px] text-green-400 tracking-[0.15em]">
                         {typeof response.buildTotalDuration === "number" &&
-                          Number.isFinite(response.buildTotalDuration)
+                        Number.isFinite(response.buildTotalDuration)
                           ? `DONE · ${formatMs(response.buildTotalDuration)}`
                           : "DONE"}
                       </span>
@@ -681,7 +757,9 @@ function StudioInner({ projectId }: { projectId: string }) {
                   ) : (
                     <div className="flex items-center gap-1.5 rounded-full border border-border px-3 py-1">
                       <span className="h-1.5 w-1.5 rounded-full bg-white/20" />
-                      <span className="font-mono text-[10px] text-muted-foreground/50 tracking-[0.15em]">IDLE</span>
+                      <span className="font-mono text-[10px] text-muted-foreground/50 tracking-[0.15em]">
+                        IDLE
+                      </span>
                     </div>
                   )}
                 </div>
@@ -693,16 +771,22 @@ function StudioInner({ projectId }: { projectId: string }) {
                       type="button"
                       onClick={() => {
                         setConversationCollapsed(false);
-                        setLeftPaneView((v) => (v === "changes" ? "conversation" : "changes"));
+                        setLeftPaneView((v) =>
+                          v === "changes" ? "conversation" : "changes",
+                        );
                       }}
                       className={cn(
                         "relative flex h-7 w-7 items-center justify-center rounded-md border transition-colors",
                         leftPaneView === "changes"
                           ? "border-primary/35 bg-primary/10 text-primary"
-                          : "border-border bg-muted/40 text-muted-foreground/70 hover:border-border hover:text-foreground"
+                          : "border-border bg-muted/40 text-muted-foreground/70 hover:border-border hover:text-foreground",
                       )}
-                      title={leftPaneView === "changes" ? "返回对话" : "查看变更历史"}
-                      aria-label={leftPaneView === "changes" ? "返回对话" : "查看变更历史"}
+                      title={
+                        leftPaneView === "changes" ? "返回对话" : "查看变更历史"
+                      }
+                      aria-label={
+                        leftPaneView === "changes" ? "返回对话" : "查看变更历史"
+                      }
                     >
                       <History className="h-3.5 w-3.5" />
                       {codeChangeCount > 0 && leftPaneView !== "changes" ? (
@@ -721,7 +805,10 @@ function StudioInner({ projectId }: { projectId: string }) {
                     </Suspense>
                   ) : null}
                   {projectId ? (
-                    <StudioDeployMenu projectId={projectId} gate={capabilities.deploy} />
+                    <StudioDeployMenu
+                      projectId={projectId}
+                      gate={capabilities.deploy}
+                    />
                   ) : null}
                   {projectId ? (
                     <StudioPublishMenu
@@ -745,7 +832,10 @@ function StudioInner({ projectId }: { projectId: string }) {
           <div className="flex shrink-0 items-center justify-between gap-3 border-b border-emerald-400/20 bg-emerald-500/10 px-4 py-2">
             <p className="min-w-0 truncate text-[12px] text-emerald-100/90">
               已从 {remixedFromTitle}
-              {remixedFromOwnerUsername ? `（${remixedFromOwnerUsername}）` : ""} Remix
+              {remixedFromOwnerUsername
+                ? `（${remixedFromOwnerUsername}）`
+                : ""}{" "}
+              Remix
             </p>
             <button
               type="button"
@@ -768,9 +858,7 @@ function StudioInner({ projectId }: { projectId: string }) {
                 : "lg:w-[540px] lg:min-w-[540px] lg:max-w-[540px]",
             )}
           >
-            <div
-              className="h-full min-h-0 max-h-full overflow-hidden lg:h-full"
-            >
+            <div className="h-full min-h-0 max-h-full overflow-hidden lg:h-full">
               <BuildConversation
                 {...studio}
                 designSelectionLabel={designMode.selectionBadgeLabel}
@@ -813,15 +901,18 @@ function StudioInner({ projectId }: { projectId: string }) {
                 >
                   <button
                     onClick={() => setRightPanel("topology")}
-                    className={`flex items-center gap-1.5 px-3 h-7 font-mono text-[10px] uppercase tracking-widest transition-all ${rightPanel === "topology"
-                      ? "bg-white/8 text-foreground"
-                      : "text-muted-foreground/50 hover:text-muted-foreground"
-                      }`}
+                    className={`flex items-center gap-1.5 px-3 h-7 font-mono text-[10px] uppercase tracking-widest transition-all ${
+                      rightPanel === "topology"
+                        ? "bg-white/8 text-foreground"
+                        : "text-muted-foreground/50 hover:text-muted-foreground"
+                    }`}
                   >
                     <GitBranch className="h-3 w-3" />
                     Topology
                     {response && (
-                      <span className={`ml-1 font-mono text-[9px] ${rightPanel === "topology" ? "text-primary" : "text-muted-foreground/40"}`}>
+                      <span
+                        className={`ml-1 font-mono text-[9px] ${rightPanel === "topology" ? "text-primary" : "text-muted-foreground/40"}`}
+                      >
                         {buildSteps.length}
                       </span>
                     )}
@@ -830,10 +921,11 @@ function StudioInner({ projectId }: { projectId: string }) {
                     onClick={() => setRightPanel("code")}
                     disabled={!capabilities.code.allowed}
                     title={capabilityTitle(capabilities.code)}
-                    className={`flex items-center gap-1.5 px-3 h-7 font-mono text-[10px] uppercase tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed ${rightPanel === "code"
-                      ? "bg-white/8 text-foreground"
-                      : "text-muted-foreground/50 hover:text-muted-foreground"
-                      }`}
+                    className={`flex items-center gap-1.5 px-3 h-7 font-mono text-[10px] uppercase tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed ${
+                      rightPanel === "code"
+                        ? "bg-white/8 text-foreground"
+                        : "text-muted-foreground/50 hover:text-muted-foreground"
+                    }`}
                   >
                     <FileCode2 className="h-3 w-3" />
                     Code
@@ -842,10 +934,11 @@ function StudioInner({ projectId }: { projectId: string }) {
                     onClick={() => setRightPanel("preview")}
                     disabled={!capabilities.preview.allowed}
                     title={capabilityTitle(capabilities.preview)}
-                    className={`flex items-center gap-1.5 px-3 h-7 font-mono text-[10px] uppercase tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed ${rightPanel === "preview"
-                      ? "bg-white/8 text-foreground"
-                      : "text-muted-foreground/50 hover:text-muted-foreground"
-                      }`}
+                    className={`flex items-center gap-1.5 px-3 h-7 font-mono text-[10px] uppercase tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed ${
+                      rightPanel === "preview"
+                        ? "bg-white/8 text-foreground"
+                        : "text-muted-foreground/50 hover:text-muted-foreground"
+                    }`}
                   >
                     <Monitor className="h-3 w-3" />
                     Preview
@@ -857,7 +950,9 @@ function StudioInner({ projectId }: { projectId: string }) {
                     <Checkbox
                       id="auto-preview-after-build"
                       checked={autoPreviewAfterBuild}
-                      onCheckedChange={(v) => setAutoPreviewAfterBuild(v === true)}
+                      onCheckedChange={(v) =>
+                        setAutoPreviewAfterBuild(v === true)
+                      }
                     />
                     <Label
                       htmlFor="auto-preview-after-build"
@@ -872,63 +967,74 @@ function StudioInner({ projectId }: { projectId: string }) {
                 <div className="flex-1" />
 
                 {/* Action buttons — right */}
-                <div className="flex items-center gap-2" data-ox-tour="studio-design-pick">
-                {rightPanel === "preview" && previewSlot.mode === "live" && previewPainted && previewUrl && (
-                  <>
-                    {capabilities.preview.allowed ? (
-                      <button
-                        type="button"
-                        onClick={() => designMode.setActive(!designMode.active)}
-                        className={cn(
-                          "flex items-center gap-1.5 rounded-md border px-2.5 h-7 font-mono text-[10px] transition-all",
-                          designMode.active
-                            ? "border-primary/40 bg-primary/10 text-primary"
-                            : "border-border bg-muted/40 text-muted-foreground/70 hover:border-border hover:text-foreground"
-                        )}
-                        title={
-                          designMode.directEditCapable
-                            ? "Pick elements to Direct-edit or send to Modify"
-                            : "Pick an element, then describe the change in Modify"
-                        }
-                      >
-                        <MousePointer2 className="h-3 w-3" />
-                        {designMode.active ? "Exit pick" : "Design pick"}
-                      </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      onClick={requestCoverCapture}
-                      disabled={coverCaptureBusy}
-                      className="flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 h-7 font-mono text-[10px] text-muted-foreground/70 transition-all hover:border-border hover:text-foreground disabled:opacity-40"
-                      title="用当前预览首页重新生成项目列表封面图"
-                    >
-                      {coverCaptureBusy ? (
-                        <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-                      ) : (
-                        <ImagePlus className="h-3 w-3" aria-hidden />
-                      )}
-                      更新封面
-                    </button>
-                    <button
-                      onClick={studio.rebuildPreview}
-                      className="flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 h-7 font-mono text-[10px] text-muted-foreground/70 transition-all hover:border-border hover:text-foreground"
-                      title="Rebuild preview"
-                    >
-                      <RefreshCw className="h-3 w-3" />
-                      Rebuild
-                    </button>
-                    <a
-                      href={previewIframeSrc ?? previewUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 h-7 font-mono text-[10px] text-muted-foreground/70 transition-all hover:border-border hover:text-foreground"
-                      title="Open in new tab"
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                      Open
-                    </a>
-                  </>
-                )}
+                <div
+                  className="flex items-center gap-2"
+                  data-ox-tour="studio-design-pick"
+                >
+                  {rightPanel === "preview" &&
+                    previewSlot.mode === "live" &&
+                    previewPainted &&
+                    previewUrl && (
+                      <>
+                        {capabilities.preview.allowed ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              designMode.setActive(!designMode.active)
+                            }
+                            className={cn(
+                              "flex items-center gap-1.5 rounded-md border px-2.5 h-7 font-mono text-[10px] transition-all",
+                              designMode.active
+                                ? "border-primary/40 bg-primary/10 text-primary"
+                                : "border-border bg-muted/40 text-muted-foreground/70 hover:border-border hover:text-foreground",
+                            )}
+                            title={
+                              designMode.directEditCapable
+                                ? "Pick elements to Direct-edit or send to Modify"
+                                : "Pick an element, then describe the change in Modify"
+                            }
+                          >
+                            <MousePointer2 className="h-3 w-3" />
+                            {designMode.active ? "Exit pick" : "Design pick"}
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          onClick={requestCoverCapture}
+                          disabled={coverCaptureBusy}
+                          className="flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 h-7 font-mono text-[10px] text-muted-foreground/70 transition-all hover:border-border hover:text-foreground disabled:opacity-40"
+                          title="用当前预览首页重新生成项目列表封面图"
+                        >
+                          {coverCaptureBusy ? (
+                            <Loader2
+                              className="h-3 w-3 animate-spin"
+                              aria-hidden
+                            />
+                          ) : (
+                            <ImagePlus className="h-3 w-3" aria-hidden />
+                          )}
+                          更新封面
+                        </button>
+                        <button
+                          onClick={studio.rebuildPreview}
+                          className="flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 h-7 font-mono text-[10px] text-muted-foreground/70 transition-all hover:border-border hover:text-foreground"
+                          title="Rebuild preview"
+                        >
+                          <RefreshCw className="h-3 w-3" />
+                          Rebuild
+                        </button>
+                        <a
+                          href={previewIframeSrc ?? previewUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 h-7 font-mono text-[10px] text-muted-foreground/70 transition-all hover:border-border hover:text-foreground"
+                          title="Open in new tab"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          Open
+                        </a>
+                      </>
+                    )}
                 </div>
               </div>
               {rightPanel === "preview" && coverCaptureHint ? (
@@ -993,16 +1099,26 @@ function StudioInner({ projectId }: { projectId: string }) {
                       : undefined
                   }
                 >
-                  <div ref={previewContainerRef} className="relative flex min-h-0 flex-1" data-ox-tour="studio-preview">
+                  <div
+                    ref={previewContainerRef}
+                    className="relative flex min-h-0 flex-1"
+                    data-ox-tour="studio-preview"
+                  >
                     <iframe
-                      key={previewIframeSrc ?? `${previewUrl}_${previewVersion}`}
+                      key={
+                        previewIframeSrc ?? `${previewUrl}_${previewVersion}`
+                      }
                       ref={iframeRef}
                       src={previewIframeSrc ?? previewUrl}
                       className="w-full flex-1 border-0 bg-background"
                       title="Project Preview"
                       onLoad={() => {
                         try {
-                          if (previewDocumentLooksPainted(iframeRef.current?.contentDocument)) {
+                          if (
+                            previewDocumentLooksPainted(
+                              iframeRef.current?.contentDocument,
+                            )
+                          ) {
                             markPreviewSrcPainted(previewSrcKey);
                             return;
                           }
@@ -1023,14 +1139,18 @@ function StudioInner({ projectId }: { projectId: string }) {
                 </div>
               ) : null}
 
-              {rightPanel === "preview" && detailsRecord && previewSlot.mode === "details" ? (
+              {rightPanel === "preview" &&
+              detailsRecord &&
+              previewSlot.mode === "details" ? (
                 <div className="relative flex h-full min-h-0 flex-col">
                   <ModifyTurnDetailsPane
                     record={detailsRecord}
                     filePath={previewSlot.filePath}
                     onFilePathChange={(path) =>
                       setPreviewSlot((prev) =>
-                        prev.mode === "details" ? { ...prev, filePath: path } : prev
+                        prev.mode === "details"
+                          ? { ...prev, filePath: path }
+                          : prev,
                       )
                     }
                     onBackToPreview={() =>
@@ -1057,7 +1177,9 @@ function StudioInner({ projectId }: { projectId: string }) {
                     <div className="flex flex-1 flex-col items-center justify-center gap-3">
                       <HamsterLoader size="sm" />
                       <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
-                        {previewState === "ready" ? "Rendering preview…" : "Starting preview…"}
+                        {previewState === "ready"
+                          ? "Rendering preview…"
+                          : "Starting preview…"}
                       </p>
                       <p className="font-mono text-[10px] text-muted-foreground/70">
                         {previewState === "ready"
@@ -1068,16 +1190,26 @@ function StudioInner({ projectId }: { projectId: string }) {
                   )}
                   {previewState === "error" && (
                     <div className="flex flex-1 flex-col items-center justify-center gap-3">
-                      <p className="font-mono text-xs text-red-400">Preview failed</p>
-                      <p className="font-mono text-[10px] text-muted-foreground max-w-sm text-center">{previewError}</p>
-                      <button onClick={startPreview} className="defi-button-outline px-4 py-2 text-[11px] font-medium flex items-center gap-1.5">
+                      <p className="font-mono text-xs text-red-400">
+                        Preview failed
+                      </p>
+                      <p className="font-mono text-[10px] text-muted-foreground max-w-sm text-center">
+                        {previewError}
+                      </p>
+                      <button
+                        onClick={startPreview}
+                        className="defi-button-outline px-4 py-2 text-[11px] font-medium flex items-center gap-1.5"
+                      >
                         <RefreshCw className="h-3 w-3" /> Retry
                       </button>
                     </div>
                   )}
                   {previewState === "idle" && projectId && (
                     <div className="flex flex-1 flex-col items-center justify-center gap-3">
-                      <button onClick={startPreview} className="defi-button-outline px-5 py-2.5 text-[11px] font-medium flex items-center gap-2">
+                      <button
+                        onClick={startPreview}
+                        className="defi-button-outline px-5 py-2.5 text-[11px] font-medium flex items-center gap-2"
+                      >
                         <Monitor className="h-4 w-4" /> Start Preview
                       </button>
                     </div>
@@ -1108,7 +1240,11 @@ function StudioInner({ projectId }: { projectId: string }) {
   );
 }
 
-export default function StudioPage({ params }: { params: Promise<{ projectId: string }> }) {
+export default function StudioPage({
+  params,
+}: {
+  params: Promise<{ projectId: string }>;
+}) {
   const { projectId } = use(params);
   return (
     <Suspense>
