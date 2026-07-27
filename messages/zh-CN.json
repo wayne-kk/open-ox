@@ -41,6 +41,16 @@
     "step3Body": "在 Studio 里对话修改、预览与 Design Mode 精修，持续迭代直到可交付。",
     "pipelineToggle": "查看工程流水线",
     "pipelineHint": "8 个核心节点 — 每步有明确输入输出，构建失败可自动修复。",
+    "pipelineSteps": {
+      "analyze": "解析需求 · 输出聚焦的站点蓝图",
+      "infer": "推理视觉方向 · 明确设计意图",
+      "plan": "细化蓝图 · 规划每个页面",
+      "design": "色彩 · 字体 · 动效 · 设计 Token",
+      "pages": "并行构建各页面及其组件",
+      "chrome": "完善全局导航与页脚",
+      "build": "构建 · 类型检查 · 验证",
+      "repair": "自动修复 · 最多 5 轮"
+    },
     "communityTitle": "发现社区作品",
     "communitySubtitle": "看看别人用 Open-OX 做出了什么。",
     "communityEmpty": "还没有发布的社区作品",
