@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { routing } from "@/i18n/routing";
 import { isSeoOriginLocal, resolvePublicOrigin } from "@/lib/seo/siteUrl";
 
 const PRIVATE_PREFIXES = [
@@ -16,9 +17,14 @@ const PRIVATE_PREFIXES = [
 
 export default async function robots(): Promise<MetadataRoute.Robots> {
   const origin = await resolvePublicOrigin();
+  const prefixedLocales = routing.locales.filter(
+    (locale) => locale !== routing.defaultLocale
+  );
   const disallow = [
     ...PRIVATE_PREFIXES,
-    ...PRIVATE_PREFIXES.map((p) => `/en${p}`),
+    ...prefixedLocales.flatMap((locale) =>
+      PRIVATE_PREFIXES.map((path) => `/${locale}${path}`)
+    ),
   ];
 
   return {

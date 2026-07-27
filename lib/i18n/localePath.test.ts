@@ -21,11 +21,11 @@ describe("stripLocalePrefix", () => {
 
 describe("withLocalePrefix", () => {
   it("omits default locale", () => {
-    expect(withLocalePrefix("/dashboard", "zh-CN")).toBe("/dashboard");
+    expect(withLocalePrefix("/dashboard", "en")).toBe("/dashboard");
   });
 
-  it("prefixes en", () => {
-    expect(withLocalePrefix("/", "en")).toBe("/en");
-    expect(withLocalePrefix("/auth", "en")).toBe("/en/auth");
+  it("prefixes zh-CN", () => {
+    expect(withLocalePrefix("/", "zh-CN")).toBe("/zh-CN");
+    expect(withLocalePrefix("/auth", "zh-CN")).toBe("/zh-CN/auth");
   });
 });

@@ -23,7 +23,7 @@ describe("site crawling policy", () => {
     const rule = await getDefaultRule();
 
     expect(rule?.disallow).toEqual(
-      expect.arrayContaining(["/dashboard", "/en/dashboard"])
+      expect.arrayContaining(["/dashboard", "/zh-CN/dashboard"])
     );
   });
 });

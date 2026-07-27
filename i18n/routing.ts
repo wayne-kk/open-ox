@@ -2,9 +2,9 @@ import { defineRouting } from "next-intl/routing";
 
 export const routing = defineRouting({
   locales: ["zh-CN", "en"],
-  defaultLocale: "zh-CN",
+  defaultLocale: "en",
   localePrefix: "as-needed",
-  // First visit stays default zh-CN; cookie only after explicit switch (no Accept-Language).
+  // The global root is English; language changes happen only through the explicit switcher.
   localeDetection: false,
   // Next Metadata owns canonical-aware hreflang tags for indexed marketing pages.
   alternateLinks: false,

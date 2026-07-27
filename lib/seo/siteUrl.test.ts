@@ -26,17 +26,17 @@ describe("siteUrl helpers", () => {
   });
 
   it("builds absolute locale URLs", () => {
-    expect(absoluteLocaleUrl("/", "zh-CN")).toBe("https://open-ox.example");
-    expect(absoluteLocaleUrl("/", "en")).toBe("https://open-ox.example/en");
+    expect(absoluteLocaleUrl("/", "en")).toBe("https://open-ox.example");
+    expect(absoluteLocaleUrl("/", "zh-CN")).toBe("https://open-ox.example/zh-CN");
     expect(absoluteLocaleUrl("/pricing", "en")).toBe(
-      "https://open-ox.example/en/pricing"
+      "https://open-ox.example/pricing"
     );
   });
 
   it("includes hreflang and x-default", () => {
     const langs = languageAlternates("/pricing");
-    expect(langs["zh-CN"]).toBe("https://open-ox.example/pricing");
-    expect(langs.en).toBe("https://open-ox.example/en/pricing");
+    expect(langs["zh-CN"]).toBe("https://open-ox.example/zh-CN/pricing");
+    expect(langs.en).toBe("https://open-ox.example/pricing");
     expect(langs["x-default"]).toBe("https://open-ox.example/pricing");
   });
 

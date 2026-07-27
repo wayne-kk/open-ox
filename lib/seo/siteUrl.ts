@@ -83,7 +83,7 @@ export async function resolvePublicOrigin(): Promise<string> {
   return fromEnv;
 }
 
-/** Absolute URL for a locale-aware pathname (e.g. `/pricing` → `https://…/en/pricing`). */
+/** Absolute URL for a locale-aware pathname (e.g. zh-CN `/pricing` → `/zh-CN/pricing`). */
 export function absoluteLocaleUrl(
   pathname: string,
   locale: string,

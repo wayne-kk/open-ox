@@ -122,8 +122,8 @@
   },
   "seo": {
     "home": {
-      "title": "Open-OX — AI 网站构建引擎",
-      "description": "用自然语言描述想法，几分钟内得到可运行的 Next.js 站点。从生成到 Studio 迭代与上线。"
+      "title": "Open-OX — 轻量、快速的 AI 网站构建器",
+      "description": "输入一个想法，几分钟内生成界面精美的网站。Open-OX 让建站、修改和迭代更简单快捷，支持导出完整源码，并可部署到你自己的账户，交付与控制权始终属于你。"
     },
     "pricing": {
       "title": "定价 · Open-OX",
