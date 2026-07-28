@@ -282,7 +282,6 @@
     "compare": "Comparisons"
   },
   "onboarding": {
-    "creditsSoftPromise": "New accounts get 12 welcome credits once — roughly enough for one full generate and a few edits (actual usage may vary).",
     "stepGenerate": "Generate a previewable site",
     "stepDesign": "Edit once in Design Mode",
     "dismiss": "Don't show again",
