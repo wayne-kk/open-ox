@@ -41,6 +41,30 @@ function isPublicStaticAssetPath(pathname: string): boolean {
   );
 }
 
+async function isRemovedShowcaseProject(pathname: string): Promise<boolean> {
+  const stripped = stripLocalePrefix(pathname);
+  const match = stripped.match(/^\/showcase\/([^/]+)\/[^/]+$/);
+  if (!match) return false;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY?.trim();
+  if (!url || !key) return false;
+  try {
+    const endpoint = new URL("/rest/v1/project_search_tombstones", url);
+    endpoint.searchParams.set("project_id", `eq.${decodeURIComponent(match[1])}`);
+    endpoint.searchParams.set("select", "project_id");
+    endpoint.searchParams.set("limit", "1");
+    const response = await fetch(endpoint, {
+      headers: { apikey: key, authorization: `Bearer ${key}` },
+      cache: "no-store",
+    });
+    if (!response.ok) return false;
+    const rows = await response.json() as Array<{ project_id: string }>;
+    return rows.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 function createSupabaseFromRequest(
   request: NextRequest,
   i18nResponse: NextResponse
@@ -130,6 +154,13 @@ export async function proxy(request: NextRequest) {
     }
   }
 
+  if (await isRemovedShowcaseProject(path)) {
+    return new NextResponse(
+      "<!doctype html><html><head><meta name=\"robots\" content=\"noindex,follow\"><title>Project removed</title></head><body><main><h1>Project removed</h1><p>This published project is no longer available.</p><a href=\"/\">Open OX</a></main></body></html>",
+      { status: 410, headers: { "content-type": "text/html; charset=utf-8" } }
+    );
+  }
+
   // Skip i18n for API, health, auth callback, site previews, public assets, SEO.
   // Matcher still runs for these (preview host needs `/{id}/_next/*.js`), but on the
   // main origin locale rewrite would turn `/favicon.png` into `/zh-CN/favicon.png`.
@@ -138,6 +169,7 @@ export async function proxy(request: NextRequest) {
     path.startsWith("/health") ||
     path.startsWith("/auth/callback") ||
     path.startsWith("/site-previews") ||
+    path.startsWith("/sitemaps") ||
     path.startsWith("/open-ox") ||
     isPublicStaticAssetPath(path) ||
     path === "/sitemap.xml" ||

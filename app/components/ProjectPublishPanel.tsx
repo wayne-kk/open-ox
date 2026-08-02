@@ -17,6 +17,7 @@ import { ProjectBrandingControl } from "@/app/components/ProjectBrandingControl"
 export type ProjectPublishState = {
   publishPreview: boolean;
   allowRemix: boolean;
+  searchIndexingEnabled: boolean;
   staticPreviewSyncedAt: string | null;
 };
 
@@ -30,7 +31,11 @@ function hasStaticPreview(syncedAt: string | null | undefined): boolean {
 
 export async function patchProjectPublish(
   projectId: string,
-  patch: { publishPreview?: boolean; allowRemix?: boolean }
+  patch: {
+    publishPreview?: boolean;
+    allowRemix?: boolean;
+    searchIndexingEnabled?: boolean;
+  }
 ): Promise<PatchResult> {
   try {
     const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, {
@@ -44,6 +49,7 @@ export async function patchProjectPublish(
       code?: string;
       publishPreview?: boolean;
       allowRemix?: boolean;
+      searchIndexingEnabled?: boolean;
       staticPreviewSyncedAt?: string | null;
     };
     if (!res.ok) {
@@ -61,6 +67,7 @@ export async function patchProjectPublish(
       state: {
         publishPreview: body.publishPreview === true,
         allowRemix: body.allowRemix === true,
+        searchIndexingEnabled: body.searchIndexingEnabled === true,
         staticPreviewSyncedAt: body.staticPreviewSyncedAt ?? null,
       },
     };
@@ -83,11 +90,13 @@ export async function fetchProjectPublishState(
     const body = (await res.json()) as {
       publishPreview?: boolean;
       allowRemix?: boolean;
+      searchIndexingEnabled?: boolean;
       staticPreviewSyncedAt?: string | null;
     };
     return {
       publishPreview: body.publishPreview === true,
       allowRemix: body.allowRemix === true,
+      searchIndexingEnabled: body.searchIndexingEnabled === true,
       staticPreviewSyncedAt: body.staticPreviewSyncedAt ?? null,
     };
   } catch {
@@ -162,6 +171,7 @@ export function ProjectPublishToggles({
   const [state, setState] = useState<ProjectPublishState>({
     publishPreview: initial?.publishPreview === true,
     allowRemix: initial?.allowRemix === true,
+    searchIndexingEnabled: initial?.searchIndexingEnabled === true,
     staticPreviewSyncedAt: initial?.staticPreviewSyncedAt ?? null,
   });
   const [loading, setLoading] = useState(!initial);
@@ -173,6 +183,7 @@ export function ProjectPublishToggles({
       setState({
         publishPreview: initial.publishPreview === true,
         allowRemix: initial.allowRemix === true,
+        searchIndexingEnabled: initial.searchIndexingEnabled === true,
         staticPreviewSyncedAt: initial.staticPreviewSyncedAt ?? null,
       });
       setLoading(false);
@@ -188,10 +199,20 @@ export function ProjectPublishToggles({
     return () => {
       cancelled = true;
     };
-  }, [projectId, initial?.publishPreview, initial?.allowRemix, initial?.staticPreviewSyncedAt]);
+  }, [
+    projectId,
+    initial?.publishPreview,
+    initial?.allowRemix,
+    initial?.searchIndexingEnabled,
+    initial?.staticPreviewSyncedAt,
+  ]);
 
   const apply = useCallback(
-    async (patch: { publishPreview?: boolean; allowRemix?: boolean }) => {
+    async (patch: {
+      publishPreview?: boolean;
+      allowRemix?: boolean;
+      searchIndexingEnabled?: boolean;
+    }) => {
       setBusy(true);
       setError(null);
       const result = await patchProjectPublish(projectId, patch);
@@ -234,6 +255,14 @@ export function ProjectPublishToggles({
         disabled={!previewReady && !state.publishPreview}
         busy={busy}
         onChange={(next) => void apply({ publishPreview: next })}
+      />
+      <ToggleRow
+        label="允许搜索引擎收录"
+        description="公开页面可出现在 Google、Bing 和百度搜索结果中"
+        checked={state.searchIndexingEnabled}
+        disabled={!state.publishPreview}
+        busy={busy}
+        onChange={(next) => void apply({ searchIndexingEnabled: next })}
       />
       <ToggleRow
         label="允许 Remix"

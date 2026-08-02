@@ -75,6 +75,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     folderId?: string | null;
     publishPreview?: boolean;
     allowRemix?: boolean;
+    searchIndexingEnabled?: boolean;
   };
   try {
     body = await req.json();
@@ -99,7 +100,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     await renameProject(db, id, body.name.trim());
   }
 
-  if (body.publishPreview !== undefined || body.allowRemix !== undefined) {
+  if (
+    body.publishPreview !== undefined ||
+    body.allowRemix !== undefined ||
+    body.searchIndexingEnabled !== undefined
+  ) {
     try {
       const current = (await getProject(db, id)) ?? access.project;
       await setProjectPublishSettings(
@@ -110,6 +115,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
             ? { publishPreview: body.publishPreview }
             : {}),
           ...(body.allowRemix !== undefined ? { allowRemix: body.allowRemix } : {}),
+          ...(body.searchIndexingEnabled !== undefined
+            ? { searchIndexingEnabled: body.searchIndexingEnabled }
+            : {}),
         },
         current
       );
