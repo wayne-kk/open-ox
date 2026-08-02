@@ -12,9 +12,7 @@ export interface AgentWorkspaceFinding {
   message: string;
   path?: string;
   blocking: boolean;
-  resolution?:
-    | { kind: "external"; capability: string }
-    | { kind: "edit"; path: string };
+  resolution?: { kind: "external"; capability: string } | { kind: "edit"; path: string };
 }
 
 export interface AgentWorkspaceProfile {
@@ -27,13 +25,13 @@ export interface AgentWorkspaceProfile {
   primaryArtifact?: {
     path: string;
     requireSessionWriteWhenInvalid?: boolean;
+    /** Allow owned supporting artifacts to be created before the primary artifact. */
+    allowSupportingArtifactsBeforePrimary?: boolean;
     isValid(content: string): boolean;
   };
   /** Keep editing capabilities open after file validity for agent-driven refactoring. */
   explicitCompletion?: boolean;
-  inspectFindings(
-    artifacts: ReadonlyMap<string, FileSessionArtifact>,
-  ): readonly AgentWorkspaceFinding[];
+  inspectFindings(artifacts: ReadonlyMap<string, FileSessionArtifact>): readonly AgentWorkspaceFinding[];
 }
 
 export type AgentWorkspaceCapability =
@@ -58,10 +56,7 @@ export type AgentWorkspaceIntent =
   | { kind: "external"; capability: string; args: Record<string, unknown> };
 
 export interface AgentWorkspacePlan {
-  decision:
-    | { kind: "continue"; reason: string }
-    | { kind: "complete" }
-    | { kind: "failed"; error: string };
+  decision: { kind: "continue"; reason: string } | { kind: "complete" } | { kind: "failed"; error: string };
   capabilities: readonly AgentWorkspaceCapability[];
   finding?: AgentWorkspaceFinding;
 }
@@ -190,10 +185,12 @@ export function createAgentWorkspaceRuntime(options: {
       }
       return {
         decision: { kind: "continue", reason: finding.message },
-        capabilities: [{
-          kind: "external",
-          capability: finding.resolution.capability,
-        }],
+        capabilities: [
+          {
+            kind: "external",
+            capability: finding.resolution.capability,
+          },
+        ],
         finding,
       };
     }
@@ -210,9 +207,8 @@ export function createAgentWorkspaceRuntime(options: {
     }
     return {
       decision: { kind: "continue", reason: finding.message },
-      capabilities: workspace.access.get(path) === "edit_ready"
-        ? [{ kind: "edit", path }]
-        : [{ kind: "read", path }],
+      capabilities:
+        workspace.access.get(path) === "edit_ready" ? [{ kind: "edit", path }] : [{ kind: "read", path }],
       finding,
     };
   };
@@ -235,44 +231,54 @@ export function createAgentWorkspaceRuntime(options: {
         capabilities: [{ kind: "create_primary", path: primary.path }],
       };
     }
-    if (primary && !workspace.artifacts.has(primary.path)) {
+    if (primary && !workspace.artifacts.has(primary.path) && !primary.allowSupportingArtifactsBeforePrimary) {
       return {
-        decision: fileDecision.kind === "complete"
-          ? { kind: "continue", reason: `${primary.path} is missing` }
-          : fileDecision,
+        decision:
+          fileDecision.kind === "complete"
+            ? { kind: "continue", reason: `${primary.path} is missing` }
+            : fileDecision,
         capabilities: [{ kind: "create_primary", path: primary.path }],
       };
     }
 
     if (workspace.prerequisite?.kind === "read_required") {
       return {
-        decision: fileDecision.kind === "complete"
-          ? { kind: "continue", reason: `${prerequisite.kind === "read_required" ? prerequisite.path : "file"} needs a fresh snapshot` }
-          : fileDecision,
-        capabilities: [{
-          kind: "read",
-          ...(prerequisite.kind === "read_required"
-            ? { path: prerequisite.path }
-            : { path: workspace.prerequisite.path }),
-        }],
+        decision:
+          fileDecision.kind === "complete"
+            ? {
+                kind: "continue",
+                reason: `${prerequisite.kind === "read_required" ? prerequisite.path : "file"} needs a fresh snapshot`,
+              }
+            : fileDecision,
+        capabilities: [
+          {
+            kind: "read",
+            ...(prerequisite.kind === "read_required"
+              ? { path: prerequisite.path }
+              : { path: workspace.prerequisite.path }),
+          },
+        ],
       };
     }
 
     if (prerequisite.kind === "edit_ready") {
       return {
-        decision: { kind: "continue", reason: `${prerequisite.path} is ready for editing` },
+        decision: {
+          kind: "continue",
+          reason: `${prerequisite.path} is ready for editing`,
+        },
         capabilities: [{ kind: "edit", path: prerequisite.path }],
       };
     }
 
     const diagnostic = workspace.diagnostics[0];
-    if (diagnostic && fileSession.ownsPath(diagnostic.path) &&
-      workspace.artifacts.has(diagnostic.path)) {
+    if (diagnostic && fileSession.ownsPath(diagnostic.path) && workspace.artifacts.has(diagnostic.path)) {
       return {
         decision: { kind: "continue", reason: diagnostic.message },
-        capabilities: workspace.access.get(diagnostic.path) === "edit_ready"
-          ? [{ kind: "edit", path: diagnostic.path }]
-          : [{ kind: "read", path: diagnostic.path }],
+        capabilities:
+          workspace.access.get(diagnostic.path) === "edit_ready"
+            ? [{ kind: "edit", path: diagnostic.path }]
+            : [{ kind: "read", path: diagnostic.path }],
       };
     }
 
@@ -281,16 +287,36 @@ export function createAgentWorkspaceRuntime(options: {
       if (findingResult) return findingResult;
     }
 
+    if (primary && !workspace.artifacts.has(primary.path)) {
+      return {
+        decision:
+          fileDecision.kind === "complete"
+            ? { kind: "continue", reason: `${primary.path} is missing` }
+            : fileDecision,
+        capabilities: [
+          { kind: "create" },
+          { kind: "create_primary", path: primary.path },
+          ...(workspace.needsVerification ? [{ kind: "verify" } as const] : []),
+        ],
+      };
+    }
+
     if (fileDecision.kind === "complete" && profile.explicitCompletion) {
       return {
-        decision: { kind: "continue", reason: "workspace is valid; awaiting explicit completion" },
+        decision: {
+          kind: "continue",
+          reason: "workspace is valid; awaiting explicit completion",
+        },
         capabilities: [
           { kind: "create" },
           { kind: "read" },
           { kind: "edit" },
           { kind: "verify" },
           ...Object.keys(externalActions).map(
-            (capability): AgentWorkspaceCapability => ({ kind: "external", capability }),
+            (capability): AgentWorkspaceCapability => ({
+              kind: "external",
+              capability,
+            }),
           ),
         ],
       };
@@ -301,7 +327,10 @@ export function createAgentWorkspaceRuntime(options: {
       (workspace.needsVerification || externalMutationNeedsVerification)
     ) {
       return {
-        decision: { kind: "continue", reason: "current workspace revision needs verification" },
+        decision: {
+          kind: "continue",
+          reason: "current workspace revision needs verification",
+        },
         capabilities: [{ kind: "verify" }],
       };
     }
@@ -317,7 +346,10 @@ export function createAgentWorkspaceRuntime(options: {
         { kind: "edit" },
         { kind: "verify" },
         ...Object.keys(externalActions).map(
-          (capability): AgentWorkspaceCapability => ({ kind: "external", capability }),
+          (capability): AgentWorkspaceCapability => ({
+            kind: "external",
+            capability,
+          }),
         ),
       ],
     };
@@ -347,13 +379,13 @@ export function createAgentWorkspaceRuntime(options: {
         ownership: "configured workspace paths",
       };
       const capabilities = currentPlan.capabilities.map((capability) =>
-        capability.kind === "external" ? capability.capability : capability.kind
+        capability.kind === "external" ? capability.capability : capability.kind,
       );
       const decisions = [
         `ownership=${projection.ownership}`,
-        `next=${currentPlan.decision.kind === "continue"
-          ? currentPlan.decision.reason
-          : currentPlan.decision.kind}`,
+        `next=${
+          currentPlan.decision.kind === "continue" ? currentPlan.decision.reason : currentPlan.decision.kind
+        }`,
         ...(currentPlan.finding ? [`finding=${JSON.stringify(currentPlan.finding)}`] : []),
       ];
       return {
@@ -363,15 +395,18 @@ export function createAgentWorkspaceRuntime(options: {
           revision: artifact.revision,
         })),
         writtenPaths: workspace.writtenPaths,
-        diagnostics: workspace.diagnostics.map(({ path, message }) => ({ path, message })),
+        diagnostics: workspace.diagnostics.map(({ path, message }) => ({
+          path,
+          message,
+        })),
         mutations: workspace.mutations,
         contextCard: [
           `[${projection.label}]`,
           `target: ${projection.targetPaths.join(", ") || "none"}`,
           `written_paths: ${workspace.writtenPaths.join(", ") || "none"}`,
-          `next: ${currentPlan.decision.kind === "continue"
-            ? currentPlan.decision.reason
-            : currentPlan.decision.kind}`,
+          `next: ${
+            currentPlan.decision.kind === "continue" ? currentPlan.decision.reason : currentPlan.decision.kind
+          }`,
           `blocking_finding: ${currentPlan.finding ? JSON.stringify(currentPlan.finding) : "none"}`,
           `legal_capabilities: ${capabilities.join(", ") || "none"}`,
           `ownership: ${projection.ownership}`,
@@ -395,15 +430,21 @@ export function createAgentWorkspaceRuntime(options: {
       const currentPlan = plan();
       const legal = currentPlan.capabilities.some((capability) => {
         if (intent.kind === "create") {
-          return capability.kind === "create" ||
-            (capability.kind === "create_primary" && capability.path === intent.path);
+          return (
+            capability.kind === "create" ||
+            (capability.kind === "create_primary" && capability.path === intent.path)
+          );
         }
         if (intent.kind === "external") {
           return capability.kind === "external" && capability.capability === intent.capability;
         }
         if (capability.kind !== intent.kind) return false;
-        return !("path" in capability) || !capability.path ||
-          !("path" in intent) || capability.path === intent.path;
+        return (
+          !("path" in capability) ||
+          !capability.path ||
+          !("path" in intent) ||
+          capability.path === intent.path
+        );
       });
       if (!legal) return illegalIntent(intent);
 
@@ -411,7 +452,7 @@ export function createAgentWorkspaceRuntime(options: {
         const isPrimaryCreate = currentPlan.capabilities.some(
           (capability) => capability.kind === "create_primary" && capability.path === intent.path,
         );
-        if (!isPrimaryCreate && await fileSession.loadIfExists(intent.path)) {
+        if (!isPrimaryCreate && (await fileSession.loadIfExists(intent.path))) {
           const snapshot = await executeFile({
             name: "read_file_snapshot",
             args: { path: intent.path },
@@ -437,10 +478,7 @@ export function createAgentWorkspaceRuntime(options: {
           name: "read_file_snapshot",
           args: { path: intent.path },
         });
-        if (
-          result.success && prerequisite.kind === "read_required" &&
-          prerequisite.path === intent.path
-        ) {
+        if (result.success && prerequisite.kind === "read_required" && prerequisite.path === intent.path) {
           prerequisite = { kind: "edit_ready", path: intent.path };
         }
         return result;
@@ -455,7 +493,11 @@ export function createAgentWorkspaceRuntime(options: {
           return {
             success: false,
             error: `EDIT_TEXT_NOT_FOUND: ${intent.oldText}`,
-            meta: { path: intent.path, code: "EDIT_TEXT_NOT_FOUND", retryable: true },
+            meta: {
+              path: intent.path,
+              code: "EDIT_TEXT_NOT_FOUND",
+              retryable: true,
+            },
           };
         }
         const result = await executeFile({
@@ -465,16 +507,16 @@ export function createAgentWorkspaceRuntime(options: {
         if (!result.success && result.meta?.code === "STALE_REVISION") {
           prerequisite = { kind: "read_required", path: intent.path };
         }
-        if (
-          result.success && prerequisite.kind === "edit_ready" &&
-          prerequisite.path === intent.path
-        ) {
+        if (result.success && prerequisite.kind === "edit_ready" && prerequisite.path === intent.path) {
           prerequisite = { kind: "none" };
         }
         return result;
       }
       if (intent.kind === "verify") {
-        const result = await executeFile({ name: "verify_files", args: { paths: intent.paths } });
+        const result = await executeFile({
+          name: "verify_files",
+          args: { paths: intent.paths },
+        });
         if (result.success) externalMutationNeedsVerification = false;
         return result;
       }

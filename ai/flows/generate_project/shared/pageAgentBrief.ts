@@ -29,9 +29,7 @@ export interface BuildPageAgentUserMessageParams {
   screenshotReplicaLayout?: boolean;
 }
 
-function buildWorkspaceNoteBlock(
-  params: BuildPageAgentUserMessageParams,
-): string {
+function buildWorkspaceNoteBlock(params: BuildPageAgentUserMessageParams): string {
   const lines = [
     "The **next message** pre-loads full `design-system.md`, layout, globals, directory trees",
     ...(params.userProvidedFileHint ? ["and user-provided content"] : []),
@@ -40,9 +38,7 @@ function buildWorkspaceNoteBlock(
   return lines.join(" ");
 }
 
-export function buildPageAgentUserMessage(
-  params: BuildPageAgentUserMessageParams,
-): string {
+export function buildPageAgentUserMessage(params: BuildPageAgentUserMessageParams): string {
   const {
     targetPath,
     slug,
@@ -106,16 +102,16 @@ ${layoutContractBlock}
 ${userProvidedFileHint}${userProvidedImagesBlock}
 
 ## Instructions
-1. **Implement this route only; create the target first**: Other routes are handled by separate Page Workers. Your first available action is \`create_target_page\`; the runtime binds it to \`${targetPath}\`, so submit only the complete TSX source.
-2. **Build after the target exists**: The runtime then exposes \`create_page_component\` for new files under \`${componentRoot}/**\`. Create each path once. To revise an owned file, call \`read_page_file\`, then \`edit_page_file\` with the returned exact revision plus exact old/new text.
+1. **Declare the page component graph first**: Your first action is \`declare_page_components\`. Declare 1-15 meaningful components under \`${componentRoot}/**\`, each with one responsibility and a \`usedBy\` parent (another declared component or \`${targetPath}\`). List dependencies before their parents. Include a concise \`compositionIntent\` explaining how the components form one coherent experience. Model regions, interactions, data displays, and local controls as needed; do not reduce the graph to a stack of generic Sections.
+2. **Complete components before the page**: Create every declared component before \`${targetPath}\` using \`create_page_component\`, strictly following dependency-first order. Each component must default export its React component. Parents must import declared children through the stable \`@/<component path without .tsx>\` module path and render them. Create each path once. To revise an owned file, call \`read_page_file\`, then \`edit_page_file\` with the returned exact revision plus exact old/new text.
 3. **User images**: Use listed https URLs as remote \`src\`; each URL at most once.${
     userImageCount > 0
       ? ` ${userImageCount} user URL(s) — assign all before \`generate_image\` for extras.`
       : " Use \`generate_image\` only when you need visuals without user URLs."
   }
-4. **Images, fixes & finish**: Declare final stable local paths such as \`/images/home-hero.png\` directly in source, then call \`generate_image\`; the runtime writes the asset to that declared path, so do not edit the source afterward. Only a forbidden remote/placeholder reference requires \`read_page_file\` + \`edit_page_file\`. Call \`verify_page_files\`; diagnostics are repaired with the same read/edit sequence. Completion is automatic. Formatting is automatic.
+4. **Assemble, verify, finish**: After every declared component is complete, create the final \`${targetPath}\` as a thin assembly of the graph's root components. Every declared component must be imported and rendered by its declared \`usedBy\` parent. Declare stable image paths such as \`/images/home-hero.png\` in component source, then call \`generate_image\`; the runtime writes the asset at that path. Call \`verify_page_files\` after the final page write, repair diagnostics, then call \`page_implementation_complete\`. Formatting is automatic.
 
-Decide whether to split the page into Sections first, then keep the final \`${targetPath}\` assembly thin. Extract meaningful reusable or independently understandable UI blocks under \`${componentRoot}/**\`; do not leave the entire implementation inline merely because the page already renders. Do not repeat a successful create command or recreate a path to revise it. Verify all files, then finish by calling \`page_implementation_complete\` with a concise summary. Image tools are unavailable until the target page exists.
+Maintain one visual and narrative composition across component boundaries: carry the design system, content hierarchy, state ownership, pacing, and transitions through the graph. Do not repeat a successful create command or recreate a path to revise it.
 
 Do not write another route or any component outside \`${componentRoot}/**\`.`;
 }

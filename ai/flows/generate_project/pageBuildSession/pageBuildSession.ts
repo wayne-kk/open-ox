@@ -1,4 +1,5 @@
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
+import ts from "typescript";
 import type { ToolResult } from "@/ai/tools";
 import type { FileSession, FileSessionArtifact } from "@/ai/shared/fileSession/fileSession";
 import { callLLMWithToolsFromMessages } from "@/ai/shared/llm/toolLoop";
@@ -52,6 +53,8 @@ export interface PageBuildSessionSpec {
   fileSession: FileSession;
   isPrimaryArtifactValid?(content: string): boolean;
   explicitCompletion?: boolean;
+  /** Build the declared component graph before creating the final route assembly. */
+  componentFirst?: boolean;
   assetLifecycle?: PageAssetLifecycle;
   onEvent?(event: PageBuildEvent): void;
   langfusePhase: string;
@@ -72,9 +75,13 @@ const functionTool = (
   name: string,
   description: string,
   parameters: Record<string, unknown>,
-): ChatCompletionTool => ({ type: "function", function: { name, description, parameters } });
+): ChatCompletionTool => ({
+  type: "function",
+  function: { name, description, parameters },
+});
 
 const PAGE_TOOL = {
+  declareComponents: "declare_page_components",
   createTarget: "create_target_page",
   createComponent: "create_page_component",
   read: "read_page_file",
@@ -83,10 +90,104 @@ const PAGE_TOOL = {
   image: "generate_image",
 } as const;
 
+interface DeclaredPageComponent {
+  path: string;
+  responsibility: string;
+  usedBy: string;
+}
+
+interface DeclaredPageComponentGraph {
+  compositionIntent: string;
+  components: DeclaredPageComponent[];
+}
+
+function componentUsageIncompleteReason(source: string, component: DeclaredPageComponent): string | null {
+  const sourceFile = ts.createSourceFile("page.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const importedBindings = new Map<string, string>();
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) {
+      continue;
+    }
+    const binding = statement.importClause?.name?.text;
+    if (binding) importedBindings.set(statement.moduleSpecifier.text, binding);
+  }
+  const renderedBindings = new Set<string>();
+  const visit = (node: ts.Node): void => {
+    if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+      if (ts.isIdentifier(node.tagName)) renderedBindings.add(node.tagName.text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+
+  const modulePath = `@/${component.path.replace(/\.tsx$/, "")}`;
+  const binding = importedBindings.get(modulePath);
+  return !binding || !renderedBindings.has(binding)
+    ? `${component.usedBy} must import and render ${component.path} according to the declared component graph`
+    : null;
+}
+
+function thinPageAssemblyIncompleteReason(source: string): string | null {
+  const sourceFile = ts.createSourceFile("page.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let invalidIntrinsic: string | null = null;
+  let invalidPageBody = false;
+  const visit = (node: ts.Node): void => {
+    if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+      const tag = node.tagName.getText(sourceFile);
+      if (/^[a-z]/.test(tag) && tag !== "main") invalidIntrinsic ??= tag;
+    }
+    if (
+      ts.isFunctionDeclaration(node) &&
+      node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword) &&
+      node.body?.statements.some((statement) => !ts.isReturnStatement(statement))
+    ) {
+      invalidPageBody = true;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  if (invalidIntrinsic) {
+    return `Final page must remain a thin component assembly; move <${invalidIntrinsic}> into a declared component`;
+  }
+  return invalidPageBody
+    ? "Final page must remain a thin component assembly; move page implementation statements into declared components"
+    : null;
+}
+
+const DECLARE_COMPONENTS_TOOL = functionTool(
+  PAGE_TOOL.declareComponents,
+  "Declare the page component graph, responsibilities, and composition intent before writing files.",
+  {
+    type: "object",
+    properties: {
+      compositionIntent: { type: "string" },
+      components: {
+        type: "array",
+        minItems: 1,
+        maxItems: 15,
+        items: {
+          type: "object",
+          properties: {
+            path: { type: "string" },
+            responsibility: { type: "string" },
+            usedBy: { type: "string" },
+          },
+          required: ["path", "responsibility", "usedBy"],
+        },
+      },
+    },
+    required: ["compositionIntent", "components"],
+  },
+);
+
 const CREATE_TARGET_TOOL = functionTool(
   PAGE_TOOL.createTarget,
   "Create the required target page. The runtime owns its path; provide only complete TSX source.",
-  { type: "object", properties: { content: { type: "string" } }, required: ["content"] },
+  {
+    type: "object",
+    properties: { content: { type: "string" } },
+    required: ["content"],
+  },
 );
 
 const CREATE_COMPONENT_TOOL = functionTool(
@@ -102,7 +203,11 @@ const CREATE_COMPONENT_TOOL = functionTool(
 const READ_TOOL = functionTool(
   PAGE_TOOL.read,
   "Read the canonical content and revision of an owned page file before replacement.",
-  { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
+  {
+    type: "object",
+    properties: { path: { type: "string" } },
+    required: ["path"],
+  },
 );
 
 const EDIT_TOOL = functionTool(
@@ -129,9 +234,12 @@ const VERIFY_TOOL = functionTool(
 const COMPLETE_TOOL = functionTool(
   "page_implementation_complete",
   "Finish after the target page is a thin assembly layer, reusable page components are extracted, and verification is clean.",
-  { type: "object", properties: { summary: { type: "string" } }, required: ["summary"] },
+  {
+    type: "object",
+    properties: { summary: { type: "string" } },
+    required: ["summary"],
+  },
 );
-
 
 function pageToolActivity(
   name: string,
@@ -170,15 +278,14 @@ function pageFindings(
       };
     }
     return {
-      code: requirement.nextAction === "generate_asset"
-        ? "MISSING_ASSET"
-        : "SOURCE_REFERENCE_REQUIRES_EDIT",
+      code: requirement.nextAction === "generate_asset" ? "MISSING_ASSET" : "SOURCE_REFERENCE_REQUIRES_EDIT",
       message: `artifact requirement: ${JSON.stringify(requirement)}`,
       path: requirement.path,
       blocking: true,
-      resolution: requirement.nextAction === "generate_asset"
-        ? { kind: "external" as const, capability: PAGE_TOOL.image }
-        : { kind: "edit" as const, path: requirement.path },
+      resolution:
+        requirement.nextAction === "generate_asset"
+          ? { kind: "external" as const, capability: PAGE_TOOL.image }
+          : { kind: "edit" as const, path: requirement.path },
     };
   });
 }
@@ -204,13 +311,15 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
   let iterationsUsed = 0;
   let emptyStopRecoveries = 0;
   let deterministicRecoveries = 0;
+  let declaredComponentGraph: DeclaredPageComponentGraph | null = null;
   const executeImage = async (args: Record<string, unknown>) => {
     const requirement = spec.assetLifecycle?.inspect(spec.fileSession.snapshot().artifacts)[0];
-    const declaredPath = requirement?.kind === "asset_reference" &&
-        requirement.nextAction === "generate_asset" &&
-        requirement.reference.startsWith("/images/")
-      ? requirement.reference.split(/[?#]/, 1)[0]
-      : null;
+    const declaredPath =
+      requirement?.kind === "asset_reference" &&
+      requirement.nextAction === "generate_asset" &&
+      requirement.reference.startsWith("/images/")
+        ? requirement.reference.split(/[?#]/, 1)[0]
+        : null;
     const filename = declaredPath?.slice("/images/".length).replace(/\.[^.]+$/, "");
     return spec.assetLifecycle!.generation!.execute({
       ...args,
@@ -229,40 +338,98 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
       primaryArtifact: {
         path: spec.targetPath,
         requireSessionWriteWhenInvalid: true,
-        isValid: spec.isPrimaryArtifactValid ?? ((content) =>
-          content.trim().length > 0 && !content.includes("Preparing your site")),
+        allowSupportingArtifactsBeforePrimary: spec.componentFirst,
+        isValid:
+          spec.isPrimaryArtifactValid ??
+          ((content) => content.trim().length > 0 && !content.includes("Preparing your site")),
       },
       explicitCompletion: spec.explicitCompletion,
       inspectFindings: (artifacts) => pageFindings(spec.assetLifecycle, artifacts),
     },
-    externalActions: spec.assetLifecycle?.generation
-      ? { [PAGE_TOOL.image]: executeImage }
-      : {},
+    externalActions: spec.assetLifecycle?.generation ? { [PAGE_TOOL.image]: executeImage } : {},
   });
   await runtime.initialize();
   let completedByAgent = false;
+  const missingDeclaredComponentPaths = (): string[] => {
+    if (!declaredComponentGraph) return [];
+    const artifacts = spec.fileSession.snapshot().artifacts;
+    return declaredComponentGraph.components
+      .map((component) => component.path)
+      .filter((path) => !artifacts.has(path));
+  };
+  const componentGraphReady = () =>
+    !spec.componentFirst || (declaredComponentGraph !== null && missingDeclaredComponentPaths().length === 0);
+  const componentGraphIncompleteReason = (): string | null => {
+    if (!spec.componentFirst || !declaredComponentGraph) return null;
+    const artifacts = spec.fileSession.snapshot().artifacts;
+    for (const component of declaredComponentGraph.components) {
+      const parentSource = artifacts.get(component.usedBy)?.content;
+      if (!parentSource) return `${component.usedBy} is missing from the declared component graph`;
+      const reason = componentUsageIncompleteReason(parentSource, component);
+      if (reason) return reason;
+    }
+    const pageSource = artifacts.get(spec.targetPath)?.content;
+    return pageSource ? thinPageAssemblyIncompleteReason(pageSource) : null;
+  };
   const completionReady = () => {
     const snapshot = spec.fileSession.snapshot();
-    return snapshot.decision.kind === "complete" &&
+    return (
+      componentGraphReady() &&
+      snapshot.decision.kind === "complete" &&
       !snapshot.needsVerification &&
-      snapshot.diagnostics.length === 0;
+      snapshot.diagnostics.length === 0 &&
+      componentGraphIncompleteReason() === null
+    );
   };
 
-  const runtimeTools = (): ChatCompletionTool[] =>
-    [
+  const runtimeTools = (): ChatCompletionTool[] => {
+    if (spec.componentFirst && !declaredComponentGraph) return [DECLARE_COMPONENTS_TOOL];
+    const snapshot = spec.fileSession.snapshot();
+    const primaryExists = snapshot.artifacts.has(spec.targetPath);
+    const tools = [
       ...toolsForCapabilities(runtime.plan().capabilities, spec.assetLifecycle),
       ...(spec.explicitCompletion && completionReady() ? [COMPLETE_TOOL] : []),
     ];
+    if (!spec.componentFirst) return tools;
+    if (!componentGraphReady()) {
+      const createComponent = tools.find((tool) => tool.function.name === PAGE_TOOL.createComponent);
+      return createComponent
+        ? [createComponent]
+        : tools.filter((tool) => tool.function.name !== PAGE_TOOL.createTarget);
+    }
+    if (snapshot.needsVerification) {
+      return tools.filter((tool) => tool.function.name === PAGE_TOOL.verify);
+    }
+    if (!primaryExists) {
+      return tools.filter((tool) => tool.function.name === PAGE_TOOL.createTarget);
+    }
+    if (completionReady()) {
+      return tools.filter((tool) => tool.function.name === "page_implementation_complete");
+    }
+    return tools;
+  };
   const runtimeStateCard = (): string => {
     const projection = runtime.project();
-    const legalTools = runtimeTools().map((tool) => tool.function.name).join(", ") || "none";
+    const legalTools =
+      runtimeTools()
+        .map((tool) => tool.function.name)
+        .join(", ") || "none";
     return `${projection.contextCard}\nlegal_tools: ${legalTools}`;
   };
   const runtimeTaskState = (): DurableTaskState => runtime.project().taskState;
 
   const { content, toolCalls } = await callLLMWithToolsFromMessages({
     messages,
-    tools: [CREATE_TARGET_TOOL, CREATE_COMPONENT_TOOL, READ_TOOL, EDIT_TOOL, VERIFY_TOOL, ...(spec.explicitCompletion ? [COMPLETE_TOOL] : []), ...(spec.assetLifecycle?.generation ? [spec.assetLifecycle.generation.tool] : [])],
+    tools: [
+      DECLARE_COMPONENTS_TOOL,
+      CREATE_TARGET_TOOL,
+      CREATE_COMPONENT_TOOL,
+      READ_TOOL,
+      EDIT_TOOL,
+      VERIFY_TOOL,
+      ...(spec.explicitCompletion ? [COMPLETE_TOOL] : []),
+      ...(spec.assetLifecycle?.generation ? [spec.assetLifecycle.generation.tool] : []),
+    ],
     temperature: 0.5,
     maxIterations: spec.maxIterations,
     completionProfile: "code",
@@ -271,67 +438,161 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
     model: spec.model,
     ...(spec.thinkingLevel ? { thinkingLevel: spec.thinkingLevel } : {}),
     executeToolOverrides: {
-      [PAGE_TOOL.createTarget]: (args) => runtime.execute({
-        kind: "create",
-        path: spec.targetPath,
-        content: String(args.content ?? ""),
-      }),
-      [PAGE_TOOL.createComponent]: (args) => runtime.execute({
-        kind: "create",
-        path: String(args.path ?? ""),
-        content: String(args.content ?? ""),
-      }),
-      [PAGE_TOOL.read]: (args) => runtime.execute({
-        kind: "read",
-        path: String(args.path ?? ""),
-      }),
-      [PAGE_TOOL.edit]: (args) => runtime.execute({
-        kind: "edit",
-        path: String(args.path ?? ""),
-        baseRevision: String(args.baseRevision ?? ""),
-        oldText: String(args.oldText ?? ""),
-        newText: String(args.newText ?? ""),
-      }),
+      [PAGE_TOOL.declareComponents]: async (args) => {
+        if (!spec.componentFirst || declaredComponentGraph) {
+          return {
+            success: false,
+            error: "Page component graph can only be declared once at the start",
+            meta: {
+              code: "COMPONENT_GRAPH_ALREADY_DECLARED",
+              retryable: false,
+            },
+          };
+        }
+        const compositionIntent = String(args.compositionIntent ?? "").trim();
+        const rawComponents = Array.isArray(args.components) ? args.components : [];
+        const components = rawComponents.flatMap((candidate): DeclaredPageComponent[] => {
+          if (!candidate || typeof candidate !== "object") return [];
+          const record = candidate as Record<string, unknown>;
+          return [
+            {
+              path: String(record.path ?? "").trim(),
+              responsibility: String(record.responsibility ?? "").trim(),
+              usedBy: String(record.usedBy ?? "").trim(),
+            },
+          ];
+        });
+        const paths = components.map((component) => component.path);
+        const indexByPath = new Map(paths.map((path, index) => [path, index]));
+        const valid =
+          compositionIntent.length > 0 &&
+          components.length > 0 &&
+          components.length <= 15 &&
+          components.every(
+            (component, index) =>
+              component.path.startsWith(`${spec.componentRoot}/`) &&
+              component.path.endsWith(".tsx") &&
+              component.responsibility.length > 0 &&
+              (component.usedBy === spec.targetPath ||
+                (indexByPath.has(component.usedBy) && indexByPath.get(component.usedBy)! > index)),
+          ) &&
+          new Set(paths).size === paths.length;
+        if (!valid) {
+          return {
+            success: false,
+            error: `Declare 1-15 unique .tsx components under ${spec.componentRoot}/ in dependency-first order, with responsibilities, usedBy parents, and composition intent`,
+            meta: { code: "INVALID_PAGE_COMPONENT_GRAPH", retryable: true },
+          };
+        }
+        declaredComponentGraph = { compositionIntent, components };
+        return {
+          success: true,
+          output: `Declared ${components.length} page components`,
+        };
+      },
+      [PAGE_TOOL.createTarget]: (args) => {
+        if (spec.componentFirst && !componentGraphReady()) {
+          return Promise.resolve({
+            success: false,
+            error: "All declared page components must be complete before creating the page assembly",
+            meta: { code: "PAGE_COMPONENTS_INCOMPLETE", retryable: true },
+          });
+        }
+        return runtime.execute({
+          kind: "create",
+          path: spec.targetPath,
+          content: String(args.content ?? ""),
+        });
+      },
+      [PAGE_TOOL.createComponent]: (args) => {
+        const path = String(args.path ?? "");
+        if (
+          spec.componentFirst &&
+          !declaredComponentGraph?.components.some((component) => component.path === path)
+        ) {
+          return Promise.resolve({
+            success: false,
+            error: `${path} is not in the declared page component graph`,
+            meta: { code: "UNDECLARED_PAGE_COMPONENT", retryable: true },
+          });
+        }
+        const nextPath = missingDeclaredComponentPaths()[0];
+        if (spec.componentFirst && path !== nextPath) {
+          return Promise.resolve({
+            success: false,
+            error: `Create the component graph in dependency-first order; next path is ${nextPath}`,
+            meta: { code: "PAGE_COMPONENT_OUT_OF_ORDER", retryable: true },
+          });
+        }
+        return runtime.execute({
+          kind: "create",
+          path,
+          content: String(args.content ?? ""),
+        });
+      },
+      [PAGE_TOOL.read]: (args) =>
+        runtime.execute({
+          kind: "read",
+          path: String(args.path ?? ""),
+        }),
+      [PAGE_TOOL.edit]: (args) =>
+        runtime.execute({
+          kind: "edit",
+          path: String(args.path ?? ""),
+          baseRevision: String(args.baseRevision ?? ""),
+          oldText: String(args.oldText ?? ""),
+          newText: String(args.newText ?? ""),
+        }),
       [PAGE_TOOL.verify]: () => runtime.execute({ kind: "verify" }),
       page_implementation_complete: async (args) => {
         if (!completionReady()) {
+          const structureError = componentGraphIncompleteReason();
           return {
             success: false,
-            error: "Page files must be valid and cleanly verified before completion",
+            error: structureError ?? "Page files must be valid and cleanly verified before completion",
             meta: { code: "VERIFICATION_REQUIRED", retryable: true },
           };
         }
         completedByAgent = true;
-        return { success: true, output: String(args.summary ?? "Page implementation complete") };
+        return {
+          success: true,
+          output: String(args.summary ?? "Page implementation complete"),
+        };
       },
-      ...(spec.assetLifecycle?.generation ? {
-        [PAGE_TOOL.image]: (args: Record<string, unknown>) => runtime.execute({
-          kind: "external",
-          capability: PAGE_TOOL.image,
-          args,
-        }),
-      } : {}),
+      ...(spec.assetLifecycle?.generation
+        ? {
+            [PAGE_TOOL.image]: (args: Record<string, unknown>) =>
+              runtime.execute({
+                kind: "external",
+                capability: PAGE_TOOL.image,
+                args,
+              }),
+          }
+        : {}),
     },
     resolveToolsForIteration: runtimeTools,
-    resolveToolChoiceForIteration: () => spec.explicitCompletion || runtime.plan().decision.kind !== "complete" ? "required" : "auto",
+    resolveToolChoiceForIteration: () =>
+      spec.explicitCompletion || runtime.plan().decision.kind !== "complete" ? "required" : "auto",
     resolveTaskStateForRound: runtimeTaskState,
     onMessage: (message) => spec.onEvent?.({ kind: "message", message }),
     onAssistantRound: ({ iteration }) => {
       iterationsUsed = Math.max(iterationsUsed, iteration + 1);
       spec.onEvent?.({ kind: "assistant_round", iteration });
     },
-    onToolCall: (info) => spec.onEvent?.({
-      kind: "tool",
-      ...info,
-      ...pageToolActivity(info.name, info.args, spec.targetPath, info.result),
-    }),
+    onToolCall: (info) =>
+      spec.onEvent?.({
+        kind: "tool",
+        ...info,
+        ...pageToolActivity(info.name, info.args, spec.targetPath, info.result),
+      }),
     onAssistantStop: ({ messages: history }) => {
       const decision = runtime.plan().decision;
       if (
         (spec.explicitCompletion ? completedByAgent : decision.kind === "complete") ||
         decision.kind === "failed" ||
         emptyStopRecoveries >= 2
-      ) return false;
+      )
+        return false;
       emptyStopRecoveries += 1;
       const recovery: ChatMessage = {
         role: "user",
@@ -344,9 +605,10 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
       spec.onEvent?.({ kind: "message", message: recovery });
       return true;
     },
-    shouldAbortAfterToolResults: () => spec.explicitCompletion
-      ? completedByAgent || runtime.plan().decision.kind === "failed"
-      : runtime.plan().decision.kind !== "continue",
+    shouldAbortAfterToolResults: () =>
+      spec.explicitCompletion
+        ? completedByAgent || runtime.plan().decision.kind === "failed"
+        : runtime.plan().decision.kind !== "continue",
     requireTools: true,
     onApproachingLimit: ({ messages: history }) => {
       const nudge: ChatMessage = {
@@ -363,7 +625,8 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
     for (let recovery = 0; recovery < 8; recovery += 1) {
       const before = runtime.plan().decision;
       if (before.kind !== "continue") break;
-      const requirement = spec.assetLifecycle?.inspect(spec.fileSession.snapshot().artifacts)
+      const requirement = spec.assetLifecycle
+        ?.inspect(spec.fileSession.snapshot().artifacts)
         .find((candidate) => candidate.kind === "asset_reference");
       let result: ToolResult | string | null = null;
       let toolName = "";
@@ -394,15 +657,22 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
         toolName = PAGE_TOOL.edit;
         const capabilities = runtime.plan().capabilities;
         let baseRevision: string | undefined;
-        if (capabilities.some((capability) =>
-          capability.kind === "read" && capability.path === requirement.path
-        )) {
-          const snapshot = await runtime.execute({ kind: "read", path: requirement.path });
+        if (
+          capabilities.some(
+            (capability) => capability.kind === "read" && capability.path === requirement.path,
+          )
+        ) {
+          const snapshot = await runtime.execute({
+            kind: "read",
+            path: requirement.path,
+          });
           if (typeof snapshot === "string" || !snapshot.success || !snapshot.meta?.revision) break;
           baseRevision = String(snapshot.meta.revision);
-        } else if (capabilities.some((capability) =>
-          capability.kind === "edit" && capability.path === requirement.path
-        )) {
+        } else if (
+          capabilities.some(
+            (capability) => capability.kind === "edit" && capability.path === requirement.path,
+          )
+        ) {
           baseRevision = spec.fileSession.snapshot().artifacts.get(requirement.path)?.revision;
         }
         if (!baseRevision) break;
@@ -432,7 +702,10 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
         name: toolName,
         args,
         iteration: iterationsUsed + recovery,
-        result: result ?? { success: false, error: "deterministic recovery produced no result" },
+        result: result ?? {
+          success: false,
+          error: "deterministic recovery produced no result",
+        },
         ...pageToolActivity(toolName, args, spec.targetPath),
       });
       if (typeof result !== "string" && !result?.success) break;
@@ -446,12 +719,12 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
     toolCalls,
     iterationsUsed,
     emptyStopRecoveries,
-    finalDecision: spec.explicitCompletion && completedByAgent
-      ? { kind: "complete" }
-      : runtime.plan().decision,
+    finalDecision:
+      spec.explicitCompletion && completedByAgent ? { kind: "complete" } : runtime.plan().decision,
     finalRequirement: runtime.plan().finding?.blocking
-      ? spec.assetLifecycle?.inspect(spec.fileSession.snapshot().artifacts)
-        .find((requirement) => requirement.kind === "asset_reference")
+      ? spec.assetLifecycle
+          ?.inspect(spec.fileSession.snapshot().artifacts)
+          .find((requirement) => requirement.kind === "asset_reference")
       : undefined,
     finalLegalTools: runtimeTools().map((tool) => tool.function.name),
     deterministicRecoveries,

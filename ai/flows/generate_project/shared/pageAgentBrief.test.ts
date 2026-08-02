@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  buildPageAgentUserMessage,
-  PAGE_AGENT_HERO_SKILL_PATH,
-} from "./pageAgentBrief";
+import { buildPageAgentUserMessage, PAGE_AGENT_HERO_SKILL_PATH } from "./pageAgentBrief";
 import {
   createBootstrapGuardedReadExecutor,
   createPageAgentSessionState,
@@ -39,12 +36,15 @@ describe("pageAgentBrief", () => {
     expect(msg).toContain("Workspace context");
     expect(msg).toContain("design-system.md");
     expect(msg).toContain("do not re-read");
-    expect(msg).toContain("Implement this route only");
+    expect(msg).toContain("Declare the page component graph first");
     expect(msg).toContain("chrome-first");
     expect(msg).toContain("site-wide Nav/Navbar/Header/Sidebar/Footer");
     expect(msg).toContain("bottom tab bars");
-    expect(msg).toContain("Decide whether to split the page into Sections first");
-    expect(msg).toContain("final `app/page.tsx` assembly");
+    expect(msg).toContain("declare_page_components");
+    expect(msg).toContain("Create every declared component before `app/page.tsx`");
+    expect(msg).toContain("compositionIntent");
+    expect(msg).toContain("final `app/page.tsx` as a thin assembly");
+    expect(msg).not.toContain("create the target first");
     expect(msg).toContain("`create_page_component`");
     expect(msg).toContain("`read_page_file`");
     expect(msg).toContain("`edit_page_file`");
@@ -101,20 +101,14 @@ describe("pageAgentBrief", () => {
 
 describe("pageAgentToolLoop", () => {
   it("normalizeAgentRelativePath normalizes slashes", () => {
-    expect(normalizeAgentRelativePath("./app/layout.tsx")).toBe(
-      "app/layout.tsx",
-    );
+    expect(normalizeAgentRelativePath("./app/layout.tsx")).toBe("app/layout.tsx");
   });
 
   it("isPageAgentForbiddenWritePath blocks layout and chrome", () => {
     expect(isPageAgentForbiddenWritePath("app/layout.tsx")).toBe(true);
     expect(isPageAgentForbiddenWritePath("app/globals.css")).toBe(true);
-    expect(isPageAgentForbiddenWritePath("components/chrome/Navbar.tsx")).toBe(
-      true,
-    );
-    expect(isPageAgentForbiddenWritePath("components/home/Hero.tsx")).toBe(
-      false,
-    );
+    expect(isPageAgentForbiddenWritePath("components/chrome/Navbar.tsx")).toBe(true);
+    expect(isPageAgentForbiddenWritePath("components/home/Hero.tsx")).toBe(false);
     expect(isPageAgentForbiddenWritePath("app/page.tsx")).toBe(false);
   });
 
@@ -123,62 +117,32 @@ describe("pageAgentToolLoop", () => {
       targetPath: "app/about/page.tsx",
       componentRoot: "components/pages/about",
     };
-    expect(isPageAgentOwnedWritePath("app/about/page.tsx", ownership)).toBe(
-      true,
-    );
-    expect(
-      isPageAgentOwnedWritePath("components/pages/about/Hero.tsx", ownership),
-    ).toBe(true);
+    expect(isPageAgentOwnedWritePath("app/about/page.tsx", ownership)).toBe(true);
+    expect(isPageAgentOwnedWritePath("components/pages/about/Hero.tsx", ownership)).toBe(true);
     expect(isPageAgentOwnedWritePath("app/page.tsx", ownership)).toBe(false);
-    expect(
-      isPageAgentOwnedWritePath("components/pages/home/Hero.tsx", ownership),
-    ).toBe(false);
-    expect(isPageAgentOwnedWritePath("components/Hero.tsx", ownership)).toBe(
-      false,
-    );
-    expect(
-      isPageAgentOwnedWritePath(
-        "components/pages/about/../home/Hero.tsx",
-        ownership,
-      ),
-    ).toBe(false);
-    expect(
-      isPageAgentOwnedWritePath(
-        "components/pages/about/../../chrome/Nav.tsx",
-        ownership,
-      ),
-    ).toBe(false);
-    expect(
-      isPageAgentOwnedWritePath("/components/pages/about/Hero.tsx", ownership),
-    ).toBe(false);
+    expect(isPageAgentOwnedWritePath("components/pages/home/Hero.tsx", ownership)).toBe(false);
+    expect(isPageAgentOwnedWritePath("components/Hero.tsx", ownership)).toBe(false);
+    expect(isPageAgentOwnedWritePath("components/pages/about/../home/Hero.tsx", ownership)).toBe(false);
+    expect(isPageAgentOwnedWritePath("components/pages/about/../../chrome/Nav.tsx", ownership)).toBe(false);
+    expect(isPageAgentOwnedWritePath("/components/pages/about/Hero.tsx", ownership)).toBe(false);
     expect(isPageAgentOwnedWritePath("", ownership)).toBe(false);
   });
 
   it("does not expose mutation tools that bypass page ownership", () => {
     expect(PAGE_AGENT_TOOL_NAMES).toEqual(
-      expect.arrayContaining([
-        "read_file",
-        "write_file",
-        "edit_file",
-        "generate_image",
-      ]),
+      expect.arrayContaining(["read_file", "write_file", "edit_file", "generate_image"]),
     );
     expect(PAGE_AGENT_TOOL_NAMES).not.toContain("exec_shell");
     expect(PAGE_AGENT_TOOL_NAMES).not.toContain("install_package");
     expect(PAGE_AGENT_TOOL_NAMES).not.toContain("revert_file");
-    expect(
-      PAGE_AGENT_ACT_TOOL_NAMES.every((name) =>
-        PAGE_AGENT_TOOL_NAMES.includes(name),
-      ),
-    ).toBe(true);
+    expect(PAGE_AGENT_ACT_TOOL_NAMES.every((name) => PAGE_AGENT_TOOL_NAMES.includes(name))).toBe(true);
   });
 
   it("resolvePageAgentMaxIterations defaults to 96", () => {
     const prev = process.env.PAGE_IMPLEMENT_AGENT_MAX_ITERATIONS;
     delete process.env.PAGE_IMPLEMENT_AGENT_MAX_ITERATIONS;
     expect(resolvePageAgentMaxIterations()).toBe(96);
-    if (prev !== undefined)
-      process.env.PAGE_IMPLEMENT_AGENT_MAX_ITERATIONS = prev;
+    if (prev !== undefined) process.env.PAGE_IMPLEMENT_AGENT_MAX_ITERATIONS = prev;
   });
 
   it("formatPageAgentToolResultForModel shortens successful write_file", () => {
@@ -221,12 +185,7 @@ describe("pageAgentToolLoop", () => {
       { success: false, error: "verification failed" },
     );
     expect(state.writtenPaths).toEqual([]);
-    expect(
-      shouldRejectRepeatedPageAgentWrite(
-        state,
-        "components/pages/home/Hero.tsx",
-      ),
-    ).toBe(false);
+    expect(shouldRejectRepeatedPageAgentWrite(state, "components/pages/home/Hero.tsx")).toBe(false);
 
     recordPageAgentToolResult(
       state,
@@ -235,12 +194,7 @@ describe("pageAgentToolLoop", () => {
       { success: true, output: "written" },
     );
     expect(state.writtenPaths).toEqual(["components/pages/home/Hero.tsx"]);
-    expect(
-      shouldRejectRepeatedPageAgentWrite(
-        state,
-        "components/pages/home/Hero.tsx",
-      ),
-    ).toBe(true);
+    expect(shouldRejectRepeatedPageAgentWrite(state, "components/pages/home/Hero.tsx")).toBe(true);
   });
 
   it("filterPageAgentToolsForPhase hides observe tools in act mode", () => {

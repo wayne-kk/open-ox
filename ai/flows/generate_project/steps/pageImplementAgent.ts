@@ -11,18 +11,10 @@ import {
 import { lfPageImplementPhaseSlug } from "@/lib/observability/langfuseGenerationCatalog";
 import type { ChatMessage } from "@/ai/shared/llm/types";
 import { getSystemToolDefinitions } from "@/ai/tools/systemToolCatalog";
-import {
-  createRequiredImageExecutor,
-  type PendingImage,
-} from "@/ai/tools/system/generateImageTool";
+import { createRequiredImageExecutor, type PendingImage } from "@/ai/tools/system/generateImageTool";
 import { getModelForStep, getThinkingLevelForStep } from "@/lib/config/models";
 import { slugToPageComponentRoot, slugToPagePath } from "../shared/paths";
-import type {
-  PlannedPageBlueprint,
-  StepTrace,
-  PageAgentProjectContext,
-  BuildStep,
-} from "../types";
+import type { PlannedPageBlueprint, StepTrace, PageAgentProjectContext, BuildStep } from "../types";
 import { resolvePageImplementAgentRuleIds } from "../shared/agentRuleBundles";
 import { buildUserVisionContent } from "../shared/userVisionContent";
 import { screenshotGuardrailIdFromContext } from "../shared/screenshotIntentMode";
@@ -42,15 +34,9 @@ import {
   listUserProvidedImageUrls,
 } from "../shared/userProvidedImageEnforcement";
 import { buildPageAgentUserMessage } from "../shared/pageAgentBrief";
-import {
-  buildPageAgentBootstrap,
-  isPageAgentBootstrapEnabled,
-} from "../shared/pageAgentBootstrap";
+import { buildPageAgentBootstrap, isPageAgentBootstrapEnabled } from "../shared/pageAgentBootstrap";
 import { resolvePageAgentMaxIterations } from "../shared/pageAgentToolLoop";
-import {
-  createFileSession,
-  type FileSessionWorkspace,
-} from "@/ai/shared/fileSession/fileSession";
+import { createFileSession, type FileSessionWorkspace } from "@/ai/shared/fileSession/fileSession";
 import { SiteFileSessionWorkspace } from "@/ai/shared/fileSession/siteFileSessionWorkspace";
 import { getSiteRoot } from "@/ai/tools/system/common";
 import {
@@ -65,25 +51,14 @@ function truncate(text: string, max: number): string {
 }
 
 function assertDefaultExportPage(tsx: string, path: string): void {
-  if (
-    !/export\s+default\s+function\b/.test(tsx) &&
-    !/export\s+default\s+\w+/.test(tsx)
-  ) {
-    throw new Error(
-      `page_implement_agent: ${path} must include a default export`,
-    );
+  if (!/export\s+default\s+function\b/.test(tsx) && !/export\s+default\s+\w+/.test(tsx)) {
+    throw new Error(`page_implement_agent: ${path} must include a default export`);
   }
 }
 
-export function pageImplementationIncompleteReason(
-  tsx: string,
-  path: string,
-): string | null {
+export function pageImplementationIncompleteReason(tsx: string, path: string): string | null {
   if (!tsx.trim()) return `${path} is empty or missing`;
-  if (
-    !/export\s+default\s+function\b/.test(tsx) &&
-    !/export\s+default\s+\w+/.test(tsx)
-  ) {
+  if (!/export\s+default\s+function\b/.test(tsx) && !/export\s+default\s+\w+/.test(tsx)) {
     return `${path} must include a default export`;
   }
   if (tsx.includes("Preparing your site")) {
@@ -114,10 +89,9 @@ export function createPageFileSession(options: {
     ownsPath: (path) => path === targetPath || path.startsWith(`${componentRoot}/`),
     requiredArtifacts: [targetPath],
     replaceableBaselinePaths: [targetPath],
-    validateArtifact: (path, content) =>
-      pageImplementationIncompleteReason(content, path),
+    validateArtifact: (path, content) => pageImplementationIncompleteReason(content, path),
     validateCompletion: options.validateCompletion,
-    maxFiles: 8,
+    maxFiles: 16,
     maxConsecutiveFailuresPerFile: 2,
   });
 }
@@ -152,9 +126,7 @@ export async function runPageImplementAgent(
   const model = getModelForStep("page_implement_agent");
   const thinking = getThinkingLevelForStep("page_implement_agent");
   const agentStepName = `page_implement_agent:${page.slug}`;
-  const userContent = prepareUserProvidedContentForPageAgent(
-    projectContext.userProvidedContent,
-  );
+  const userContent = prepareUserProvidedContentForPageAgent(projectContext.userProvidedContent);
   const hasRefShot = Boolean(projectContext.referenceScreenshotDataUrl?.trim());
   const imageUrlFallbackText = shouldScanPromptForUserImageUrls(
     projectContext.screenshotIntentMode ?? "none",
@@ -163,10 +135,7 @@ export async function runPageImplementAgent(
   )
     ? (projectContext.rawUserInput ?? "")
     : "";
-  const userImageUrls = listUserProvidedImageUrls(
-    userContent,
-    imageUrlFallbackText,
-  );
+  const userImageUrls = listUserProvidedImageUrls(userContent, imageUrlFallbackText);
   const userImageCount = userImageUrls.length;
   const hasUserContent = hasUserProvidedContent(userContent);
   const refShot = projectContext.referenceScreenshotDataUrl ?? null;
@@ -216,10 +185,7 @@ export async function runPageImplementAgent(
     loadStepPrompt("pageImplementAgent"),
     ...(refGuardId ? [loadGuardrail(refGuardId)] : []),
     ...(replicateLayout
-      ? [
-          loadGuardrail("screenshotReplicateNoUserAssets"),
-          loadGuardrail("screenshotReplicatePageOwnsChrome"),
-        ]
+      ? [loadGuardrail("screenshotReplicateNoUserAssets"), loadGuardrail("screenshotReplicatePageOwnsChrome")]
       : [loadGuardrail("chromeDeferredNoPageNav")]),
     ...resolvePageImplementAgentRuleIds({
       userProvidedImageCount: userImageCount,
@@ -263,9 +229,10 @@ export async function runPageImplementAgent(
     onGeneratedAsset: (asset) => imageAssets.recordGeneratedAsset(asset.publicPath),
   });
   const imageExecutor = guardGenerateImageExecutor(baseImageExecutor, userImageUrls);
-  const imageTool = userImageCount > 0
-    ? buildGenerateImageToolForPageAgent(userImageCount)
-    : getSystemToolDefinitions(["generate_image"])[0];
+  const imageTool =
+    userImageCount > 0
+      ? buildGenerateImageToolForPageAgent(userImageCount)
+      : getSystemToolDefinitions(["generate_image"])[0];
 
   const maxIterations = resolvePageAgentMaxIterations();
   const build = await runPageBuildSession({
@@ -278,8 +245,8 @@ export async function runPageImplementAgent(
     ...(thinking ? { thinkingLevel: thinking } : {}),
     fileSession,
     explicitCompletion: true,
-    isPrimaryArtifactValid: (content) =>
-      pageImplementationIncompleteReason(content, targetPath) === null,
+    componentFirst: true,
+    isPrimaryArtifactValid: (content) => pageImplementationIncompleteReason(content, targetPath) === null,
     assetLifecycle: {
       inspect: imageAssets.inspect,
       ...(imageTool ? { generation: { tool: imageTool, execute: imageExecutor } } : {}),
@@ -307,9 +274,10 @@ export async function runPageImplementAgent(
           duration: 0,
         });
       }
-      const detail = activity === "read" || activity === "write"
-        ? `${activity === "read" ? "reading" : "writing"} ${eventPath?.split("/").pop() || "..."}`
-        : undefined;
+      const detail =
+        activity === "read" || activity === "write"
+          ? `${activity === "read" ? "reading" : "writing"} ${eventPath?.split("/").pop() || "..."}`
+          : undefined;
       if (detail) {
         onStep({
           step: agentStepName,

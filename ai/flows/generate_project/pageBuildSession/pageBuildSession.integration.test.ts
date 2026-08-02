@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import type { callLLMWithToolsFromMessages } from "@/ai/shared/llm/toolLoop";
 
 const loop = vi.hoisted(() => ({ call: vi.fn() }));
-vi.mock("@/ai/shared/llm/toolLoop", () => ({ callLLMWithToolsFromMessages: loop.call }));
+vi.mock("@/ai/shared/llm/toolLoop", () => ({
+  callLLMWithToolsFromMessages: loop.call,
+}));
 
 import { createFileSession, InMemoryFileSessionWorkspace } from "@/ai/shared/fileSession/fileSession";
 import { runPageBuildSession } from "./pageBuildSession";
@@ -10,6 +12,180 @@ import { runPageBuildSession } from "./pageBuildSession";
 type ToolLoopParams = Parameters<typeof callLLMWithToolsFromMessages>[0];
 
 describe("runPageBuildSession", () => {
+  it("builds the declared component graph before exposing the final page assembly", async () => {
+    const targetPath = "app/page.tsx";
+    const heroPath = "components/pages/home/Hero.tsx";
+    const showcasePath = "components/pages/home/ProductShowcase.tsx";
+    const cardPath = "components/pages/home/ProductCard.tsx";
+    const fileSession = createFileSession({
+      owner: "page:home",
+      workspace: new InMemoryFileSessionWorkspace(),
+      ownsPath: (path) => path === targetPath || path.startsWith("components/pages/home/"),
+      requiredArtifacts: [targetPath],
+    });
+
+    loop.call.mockImplementationOnce(async (params: ToolLoopParams) => {
+      expect(params.resolveToolsForIteration?.(0, params.tools).map((tool) => tool.function.name)).toEqual([
+        "declare_page_components",
+      ]);
+      await params.executeToolOverrides.declare_page_components({
+        compositionIntent:
+          "Hero establishes the promise while ProductShowcase proves it through reusable cards.",
+        components: [
+          {
+            path: cardPath,
+            responsibility: "Render one product",
+            usedBy: showcasePath,
+          },
+          {
+            path: heroPath,
+            responsibility: "Establish the product promise",
+            usedBy: targetPath,
+          },
+          {
+            path: showcasePath,
+            responsibility: "Show the product range",
+            usedBy: targetPath,
+          },
+        ],
+      });
+      expect(params.resolveToolsForIteration?.(1, params.tools).map((tool) => tool.function.name)).toEqual([
+        "create_page_component",
+      ]);
+      await params.executeToolOverrides.create_page_component({
+        path: cardPath,
+        content: "export default function ProductCard() { return <article>Product</article> }",
+      });
+      expect(params.resolveToolsForIteration?.(2, params.tools).map((tool) => tool.function.name)).toEqual([
+        "create_page_component",
+      ]);
+      await params.executeToolOverrides.create_page_component({
+        path: heroPath,
+        content: 'export default function Hero() { return <section id="hero">Promise</section> }',
+      });
+      expect(params.resolveToolsForIteration?.(3, params.tools).map((tool) => tool.function.name)).toEqual([
+        "create_page_component",
+      ]);
+      await params.executeToolOverrides.create_page_component({
+        path: showcasePath,
+        content: [
+          'import ProductCard from "@/components/pages/home/ProductCard";',
+          "export default function ProductShowcase() { return <section><ProductCard /></section> }",
+        ].join("\n"),
+      });
+      expect(params.resolveToolsForIteration?.(4, params.tools).map((tool) => tool.function.name)).toEqual([
+        "verify_page_files",
+      ]);
+      await params.executeToolOverrides.verify_page_files({});
+      expect(params.resolveToolsForIteration?.(5, params.tools).map((tool) => tool.function.name)).toEqual([
+        "create_target_page",
+      ]);
+      await params.executeToolOverrides.create_target_page({
+        content: [
+          'import Hero from "@/components/pages/home/Hero";',
+          'import ProductShowcase from "@/components/pages/home/ProductShowcase";',
+          "export default function Page() { return <main><Hero /><ProductShowcase /></main> }",
+        ].join("\n"),
+      });
+      expect(params.resolveToolsForIteration?.(6, params.tools).map((tool) => tool.function.name)).toEqual([
+        "verify_page_files",
+      ]);
+      await params.executeToolOverrides.verify_page_files({});
+      expect(params.resolveToolsForIteration?.(7, params.tools).map((tool) => tool.function.name)).toEqual([
+        "page_implementation_complete",
+      ]);
+      await params.executeToolOverrides.page_implementation_complete({
+        summary: "assembled",
+      });
+      return { content: "assembled", toolCalls: [] };
+    });
+
+    const result = await runPageBuildSession({
+      slug: "home",
+      targetPath,
+      componentRoot: "components/pages/home",
+      initialMessages: [{ role: "user", content: "Build" }],
+      model: "gemini-3.6-flash",
+      maxIterations: 12,
+      fileSession,
+      explicitCompletion: true,
+      componentFirst: true,
+      langfusePhase: "page.home",
+    });
+
+    expect(result.finalDecision).toEqual({ kind: "complete" });
+    expect(fileSession.writtenPaths()).toEqual([cardPath, heroPath, showcasePath, targetPath]);
+  });
+
+  it("does not complete when a component is mounted by the wrong parent", async () => {
+    const targetPath = "app/page.tsx";
+    const heroPath = "components/pages/home/Hero.tsx";
+    const cardPath = "components/pages/home/ProductCard.tsx";
+    const fileSession = createFileSession({
+      owner: "page:home",
+      workspace: new InMemoryFileSessionWorkspace(),
+      ownsPath: (path) => path === targetPath || path.startsWith("components/pages/home/"),
+      requiredArtifacts: [targetPath],
+    });
+    loop.call.mockImplementationOnce(async (params: ToolLoopParams) => {
+      await params.executeToolOverrides.declare_page_components({
+        compositionIntent: "Hero owns its supporting product card",
+        components: [
+          {
+            path: cardPath,
+            responsibility: "Supporting product",
+            usedBy: heroPath,
+          },
+          { path: heroPath, responsibility: "Promise", usedBy: targetPath },
+        ],
+      });
+      await params.executeToolOverrides.create_page_component({
+        path: cardPath,
+        content: "export default function ProductCard() { return <article /> }",
+      });
+      await params.executeToolOverrides.create_page_component({
+        path: heroPath,
+        content: "export default function Hero() { return <section /> }",
+      });
+      await params.executeToolOverrides.verify_page_files({});
+      await params.executeToolOverrides.create_target_page({
+        content: [
+          'import Hero from "@/components/pages/home/Hero";',
+          'import ProductCard from "@/components/pages/home/ProductCard";',
+          "export default function Page() { return <main><Hero /><ProductCard /></main> }",
+        ].join("\n"),
+      });
+      await params.executeToolOverrides.verify_page_files({});
+      expect(
+        params.resolveToolsForIteration?.(6, params.tools).map((tool) => tool.function.name),
+      ).not.toContain("page_implementation_complete");
+      const completion = await params.executeToolOverrides.page_implementation_complete({
+        summary: "done",
+      });
+      expect(completion).toEqual(
+        expect.objectContaining({
+          success: false,
+          error: expect.stringContaining("declared component graph"),
+        }),
+      );
+      return { content: "", toolCalls: [] };
+    });
+
+    const result = await runPageBuildSession({
+      slug: "home",
+      targetPath,
+      componentRoot: "components/pages/home",
+      initialMessages: [{ role: "user", content: "Build" }],
+      model: "gemini-3.6-flash",
+      maxIterations: 8,
+      fileSession,
+      explicitCompletion: true,
+      componentFirst: true,
+      langfusePhase: "page.home",
+    });
+    expect(result.finalDecision.kind).not.toBe("complete");
+  });
+
   it("recovers an empty stop with the exact requirement and legal command", async () => {
     const targetPath = "app/page.tsx";
     const placeholder = "https://images.unsplash.com/hero.jpg";
@@ -21,7 +197,10 @@ describe("runPageBuildSession", () => {
     });
     const imageTool = {
       type: "function" as const,
-      function: { name: "generate_image", parameters: { type: "object", properties: {} } },
+      function: {
+        name: "generate_image",
+        parameters: { type: "object", properties: {} },
+      },
     };
     let generatedPath: string | null = null;
     loop.call.mockImplementationOnce(async (params: ToolLoopParams) => {
@@ -29,25 +208,31 @@ describe("runPageBuildSession", () => {
         content: `export default () => <img src="${placeholder}" />`,
       });
       const history: ToolLoopParams["messages"] = [];
-      expect(params.onAssistantStop?.({
-        iteration: 15,
-        message: { role: "assistant", content: "" },
-        messages: history,
-      })).toBe(true);
+      expect(
+        params.onAssistantStop?.({
+          iteration: 15,
+          message: { role: "assistant", content: "" },
+          messages: history,
+        }),
+      ).toBe(true);
       expect(history.at(-1)?.content).toContain(`"path":"${targetPath}"`);
       expect(history.at(-1)?.content).toContain(`"reference":"${placeholder}"`);
       expect(history.at(-1)?.content).toContain('"nextAction":"generate_asset"');
       expect(history.at(-1)?.content).toContain("legal_tools: generate_image");
-      expect(params.onAssistantStop?.({
-        iteration: 16,
-        message: { role: "assistant", content: "" },
-        messages: history,
-      })).toBe(true);
-      expect(params.onAssistantStop?.({
-        iteration: 17,
-        message: { role: "assistant", content: "" },
-        messages: history,
-      })).toBe(false);
+      expect(
+        params.onAssistantStop?.({
+          iteration: 16,
+          message: { role: "assistant", content: "" },
+          messages: history,
+        }),
+      ).toBe(true);
+      expect(
+        params.onAssistantStop?.({
+          iteration: 17,
+          message: { role: "assistant", content: "" },
+          messages: history,
+        }),
+      ).toBe(false);
       return { content: "", toolCalls: [] };
     });
 
@@ -60,15 +245,18 @@ describe("runPageBuildSession", () => {
       maxIterations: 96,
       fileSession,
       assetLifecycle: {
-        inspect: (artifacts) => artifacts.get(targetPath)?.content.includes(placeholder)
-          ? [{
-              kind: "asset_reference",
-              path: targetPath,
-              reference: placeholder,
-              nextAction: generatedPath ? "edit_source" : "generate_asset",
-              ...(generatedPath ? { replacement: generatedPath } : {}),
-            }]
-          : [],
+        inspect: (artifacts) =>
+          artifacts.get(targetPath)?.content.includes(placeholder)
+            ? [
+                {
+                  kind: "asset_reference",
+                  path: targetPath,
+                  reference: placeholder,
+                  nextAction: generatedPath ? "edit_source" : "generate_asset",
+                  ...(generatedPath ? { replacement: generatedPath } : {}),
+                },
+              ]
+            : [],
         generation: {
           tool: imageTool,
           execute: async () => {
@@ -100,8 +288,9 @@ describe("runPageBuildSession", () => {
         content: `export default () => <img src="${placeholder}" />`,
       });
       await params.executeToolOverrides.read_page_file({ path: targetPath });
-      expect(params.resolveToolsForIteration?.(2, params.tools).map((tool) => tool.function.name))
-        .toEqual(["edit_page_file"]);
+      expect(params.resolveToolsForIteration?.(2, params.tools).map((tool) => tool.function.name)).toEqual([
+        "edit_page_file",
+      ]);
       const history: ToolLoopParams["messages"] = [];
       params.onAssistantStop?.({
         iteration: 2,
@@ -125,15 +314,18 @@ describe("runPageBuildSession", () => {
       maxIterations: 96,
       fileSession,
       assetLifecycle: {
-        inspect: (artifacts) => artifacts.get(targetPath)?.content.includes(placeholder)
-          ? [{
-              kind: "asset_reference",
-              path: targetPath,
-              reference: placeholder,
-              nextAction: "edit_source",
-              replacement,
-            }]
-          : [],
+        inspect: (artifacts) =>
+          artifacts.get(targetPath)?.content.includes(placeholder)
+            ? [
+                {
+                  kind: "asset_reference",
+                  path: targetPath,
+                  reference: placeholder,
+                  nextAction: "edit_source",
+                  replacement,
+                },
+              ]
+            : [],
       },
       langfusePhase: "page.home",
     });
@@ -153,8 +345,9 @@ describe("runPageBuildSession", () => {
       requiredArtifacts: [targetPath],
     });
     loop.call.mockImplementationOnce(async (params: ToolLoopParams) => {
-      expect(params.resolveToolsForIteration?.(0, params.tools).map((tool) => tool.function.name))
-        .toEqual(["verify_page_files"]);
+      expect(params.resolveToolsForIteration?.(0, params.tools).map((tool) => tool.function.name)).toEqual([
+        "verify_page_files",
+      ]);
       await params.executeToolOverrides.verify_page_files({});
       expect(params.resolveToolsForIteration?.(1, params.tools)).toEqual([]);
       return { content: "", toolCalls: [] };
@@ -170,8 +363,7 @@ describe("runPageBuildSession", () => {
       fileSession,
       langfusePhase: "page.home",
     });
-    expect(fileSession.events().filter((event) => event.code === "FILE_ALREADY_EXISTS"))
-      .toEqual([]);
+    expect(fileSession.events().filter((event) => event.code === "FILE_ALREADY_EXISTS")).toEqual([]);
     expect(result.finalDecision).toEqual({ kind: "complete" });
   });
 
@@ -186,16 +378,19 @@ describe("runPageBuildSession", () => {
       ownsPath: (path) => path === targetPath,
       requiredArtifacts: [targetPath],
       replaceableBaselinePaths: [targetPath],
-      validateArtifact: (_path, content) =>
-        content.includes("Preparing your site") ? "default stub" : null,
+      validateArtifact: (_path, content) => (content.includes("Preparing your site") ? "default stub" : null),
     });
     loop.call.mockImplementationOnce(async (params: ToolLoopParams) => {
-      expect(params.resolveToolsForIteration?.(0, params.tools).map((tool) => tool.function.name))
-        .toEqual(["create_target_page"]);
-      const created = await params.executeToolOverrides.create_target_page({ content: implemented });
+      expect(params.resolveToolsForIteration?.(0, params.tools).map((tool) => tool.function.name)).toEqual([
+        "create_target_page",
+      ]);
+      const created = await params.executeToolOverrides.create_target_page({
+        content: implemented,
+      });
       expect(created.success).toBe(true);
-      expect(params.resolveToolsForIteration?.(1, params.tools).map((tool) => tool.function.name))
-        .toEqual(["verify_page_files"]);
+      expect(params.resolveToolsForIteration?.(1, params.tools).map((tool) => tool.function.name)).toEqual([
+        "verify_page_files",
+      ]);
       await params.executeToolOverrides.verify_page_files({});
       return { content: "", toolCalls: [] };
     });
@@ -214,8 +409,7 @@ describe("runPageBuildSession", () => {
     expect(result.finalDecision).toEqual({ kind: "complete" });
     expect(fileSession.writtenPaths()).toContain(targetPath);
     expect((await workspace.read(targetPath)).content).toBe(implemented);
-    expect(fileSession.events().filter((event) => event.code === "FILE_ALREADY_CREATED"))
-      .toEqual([]);
+    expect(fileSession.events().filter((event) => event.code === "FILE_ALREADY_CREATED")).toEqual([]);
   });
 
   it("enforces target-first tools and opens the build phase only after the target write", async () => {
@@ -232,50 +426,78 @@ describe("runPageBuildSession", () => {
     });
     loop.call.mockImplementationOnce(async (params: ToolLoopParams) => {
       expect(params.contextMode).toBe("managed");
-      expect(params.resolveToolsForIteration?.(0, params.tools).map((tool) => tool.function.name))
-        .toEqual(["create_target_page"]);
+      expect(params.resolveToolsForIteration?.(0, params.tools).map((tool) => tool.function.name)).toEqual([
+        "create_target_page",
+      ]);
       const result = await params.executeToolOverrides.create_target_page({
         content: "export default function Page() { return <main /> }",
       });
       expect(result.success).toBe(true);
       expect(params.resolveTaskStateForRound?.().targetPaths).toEqual([targetPath]);
       expect(params.resolveTaskStateForRound?.().mutations).toEqual([
-        expect.objectContaining({ path: targetPath, revision: expect.stringMatching(/^sha256:/) }),
+        expect.objectContaining({
+          path: targetPath,
+          revision: expect.stringMatching(/^sha256:/),
+        }),
       ]);
       expect(params.resolveTaskStateForRound?.().decisions).toContain("next=continue building");
-      expect(params.resolveToolsForIteration?.(1, params.tools).map((tool) => tool.function.name))
-        .toEqual(["create_page_component", "read_page_file", "edit_page_file", "verify_page_files"]);
+      expect(params.resolveToolsForIteration?.(1, params.tools).map((tool) => tool.function.name)).toEqual([
+        "create_page_component",
+        "read_page_file",
+        "edit_page_file",
+        "verify_page_files",
+      ]);
       const duplicateComponent = await params.executeToolOverrides.create_page_component({
         path: existingComponent,
         content: "export function Existing() { return <div /> }",
       });
-      expect(duplicateComponent).toEqual(expect.objectContaining({
-        success: true,
-        output: expect.stringContaining("Creation was not executed"),
-        meta: expect.objectContaining({ code: "EXISTING_ARTIFACT", transition: "editable" }),
-      }));
-      expect(params.resolveToolsForIteration?.(2, params.tools).map((tool) => tool.function.name))
-        .toEqual(["edit_page_file"]);
+      expect(duplicateComponent).toEqual(
+        expect.objectContaining({
+          success: true,
+          output: expect.stringContaining("Creation was not executed"),
+          meta: expect.objectContaining({
+            code: "EXISTING_ARTIFACT",
+            transition: "editable",
+          }),
+        }),
+      );
+      expect(params.resolveToolsForIteration?.(2, params.tools).map((tool) => tool.function.name)).toEqual([
+        "edit_page_file",
+      ]);
       await params.executeToolOverrides.edit_page_file({
         path: existingComponent,
         baseRevision: duplicateComponent.meta?.revision,
         oldText: "return null",
         newText: "return <div />",
       });
-      expect(params.resolveToolsForIteration?.(3, params.tools).map((tool) => tool.function.name))
-        .toEqual(["create_page_component", "read_page_file", "edit_page_file", "verify_page_files"]);
+      expect(params.resolveToolsForIteration?.(3, params.tools).map((tool) => tool.function.name)).toEqual([
+        "create_page_component",
+        "read_page_file",
+        "edit_page_file",
+        "verify_page_files",
+      ]);
       return { content: "", toolCalls: [] };
     });
 
     const result = await runPageBuildSession({
-      slug: "home", targetPath, componentRoot: "components/pages/home",
-      initialMessages: [{ role: "system", content: "Build" }, { role: "user", content: "Home" }],
-      model: "gemini-3.6-flash", maxIterations: 8, fileSession, langfusePhase: "page.home",
+      slug: "home",
+      targetPath,
+      componentRoot: "components/pages/home",
+      initialMessages: [
+        { role: "system", content: "Build" },
+        { role: "user", content: "Home" },
+      ],
+      model: "gemini-3.6-flash",
+      maxIterations: 8,
+      fileSession,
+      langfusePhase: "page.home",
     });
-    expect(result.finalDecision).toEqual({ kind: "continue", reason: "continue building" });
+    expect(result.finalDecision).toEqual({
+      kind: "continue",
+      reason: "continue building",
+    });
     expect(fileSession.writtenPaths()).toEqual([targetPath, existingComponent]);
-    expect(fileSession.events().filter((event) => event.code === "FILE_ALREADY_EXISTS"))
-      .toEqual([]);
+    expect(fileSession.events().filter((event) => event.code === "FILE_ALREADY_EXISTS")).toEqual([]);
   });
 
   it("requires verification when presence discovery adopts an existing component", async () => {
@@ -289,7 +511,7 @@ describe("runPageBuildSession", () => {
       }),
       ownsPath: (path) => path === targetPath || path.startsWith("components/pages/home/"),
       requiredArtifacts: [targetPath],
-      validateCompletion: () => holdCompletion ? "building" : null,
+      validateCompletion: () => (holdCompletion ? "building" : null),
     });
     loop.call.mockImplementationOnce(async (params: ToolLoopParams) => {
       await params.executeToolOverrides.create_target_page({
@@ -298,8 +520,9 @@ describe("runPageBuildSession", () => {
       await params.executeToolOverrides.verify_page_files({});
       expect(await fileSession.loadIfExists(componentPath)).toBe(true);
       holdCompletion = false;
-      expect(params.resolveToolsForIteration?.(1, params.tools).map((tool) => tool.function.name))
-        .toEqual(["verify_page_files"]);
+      expect(params.resolveToolsForIteration?.(1, params.tools).map((tool) => tool.function.name)).toEqual([
+        "verify_page_files",
+      ]);
       return { content: "", toolCalls: [] };
     });
 
@@ -325,59 +548,75 @@ describe("runPageBuildSession", () => {
       ownsPath: (path) => path === targetPath,
       requiredArtifacts: [targetPath],
       validateCompletion: ({ artifacts }) =>
-        artifacts.get(targetPath)?.content.includes(placeholder)
-          ? "asset replacement pending"
-          : null,
+        artifacts.get(targetPath)?.content.includes(placeholder) ? "asset replacement pending" : null,
     });
     const imageTool = {
       type: "function" as const,
-      function: { name: "generate_image", parameters: { type: "object", properties: {} } },
+      function: {
+        name: "generate_image",
+        parameters: { type: "object", properties: {} },
+      },
     };
     loop.call.mockImplementationOnce(async (params: ToolLoopParams) => {
       const source = `export default function Page() { return <img src="${placeholder}" /> }`;
       await params.executeToolOverrides.create_target_page({ content: source });
-      expect(params.resolveToolsForIteration?.(1, params.tools).map((tool) => tool.function.name))
-        .toEqual(["generate_image"]);
+      expect(params.resolveToolsForIteration?.(1, params.tools).map((tool) => tool.function.name)).toEqual([
+        "generate_image",
+      ]);
       expect(params.resolveTaskStateForRound?.().decisions).toContainEqual(
         expect.stringContaining('"nextAction":"generate_asset"'),
       );
 
-      const duplicate = await params.executeToolOverrides.create_target_page({ content: source });
-      expect(duplicate).toEqual(expect.objectContaining({
-        success: false,
-        error: expect.stringContaining("ILLEGAL_CAPABILITY"),
-      }));
+      const duplicate = await params.executeToolOverrides.create_target_page({
+        content: source,
+      });
+      expect(duplicate).toEqual(
+        expect.objectContaining({
+          success: false,
+          error: expect.stringContaining("ILLEGAL_CAPABILITY"),
+        }),
+      );
 
       await params.executeToolOverrides.generate_image({});
-      expect(params.resolveToolsForIteration?.(2, params.tools).map((tool) => tool.function.name))
-        .toEqual(["read_page_file"]);
+      expect(params.resolveToolsForIteration?.(2, params.tools).map((tool) => tool.function.name)).toEqual([
+        "read_page_file",
+      ]);
       const wrongSnapshot = await params.executeToolOverrides.read_page_file({
         path: "components/pages/home/Other.tsx",
       });
-      expect(wrongSnapshot).toEqual(expect.objectContaining({
-        success: false,
-        error: expect.stringContaining("ILLEGAL_CAPABILITY"),
-      }));
-      let snapshot = await params.executeToolOverrides.read_page_file({ path: targetPath });
-      expect(params.resolveToolsForIteration?.(3, params.tools).map((tool) => tool.function.name))
-        .toEqual(["edit_page_file"]);
+      expect(wrongSnapshot).toEqual(
+        expect.objectContaining({
+          success: false,
+          error: expect.stringContaining("ILLEGAL_CAPABILITY"),
+        }),
+      );
+      let snapshot = await params.executeToolOverrides.read_page_file({
+        path: targetPath,
+      });
+      expect(params.resolveToolsForIteration?.(3, params.tools).map((tool) => tool.function.name)).toEqual([
+        "edit_page_file",
+      ]);
       await params.executeToolOverrides.edit_page_file({
         path: targetPath,
         baseRevision: "sha256:stale",
         oldText: placeholder,
         newText: generatedPath!,
       });
-      expect(params.resolveToolsForIteration?.(4, params.tools).map((tool) => tool.function.name))
-        .toEqual(["read_page_file"]);
-      snapshot = await params.executeToolOverrides.read_page_file({ path: targetPath });
+      expect(params.resolveToolsForIteration?.(4, params.tools).map((tool) => tool.function.name)).toEqual([
+        "read_page_file",
+      ]);
+      snapshot = await params.executeToolOverrides.read_page_file({
+        path: targetPath,
+      });
       await params.executeToolOverrides.edit_page_file({
         path: targetPath,
         baseRevision: snapshot.meta?.revision,
         oldText: placeholder,
         newText: generatedPath!,
       });
-      expect(params.resolveToolsForIteration?.(5, params.tools).map((tool) => tool.function.name))
-        .toEqual(["verify_page_files"]);
+      expect(params.resolveToolsForIteration?.(5, params.tools).map((tool) => tool.function.name)).toEqual([
+        "verify_page_files",
+      ]);
       await params.executeToolOverrides.verify_page_files({ paths: [] });
       expect(params.resolveToolsForIteration?.(6, params.tools)).toEqual([]);
       return { content: "", toolCalls: [] };
@@ -395,12 +634,14 @@ describe("runPageBuildSession", () => {
         inspect: (artifacts) => {
           const source = artifacts.get(targetPath)?.content ?? "";
           return source.includes(placeholder)
-            ? [{
-                kind: "asset_reference" as const,
-                path: targetPath,
-                reference: placeholder,
-                nextAction: generatedPath ? "edit_source" as const : "generate_asset" as const,
-              }]
+            ? [
+                {
+                  kind: "asset_reference" as const,
+                  path: targetPath,
+                  reference: placeholder,
+                  nextAction: generatedPath ? ("edit_source" as const) : ("generate_asset" as const),
+                },
+              ]
             : [];
         },
         generation: {
@@ -415,8 +656,7 @@ describe("runPageBuildSession", () => {
     });
 
     expect(result.finalDecision).toEqual({ kind: "complete" });
-    expect(fileSession.events().filter((event) => event.code === "FILE_ALREADY_CREATED"))
-      .toEqual([]);
+    expect(fileSession.events().filter((event) => event.code === "FILE_ALREADY_CREATED")).toEqual([]);
   });
 
   it("generates a declared local image at its stable path without editing source", async () => {
@@ -433,20 +673,25 @@ describe("runPageBuildSession", () => {
     });
     const imageTool = {
       type: "function" as const,
-      function: { name: "generate_image", parameters: { type: "object", properties: {} } },
+      function: {
+        name: "generate_image",
+        parameters: { type: "object", properties: {} },
+      },
     };
 
     loop.call.mockImplementationOnce(async (params: ToolLoopParams) => {
       await params.executeToolOverrides.create_target_page({ content: source });
-      expect(params.resolveToolsForIteration?.(1, params.tools).map((tool) => tool.function.name))
-        .toEqual(["generate_image"]);
+      expect(params.resolveToolsForIteration?.(1, params.tools).map((tool) => tool.function.name)).toEqual([
+        "generate_image",
+      ]);
       await params.executeToolOverrides.generate_image({
         filename: "model-chosen-name",
         prompt: "A precise editorial hero image",
       });
       expect(generationArgs).toMatchObject({ filename: "home-hero" });
-      expect(params.resolveToolsForIteration?.(2, params.tools).map((tool) => tool.function.name))
-        .toEqual(["verify_page_files"]);
+      expect(params.resolveToolsForIteration?.(2, params.tools).map((tool) => tool.function.name)).toEqual([
+        "verify_page_files",
+      ]);
       await params.executeToolOverrides.verify_page_files({});
       return { content: "", toolCalls: [] };
     });
@@ -460,18 +705,27 @@ describe("runPageBuildSession", () => {
       maxIterations: 6,
       fileSession,
       assetLifecycle: {
-        inspect: () => generated ? [] : [{
-          kind: "asset_reference",
-          path: targetPath,
-          reference: imagePath,
-          nextAction: "generate_asset",
-        }],
+        inspect: () =>
+          generated
+            ? []
+            : [
+                {
+                  kind: "asset_reference",
+                  path: targetPath,
+                  reference: imagePath,
+                  nextAction: "generate_asset",
+                },
+              ],
         generation: {
           tool: imageTool,
           execute: async (args) => {
             generationArgs = args;
             generated = true;
-            return { success: true, output: imagePath, meta: { path: imagePath } };
+            return {
+              success: true,
+              output: imagePath,
+              meta: { path: imagePath },
+            };
           },
         },
       },
@@ -480,9 +734,9 @@ describe("runPageBuildSession", () => {
 
     expect(result.finalDecision).toEqual({ kind: "complete" });
     expect(fileSession.artifacts().get(targetPath)?.content).toBe(source);
-    expect(fileSession.events().filter((event) =>
-      event.kind === "file_snapshot" || event.kind === "file_updated"
-    )).toEqual([]);
+    expect(
+      fileSession.events().filter((event) => event.kind === "file_snapshot" || event.kind === "file_updated"),
+    ).toEqual([]);
   });
 
   it("does not turn an unverifiable runtime image binding into a blocking edit", async () => {
@@ -496,8 +750,9 @@ describe("runPageBuildSession", () => {
     });
     loop.call.mockImplementationOnce(async (params: ToolLoopParams) => {
       await params.executeToolOverrides.create_target_page({ content: source });
-      expect(params.resolveToolsForIteration?.(1, params.tools).map((tool) => tool.function.name))
-        .toEqual(["verify_page_files"]);
+      expect(params.resolveToolsForIteration?.(1, params.tools).map((tool) => tool.function.name)).toEqual([
+        "verify_page_files",
+      ]);
       await params.executeToolOverrides.verify_page_files({});
       return { content: "", toolCalls: [] };
     });
@@ -511,11 +766,13 @@ describe("runPageBuildSession", () => {
       maxIterations: 4,
       fileSession,
       assetLifecycle: {
-        inspect: () => [{
-          kind: "source_diagnostic",
-          path: targetPath,
-          message: "item.product.image cannot be verified statically",
-        }],
+        inspect: () => [
+          {
+            kind: "source_diagnostic",
+            path: targetPath,
+            message: "item.product.image cannot be verified statically",
+          },
+        ],
       },
       langfusePhase: "page.home",
     });
