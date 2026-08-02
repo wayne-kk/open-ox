@@ -3,14 +3,6 @@
     {
       "path": "/api/internal/purge-trashed-projects",
       "schedule": "0 3 * * *"
-    },
-    {
-      "path": "/api/internal/search-discovery",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/internal/register-search-sitemaps",
-      "schedule": "0 4 * * 1"
     }
   ]
 }

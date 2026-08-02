@@ -2,7 +2,6 @@ import fs from "fs/promises";
 import path from "path";
 import { Dirent } from "fs";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { projectSeoSlug } from "@/lib/seo/publishedProject";
 
 import { clampProjectListName } from "@/lib/projectDisplayName";
 import {
@@ -101,12 +100,6 @@ export interface ProjectMetadata {
   remixedFromOwnerUsername?: string | null;
   /** When static export last synced to site-previews storage. */
   staticPreviewSyncedAt?: string | null;
-  searchIndexingEnabled?: boolean;
-  seoSlug?: string | null;
-  seoTitle?: string | null;
-  seoDescription?: string | null;
-  publishedAt?: string | null;
-  seoUpdatedAt?: string | null;
   /** Owner workspace tags (populated by gallery / tag APIs). */
   tags?: ProjectTagRow[];
   /** Recycle Bin: when set, project is soft-deleted. */
@@ -149,12 +142,6 @@ interface ProjectRow {
   remixed_from_title?: string | null;
   remixed_from_owner_username?: string | null;
   static_preview_synced_at?: string | null;
-  search_indexing_enabled?: boolean | null;
-  seo_slug?: string | null;
-  seo_title?: string | null;
-  seo_description?: string | null;
-  published_at?: string | null;
-  seo_updated_at?: string | null;
   deleted_at?: string | null;
   purge_after?: string | null;
 }
@@ -234,12 +221,6 @@ function rowToMetadata(row: ProjectRow): ProjectMetadata {
     remixedFromTitle: row.remixed_from_title ?? null,
     remixedFromOwnerUsername: row.remixed_from_owner_username ?? null,
     staticPreviewSyncedAt: row.static_preview_synced_at ?? null,
-    searchIndexingEnabled: row.search_indexing_enabled === true,
-    seoSlug: row.seo_slug ?? null,
-    seoTitle: row.seo_title ?? null,
-    seoDescription: row.seo_description ?? null,
-    publishedAt: row.published_at ?? null,
-    seoUpdatedAt: row.seo_updated_at ?? null,
     deletedAt: row.deleted_at ?? null,
     purgeAfter: row.purge_after ?? null,
   };
@@ -290,12 +271,6 @@ interface ProjectListRow {
   remixed_from_title?: string | null;
   remixed_from_owner_username?: string | null;
   static_preview_synced_at?: string | null;
-  search_indexing_enabled?: boolean | null;
-  seo_slug?: string | null;
-  seo_title?: string | null;
-  seo_description?: string | null;
-  published_at?: string | null;
-  seo_updated_at?: string | null;
   deleted_at?: string | null;
   purge_after?: string | null;
 }
@@ -346,7 +321,7 @@ export async function listProjectsSummary(
   let query = db
     .from("projects")
     .select(
-      "id,name,user_prompt,status,created_at,updated_at,completed_at,error,verification_status,model_id,generation_mode,folder_id,user_id,owner_username,cover_image_status,cover_image_storage_path,cover_image_updated_at,publish_preview,allow_remix,listing,remixed_from_project_id,remixed_from_title,remixed_from_owner_username,static_preview_synced_at,search_indexing_enabled,seo_slug,seo_title,seo_description,published_at,seo_updated_at,deleted_at,purge_after"
+      "id,name,user_prompt,status,created_at,updated_at,completed_at,error,verification_status,model_id,generation_mode,folder_id,user_id,owner_username,cover_image_status,cover_image_storage_path,cover_image_updated_at,publish_preview,allow_remix,listing,remixed_from_project_id,remixed_from_title,remixed_from_owner_username,static_preview_synced_at,deleted_at,purge_after"
     )
     .order(options.trashedOnly ? "deleted_at" : "created_at", { ascending: false });
 
@@ -444,12 +419,6 @@ export async function listProjectsSummary(
     remixedFromTitle: row.remixed_from_title ?? null,
     remixedFromOwnerUsername: row.remixed_from_owner_username ?? null,
     staticPreviewSyncedAt: row.static_preview_synced_at ?? null,
-    searchIndexingEnabled: row.search_indexing_enabled === true,
-    seoSlug: row.seo_slug ?? null,
-    seoTitle: row.seo_title ?? null,
-    seoDescription: row.seo_description ?? null,
-    publishedAt: row.published_at ?? null,
-    seoUpdatedAt: row.seo_updated_at ?? null,
     deletedAt: row.deleted_at ?? null,
     purgeAfter: row.purge_after ?? null,
   }));
@@ -462,11 +431,7 @@ export async function listProjectsSummary(
 export async function setProjectPublishSettings(
   db: SupabaseClient,
   id: string,
-  patch: {
-    publishPreview?: boolean;
-    allowRemix?: boolean;
-    searchIndexingEnabled?: boolean;
-  },
+  patch: { publishPreview?: boolean; allowRemix?: boolean },
   current: ProjectMetadata
 ): Promise<ProjectMetadata> {
   let publishPreview = current.publishPreview === true;
@@ -494,10 +459,6 @@ export async function setProjectPublishSettings(
     .update({
       publish_preview: publishPreview,
       allow_remix: allowRemix,
-      ...(patch.searchIndexingEnabled !== undefined
-        ? { search_indexing_enabled: patch.searchIndexingEnabled }
-        : {}),
-      seo_slug: current.seoSlug?.trim() || projectSeoSlug(current.name),
       updated_at: new Date().toISOString(),
     })
     .eq("id", id)
@@ -719,11 +680,7 @@ export async function renameProject(db: SupabaseClient, id: string, name: string
   const finalName = safeName.length > 0 ? safeName : "未命名项目";
   const { error } = await db
     .from("projects")
-    .update({
-      name: finalName,
-      seo_slug: projectSeoSlug(finalName),
-      updated_at: new Date().toISOString(),
-    })
+    .update({ name: finalName, updated_at: new Date().toISOString() })
     .eq("id", id);
   if (error) throw new Error(`[projectManager] renameProject failed: ${error.message}`);
 }

@@ -6,7 +6,6 @@ import { HamsterLoader } from "@/components/ui/hamster-loader";
 import { useAuthUser } from "@/app/components/AuthHeaderActions";
 import { formatRelativeTime } from "@/lib/formatRelativeTime";
 import { projectCoverDisplayUrl } from "@/lib/projectCoverUrls";
-import { projectShowcasePath } from "@/lib/seo/publishedProject";
 import { cn } from "@/lib/utils";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
 
@@ -22,7 +21,6 @@ type CommunityProject = {
   createdAt?: string;
   updatedAt?: string;
   remixedFromTitle?: string | null;
-  seoSlug?: string | null;
 };
 
 const PAGE_SIZE = 24;
@@ -59,7 +57,7 @@ function CommunityCard({
     .slice(0, 2)
     .map((w) => w[0]?.toUpperCase() ?? "")
     .join("");
-  const previewHref = projectShowcasePath(project);
+  const previewHref = `/projects/${project.id}/preview-launch`;
   const owner = project.ownerUsername?.trim() || "匿名作者";
   const allowRemix = project.allowRemix === true;
   const remixBusy = remixingId === project.id;
@@ -76,6 +74,8 @@ function CommunityCard({
     >
       <a
         href={previewHref}
+        target="_blank"
+        rel="noopener noreferrer"
         className="relative block w-full shrink-0 overflow-hidden bg-muted"
       >
         <div
@@ -125,6 +125,8 @@ function CommunityCard({
       <div className="flex min-h-0 flex-1 flex-col gap-1.5 px-3.5 py-3">
         <a
           href={previewHref}
+          target="_blank"
+          rel="noopener noreferrer"
           className="ox-card-title ox-card-title-accent line-clamp-2 text-[13px] font-semibold leading-snug text-foreground"
         >
           {project.name || "未命名项目"}

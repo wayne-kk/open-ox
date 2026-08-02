@@ -9,6 +9,7 @@ import {
 
 export {
   coerceStoredProductionUrl,
+  pickStableProductionUrl,
   productionUrlFromDeployment,
 } from "./productionUrl";
 
@@ -51,6 +52,24 @@ export type CreatedVercelProject = {
   /** Team scope that succeeded (null = personal account). */
   teamId: string | null;
 };
+
+export async function listVercelProjectDomains(params: {
+  accessToken: string;
+  teamId: string | null;
+  projectId: string;
+}): Promise<string[]> {
+  const q = teamQuery(params.teamId);
+  const json = await vercelFetch<{
+    domains?: Array<{ name?: string; verified?: boolean }>;
+  }>(
+    params.accessToken,
+    `https://api.vercel.com/v9/projects/${encodeURIComponent(params.projectId)}/domains${q}`
+  );
+  return (json.domains ?? [])
+    .filter((domain) => domain.verified !== false)
+    .map((domain) => domain.name?.trim())
+    .filter((domain): domain is string => Boolean(domain));
+}
 
 async function postCreateVercelProject(params: {
   accessToken: string;
@@ -297,4 +316,3 @@ export async function waitForVercelDeploymentReady(params: {
     await new Promise((r) => setTimeout(r, pollMs));
   }
 }
-

@@ -3,11 +3,17 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 import { getProject } from "@/lib/projectManager";
 import {
+  applyGeneratedSiteSeo,
+  buildGeneratedSiteSeoProfile,
+} from "@/lib/generatedSiteSeo";
+import {
   coerceStoredProductionUrl,
   createVercelDeployment,
   createVercelProject,
   fetchVercelInstallationTeamId,
   listVercelDeploymentAliases,
+  listVercelProjectDomains,
+  pickStableProductionUrl,
   productionUrlFromDeployment,
   uploadStaticDirToVercel,
   waitForVercelDeploymentReady,
@@ -276,6 +282,29 @@ async function runDeployJob(params: {
     } else if (installationTeamId && installationTeamId !== creds.teamId) {
       teamId = installationTeamId;
     }
+
+    const projectDomains = await listVercelProjectDomains({
+      accessToken: creds.accessToken,
+      teamId,
+      projectId: vercelProjectId!,
+    });
+    const productionOrigin = pickStableProductionUrl(
+      [existing.productionUrl, ...projectDomains],
+      { projectName: vercelProjectName ?? desiredName }
+    );
+    if (!productionOrigin) {
+      throw new Error("[vercelDeploy] Vercel project has no verified production domain");
+    }
+    if (!project) {
+      throw new Error(`[vercelDeploy] Project metadata not found: ${projectId}`);
+    }
+    await applyGeneratedSiteSeo(
+      outDir,
+      buildGeneratedSiteSeoProfile(project, {
+        origin: productionOrigin,
+        indexable: true,
+      })
+    );
 
     const files = await uploadStaticDirToVercel({
       accessToken: creds.accessToken,

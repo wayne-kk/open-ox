@@ -29,7 +29,7 @@ import {
 } from "@/lib/ensureProjectNodeModules";
 import { envForNextWebpackChild } from "@/lib/nextWebpackChildEnv";
 import { withSiteBuildLock } from "@/lib/siteBuildLock";
-import { getSiteRoot } from "@/lib/projectManager";
+import { getProject, getSiteRoot } from "@/lib/projectManager";
 import { isPreparingSiteHomePageStub } from "@/lib/preparingSiteHomePageStub";
 import { ensureProjectSourcesOnDisk, restoreProjectFiles } from "@/lib/storage";
 import {
@@ -67,6 +67,10 @@ import {
   isDedicatedPreviewOrigin,
 } from "@/lib/previewOrigin";
 import { applyProjectArtifactBranding } from "@/lib/branding/applyProjectArtifactBranding";
+import {
+  applyGeneratedSiteSeo,
+  buildGeneratedSiteSeoProfile,
+} from "@/lib/generatedSiteSeo";
 
 export { contentTypeForRelPath, resolveProxiedContentType };
 
@@ -760,6 +764,17 @@ export async function syncStaticSitePreview(
           const aggregateKey = `${filesFp}:${originFp}`;
           const outDir = path.join(projectDir, "out");
           await rewriteExportedPublicPathsInOutDir(outDir, basePath);
+          const project = await getProject(db, projectId);
+          if (!project) {
+            throw new Error(`[staticPreview] Project metadata not found: ${projectId}`);
+          }
+          await applyGeneratedSiteSeo(
+            outDir,
+            buildGeneratedSiteSeoProfile(project, {
+              origin: url,
+              indexable: false,
+            })
+          );
           await applyProjectArtifactBranding(outDir, projectId, storage, "publish_preview");
           await uploadOutDir(storage, projectId, outDir);
           // Mark synced before deleting local out/ — otherwise a late failure leaves Storage
