@@ -224,7 +224,8 @@ export function createAgentWorkspaceRuntime(options: {
       primary?.requireSessionWriteWhenInvalid &&
       workspace.artifacts.has(primary.path) &&
       !primary.isValid(workspace.artifacts.get(primary.path)!.content) &&
-      !workspace.writtenPaths.includes(primary.path)
+      !workspace.writtenPaths.includes(primary.path) &&
+      !primary.allowSupportingArtifactsBeforePrimary
     ) {
       return {
         decision: fileDecision,

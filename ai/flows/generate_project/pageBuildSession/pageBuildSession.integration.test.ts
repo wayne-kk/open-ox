@@ -12,6 +12,51 @@ import { runPageBuildSession } from "./pageBuildSession";
 type ToolLoopParams = Parameters<typeof callLLMWithToolsFromMessages>[0];
 
 describe("runPageBuildSession", () => {
+  it("allows the first declared component when the scaffold target stub already exists", async () => {
+    const targetPath = "app/page.tsx";
+    const heroPath = "components/pages/home/Hero.tsx";
+    const fileSession = createFileSession({
+      owner: "page:home",
+      workspace: new InMemoryFileSessionWorkspace({
+        [targetPath]: "export default function Page() { return <main>Preparing your site…</main> }",
+      }),
+      ownsPath: (path) => path === targetPath || path.startsWith("components/pages/home/"),
+      requiredArtifacts: [targetPath],
+      replaceableBaselinePaths: [targetPath],
+      validateArtifact: (path, content) =>
+        path === targetPath && content.includes("Preparing your site") ? "default stub" : null,
+    });
+    loop.call.mockImplementationOnce(async (params: ToolLoopParams) => {
+      await params.executeToolOverrides.declare_page_components({
+        compositionIntent: "Hero carries the opening experience",
+        components: [{ path: heroPath, responsibility: "Opening experience", usedBy: targetPath }],
+      });
+      expect(params.resolveToolsForIteration?.(1, params.tools).map((tool) => tool.function.name)).toEqual([
+        "create_page_component",
+      ]);
+      const created = await params.executeToolOverrides.create_page_component({
+        path: heroPath,
+        content: "export default function Hero() { return <section>Hero</section> }",
+      });
+      expect(created).toEqual(expect.objectContaining({ success: true }));
+      return { content: "", toolCalls: [] };
+    });
+
+    await runPageBuildSession({
+      slug: "home",
+      targetPath,
+      componentRoot: "components/pages/home",
+      initialMessages: [{ role: "user", content: "Build" }],
+      model: "gemini-3.6-flash",
+      maxIterations: 4,
+      fileSession,
+      explicitCompletion: true,
+      componentFirst: true,
+      isPrimaryArtifactValid: (content) => !content.includes("Preparing your site"),
+      langfusePhase: "page.home",
+    });
+  });
+
   it("builds the declared component graph before exposing the final page assembly", async () => {
     const targetPath = "app/page.tsx";
     const heroPath = "components/pages/home/Hero.tsx";
