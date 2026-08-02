@@ -57,6 +57,82 @@ describe("runPageBuildSession", () => {
     });
   });
 
+  it("recovers a partial component graph with the exact next component contract", async () => {
+    const targetPath = "app/page.tsx";
+    const componentRoot = "components/pages/home";
+    const paths = ["Hero", "Showcase", "Unboxing", "ReleaseCalendar"].map(
+      (name) => `${componentRoot}/${name}.tsx`,
+    );
+    const fileSession = createFileSession({
+      owner: "page:home",
+      workspace: new InMemoryFileSessionWorkspace({
+        [targetPath]: "export default function Page() { return <main>Preparing your site…</main> }",
+      }),
+      ownsPath: (path) => path === targetPath || path.startsWith(`${componentRoot}/`),
+      requiredArtifacts: [targetPath],
+      replaceableBaselinePaths: [targetPath],
+      validateArtifact: (path, content) =>
+        path === targetPath && content.includes("Preparing your site") ? "default stub" : null,
+    });
+
+    loop.call.mockImplementationOnce(async (params: ToolLoopParams) => {
+      await params.executeToolOverrides.declare_page_components({
+        compositionIntent: "A continuous toy launch journey",
+        components: paths.map((path, index) => ({
+          path,
+          responsibility: index === 3 ? "Present upcoming releases and dates" : `Experience ${index + 1}`,
+          usedBy: targetPath,
+        })),
+      });
+      for (const [index, path] of paths.slice(0, 3).entries()) {
+        await params.executeToolOverrides.create_page_component({
+          path,
+          content: `export default function Part${index + 1}() { return <section /> }`,
+        });
+      }
+
+      const history: ToolLoopParams["messages"] = [];
+      expect(
+        params.onAssistantStop?.({
+          iteration: 4,
+          message: { role: "assistant", content: "" },
+          messages: history,
+        }),
+      ).toBe(true);
+      const recovery = String(history.at(-1)?.content);
+      expect(recovery).toContain("legal_tools: create_page_component");
+      expect(recovery).toContain(`next_component_path: ${paths[3]}`);
+      expect(recovery).toContain("next_component_responsibility: Present upcoming releases and dates");
+      expect(recovery).toContain(`next_component_used_by: ${targetPath}`);
+      expect(recovery).toContain(`missing_components: ${paths[3]}`);
+      expect(recovery).toContain("composition_intent: A continuous toy launch journey");
+      expect(params.resolveTaskStateForRound?.().decisions).toEqual(
+        expect.arrayContaining([
+          `next_component_path=${paths[3]}`,
+          "next_component_responsibility=Present upcoming releases and dates",
+          `next_component_used_by=${targetPath}`,
+        ]),
+      );
+      return { content: "", toolCalls: [] };
+    });
+
+    const result = await runPageBuildSession({
+      slug: "home",
+      targetPath,
+      componentRoot,
+      initialMessages: [{ role: "user", content: "Build" }],
+      model: "gemini-3.6-flash",
+      maxIterations: 96,
+      fileSession,
+      explicitCompletion: true,
+      componentFirst: true,
+      isPrimaryArtifactValid: (content) => !content.includes("Preparing your site"),
+      langfusePhase: "page.home",
+    });
+
+    expect(result.finalLegalTools).toEqual(["create_page_component"]);
+  });
+
   it("builds the declared component graph before exposing the final page assembly", async () => {
     const targetPath = "app/page.tsx";
     const heroPath = "components/pages/home/Hero.tsx";

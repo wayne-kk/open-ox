@@ -359,6 +359,29 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
   };
   const componentGraphReady = () =>
     !spec.componentFirst || (declaredComponentGraph !== null && missingDeclaredComponentPaths().length === 0);
+  const nextDeclaredComponent = (): DeclaredPageComponent | null => {
+    const nextPath = missingDeclaredComponentPaths()[0];
+    return declaredComponentGraph?.components.find((component) => component.path === nextPath) ?? null;
+  };
+  const componentGraphState = (): string[] => {
+    if (!declaredComponentGraph) return ["component_graph=not_declared"];
+    const nextComponent = nextDeclaredComponent();
+    return [
+      `composition_intent=${declaredComponentGraph.compositionIntent}`,
+      ...declaredComponentGraph.components.map(
+        (component) =>
+          `declared_component=${component.path}; responsibility=${component.responsibility}; used_by=${component.usedBy}`,
+      ),
+      `missing_components=${missingDeclaredComponentPaths().join(",") || "none"}`,
+      ...(nextComponent
+        ? [
+            `next_component_path=${nextComponent.path}`,
+            `next_component_responsibility=${nextComponent.responsibility}`,
+            `next_component_used_by=${nextComponent.usedBy}`,
+          ]
+        : []),
+    ];
+  };
   const componentGraphIncompleteReason = (): string | null => {
     if (!spec.componentFirst || !declaredComponentGraph) return null;
     const artifacts = spec.fileSession.snapshot().artifacts;
@@ -414,9 +437,16 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
       runtimeTools()
         .map((tool) => tool.function.name)
         .join(", ") || "none";
-    return `${projection.contextCard}\nlegal_tools: ${legalTools}`;
+    const graphState = componentGraphState().join("\n").replaceAll("=", ": ");
+    return `${projection.contextCard}\n${graphState}\nlegal_tools: ${legalTools}`;
   };
-  const runtimeTaskState = (): DurableTaskState => runtime.project().taskState;
+  const runtimeTaskState = (): DurableTaskState => {
+    const taskState = runtime.project().taskState;
+    return {
+      ...taskState,
+      decisions: [...(taskState.decisions ?? []), ...componentGraphState()],
+    };
+  };
 
   const { content, toolCalls } = await callLLMWithToolsFromMessages({
     messages,
@@ -599,7 +629,7 @@ export async function runPageBuildSession(spec: PageBuildSessionSpec): Promise<P
         content:
           `${runtimeStateCard()}\n` +
           `[Recovery ${emptyStopRecoveries}/2] The page is not complete. ` +
-          `Call exactly one tool from legal_tools now. Do not return text and do not stop.`,
+          `Call exactly one tool from legal_tools now. When next_component_path is present, create exactly that component with complete TSX matching its responsibility and parent contract. Do not return text and do not stop.`,
       };
       history.push(recovery);
       spec.onEvent?.({ kind: "message", message: recovery });
