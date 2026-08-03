@@ -123,7 +123,7 @@ ${fileSections.join("\n\n")}`;
     `- ${PAGE_AGENT_LAYOUT_PATH} (chrome already mounted — content only)`,
     `- ${PAGE_AGENT_GLOBALS_PATH}`,
     ...(params.hasUserProvidedContent ? [`- ${USER_PROVIDED_CONTENT_PATH}`] : []),
-    "Continue the page implementation autonomously with create_page_file for owned components and the target route. Keep the target page a thin assembly, use read_page_file then edit_page_file for revisions, verify, and finish with page_implementation_complete.",
+    "Continue the page implementation autonomously with create_page_file for owned components and the target route. Keep the target page a thin assembly, use read_page_file then edit_page_file for revisions, and finish with page_implementation_complete. Project-level verification runs after generation.",
   ].join("\n");
 
   return { bootstrappedPaths, message, compactSummary };

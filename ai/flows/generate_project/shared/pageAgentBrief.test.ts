@@ -50,7 +50,8 @@ describe("pageAgentBrief", () => {
     expect(msg).toContain("`read_page_file`");
     expect(msg).toContain("`edit_page_file`");
     expect(msg).not.toContain("`replace_page_file`");
-    expect(msg).toContain("`verify_page_files`");
+    expect(msg).not.toContain("`verify_page_files`");
+    expect(msg).toContain("Project-level typecheck and build repair");
     expect(msg).not.toContain("no later than your third mutation");
     expect(msg).not.toContain("parallel `write_file`");
     expect(msg).not.toContain(PAGE_AGENT_HERO_SKILL_PATH);

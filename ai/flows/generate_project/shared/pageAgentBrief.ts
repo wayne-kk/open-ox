@@ -108,7 +108,7 @@ ${userProvidedFileHint}${userProvidedImagesBlock}
       ? ` ${userImageCount} user URL(s) — assign all before \`generate_image\` for extras.`
       : " Use \`generate_image\` only when you need visuals without user URLs."
   }
-4. **Assemble, verify, finish**: Keep the final \`${targetPath}\` as a thin assembly of the page-local components you chose. Declare stable image paths such as \`/images/home-hero.png\` in component source, then call \`generate_image\`; the runtime writes the asset at that path. Call \`verify_page_files\` after the final page write, repair diagnostics, then call \`page_implementation_complete\`. Formatting is automatic.
+4. **Assemble and finish**: Keep the final \`${targetPath}\` as a thin assembly of the page-local components you chose. Declare stable image paths such as \`/images/home-hero.png\` in component source, then call \`generate_image\`; the runtime writes the asset at that path. Call \`page_implementation_complete\` after the page and required assets are complete. Project-level typecheck and build repair run after all generation. Formatting is automatic.
 
 Maintain one visual and narrative composition across component boundaries: carry the design system, content hierarchy, state ownership, pacing, and transitions through the page. Do not repeat a successful create command or recreate a path to revise it.
 

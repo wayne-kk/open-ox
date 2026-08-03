@@ -217,7 +217,7 @@ export async function runPageImplementAgent(
     slug: page.slug,
     targetPath,
     componentRoot,
-    workspace: new SiteFileSessionWorkspace(),
+    workspace: new SiteFileSessionWorkspace({ verifyOnMutation: false }),
   });
 
   const pageImageScope = `page-${componentRoot.slice("components/pages/".length)}`;
@@ -245,6 +245,7 @@ export async function runPageImplementAgent(
     ...(thinking ? { thinkingLevel: thinking } : {}),
     fileSession,
     explicitCompletion: true,
+    deferVerification: true,
     isPrimaryArtifactValid: (content) => pageImplementationIncompleteReason(content, targetPath) === null,
     assetLifecycle: {
       inspect: imageAssets.inspect,

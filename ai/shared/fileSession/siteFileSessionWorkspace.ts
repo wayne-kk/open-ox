@@ -61,6 +61,8 @@ export function applyFileSessionEdits(content: string, edits: FileSessionTextEdi
 }
 
 export class SiteFileSessionWorkspace implements FileSessionWorkspace {
+  constructor(private readonly options: { verifyOnMutation?: boolean } = {}) {}
+
   private fullPath(path: string): string {
     return join(getSiteRoot(), path);
   }
@@ -124,7 +126,7 @@ export class SiteFileSessionWorkspace implements FileSessionWorkspace {
   }
 
   private async result(path: string, content: string): Promise<FileSessionMutationResult> {
-    const diagnostics = isVerifiableSourcePath(path)
+    const diagnostics = this.options.verifyOnMutation !== false && isVerifiableSourcePath(path)
       ? diagnosticsOf(path, (await verifyWrittenSourceFile(path)).diagnostics)
       : [];
     return { content, revision: revision(content), diagnostics };

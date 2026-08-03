@@ -30,7 +30,7 @@ function hasStaticPreview(syncedAt: string | null | undefined): boolean {
 
 export async function patchProjectPublish(
   projectId: string,
-  patch: { publishPreview?: boolean; allowRemix?: boolean }
+  patch: { publishPreview?: boolean; allowRemix?: boolean },
 ): Promise<PatchResult> {
   try {
     const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, {
@@ -73,7 +73,7 @@ export async function patchProjectPublish(
 }
 
 export async function fetchProjectPublishState(
-  projectId: string
+  projectId: string,
 ): Promise<ProjectPublishState | null> {
   try {
     const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, {
@@ -114,19 +114,22 @@ function ToggleRow({
     <label
       className={cn(
         "flex cursor-pointer items-start justify-between gap-3 rounded-lg px-2 py-2 transition-colors",
-        disabled ? "cursor-not-allowed opacity-45" : "hover:bg-muted"
+        disabled ? "cursor-not-allowed opacity-45" : "hover:bg-muted",
       )}
     >
       <div className="min-w-0 space-y-0.5">
         <div className="text-[12px] font-medium text-foreground">{label}</div>
         {description ? (
-          <p className="text-[10px] leading-relaxed text-muted-foreground/70">{description}</p>
+          <p className="text-[10px] leading-relaxed text-muted-foreground/70">
+            {description}
+          </p>
         ) : null}
       </div>
       <button
         type="button"
         role="switch"
         aria-checked={checked}
+        aria-busy={busy}
         disabled={disabled || busy}
         onClick={() => onChange(!checked)}
         className={cn(
@@ -134,15 +137,19 @@ function ToggleRow({
           checked
             ? "border-primary/50 bg-primary/80"
             : "border-border bg-muted",
-          (disabled || busy) && "pointer-events-none"
+          (disabled || busy) && "pointer-events-none",
         )}
       >
-        <span
-          className={cn(
-            "absolute top-[1px] left-[1px] h-[14px] w-[14px] rounded-full bg-background shadow-sm transition-transform",
-            checked && "translate-x-[14px] bg-primary-foreground"
-          )}
-        />
+        {busy ? (
+          <Loader2 className="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 animate-spin text-foreground" />
+        ) : (
+          <span
+            className={cn(
+              "absolute left-[1px] top-[1px] h-[14px] w-[14px] rounded-full bg-background shadow-sm transition-transform",
+              checked && "translate-x-[14px] bg-primary-foreground",
+            )}
+          />
+        )}
       </button>
     </label>
   );
@@ -165,7 +172,9 @@ export function ProjectPublishToggles({
     staticPreviewSyncedAt: initial?.staticPreviewSyncedAt ?? null,
   });
   const [loading, setLoading] = useState(!initial);
-  const [busy, setBusy] = useState(false);
+  const [busyField, setBusyField] = useState<
+    "publishPreview" | "allowRemix" | null
+  >(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -188,14 +197,21 @@ export function ProjectPublishToggles({
     return () => {
       cancelled = true;
     };
-  }, [projectId, initial?.publishPreview, initial?.allowRemix, initial?.staticPreviewSyncedAt]);
+  }, [
+    projectId,
+    initial?.publishPreview,
+    initial?.allowRemix,
+    initial?.staticPreviewSyncedAt,
+  ]);
 
   const apply = useCallback(
     async (patch: { publishPreview?: boolean; allowRemix?: boolean }) => {
-      setBusy(true);
+      const field =
+        patch.publishPreview !== undefined ? "publishPreview" : "allowRemix";
+      setBusyField(field);
       setError(null);
       const result = await patchProjectPublish(projectId, patch);
-      setBusy(false);
+      setBusyField(null);
       if (!result.ok) {
         if (result.code === "STATIC_PREVIEW_REQUIRED") {
           setError("需要先有可用的静态预览才能发布到社区");
@@ -207,7 +223,7 @@ export function ProjectPublishToggles({
       setState(result.state);
       onStateChange?.(result.state);
     },
-    [onStateChange, projectId]
+    [onStateChange, projectId],
   );
 
   const previewReady = hasStaticPreview(state.staticPreviewSyncedAt);
@@ -222,7 +238,9 @@ export function ProjectPublishToggles({
   }
 
   return (
-    <div className={cn("space-y-1", compact ? "min-w-[220px]" : "min-w-[260px]")}>
+    <div
+      className={cn("space-y-1", compact ? "min-w-[220px]" : "min-w-[260px]")}
+    >
       <ToggleRow
         label="发布预览"
         description={
@@ -231,20 +249,24 @@ export function ProjectPublishToggles({
             : "需先生成静态预览后才能开启"
         }
         checked={state.publishPreview}
-        disabled={!previewReady && !state.publishPreview}
-        busy={busy}
+        disabled={
+          busyField !== null || (!previewReady && !state.publishPreview)
+        }
+        busy={busyField === "publishPreview"}
         onChange={(next) => void apply({ publishPreview: next })}
       />
       <ToggleRow
         label="允许 Remix"
         description="拷贝许可（日后可收费）"
         checked={state.allowRemix}
-        disabled={!state.publishPreview}
-        busy={busy}
+        disabled={busyField !== null || !state.publishPreview}
+        busy={busyField === "allowRemix"}
         onChange={(next) => void apply({ allowRemix: next })}
       />
       {error ? (
-        <p className="px-2 pt-1 text-[10px] leading-relaxed text-red-400/90">{error}</p>
+        <p className="px-2 pt-1 text-[10px] leading-relaxed text-red-400/90">
+          {error}
+        </p>
       ) : null}
     </div>
   );
@@ -283,15 +305,13 @@ export function StudioPublishMenu({
           type="button"
           disabled={gateBlocked}
           title={
-            gateBlocked
-              ? studioCapabilityReasonLabel(gate.reason)
-              : undefined
+            gateBlocked ? studioCapabilityReasonLabel(gate.reason) : undefined
           }
           className={cn(
             "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 font-mono text-[10px] transition-colors disabled:cursor-not-allowed disabled:opacity-40",
             published
               ? "border-primary/35 bg-primary/12 text-primary hover:bg-primary/18"
-              : "border-border bg-muted/40 text-muted-foreground hover:border-border hover:bg-muted hover:text-foreground"
+              : "border-border bg-muted/40 text-muted-foreground hover:border-border hover:bg-muted hover:text-foreground",
           )}
         >
           <Globe2 className="h-3 w-3" />

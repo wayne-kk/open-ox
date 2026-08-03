@@ -58,6 +58,8 @@ export interface PageBuildSessionSpec {
   fileSession: FileSession;
   isPrimaryArtifactValid?(content: string): boolean;
   explicitCompletion?: boolean;
+  /** Defer TypeScript/build verification to the project-level repair pipeline. */
+  deferVerification?: boolean;
   assetLifecycle?: PageAssetLifecycle;
   onEvent?(event: PageBuildEvent): void;
   langfusePhase: string;
@@ -162,7 +164,7 @@ const VERIFY_TOOL = functionTool(
 
 const COMPLETE_TOOL = functionTool(
   "page_implementation_complete",
-  "Finish after the target page is a thin assembly layer, reusable page components are extracted, and verification is clean.",
+  "Finish after the target page is a thin assembly layer, reusable page components are extracted, and required assets are ready.",
   {
     type: "object",
     properties: { summary: { type: "string" } },
@@ -298,7 +300,7 @@ export async function runPageBuildSession(
     const primarySource = snapshot.artifacts.get(spec.targetPath)?.content;
     return (
       snapshot.decision.kind === "complete" &&
-      !snapshot.needsVerification &&
+      (spec.deferVerification || !snapshot.needsVerification) &&
       snapshot.diagnostics.length === 0 &&
       Boolean(primarySource) &&
       pageAssemblyIncompleteReason(primarySource!, spec.componentRoot) === null
@@ -309,7 +311,9 @@ export async function runPageBuildSession(
     const tools = [
       ...toolsForCapabilities(runtime.plan().capabilities, spec.assetLifecycle),
       ...(spec.explicitCompletion && completionReady() ? [COMPLETE_TOOL] : []),
-    ];
+    ].filter(
+      (tool) => !spec.deferVerification || tool.function.name !== PAGE_TOOL.verify,
+    );
     const uniqueTools = tools.filter(
       (tool, index) =>
         tools.findIndex(
@@ -338,7 +342,7 @@ export async function runPageBuildSession(
       CREATE_PAGE_FILE_TOOL,
       READ_TOOL,
       EDIT_TOOL,
-      VERIFY_TOOL,
+      ...(!spec.deferVerification ? [VERIFY_TOOL] : []),
       ...(spec.explicitCompletion ? [COMPLETE_TOOL] : []),
       ...(spec.assetLifecycle?.generation
         ? [spec.assetLifecycle.generation.tool]
@@ -381,7 +385,9 @@ export async function runPageBuildSession(
             success: false,
             error:
               (primarySource && pageAssemblyIncompleteReason(primarySource, spec.componentRoot)) ||
-              "Page files must be valid and cleanly verified before completion",
+              (spec.deferVerification
+                ? "Page output contract must be complete before project-level verification"
+                : "Page files must be valid and cleanly verified before completion"),
             meta: { code: "VERIFICATION_REQUIRED", retryable: true },
           };
         }

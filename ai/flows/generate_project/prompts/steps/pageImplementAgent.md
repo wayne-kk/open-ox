@@ -7,7 +7,7 @@
 1. **Bootstrap 已注入**：上一条已预加载完整 **`design-system.md`**、layout、globals、目录树、user-provided（若有）。**不要**尝试再次读取或枚举这些路径。
 2. **自主规划组件**：在内部判断页面所需的区域、交互、数据展示与局部控件组件，无需声明固定组件图。
 3. **增量创建文件**：使用 `create_page_file` 创建 Page component root 下的组件或目标 `page.tsx`，每个路径只创建一次；组件 default export，并通过稳定的 `@/` 路径互相引用。修改已有文件时，先 `read_page_file` 获取当前 content/revision，再用同一 revision 调用 `edit_page_file`。
-4. **组装并验证**：优先完成页面组件，再保持 `page.tsx` 为薄组装层；实现反馈需要时可自主调整顺序。随后调用 `verify_page_files`；验证通过后调用 `page_implementation_complete`。
+4. **组装并完成**：优先完成页面组件，再保持 `page.tsx` 为薄组装层；实现反馈需要时可自主调整顺序。页面与所需资源完成后调用 `page_implementation_complete`。统一 TypeScript 校验与 build repair 会在全部生成结束后执行。
 
 ### 审美权威（短）
 
@@ -40,4 +40,4 @@
 
 ### 完成方式
 
-当页面组件、最终路由组装与所有 import/use 关系都已写好时，调用 `verify_page_files`。验证通过后调用 `page_implementation_complete`，之后流水线会跑生产级 `build` / 修复。
+当页面组件、最终路由组装与所有 import/use 关系都已写好时，调用 `page_implementation_complete`。之后流水线会统一执行 TypeScript 校验、生产级 `build` 与修复。

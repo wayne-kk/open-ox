@@ -15,6 +15,56 @@ import { runPageBuildSession } from "./pageBuildSession";
 type ToolLoopParams = Parameters<typeof callLLMWithToolsFromMessages>[0];
 
 describe("runPageBuildSession", () => {
+  it("defers page verification to the project-level repair pipeline", async () => {
+    const targetPath = "app/page.tsx";
+    const componentRoot = "components/pages/home";
+    const fileSession = createFileSession({
+      owner: "page:home",
+      workspace: new InMemoryFileSessionWorkspace(),
+      ownsPath: (path) => path === targetPath || path.startsWith(`${componentRoot}/`),
+      requiredArtifacts: [targetPath],
+    });
+
+    loop.call.mockImplementationOnce(async (params: ToolLoopParams) => {
+      expect(params.tools.map((tool) => tool.function.name)).not.toContain("verify_page_files");
+      await params.executeToolOverrides.create_page_file({
+        path: `${componentRoot}/Hero.tsx`,
+        content: "export default function Hero() { return <section>Hero</section> }",
+      });
+      await params.executeToolOverrides.create_page_file({
+        path: targetPath,
+        content: [
+          'import Hero from "@/components/pages/home/Hero";',
+          "export default function Page() { return <main><Hero /></main> }",
+        ].join("\n"),
+      });
+      const completionTools = params
+        .resolveToolsForIteration?.(2, params.tools)
+        .map((tool) => tool.function.name);
+      expect(completionTools).not.toContain("verify_page_files");
+      expect(completionTools).toContain("page_implementation_complete");
+      const completion = await params.executeToolOverrides.page_implementation_complete({ summary: "generated" });
+      expect(completion.success).toBe(true);
+      return { content: "generated", toolCalls: [] };
+    });
+
+    const result = await runPageBuildSession({
+      slug: "home",
+      targetPath,
+      componentRoot,
+      initialMessages: [{ role: "user", content: "Build" }],
+      model: "gemini-3.6-flash",
+      maxIterations: 4,
+      fileSession,
+      explicitCompletion: true,
+      deferVerification: true,
+      langfusePhase: "page.home",
+    });
+
+    expect(result.finalDecision).toEqual({ kind: "complete" });
+    expect(result.finalLegalTools).not.toContain("verify_page_files");
+  });
+
   it("lets the page agent create owned files without declaring or sequencing a component graph", async () => {
     const targetPath = "app/page.tsx";
     const componentPath = "components/pages/home/Hero.tsx";
