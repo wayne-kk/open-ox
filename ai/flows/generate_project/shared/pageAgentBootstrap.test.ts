@@ -40,10 +40,12 @@ describe("pageAgentBootstrap", () => {
       expect(bootstrap.message).toContain("Rim Lighting");
       expect(bootstrap.message).not.toContain("### Visual Contract (from design system)");
       expect(bootstrap.compactSummary).toContain("full design system injected");
-      expect(bootstrap.message).toContain("initial `declare_page_components` action");
-      expect(bootstrap.message).not.toContain("initial `create_target_page` action");
-      expect(bootstrap.compactSummary).toContain("next missing component");
+      expect(bootstrap.message).toContain("use `create_page_file`");
+      expect(bootstrap.message).not.toContain("`declare_page_components`");
+      expect(bootstrap.message).not.toContain("`create_target_page`");
+      expect(bootstrap.compactSummary).toContain("autonomously with create_page_file");
       expect(bootstrap.compactSummary).not.toContain("Continue with create_target_page");
+      expect(bootstrap.message).not.toContain("Prefer `components/shared/**` stubs");
       expect(PAGE_AGENT_DESIGN_SYSTEM_BOOTSTRAP_MAX_CHARS).toBeGreaterThanOrEqual(fullDs.length);
     });
   });

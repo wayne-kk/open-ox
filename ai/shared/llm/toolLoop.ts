@@ -36,6 +36,7 @@ const SOURCE_MUTATION_TOOL_NAMES = new Set([
   "create_file",
   "apply_file_patch",
   "replace_file",
+  "create_page_file",
   "create_target_page",
   "create_page_component",
   "edit_page_file",

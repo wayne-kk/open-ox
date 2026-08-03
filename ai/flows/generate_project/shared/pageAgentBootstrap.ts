@@ -99,11 +99,11 @@ export function buildPageAgentBootstrap(
 
 The pipeline loaded the references below **before your first tool turn**. They do **not** consume iteration budget.
 
-**Chrome-first:** \`app/layout.tsx\` already mounts global chrome (\`components/chrome/**\`: Nav / Sidebar / Footer / tabs). Do **not** re-create any shell in the page — Chrome owns it. Start from the first content section / main viewport. Prefer \`components/shared/**\` stubs when present.
+**Chrome-first:** \`app/layout.tsx\` already mounts global chrome (\`components/chrome/**\`: Nav / Sidebar / Footer / tabs). Do **not** re-create any shell in the page — Chrome owns it. Start from the first content section / main viewport.
 
 **Design system:** full \`${PAGE_AGENT_DESIGN_SYSTEM_PATH}\` is injected below (including Visual Contract / Bold Factor when present). Follow it for tokens, signatures, surfaces, and typography.
 
-**Act now:** use the initial \`declare_page_components\` action. Let the product and interaction design determine meaningful component boundaries, create every declared page-local component in dependency order, then create the final target page as their thin assembly. Use \`read_page_file\` + \`edit_page_file\` for local revisions. Do not re-read the bootstrap paths below.
+**Act now:** decide the page's meaningful component boundaries internally, then use \`create_page_file\` to build owned page-local components and the target route incrementally. Prefer assembling the thin target page after its components, but adapt as needed. Use \`read_page_file\` + \`edit_page_file\` for local revisions. Do not re-read the bootstrap paths below.
 
 ### Tree: \`app/\`
 \`\`\`
@@ -123,7 +123,7 @@ ${fileSections.join("\n\n")}`;
     `- ${PAGE_AGENT_LAYOUT_PATH} (chrome already mounted — content only)`,
     `- ${PAGE_AGENT_GLOBALS_PATH}`,
     ...(params.hasUserProvidedContent ? [`- ${USER_PROVIDED_CONTENT_PATH}`] : []),
-    "Continue from the declared component graph. Create the next missing component in dependency order; only after all declared components exist, create the target page as a thin assembly. Use read_page_file then edit_page_file for revisions, verify, and finish with page_implementation_complete.",
+    "Continue the page implementation autonomously with create_page_file for owned components and the target route. Keep the target page a thin assembly, use read_page_file then edit_page_file for revisions, verify, and finish with page_implementation_complete.",
   ].join("\n");
 
   return { bootstrappedPaths, message, compactSummary };

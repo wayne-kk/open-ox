@@ -84,8 +84,8 @@ Page Worker caller; this is the intended depth and locality.
 
 ```mermaid
 stateDiagram-v2
-  [*] --> draft_target
-  draft_target --> build: create_target_page succeeds
+  [*] --> build
+  build --> build: create_page_file writes an owned component or target
   build --> asset_blocked: structured asset requirement
   asset_blocked --> verification_required: declared local asset generated at exact path
   asset_blocked --> snapshot_required: remote placeholder asset generated
@@ -96,7 +96,6 @@ stateDiagram-v2
   repair --> build: local edit is clean
   build --> verification_required: deterministic postconditions pass after mutation
   repair --> verification_required: deterministic postconditions pass after mutation
-  draft_target --> failed: terminal FileSession policy error
   build --> failed: terminal FileSession policy error
   repair --> failed: terminal FileSession policy error
 ```
@@ -105,17 +104,17 @@ Tool availability is an effect of state, not an instruction the model may ignore
 
 | Phase / condition | Exposed tools |
 |---|---|
-| `draft_target` | `create_target_page` only |
+| target missing or invalid | `create_page_file`, revision-safe read/edit, and verification as allowed by workspace state |
 | asset requirement needs an asset | `generate_image` only |
 | generated asset needs source edit | `read_page_file` only |
 | requirement source has a fresh revision | `edit_page_file` only |
 | current mutation needs verification | `verify_page_files` only |
-| target exists | `create_page_component`, `read_page_file`, `edit_page_file`, `verify_page_files`, optional `generate_image` |
+| target exists | `create_page_file`, `read_page_file`, `edit_page_file`, `verify_page_files`, optional `generate_image` |
 | fresh snapshot required | `read_page_file` only |
 | `complete` / `failed` | none |
 
-The target command intentionally has no `path` argument. `PageBuildSession` binds it to the
-orchestrator-provided route, eliminating wrong-route and missing-path first writes.
+The unified create command requires a `path`. `PageBuildSession` authorizes it against the
+orchestrator-provided target route and component root, rejecting every path outside that ownership boundary.
 Every tool call is authorized again at execution time against the current lifecycle. This protects
 the workspace even when a provider returns a tool that was not exposed for that iteration. An
 illegal command returns `ILLEGAL_LIFECYCLE_COMMAND` before `FileSession`, so it cannot consume the
@@ -210,7 +209,7 @@ out of the deterministic controller.
 
 | Concern | Previous | Current |
 |---|---|---|
-| first action | prompt says what to do | runtime exposes only `create_target_page` |
+| file order | prompt guides component-first assembly | runtime exposes owned-file operations without enforcing component order |
 | target ownership | model supplies path | runtime binds target path |
 | orchestration state | split across prompt/callbacks | one PageBuildSession state machine |
 | edit protocol | model-generated text ranges | full-file replacement with revision CAS |

@@ -343,6 +343,12 @@ export function createAgentWorkspaceRuntime(options: {
       decision: fileDecision,
       capabilities: [
         { kind: "create" },
+        ...(primary?.requireSessionWriteWhenInvalid &&
+        workspace.artifacts.has(primary.path) &&
+        !primary.isValid(workspace.artifacts.get(primary.path)!.content) &&
+        !workspace.writtenPaths.includes(primary.path)
+          ? [{ kind: "create_primary" as const, path: primary.path }]
+          : []),
         { kind: "read" },
         { kind: "edit" },
         { kind: "verify" },

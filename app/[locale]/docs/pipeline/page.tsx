@@ -200,12 +200,12 @@ await runChromeOptimizeStep(...); // link polish only
           <H3>Page Build Session v2</H3>
           <P>
             每个 <Code>page_implement_agent</Code> 由独立的 <Code>PageBuildSession</Code>
-            管理。初始阶段只暴露 <Code>create_target_page</Code>，且目标路由由运行时绑定；
-            后续根据文件、图片与诊断状态动态开放创建组件、读取、局部编辑、生图或验证工具。
+            管理。Agent 自主决定页面组件边界，并通过统一的 <Code>create_page_file</Code>
+            增量创建目标路由或所属组件目录中的文件；运行时不声明组件图或锁定创建顺序，
+            只根据文件、图片与诊断状态开放读取、局部编辑、生图或验证工具。
             完成由产物要求与 <Code>FileSession</Code> 的停止决策共同判定，不依赖模型自行宣布结束。
           </P>
-          <Pre>{`draft_target → create_target_page
-build        → create / read / edit / generate_image
+          <Pre>{`build        → create_page_file / read / edit / generate_image
 asset_blocked → generate_image → optional source edit
 verify       → verify_page_files → complete | repair`}</Pre>
           <P>

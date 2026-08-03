@@ -245,7 +245,6 @@ export async function runPageImplementAgent(
     ...(thinking ? { thinkingLevel: thinking } : {}),
     fileSession,
     explicitCompletion: true,
-    componentFirst: true,
     isPrimaryArtifactValid: (content) => pageImplementationIncompleteReason(content, targetPath) === null,
     assetLifecycle: {
       inspect: imageAssets.inspect,

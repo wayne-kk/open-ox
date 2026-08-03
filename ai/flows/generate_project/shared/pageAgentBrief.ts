@@ -66,7 +66,6 @@ export function buildPageAgentUserMessage(params: BuildPageAgentUserMessageParam
 \`${PAGE_AGENT_LAYOUT_PATH}\` already mounts global chrome from Chrome Scaffold (\`components/chrome/**\`: Nav / Sidebar / Footer / tabs).
 **Do not** create \`components/chrome/**\`, and **do not** implement site-wide Nav/Navbar/Header/Sidebar/Footer, **bottom tab bars**, or **app shell** frames in \`${targetPath}\` or page section components — the shell is always owned by Chrome.
 Fill page **sections** / main content only (e.g. feed viewport, hero). Put extracted components only under \`${componentRoot}/**\`. Single-page sites: stable section \`id\` attributes (e.g. \`id="features"\`).
-Reuse \`components/shared/**\` stubs when present for list/detail cards.
 `;
 
   const keywordsLine =
@@ -102,16 +101,16 @@ ${layoutContractBlock}
 ${userProvidedFileHint}${userProvidedImagesBlock}
 
 ## Instructions
-1. **Declare the page component graph first**: Your first action is \`declare_page_components\`. Declare 1-15 meaningful components under \`${componentRoot}/**\`, each with one responsibility and a \`usedBy\` parent (another declared component or \`${targetPath}\`). List dependencies before their parents. Include a concise \`compositionIntent\` explaining how the components form one coherent experience. Model regions, interactions, data displays, and local controls as needed; do not reduce the graph to a stack of generic Sections.
-2. **Complete components before the page**: Create every declared component before \`${targetPath}\` using \`create_page_component\`, strictly following dependency-first order. Each component must default export its React component. Parents must import declared children through the stable \`@/<component path without .tsx>\` module path and render them. Create each path once. To revise an owned file, call \`read_page_file\`, then \`edit_page_file\` with the returned exact revision plus exact old/new text.
+1. **Choose component boundaries autonomously**: Before writing, decide which meaningful components the page needs across regions, interactions, data displays, and local controls. Keep that plan internal; do not declare a rigid section manifest and do not reduce the page to a stack of generic Sections.
+2. **Build incrementally**: Use \`create_page_file\` for both files under \`${componentRoot}/**\` and the final \`${targetPath}\`. Prefer completing reusable page-local components before assembling the route, but adapt the order when implementation feedback requires it. Each component must default export its React component. Import page-local components through stable \`@/\` module paths. Create each path once. To revise an owned file, call \`read_page_file\`, then \`edit_page_file\` with the returned exact revision plus exact old/new text.
 3. **User images**: Use listed https URLs as remote \`src\`; each URL at most once.${
     userImageCount > 0
       ? ` ${userImageCount} user URL(s) — assign all before \`generate_image\` for extras.`
       : " Use \`generate_image\` only when you need visuals without user URLs."
   }
-4. **Assemble, verify, finish**: After every declared component is complete, create the final \`${targetPath}\` as a thin assembly of the graph's root components. Every declared component must be imported and rendered by its declared \`usedBy\` parent. Declare stable image paths such as \`/images/home-hero.png\` in component source, then call \`generate_image\`; the runtime writes the asset at that path. Call \`verify_page_files\` after the final page write, repair diagnostics, then call \`page_implementation_complete\`. Formatting is automatic.
+4. **Assemble, verify, finish**: Keep the final \`${targetPath}\` as a thin assembly of the page-local components you chose. Declare stable image paths such as \`/images/home-hero.png\` in component source, then call \`generate_image\`; the runtime writes the asset at that path. Call \`verify_page_files\` after the final page write, repair diagnostics, then call \`page_implementation_complete\`. Formatting is automatic.
 
-Maintain one visual and narrative composition across component boundaries: carry the design system, content hierarchy, state ownership, pacing, and transitions through the graph. Do not repeat a successful create command or recreate a path to revise it.
+Maintain one visual and narrative composition across component boundaries: carry the design system, content hierarchy, state ownership, pacing, and transitions through the page. Do not repeat a successful create command or recreate a path to revise it.
 
 Do not write another route or any component outside \`${componentRoot}/**\`.`;
 }
