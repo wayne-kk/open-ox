@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { restoreProjectFiles, uploadGeneratedFiles, listProjectFiles, restoreSingleProjectFileFromStorage, copyTemplateFileIntoProjectIfPresent } from "@/lib/storage";
+import { restoreProjectFiles, uploadGeneratedFiles, uploadFullProject, listProjectFiles, restoreSingleProjectFileFromStorage, copyTemplateFileIntoProjectIfPresent } from "@/lib/storage";
 import fs from "fs/promises";
 import path from "path";
 import { getSiteRoot } from "@/lib/projectManager";
 import { getSessionUser } from "@/lib/auth/session";
 import { requireOwnedProject } from "@/lib/auth/projectAccess";
+import { syncLocalProjectFingerprint } from "@/lib/previewFingerprintDb";
+import { captureProjectVersion } from "@/lib/projectVersions";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -123,6 +125,17 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     try {
         await fs.mkdir(path.dirname(filePath), { recursive: true });
         await fs.writeFile(filePath, body.content, "utf8");
+        try {
+            await syncLocalProjectFingerprint(access.db, id);
+            await uploadFullProject(id);
+            await captureProjectVersion(id, {
+                sourceKind: "manual",
+                summary: `编辑 ${normalizedPath}`,
+                verificationStatus: "unknown",
+            });
+        } catch (versionError) {
+            console.error("[PATCH /api/projects/:id/files] version capture failed", versionError);
+        }
         return NextResponse.json({ ok: true, path: normalizedPath });
     } catch (error) {
         console.error("[PATCH /api/projects/:id/files]", error);

@@ -40,7 +40,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 }
 
 /** POST /api/projects/[id]/deploy — enqueue deploy. */
-export async function POST(_req: NextRequest, { params }: Params) {
+export async function POST(req: NextRequest, { params }: Params) {
   const session = await getSessionUser();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
@@ -58,9 +58,14 @@ export async function POST(_req: NextRequest, { params }: Params) {
   }
 
   try {
+    const body = (await req.json().catch(() => ({}))) as { versionId?: unknown };
+    const versionId = typeof body.versionId === "string" && body.versionId.trim()
+      ? body.versionId.trim()
+      : null;
     const { deployId, job } = await enqueueProjectDeploy({
       projectId: id,
       userId: session.user.id,
+      versionId,
     });
     // Keep the worker alive after the response — bare fire-and-forget dies in serverless
     // and leaves last_status stuck on "queued" (endless spinner in Studio).
@@ -79,6 +84,12 @@ export async function POST(_req: NextRequest, { params }: Params) {
       return NextResponse.json(
         { error: "Connect Vercel in Settings → Integrations first", code: "VERCEL_NOT_CONNECTED" },
         { status: 400 }
+      );
+    }
+    if (msg === "PROJECT_VERSION_NOT_FOUND") {
+      return NextResponse.json(
+        { error: "选择的项目版本不存在", code: "PROJECT_VERSION_NOT_FOUND" },
+        { status: 404 }
       );
     }
     return NextResponse.json({ error: msg, code: "DEPLOY_ENQUEUE_FAILED" }, { status: 500 });

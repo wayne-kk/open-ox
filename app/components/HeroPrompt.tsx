@@ -10,7 +10,6 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { captureAppReturnTo } from "@/lib/navigation/appBack";
 import { resolveFolderIdFromSearchParam } from "@/lib/projectFolders";
 import { cn } from "@/lib/utils";
-import { useTranslations } from "next-intl";
 import {
   getProjectCreationMaintenanceStatus,
   PROJECT_CREATION_MAINTENANCE_PATH,
@@ -59,16 +58,10 @@ function composeUserPrompt(snapshot: PendingBuildPayload): string | null {
   return text;
 }
 
-export type HeroPromptProps = {
-  /** Logged-in Workspace empty: show welcome Credits soft promise under chips. */
-  showCreditsPromise?: boolean;
-};
-
-export function HeroPrompt({ showCreditsPromise = false }: HeroPromptProps) {
+export function HeroPrompt() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const folderId = resolveFolderIdFromSearchParam(searchParams.get("folder"));
-  const tOnboarding = useTranslations("onboarding");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -347,11 +340,6 @@ export function HeroPrompt({ showCreditsPromise = false }: HeroPromptProps) {
         </div>
       </div>
 
-      {showCreditsPromise ? (
-        <p className="mt-3.5 max-w-xl px-0.5 text-[11px] leading-relaxed text-muted-foreground/85">
-          {tOnboarding("creditsSoftPromise")}
-        </p>
-      ) : null}
     </form>
   );
 }

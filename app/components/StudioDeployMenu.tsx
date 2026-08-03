@@ -16,8 +16,17 @@ import {
   type CapabilityDecision,
 } from "@/lib/studio/capabilities";
 import { ProjectBrandingControl } from "@/app/components/ProjectBrandingControl";
+import { PROJECT_SOURCE_CHANGED_EVENT } from "@/lib/projectVersionEvents";
 
 type DeployStatus = "queued" | "building" | "uploading" | "ready" | "error";
+type DeploymentFreshness = "never_deployed" | "up_to_date" | "updates_available" | "unknown";
+type ProjectVersion = {
+  id: string;
+  versionNumber: number;
+  summary: string | null;
+  createdAt: string;
+  verificationStatus: "passed" | "failed" | "unknown";
+};
 
 type DeployState = {
   configured: boolean;
@@ -26,6 +35,14 @@ type DeployState = {
   productionUrl: string | null;
   lastError: string | null;
   deployId: string | null;
+  deployedVersionId: string | null;
+  pendingVersionId: string | null;
+  currentVersion: ProjectVersion | null;
+  deployedVersion: ProjectVersion | null;
+  versions: ProjectVersion[];
+  freshness: DeploymentFreshness;
+  workingCopyHasChanges: boolean;
+  versionCapturePending: boolean;
 };
 
 const IN_PROGRESS: DeployStatus[] = ["queued", "building", "uploading"];
@@ -77,6 +94,14 @@ async function fetchDeployStatus(projectId: string): Promise<Omit<DeployState, "
     lastError?: string | null;
     deployId?: string | null;
     error?: string;
+    deployedVersionId?: string | null;
+    pendingVersionId?: string | null;
+    currentVersion?: ProjectVersion | null;
+    deployedVersion?: ProjectVersion | null;
+    versions?: ProjectVersion[];
+    freshness?: DeploymentFreshness;
+    workingCopyHasChanges?: boolean;
+    versionCapturePending?: boolean;
   };
   if (!res.ok) {
     return {
@@ -85,6 +110,14 @@ async function fetchDeployStatus(projectId: string): Promise<Omit<DeployState, "
       productionUrl: null,
       lastError: body.error ?? `状态请求失败（${res.status}）`,
       deployId: null,
+      deployedVersionId: null,
+      pendingVersionId: null,
+      currentVersion: null,
+      deployedVersion: null,
+      versions: [],
+      freshness: "unknown",
+      workingCopyHasChanges: false,
+      versionCapturePending: false,
     };
   }
   return {
@@ -93,6 +126,14 @@ async function fetchDeployStatus(projectId: string): Promise<Omit<DeployState, "
     productionUrl: body.productionUrl ?? null,
     lastError: body.lastError ?? null,
     deployId: body.deployId ?? null,
+    deployedVersionId: body.deployedVersionId ?? null,
+    pendingVersionId: body.pendingVersionId ?? null,
+    currentVersion: body.currentVersion ?? null,
+    deployedVersion: body.deployedVersion ?? null,
+    versions: body.versions ?? [],
+    freshness: body.freshness ?? "unknown",
+    workingCopyHasChanges: body.workingCopyHasChanges === true,
+    versionCapturePending: body.versionCapturePending === true,
   };
 }
 
@@ -110,6 +151,7 @@ export function StudioDeployMenu({
   const gateBlocked = !gate.allowed;
   const [busy, setBusy] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const autoDeployStarted = useRef(false);
   const prevStatusRef = useRef<DeployStatus | null>(null);
   const statusToastReady = useRef(false);
@@ -120,6 +162,14 @@ export function StudioDeployMenu({
     productionUrl: null,
     lastError: null,
     deployId: null,
+    deployedVersionId: null,
+    pendingVersionId: null,
+    currentVersion: null,
+    deployedVersion: null,
+    versions: [],
+    freshness: "unknown",
+    workingCopyHasChanges: false,
+    versionCapturePending: false,
   });
 
   const refresh = useCallback(async () => {
@@ -146,6 +196,13 @@ export function StudioDeployMenu({
     statusToastReady.current = true;
 
     setState(next);
+    setSelectedVersionId((selected) =>
+      !next.workingCopyHasChanges && selected && next.versions.some((version) => version.id === selected)
+        ? selected
+        : next.workingCopyHasChanges
+          ? null
+          : next.currentVersion?.id ?? null
+    );
     setHydrated(true);
     return next;
   }, [projectId]);
@@ -158,6 +215,8 @@ export function StudioDeployMenu({
       const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/deploy`, {
         method: "POST",
         credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ versionId: selectedVersionId }),
       });
       const body = (await res.json().catch(() => ({}))) as {
         error?: string;
@@ -203,7 +262,7 @@ export function StudioDeployMenu({
     } finally {
       setBusy(false);
     }
-  }, [projectId, gate.allowed]);
+  }, [projectId, gate.allowed, selectedVersionId]);
 
   // Prefetch status so the menu is ready; also drives post-OAuth auto-deploy.
   useEffect(() => {
@@ -214,6 +273,16 @@ export function StudioDeployMenu({
     if (!open) return;
     void refresh();
   }, [open, refresh]);
+
+  useEffect(() => {
+    const onSourceChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ projectId?: string }>).detail;
+      if (detail?.projectId !== projectId) return;
+      void refresh();
+    };
+    window.addEventListener(PROJECT_SOURCE_CHANGED_EVENT, onSourceChanged);
+    return () => window.removeEventListener(PROJECT_SOURCE_CHANGED_EVENT, onSourceChanged);
+  }, [projectId, refresh]);
 
   // Poll while in progress even if the menu is closed.
   useEffect(() => {
@@ -271,6 +340,8 @@ export function StudioDeployMenu({
 
   const inProgress = state.status != null && IN_PROGRESS.includes(state.status);
   const ready = state.status === "ready" && Boolean(state.productionUrl);
+  const hasUpdates = state.freshness === "updates_available";
+  const selectedVersion = state.versions.find((version) => version.id === selectedVersionId) ?? null;
   const gateTitle = gateBlocked
     ? studioCapabilityReasonLabel(gate.reason)
     : undefined;
@@ -290,11 +361,13 @@ export function StudioDeployMenu({
           title={gateTitle}
           className={cn(
             "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 font-mono text-[10px] transition-colors disabled:cursor-not-allowed disabled:opacity-40",
-            ready
-              ? "border-emerald-400/35 bg-emerald-500/12 text-emerald-200 hover:bg-emerald-500/18"
-              : inProgress
-                ? "border-amber-400/30 bg-amber-500/10 text-amber-100 hover:bg-amber-500/16"
-                : "border-border bg-muted/40 text-muted-foreground hover:border-border hover:bg-muted hover:text-foreground"
+            inProgress
+              ? "border-amber-400/30 bg-amber-500/10 text-amber-100 hover:bg-amber-500/16"
+              : hasUpdates
+                ? "border-amber-400/35 bg-amber-500/12 text-amber-100 hover:bg-amber-500/18"
+                : ready
+                  ? "border-emerald-400/35 bg-emerald-500/12 text-emerald-200 hover:bg-emerald-500/18"
+                  : "border-border bg-muted/40 text-muted-foreground hover:border-border hover:bg-muted hover:text-foreground"
           )}
         >
           {inProgress ? (
@@ -303,6 +376,11 @@ export function StudioDeployMenu({
             <Rocket className="h-3 w-3" />
           )}
           Deploy
+          {hasUpdates && !inProgress ? (
+            <span className="rounded-sm bg-amber-300/15 px-1 py-0.5 text-[8px] text-amber-100">
+              有更新
+            </span>
+          ) : null}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -340,6 +418,14 @@ export function StudioDeployMenu({
           </div>
         ) : (
           <div className="space-y-2.5">
+            {hasUpdates && !inProgress ? (
+              <div className="rounded-md border border-amber-400/20 bg-amber-500/8 px-2.5 py-2">
+                <p className="text-[11px] font-medium text-amber-100">有更新待发布</p>
+                <p className="mt-0.5 text-[10px] text-amber-100/65">
+                  当前 v{state.currentVersion?.versionNumber ?? "-"}，线上 v{state.deployedVersion?.versionNumber ?? "旧版本"}
+                </p>
+              </div>
+            ) : null}
             <div className="flex items-center justify-between gap-2 text-[11px]">
               <span className="text-muted-foreground">状态</span>
               <span className="inline-flex items-center gap-1.5 text-foreground">
@@ -347,6 +433,42 @@ export function StudioDeployMenu({
                 {statusLabel(state.status)}
               </span>
             </div>
+
+            {state.versions.length > 0 ? (
+              <label className="block space-y-1 text-[10px] text-muted-foreground">
+                <span>发布版本</span>
+                <select
+                  value={selectedVersionId ?? ""}
+                  disabled={busy || inProgress}
+                  onChange={(event) => setSelectedVersionId(event.target.value)}
+                  className="h-8 w-full rounded-md border border-border bg-background px-2 text-[11px] text-foreground outline-none focus:border-primary/50"
+                >
+                  {state.workingCopyHasChanges ? (
+                    <option value="">当前修改 · 发布时保存为新版本</option>
+                  ) : null}
+                  {state.versions.map((version) => (
+                    <option
+                      key={version.id}
+                      value={version.id}
+                    >
+                      v{version.versionNumber} · {version.summary || "项目版本"}
+                      {version.id === state.deployedVersionId ? " · 已上线" : ""}
+                      {version.verificationStatus === "failed" ? " · 构建失败" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {selectedVersion && selectedVersion.id !== state.currentVersion?.id ? (
+              <p className="text-[10px] leading-relaxed text-muted-foreground/70">
+                将发布历史版本 v{selectedVersion.versionNumber}，不会覆盖当前项目。
+              </p>
+            ) : null}
+            {selectedVersion?.verificationStatus === "failed" ? (
+              <p className="text-[10px] leading-relaxed text-red-300/85">
+                该版本上次构建失败，发布可能失败。
+              </p>
+            ) : null}
 
             {inProgress ? (
               <p className="text-[10px] leading-relaxed text-muted-foreground/70">
@@ -387,8 +509,12 @@ export function StudioDeployMenu({
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   部署中…
                 </>
+              ) : selectedVersion && selectedVersion.id !== state.currentVersion?.id ? (
+                `发布 v${selectedVersion.versionNumber}`
+              ) : hasUpdates ? (
+                "发布更新"
               ) : ready ? (
-                "重新 Deploy"
+                "重新发布"
               ) : (
                 "Deploy 到 Vercel"
               )}

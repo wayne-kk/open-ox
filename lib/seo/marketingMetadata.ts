@@ -42,8 +42,10 @@ export async function buildMarketingMetadata({
   const alternateLocale = locale === "zh-CN" ? "en_US" : "zh_CN";
 
   return {
+    applicationName: "Open-OX",
     title,
     description,
+    category: "technology",
     robots,
     alternates: {
       canonical,

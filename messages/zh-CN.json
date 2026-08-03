@@ -41,6 +41,16 @@
     "step3Body": "在 Studio 里对话修改、预览与 Design Mode 精修，持续迭代直到可交付。",
     "pipelineToggle": "查看工程流水线",
     "pipelineHint": "8 个核心节点 — 每步有明确输入输出，构建失败可自动修复。",
+    "pipelineSteps": {
+      "analyze": "解析需求 · 输出聚焦的站点蓝图",
+      "infer": "推理视觉方向 · 明确设计意图",
+      "plan": "细化蓝图 · 规划每个页面",
+      "design": "色彩 · 字体 · 动效 · 设计 Token",
+      "pages": "并行构建各页面及其组件",
+      "chrome": "完善全局导航与页脚",
+      "build": "构建 · 类型检查 · 验证",
+      "repair": "自动修复 · 最多 5 轮"
+    },
     "communityTitle": "发现社区作品",
     "communitySubtitle": "看看别人用 Open-OX 做出了什么。",
     "communityEmpty": "还没有发布的社区作品",
@@ -122,8 +132,8 @@
   },
   "seo": {
     "home": {
-      "title": "Open-OX — AI 网站构建引擎",
-      "description": "用自然语言描述想法，几分钟内得到可运行的 Next.js 站点。从生成到 Studio 迭代与上线。"
+      "title": "Open-OX — 轻量、快速的 AI 网站构建器",
+      "description": "输入一个想法，几分钟内生成界面精美的网站。Open-OX 让建站、修改和迭代更简单快捷，支持导出完整源码，并可部署到你自己的账户，交付与控制权始终属于你。"
     },
     "pricing": {
       "title": "定价 · Open-OX",
@@ -272,7 +282,6 @@
     "compare": "产品对比"
   },
   "onboarding": {
-    "creditsSoftPromise": "新账号赠送 12 积分：约可完整生成 1 次，并再改几轮（以实际消耗为准）。",
     "stepGenerate": "生成可预览站点",
     "stepDesign": "用 Design Mode 改一处",
     "dismiss": "不再显示",

@@ -16,6 +16,7 @@ import { designModeBridgeScriptPath } from "@/lib/studio/designMode/injectBridge
 import { buildModifyDraftFromVisualEdits } from "@/lib/studio/designMode/buildModifyDraftFromVisualEdits";
 import { propertyToUtility, upsertTailwindUtility } from "@/lib/studio/designMode/directPatch/sourceMutator";
 import { formatSelectionModifyContext } from "@/lib/studio/designMode/selectionModifyContext";
+import { notifyProjectSourceChanged } from "@/lib/projectVersionEvents";
 
 /** A-class failures: Direct cannot safely mutate - hand off to Modify draft. */
 const MODIFY_HANDOFF_CODES = new Set([
@@ -507,6 +508,7 @@ export function useDesignMode({
       postToFrame({ action: "COMMIT_PREVIEW" });
       setApplyHint("Saved to source - preview refreshing.");
       trackEvent("design_mode_direct_patch", { editCount: newEdits.length });
+      notifyProjectSourceChanged(projectId);
       onDirectPatchSuccess?.();
       onPreviewRefresh?.(body.data?.previewUrl ?? null);
     } catch (err) {

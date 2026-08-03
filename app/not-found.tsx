@@ -1,4 +1,10 @@
 import Link from "next/link";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Page Not Found · Open-OX",
+  robots: { index: false },
+};
 
 /** Fallback when a request is outside the `[locale]` tree. */
 export default function RootNotFound() {

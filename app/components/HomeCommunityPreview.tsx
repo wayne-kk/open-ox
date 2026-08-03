@@ -160,7 +160,7 @@ export function HomeCommunityPreview() {
                   alt=""
                   width={640}
                   height={400}
-                  className="ox-card-cover ox-card-cover-zoom absolute inset-0 h-full w-full object-cover object-center"
+                  className="ox-card-cover ox-project-cover-image ox-card-cover-zoom absolute inset-0 h-full w-full object-cover object-top"
                   loading="lazy"
                   decoding="async"
                 />

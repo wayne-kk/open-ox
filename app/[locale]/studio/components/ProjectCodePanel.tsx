@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { notifyProjectSourceChanged } from "@/lib/projectVersionEvents";
 import { inferMonacoLanguage } from "../lib/inferMonacoLanguage";
 import { configureMonacoTsDefaults } from "../lib/monacoTsDefaults";
 import {
@@ -167,6 +168,7 @@ async function patchFileContent(projectId: string, path: string, content: string
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+  notifyProjectSourceChanged(projectId);
 }
 
 export function ProjectCodePanel({
@@ -367,6 +369,7 @@ export function ProjectCodePanel({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
       setTabs((prev) => markTabSaved(prev, path, tab.content));
+      notifyProjectSourceChanged(projectId);
     },
     [projectId],
   );

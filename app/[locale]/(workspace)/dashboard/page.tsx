@@ -2115,9 +2115,7 @@ function ProjectsPageContent() {
                 <div className="mx-auto h-40 w-full max-w-4xl animate-pulse rounded-2xl border border-border bg-card" />
               }
             >
-              <HeroPrompt
-                showCreditsPromise={!loading && projects.length === 0 && !hasActiveQuery}
-              />
+              <HeroPrompt />
             </Suspense>
           </section>
         ) : null}

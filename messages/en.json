@@ -41,6 +41,16 @@
     "step3Body": "Chat to modify, preview, and refine with Design Mode until it is ready to deliver.",
     "pipelineToggle": "View engineering pipeline",
     "pipelineHint": "8 core nodes — each with clear inputs and outputs; failed builds can auto-repair.",
+    "pipelineSteps": {
+      "analyze": "Understand the brief · Create a focused site blueprint",
+      "infer": "Infer visual direction · Define the design intent",
+      "plan": "Shape the blueprint · Plan every page",
+      "design": "Colors · Type · Motion · Design tokens",
+      "pages": "Build each page and its components in parallel",
+      "chrome": "Polish global navigation and footer",
+      "build": "Build · Type-check · Verify",
+      "repair": "Auto-repair · Up to 5 rounds"
+    },
     "communityTitle": "Discover community work",
     "communitySubtitle": "See what others are shipping with Open-OX.",
     "communityEmpty": "No community projects published yet",
@@ -122,8 +132,8 @@
   },
   "seo": {
     "home": {
-      "title": "Open-OX — AI website builder",
-      "description": "Describe your idea in natural language and get a runnable Next.js site in minutes. Generate, iterate in Studio, and ship."
+      "title": "Open-OX — Fast, Lightweight AI Website Builder",
+      "description": "Turn an idea into a polished website in minutes. Open-OX makes building fast and simple, with beautiful UI, easy edits, source export, and deployment to your own account."
     },
     "pricing": {
       "title": "Pricing · Open-OX",
@@ -272,7 +282,6 @@
     "compare": "Comparisons"
   },
   "onboarding": {
-    "creditsSoftPromise": "New accounts get 12 welcome credits once — roughly enough for one full generate and a few edits (actual usage may vary).",
     "stepGenerate": "Generate a previewable site",
     "stepDesign": "Edit once in Design Mode",
     "dismiss": "Don't show again",

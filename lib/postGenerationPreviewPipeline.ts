@@ -9,6 +9,28 @@ import { syncLocalProjectFingerprint } from "@/lib/previewFingerprintDb";
 import { shouldPublishStaticSitePreview } from "@/lib/previewMode";
 import { uploadFullProject } from "@/lib/storage";
 import { syncStaticSitePreview } from "@/lib/staticSitePreview";
+import {
+  captureProjectVersion,
+  markProjectVersionCapturePending,
+  type ProjectVersionSourceKind,
+} from "@/lib/projectVersions";
+
+async function captureVersionBestEffort(
+  projectId: string,
+  sourceKind: ProjectVersionSourceKind,
+  summary: string,
+  verificationStatus: "passed" | "failed" | "unknown" = "passed"
+): Promise<void> {
+  try {
+    await captureProjectVersion(projectId, {
+      sourceKind,
+      summary,
+      verificationStatus,
+    });
+  } catch (error) {
+    console.error(`[projectVersions] capture failed projectId=${projectId}:`, error);
+  }
+}
 
 async function assertHomePageNotPreparingStub(projectId: string): Promise<void> {
   const pagePath = path.join(getSiteRoot(projectId), "app", "page.tsx");
@@ -66,6 +88,7 @@ export function schedulePostGenerationPreviewPipeline(
 ): void {
   void (async () => {
     try {
+      await markProjectVersionCapturePending(projectId);
       await assertHomePageNotPreparingStub(projectId);
       // Publish static preview from local disk first (coalesces with Studio Rebuild),
       // then upload the full source snapshot for cross-device restore.
@@ -78,6 +101,7 @@ export function schedulePostGenerationPreviewPipeline(
           uploadErr
         );
       }
+      await captureVersionBestEffort(projectId, "generate", "初始生成");
       scheduleCaptureProjectCover(projectId);
     } catch (err) {
       console.error(`[preview pipeline] post-generation failed ${projectId}:`, err);
@@ -92,13 +116,29 @@ export function schedulePostModifyPreviewPipeline(
   options: { buildPassed: boolean }
 ): void {
   if (!options.buildPassed) {
-    void uploadFullProject(projectId).catch((err) => {
-      console.error(`[preview pipeline] modify upload failed ${projectId}:`, err);
-    });
+    void (async () => {
+      try {
+        await markProjectVersionCapturePending(projectId);
+        await uploadFullProject(projectId);
+        await captureVersionBestEffort(projectId, "modify", "项目修改", "failed");
+      } catch (err) {
+        console.error(`[preview pipeline] modify upload failed ${projectId}:`, err);
+      }
+    })();
     return;
   }
-
-  schedulePostGenerationPreviewPipeline(db, projectId);
+  void (async () => {
+    try {
+      await markProjectVersionCapturePending(projectId);
+      await assertHomePageNotPreparingStub(projectId);
+      await awaitPostModifyStaticPreviewSync(db, projectId);
+      await uploadFullProject(projectId);
+      await captureVersionBestEffort(projectId, "modify", "项目修改");
+      scheduleCaptureProjectCover(projectId);
+    } catch (err) {
+      console.error(`[preview pipeline] post-modify failed ${projectId}:`, err);
+    }
+  })();
 }
 
 /**
@@ -110,14 +150,23 @@ export async function runPostModifyPreviewPipelineBeforeCapture(
   options: { buildPassed: boolean }
 ): Promise<void> {
   if (!options.buildPassed) {
-    void uploadFullProject(projectId).catch((err) => {
-      console.error(`[preview pipeline] modify upload failed ${projectId}:`, err);
-    });
+    void (async () => {
+      try {
+        await markProjectVersionCapturePending(projectId);
+        await uploadFullProject(projectId);
+        await captureVersionBestEffort(projectId, "modify", "项目修改", "failed");
+      } catch (err) {
+        console.error(`[preview pipeline] modify upload failed ${projectId}:`, err);
+      }
+    })();
     return;
   }
+  await markProjectVersionCapturePending(projectId);
   await awaitPostModifyStaticPreviewSync(db, projectId);
-  void uploadFullProject(projectId).catch((err) => {
-    console.error(`[preview pipeline] modify upload failed ${projectId}:`, err);
-  });
+  void uploadFullProject(projectId)
+    .then(() => captureVersionBestEffort(projectId, "modify", "项目修改"))
+    .catch((err) => {
+      console.error(`[preview pipeline] modify upload failed ${projectId}:`, err);
+    });
   scheduleCaptureProjectCover(projectId);
 }

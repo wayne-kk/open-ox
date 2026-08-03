@@ -87,13 +87,21 @@ export async function syncLocalProjectFingerprint(
     .update({
       files_hash: localFp,
       static_preview_synced_at: null,
+      version_capture_pending: true,
       updated_at: new Date().toISOString(),
     })
     .eq("id", projectId);
 
   if (error) {
-    // Fallback: at least persist fingerprint so restore does not clobber local edits.
-    await saveFingerprint(db, projectId, localFp);
+    // Fallback: retain both canonical fingerprint and the durable version-capture obligation.
+    await db
+      .from("projects")
+      .update({
+        files_hash: localFp,
+        version_capture_pending: true,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", projectId);
   }
 
   return localFp;

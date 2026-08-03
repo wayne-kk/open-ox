@@ -90,7 +90,7 @@ function CommunityCard({
             <img
               src={projectCoverDisplayUrl(project.id, project.coverImageUpdatedAt)}
               alt=""
-              className="ox-card-cover ox-card-cover-zoom absolute inset-0 z-0 h-full w-full object-cover object-center"
+              className="ox-card-cover ox-project-cover-image ox-card-cover-zoom absolute inset-0 z-0 h-full w-full object-cover object-top"
               loading="lazy"
               decoding="async"
             />

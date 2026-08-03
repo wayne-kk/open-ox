@@ -7,19 +7,23 @@ import { AgentFlowDemo } from "@/app/components/AgentFlowDemo";
 import { cn } from "@/lib/utils";
 
 const AGENT_STEPS = [
-  { id: "analyze", label: "analyze_project_requirement", detail: "解析需求 · 输出最小蓝图（brief/site）", color: "text-foreground" },
-  { id: "infer", label: "infer_design_intent", detail: "独立推理 · 视觉风格意图", color: "text-muted-foreground" },
-  { id: "plan", label: "plan_project", detail: "蓝图细化 · 页面级纲要（无固定 section 清单）", color: "text-foreground" },
-  { id: "design", label: "generate_design_system", detail: "色彩 · 字体 · 动效 · Token", color: "text-foreground" },
-  { id: "pages", label: "page_implement_agent ×N", detail: "每路由工具循环实现页面与组件（无全局 Nav）", color: "text-foreground" },
-  { id: "chrome", label: "chrome_optimize_agent", detail: "页面完成后一次生成全局 Nav/Footer", color: "text-muted-foreground" },
-  { id: "build", label: "run_build", detail: "构建 · 类型检查 · 验证", color: "text-brand-signal" },
-  { id: "repair", label: "repair_build", detail: "自动修复 · 最多 5 轮", color: "text-amber-400/90" },
-];
+  { id: "analyze", label: "analyze_project_requirement", color: "text-foreground" },
+  { id: "infer", label: "infer_design_intent", color: "text-muted-foreground" },
+  { id: "plan", label: "plan_project", color: "text-foreground" },
+  { id: "design", label: "generate_design_system", color: "text-foreground" },
+  { id: "pages", label: "page_implement_agent ×N", color: "text-foreground" },
+  { id: "chrome", label: "chrome_optimize_agent", color: "text-muted-foreground" },
+  { id: "build", label: "run_build", color: "text-brand-signal" },
+  { id: "repair", label: "repair_build", color: "text-amber-400/90" },
+] as const;
 
 export function PipelineDisclosure() {
   const [open, setOpen] = useState(false);
   const t = useTranslations("landing");
+  const localizedSteps = AGENT_STEPS.map((step) => ({
+    ...step,
+    detail: t(`pipelineSteps.${step.id}`),
+  }));
 
   return (
     <div className="mt-8 pt-6">
@@ -35,7 +39,7 @@ export function PipelineDisclosure() {
       {open ? (
         <div className="mt-10 animate-fade-up">
           <p className="mb-6 text-center text-sm text-muted-foreground">{t("pipelineHint")}</p>
-          <AgentFlowDemo steps={AGENT_STEPS} />
+          <AgentFlowDemo steps={localizedSteps} />
         </div>
       ) : null}
     </div>

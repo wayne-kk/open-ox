@@ -42,8 +42,7 @@ const GLOBAL_ERROR_FILE_BODY = [
  * Overwrites the site’s `app/global-error.tsx` with the repo template (or minimal inline).
  * AI-generated or missing global error pages often break \`output: "export"\` prerendering.
  */
-export async function ensureGlobalErrorFromTemplateForProject(projectId: string): Promise<void> {
-  const projectDir = getSiteRoot(projectId);
+export async function ensureGlobalErrorFromTemplateInDir(projectDir: string): Promise<void> {
   const src = path.join(SITES_TEMPLATE_DIR, GLOBAL_ERROR_REL);
   const dest = path.join(projectDir, GLOBAL_ERROR_REL);
   await fs.mkdir(path.dirname(dest), { recursive: true });
@@ -52,6 +51,10 @@ export async function ensureGlobalErrorFromTemplateForProject(projectId: string)
   } catch {
     await fs.writeFile(dest, GLOBAL_ERROR_FILE_BODY, "utf-8");
   }
+}
+
+export async function ensureGlobalErrorFromTemplateForProject(projectId: string): Promise<void> {
+  return ensureGlobalErrorFromTemplateInDir(getSiteRoot(projectId));
 }
 
 /** Base config files the generator expects; if missing, copy from `sites/template` (same as E2B upload). */
@@ -164,17 +167,9 @@ export async function collectFiles(dir: string, base: string): Promise<string[]>
   return files;
 }
 
-export async function computeProjectFingerprint(projectId: string): Promise<string> {
+export async function computeProjectDirFingerprint(projectDir: string): Promise<string> {
   const { createHash } = await import("crypto");
-  const projectDir = getSiteRoot(projectId);
-  const files = (await collectFiles(projectDir, projectDir)).filter(
-    (rel) =>
-      rel !== "out" &&
-      !rel.startsWith("out/") &&
-      // Build stamp is metadata for preview reuse — must not change the fingerprint it records.
-      rel !== ".open-ox/static-preview-build-stamp.json"
-  );
-  files.sort();
+  const files = await collectProjectSourceFiles(projectDir);
   const hash = createHash("sha256");
   for (const relPath of files) {
     const fullPath = path.join(projectDir, relPath);
@@ -183,6 +178,24 @@ export async function computeProjectFingerprint(projectId: string): Promise<stri
     hash.update(`${relPath}:${fileHash}\n`);
   }
   return hash.digest("hex").slice(0, 16);
+}
+
+/** Canonical file set shared by source fingerprints and immutable version archives. */
+export async function collectProjectSourceFiles(projectDir: string): Promise<string[]> {
+  const files = (await collectFiles(projectDir, projectDir)).filter(
+    (rel) =>
+      rel !== "out" &&
+      !rel.startsWith("out/") &&
+      // Build stamp is metadata for preview reuse — must not change the fingerprint it records.
+      rel !== ".open-ox/static-preview-build-stamp.json" &&
+      rel !== ".open-ox/vercel-deploy-build-stamp.json"
+  );
+  files.sort();
+  return files;
+}
+
+export async function computeProjectFingerprint(projectId: string): Promise<string> {
+  return computeProjectDirFingerprint(getSiteRoot(projectId));
 }
 
 export async function writePreviewFallbackFilesIfMissing(projectDir: string): Promise<void> {
