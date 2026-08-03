@@ -13,6 +13,7 @@ import {
   buildScopedTypecheckStepTrace,
   checkGeneratedTypeScriptFiles,
   formatScopedTypecheckDetail,
+  formatScopedTypecheckRepairDetail,
   tryTypeScriptCodeFixUntilResolved,
 } from "./shared/tsxDiagnostics";
 import {
@@ -1620,32 +1621,24 @@ async function runGenerateProjectInner(
           logger.logStep(
             tscStepName,
             "ok",
-            formatScopedTypecheckDetail(
-              scopedAfter,
-              repairResult.success
-                ? `Repair: patched file(s) — ${repairResult.touchedFiles.join(", ") || "(language-service fixes only)"}`
-                : undefined
-            ),
+            formatScopedTypecheckRepairDetail(scoped, scopedAfter, repairResult),
             undefined,
             buildScopedTypecheckStepTrace(scopedAfter, {
               repairTouched: repairResult.touchedFiles,
               repairSuccess: true,
+              initialCheck: scoped,
             })
           );
         } else {
           logger.logStep(
             tscStepName,
             "error",
-            formatScopedTypecheckDetail(
-              scopedAfter,
-              repairResult.success
-                ? `Partial repair (${repairResult.touchedFiles.join(", ") || "no paths"}); diagnostics remain.`
-                : "Repair: step_repair_build did not apply edits; see trace / `.open-ox/logs/.../typecheck_generated/`."
-            ),
+            formatScopedTypecheckRepairDetail(scoped, scopedAfter, repairResult),
             undefined,
             buildScopedTypecheckStepTrace(scopedAfter, {
               repairSuccess: false,
               repairTouched: repairResult.touchedFiles,
+              initialCheck: scoped,
             })
           );
         }
@@ -1656,6 +1649,20 @@ async function runGenerateProjectInner(
           errorCount: scopedAfter.errorCount,
           errors: scopedAfter.tscStyleLog.slice(0, 4000),
           issues: scopedAfter.issues,
+          initialCheck: {
+            fileCount: scoped.fileCount,
+            errorCount: scoped.errorCount,
+            warningCount: scoped.warningCount,
+            errors: scoped.tscStyleLog.slice(0, 4000),
+            issues: scoped.issues,
+          },
+          verificationAfterRepair: {
+            fileCount: scopedAfter.fileCount,
+            errorCount: scopedAfter.errorCount,
+            warningCount: scopedAfter.warningCount,
+            errors: scopedAfter.tscStyleLog.slice(0, 4000),
+            issues: scopedAfter.issues,
+          },
           repairResult: {
             success: repairResult.success,
             touchedFiles: repairResult.touchedFiles,

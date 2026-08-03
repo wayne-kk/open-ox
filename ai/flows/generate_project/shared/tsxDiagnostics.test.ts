@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatScopedTypecheckRepairDetail,
   formatTsxIssuesAsTscStyleLog,
   isGeneratedTypeScriptPath,
+  type CheckGeneratedTypeScriptResult,
   type TsxIssue,
 } from "./tsxDiagnostics";
 
@@ -23,6 +25,48 @@ describe("isGeneratedTypeScriptPath", () => {
     expect(isGeneratedTypeScriptPath("data.json")).toBe(false);
     expect(isGeneratedTypeScriptPath("logo.png")).toBe(false);
     expect(isGeneratedTypeScriptPath("no-extension")).toBe(false);
+  });
+});
+
+describe("formatScopedTypecheckRepairDetail", () => {
+  it("shows initial diagnostics before the repaired verification result", () => {
+    const initialIssue: TsxIssue = {
+      file: "app/page.tsx",
+      line: 2,
+      column: 10,
+      code: 2614,
+      category: "error",
+      message: "Module has no exported member",
+    };
+    const initial: CheckGeneratedTypeScriptResult = {
+      passed: false,
+      fileCount: 4,
+      checkedFiles: ["app/page.tsx"],
+      issues: [initialIssue],
+      errorCount: 1,
+      warningCount: 0,
+      tscStyleLog: formatTsxIssuesAsTscStyleLog([initialIssue]),
+    };
+    const after: CheckGeneratedTypeScriptResult = {
+      passed: true,
+      fileCount: 4,
+      checkedFiles: ["app/page.tsx"],
+      issues: [],
+      errorCount: 0,
+      warningCount: 0,
+      tscStyleLog: "",
+    };
+
+    const detail = formatScopedTypecheckRepairDetail(initial, after, {
+      success: true,
+      touchedFiles: ["app/page.tsx"],
+    });
+
+    expect(detail).toContain("Initial typecheck: 1 error(s)");
+    expect(detail).toContain("app/page.tsx(2,10): error TS2614");
+    expect(detail).toContain("Repair: patched file(s) — app/page.tsx");
+    expect(detail).toContain("Verification after repair: 4 file(s) checked; 0 error(s)");
+    expect(detail).toContain("Result: passed.");
   });
 });
 

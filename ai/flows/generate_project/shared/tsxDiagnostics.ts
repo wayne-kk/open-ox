@@ -547,13 +547,46 @@ export function formatScopedTypecheckDetail(
   return lines.join("\n");
 }
 
+export function formatScopedTypecheckRepairDetail(
+  initial: CheckGeneratedTypeScriptResult,
+  after: CheckGeneratedTypeScriptResult,
+  repair: { touchedFiles: string[]; success: boolean }
+): string {
+  const lines = [
+    "In-process tsc: `checkTsxFile` per .tsx (TypeScript LanguageService), not a full-project `npx tsc`.",
+    `Initial typecheck: ${initial.errorCount} error(s), ${initial.warningCount} warning(s) in ${initial.fileCount} generated file(s).`,
+  ];
+  if (initial.tscStyleLog.trim()) {
+    lines.push("", "Initial diagnostics:", initial.tscStyleLog);
+  }
+  lines.push(
+    "",
+    repair.success
+      ? `Repair: patched file(s) — ${repair.touchedFiles.join(", ") || "(language-service fixes only)"}`
+      : "Repair: no successful edits were applied.",
+    "",
+    `Verification after repair: ${after.fileCount} file(s) checked; ${after.errorCount} error(s), ${after.warningCount} warning(s).`,
+    after.errorCount === 0 && after.warningCount === 0
+      ? "Result: passed."
+      : "Result: diagnostics remain."
+  );
+  if (after.tscStyleLog.trim() && (after.errorCount > 0 || after.warningCount > 0)) {
+    lines.push("", "Remaining diagnostics:", after.tscStyleLog);
+  }
+  return lines.join("\n");
+}
+
 /**
  * `BuildStep.trace` for the topology Detail drawer: **Output** tab shows JSON
  * with `issues` (capped) and full `tscStyleLog` for copy/paste.
  */
 export function buildScopedTypecheckStepTrace(
   scoped: CheckGeneratedTypeScriptResult,
-  extra?: { repairTouched?: string[]; repairSuccess?: boolean }
+  extra?: {
+    repairTouched?: string[];
+    repairSuccess?: boolean;
+    initialCheck?: CheckGeneratedTypeScriptResult;
+  }
 ): StepTrace {
   if (scoped.skipped) {
     return { output: { scopedTypecheck: { skipped: scoped.skipped } } };
@@ -580,6 +613,19 @@ export function buildScopedTypecheckStepTrace(
         issuesTotal: issues.length,
         issuesTruncated: issues.length > TYPECHECK_TRACE_MAX_ISSUES,
         tscStyleLog: scoped.tscStyleLog,
+        ...(extra?.initialCheck
+          ? {
+              initialCheck: {
+                fileCount: extra.initialCheck.fileCount,
+                errorCount: extra.initialCheck.errorCount,
+                warningCount: extra.initialCheck.warningCount,
+                issues: extra.initialCheck.issues.slice(0, TYPECHECK_TRACE_MAX_ISSUES),
+                issuesTotal: extra.initialCheck.issues.length,
+                tscStyleLog: extra.initialCheck.tscStyleLog,
+              },
+              verificationAfterRepair: true,
+            }
+          : {}),
         ...fixMeta,
       },
     },
