@@ -887,6 +887,11 @@ const SERIAL_ONLY_TOOLS = new Set<string>([
   "read_chrome_file",
   "replace_chrome_file",
   "verify_chrome_files",
+  "create_page_file",
+  "read_page_file",
+  "edit_page_file",
+  "verify_page_files",
+  "page_implementation_complete",
 ]);
 
 interface ParsedToolCall {

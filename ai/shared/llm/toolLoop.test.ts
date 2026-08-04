@@ -316,6 +316,52 @@ describe("callLLMWithToolsFromMessages", () => {
     expect(executionOrder).toEqual(["read:start", "read:end", "replace"]);
   });
 
+  it("serializes Page stateful calls even when a provider returns them in one response", async () => {
+    const executionOrder: string[] = [];
+    gateway.chatCompletion
+      .mockResolvedValueOnce({
+        ...response({ finishReason: "tool_calls", content: null }),
+        choices: [{
+          index: 0,
+          finish_reason: "tool_calls",
+          message: {
+            role: "assistant",
+            content: null,
+            tool_calls: [
+              { id: "read", function: { name: "read_page_file", arguments: "{}" } },
+              { id: "edit", function: { name: "edit_page_file", arguments: "{}" } },
+            ],
+          },
+        }],
+      })
+      .mockResolvedValueOnce(response({ finishReason: "stop", content: "done" }));
+
+    await callLLMWithToolsFromMessages({
+      messages: initialMessages(),
+      tools: [
+        { ...probeTool(), function: { ...probeTool().function, name: "read_page_file" } },
+        { ...probeTool(), function: { ...probeTool().function, name: "edit_page_file" } },
+      ],
+      model: "probe-model",
+      maxIterations: 2,
+      completionProfile: "code",
+      executeToolOverrides: {
+        read_page_file: async () => {
+          executionOrder.push("read:start");
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          executionOrder.push("read:end");
+          return "read";
+        },
+        edit_page_file: async () => {
+          executionOrder.push("edit");
+          return "edited";
+        },
+      },
+    });
+
+    expect(executionOrder).toEqual(["read:start", "read:end", "edit"]);
+  });
+
   it("allows a caller to recover an empty assistant stop and require another round", async () => {
     gateway.chatCompletion
       .mockResolvedValueOnce(response({ finishReason: "stop", content: null }))
