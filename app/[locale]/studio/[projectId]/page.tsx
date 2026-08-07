@@ -58,6 +58,7 @@ import {
   studioCapabilityReasonLabel,
   type CapabilityDecision,
 } from "@/lib/studio/capabilities";
+import { notifyRecentProjectsChanged } from "@/lib/recentProjects";
 
 function capabilityTitle(
   decision: CapabilityDecision,
@@ -78,6 +79,24 @@ function StudioInner({ projectId }: { projectId: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const studio = useBuildStudio(projectId);
+
+  // Record "recently opened" once per projectId — not on GET /projects/:id (polled while generating).
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/projects/${projectId}/opened`, { method: "POST" });
+        if (!res.ok || cancelled) return;
+        notifyRecentProjectsChanged();
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
   const {
     loading,
     response,

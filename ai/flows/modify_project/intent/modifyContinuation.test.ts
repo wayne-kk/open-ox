@@ -5,7 +5,6 @@ import {
   detectContinuationReply,
   inferContinuationCategory,
   mergeContinuationInstruction,
-  shouldBlockConversationShortCircuit,
 } from "./modifyContinuation";
 
 describe("modifyContinuation", () => {
@@ -26,6 +25,8 @@ describe("modifyContinuation", () => {
 
   it("does not treat meta greetings as continuation", () => {
     expect(detectContinuationReply("你好", awaitingHistory)).toBe(false);
+    expect(detectContinuationReply("非常不错 你很棒", awaitingHistory)).toBe(false);
+    expect(detectContinuationReply("谢谢你，做得很好", awaitingHistory)).toBe(false);
   });
 
   it("merges continuation into a single instruction block", () => {
@@ -57,25 +58,26 @@ describe("modifyContinuation", () => {
     expect(routed.assistantMessage).toBe("");
   });
 
-  it("blocks conversation short-circuit when modify history exists", () => {
-    expect(shouldBlockConversationShortCircuit("1", awaitingHistory)).toBe(true);
-    expect(shouldBlockConversationShortCircuit("你好", awaitingHistory)).toBe(false);
-  });
-
-  it("re-routes ambiguous short replies away from conversation when history exists", () => {
+  it("preserves explicit casual conversation when modify history exists", () => {
     const routed = applyContinuationRoutingOverrides(
       {
         category: "conversation",
         scope: "narrow",
         preloadPaths: [],
-        assistantMessage: "您好！",
+        assistantMessage: "谢谢你的认可！",
       },
       {
         isContinuation: false,
         recentHistory: awaitingHistory,
-        originalInstruction: "随便看看",
+        originalInstruction: "非常不错 你很棒",
       }
     );
-    expect(routed.category).toBe("code_change");
+
+    expect(routed).toEqual({
+      category: "conversation",
+      scope: "narrow",
+      preloadPaths: [],
+      assistantMessage: "谢谢你的认可！",
+    });
   });
 });

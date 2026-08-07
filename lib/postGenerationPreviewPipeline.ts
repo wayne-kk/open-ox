@@ -3,10 +3,20 @@ import path from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { scheduleCaptureProjectCover } from "@/lib/projectCoverCapture";
-import { getSiteRoot } from "@/lib/projectManager";
+import {
+  getProject,
+  getSiteRoot,
+  hasUsableStaticPreview,
+} from "@/lib/projectManager";
 import { isPreparingSiteHomePageStub } from "@/lib/preparingSiteHomePageStub";
 import { syncLocalProjectFingerprint } from "@/lib/previewFingerprintDb";
 import { shouldPublishStaticSitePreview } from "@/lib/previewMode";
+import {
+  isPreparingStubPreviewSkip,
+  shouldScheduleAutoCoverAfterPipeline,
+  STATIC_PREVIEW_STUB_RETRY_ATTEMPTS,
+  STATIC_PREVIEW_STUB_RETRY_DELAY_MS,
+} from "@/lib/postGenerationPreviewPipelinePolicy";
 import { uploadFullProject } from "@/lib/storage";
 import { syncStaticSitePreview } from "@/lib/staticSitePreview";
 import {
@@ -50,20 +60,35 @@ async function assertHomePageNotPreparingStub(projectId: string): Promise<void> 
   }
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function readStaticPreviewReady(
+  db: SupabaseClient,
+  projectId: string
+): Promise<boolean> {
+  try {
+    const project = await getProject(db, projectId);
+    return project ? hasUsableStaticPreview(project) : false;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Sync fingerprint + static preview (force). Does not upload sources or capture cover.
+ * Retries Preparing-stub soft-skips like Studio auto-preview.
  * Used when a caller must wait for Storage preview before screenshot (e.g. Feishu).
  */
 export async function awaitPostModifyStaticPreviewSync(
   db: SupabaseClient,
   projectId: string
-): Promise<void> {
+): Promise<{ staticPreviewReady: boolean }> {
   // Do NOT stamp files_hash here — syncStaticSitePreview(force) decides whether
   // local fingerprint is safe to trust (never stamps while home is still the
   // Preparing stub). Premature stamp was racing first auto-preview and blocking restore.
-  if (shouldPublishStaticSitePreview()) {
-    await syncStaticSitePreview(db, projectId, { force: true });
-  } else {
+  if (!shouldPublishStaticSitePreview()) {
     try {
       await syncLocalProjectFingerprint(db, projectId);
     } catch (fpErr) {
@@ -72,7 +97,53 @@ export async function awaitPostModifyStaticPreviewSync(
         fpErr instanceof Error ? fpErr.message : fpErr
       );
     }
+    return { staticPreviewReady: false };
   }
+
+  for (let attempt = 0; attempt < STATIC_PREVIEW_STUB_RETRY_ATTEMPTS; attempt += 1) {
+    const result = await syncStaticSitePreview(db, projectId, { force: true });
+    if (!isPreparingStubPreviewSkip(result)) {
+      break;
+    }
+    if (attempt < STATIC_PREVIEW_STUB_RETRY_ATTEMPTS - 1) {
+      console.warn(
+        `[preview pipeline] static preview preparing_stub — retry ` +
+          `${attempt + 1}/${STATIC_PREVIEW_STUB_RETRY_ATTEMPTS} projectId=${projectId}`
+      );
+      await sleep(STATIC_PREVIEW_STUB_RETRY_DELAY_MS);
+      continue;
+    }
+    console.warn(
+      `[preview pipeline] static preview still preparing_stub after ` +
+        `${STATIC_PREVIEW_STUB_RETRY_ATTEMPTS} attempts projectId=${projectId}`
+    );
+  }
+
+  const staticPreviewReady = await readStaticPreviewReady(db, projectId);
+  return { staticPreviewReady };
+}
+
+async function maybeScheduleCaptureProjectCover(
+  db: SupabaseClient,
+  projectId: string
+): Promise<void> {
+  const publishesStaticPreview = shouldPublishStaticSitePreview();
+  // Re-check at schedule time: Studio may finish publishing while version upload runs.
+  const staticPreviewReady = publishesStaticPreview
+    ? await readStaticPreviewReady(db, projectId)
+    : false;
+  if (
+    !shouldScheduleAutoCoverAfterPipeline({
+      publishesStaticPreview,
+      staticPreviewReady,
+    })
+  ) {
+    console.warn(
+      `[preview pipeline] skip auto cover — static preview not ready projectId=${projectId}`
+    );
+    return;
+  }
+  scheduleCaptureProjectCover(projectId);
 }
 
 /**
@@ -81,6 +152,7 @@ export async function awaitPostModifyStaticPreviewSync(
  *
  * Uses force + fingerprint sync so a mid-generation preview (stub `app/page.tsx`) cannot
  * coalesce into this publish via `inFlight` and leave Storage on the default page.
+ * Cover runs only after Storage preview is actually marked synced (when publish is on).
  */
 export function schedulePostGenerationPreviewPipeline(
   db: SupabaseClient,
@@ -102,7 +174,7 @@ export function schedulePostGenerationPreviewPipeline(
         );
       }
       await captureVersionBestEffort(projectId, "generate", "初始生成");
-      scheduleCaptureProjectCover(projectId);
+      await maybeScheduleCaptureProjectCover(db, projectId);
     } catch (err) {
       console.error(`[preview pipeline] post-generation failed ${projectId}:`, err);
     }
@@ -134,7 +206,7 @@ export function schedulePostModifyPreviewPipeline(
       await awaitPostModifyStaticPreviewSync(db, projectId);
       await uploadFullProject(projectId);
       await captureVersionBestEffort(projectId, "modify", "项目修改");
-      scheduleCaptureProjectCover(projectId);
+      await maybeScheduleCaptureProjectCover(db, projectId);
     } catch (err) {
       console.error(`[preview pipeline] post-modify failed ${projectId}:`, err);
     }
@@ -168,5 +240,5 @@ export async function runPostModifyPreviewPipelineBeforeCapture(
     .catch((err) => {
       console.error(`[preview pipeline] modify upload failed ${projectId}:`, err);
     });
-  scheduleCaptureProjectCover(projectId);
+  await maybeScheduleCaptureProjectCover(db, projectId);
 }

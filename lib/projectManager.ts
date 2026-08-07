@@ -106,6 +106,8 @@ export interface ProjectMetadata {
   deletedAt?: string | null;
   /** When set, eligible for automatic permanent delete after this time. */
   purgeAfter?: string | null;
+  /** When the owner last opened this project in Studio. */
+  lastOpenedAt?: string | null;
 }
 
 interface ProjectRow {
@@ -144,6 +146,7 @@ interface ProjectRow {
   static_preview_synced_at?: string | null;
   deleted_at?: string | null;
   purge_after?: string | null;
+  last_opened_at?: string | null;
 }
 
 /** Days after trash before auto permanent delete when the confirm checkbox is on. */
@@ -223,6 +226,7 @@ function rowToMetadata(row: ProjectRow): ProjectMetadata {
     staticPreviewSyncedAt: row.static_preview_synced_at ?? null,
     deletedAt: row.deleted_at ?? null,
     purgeAfter: row.purge_after ?? null,
+    lastOpenedAt: row.last_opened_at ?? null,
   };
 }
 
@@ -273,6 +277,7 @@ interface ProjectListRow {
   static_preview_synced_at?: string | null;
   deleted_at?: string | null;
   purge_after?: string | null;
+  last_opened_at?: string | null;
 }
 
 export type ProjectFolderFilter = "all" | "uncategorized" | string;
@@ -305,12 +310,15 @@ export async function listProjectsSummary(
     searchQuery?: string | null;
     /** Owner workspace: only projects linked to this tag id. */
     tagId?: string | null;
+    /** Sort key. `last_opened_at` spans all folders and requires a non-null open time. */
+    orderBy?: "created_at" | "last_opened_at";
   }
 ): Promise<ProjectMetadata[]> {
   const searchQuery =
     typeof options.searchQuery === "string" && options.searchQuery.trim()
       ? options.searchQuery.trim()
       : null;
+  const orderByRecent = options.orderBy === "last_opened_at";
 
   let taggedIds: string[] | null = null;
   if (options.tagId) {
@@ -318,17 +326,27 @@ export async function listProjectsSummary(
     if (taggedIds.length === 0) return [];
   }
 
+  const orderColumn = options.trashedOnly
+    ? "deleted_at"
+    : orderByRecent
+      ? "last_opened_at"
+      : "created_at";
+
   let query = db
     .from("projects")
     .select(
-      "id,name,user_prompt,status,created_at,updated_at,completed_at,error,verification_status,model_id,generation_mode,folder_id,user_id,owner_username,cover_image_status,cover_image_storage_path,cover_image_updated_at,publish_preview,allow_remix,listing,remixed_from_project_id,remixed_from_title,remixed_from_owner_username,static_preview_synced_at,deleted_at,purge_after"
+      "id,name,user_prompt,status,created_at,updated_at,completed_at,error,verification_status,model_id,generation_mode,folder_id,user_id,owner_username,cover_image_status,cover_image_storage_path,cover_image_updated_at,publish_preview,allow_remix,listing,remixed_from_project_id,remixed_from_title,remixed_from_owner_username,static_preview_synced_at,deleted_at,purge_after,last_opened_at"
     )
-    .order(options.trashedOnly ? "deleted_at" : "created_at", { ascending: false });
+    .order(orderColumn, { ascending: false });
 
   if (options.trashedOnly) {
     query = query.not("deleted_at", "is", null);
   } else {
     query = query.is("deleted_at", null);
+  }
+
+  if (orderByRecent) {
+    query = query.not("last_opened_at", "is", null);
   }
 
   if (options.communityListed) {
@@ -341,6 +359,8 @@ export async function listProjectsSummary(
       // Owner Recycle Bin: all folders
     } else if (options.publishedOnly) {
       query = query.eq("publish_preview", true);
+    } else if (orderByRecent) {
+      // Recently opened: every owned non-trashed project with an open time.
     } else {
       // `all` and legacy `uncategorized` both mean root (folder_id IS NULL),
       // unless search/tag filter is active — then include every owned project.
@@ -421,7 +441,28 @@ export async function listProjectsSummary(
     staticPreviewSyncedAt: row.static_preview_synced_at ?? null,
     deletedAt: row.deleted_at ?? null,
     purgeAfter: row.purge_after ?? null,
+    lastOpenedAt: row.last_opened_at ?? null,
   }));
+}
+
+/**
+ * Record that the owner opened this project in Studio.
+ * Does not bump `updated_at` (edit vs open are different signals).
+ */
+export async function touchProjectOpened(
+  db: SupabaseClient,
+  id: string,
+  options?: { now?: Date }
+): Promise<string> {
+  const lastOpenedAt = (options?.now ?? new Date()).toISOString();
+  const { error } = await db
+    .from("projects")
+    .update({ last_opened_at: lastOpenedAt })
+    .eq("id", id);
+  if (error) {
+    throw new Error(`[projectManager] touchProjectOpened failed: ${error.message}`);
+  }
+  return lastOpenedAt;
 }
 
 /**

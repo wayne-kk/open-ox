@@ -5,6 +5,7 @@ import {
   listDueTrashProjectIds,
   listProjectsSummary,
   restoreProject,
+  touchProjectOpened,
   trashProject,
 } from "./projectManager";
 
@@ -103,6 +104,46 @@ describe("listProjectsSummary trash filters", () => {
       calls.some((c) => c.method === "not" && c.args[0] === "deleted_at" && c.args[1] === "is" && c.args[2] === null)
     ).toBe(true);
     expect(calls.some((c) => c.method === "is" && c.args[0] === "folder_id")).toBe(false);
+  });
+
+  it("orders by last_opened_at, skips never-opened and folder filters", async () => {
+    const { db, calls } = mockListQuery([]);
+    await listProjectsSummary(db, {
+      userId: "u1",
+      orderBy: "last_opened_at",
+      limit: 10,
+    });
+    expect(
+      calls.some((c) => c.method === "order" && c.args[0] === "last_opened_at")
+    ).toBe(true);
+    expect(
+      calls.some(
+        (c) =>
+          c.method === "not" &&
+          c.args[0] === "last_opened_at" &&
+          c.args[1] === "is" &&
+          c.args[2] === null
+      )
+    ).toBe(true);
+    expect(calls.some((c) => c.method === "is" && c.args[0] === "deleted_at")).toBe(true);
+    expect(calls.some((c) => c.method === "is" && c.args[0] === "folder_id")).toBe(false);
+    expect(calls.some((c) => c.method === "range")).toBe(true);
+  });
+});
+
+describe("touchProjectOpened", () => {
+  it("updates last_opened_at without bumping updated_at", async () => {
+    const eq = vi.fn().mockResolvedValue({ error: null });
+    const update = vi.fn(() => ({ eq }));
+    const from = vi.fn(() => ({ update }));
+    const db = { from } as never;
+    const now = new Date("2026-08-07T10:00:00.000Z");
+
+    const lastOpenedAt = await touchProjectOpened(db, "proj-1", { now });
+
+    expect(lastOpenedAt).toBe("2026-08-07T10:00:00.000Z");
+    expect(update).toHaveBeenCalledWith({ last_opened_at: "2026-08-07T10:00:00.000Z" });
+    expect(eq).toHaveBeenCalledWith("id", "proj-1");
   });
 });
 

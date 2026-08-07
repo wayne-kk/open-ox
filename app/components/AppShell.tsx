@@ -1,6 +1,12 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
@@ -8,6 +14,7 @@ import {
   Folder,
   FolderOpen,
   Globe2,
+  History,
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
@@ -26,9 +33,20 @@ import {
   FOLDERS_CHANGED_EVENT,
   isRootFolderParam,
 } from "@/lib/projectFolders";
+import { projectCoverDisplayUrl } from "@/lib/projectCoverUrls";
+import {
+  RECENT_PROJECTS_CHANGED_EVENT,
+  RECENT_PROJECTS_LIMIT,
+} from "@/lib/recentProjects";
+import {
+  ProjectActionsMenu,
+  type ProjectActionsTag,
+} from "@/app/components/ProjectActionsMenu";
+import type { ProjectPublishState } from "@/app/components/ProjectPublishPanel";
 import { BrandMark } from "@/app/components/BrandMark";
 import { CreditsBalanceBadge } from "@/app/components/CreditsBalanceBadge";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
+import { toast } from "sonner";
 import {
   resolveStartBuildAction,
   WORKSPACE_PROMPT_HASH,
@@ -61,6 +79,140 @@ type ProjectFolder = {
   id: string;
   name: string;
 };
+
+type RecentProject = {
+  id: string;
+  name: string;
+  status: "awaiting_input" | "generating" | "ready" | "failed";
+  folderId?: string | null;
+  publishPreview?: boolean;
+  allowRemix?: boolean;
+  staticPreviewSyncedAt?: string | null;
+  coverImageStatus?: "pending" | "ready" | "failed" | null;
+  coverImageUpdatedAt?: string | null;
+  tags?: ProjectActionsTag[];
+};
+
+function RecentProjectNavItem({
+  project,
+  active,
+  onNavigate,
+  noCoverLabel,
+  folders,
+  allTags,
+  onPublishChange,
+  onMove,
+  onTagsChange,
+  onCoverChange,
+  onConfirmTrash,
+  deleting,
+}: {
+  project: RecentProject;
+  active: boolean;
+  onNavigate?: () => void;
+  noCoverLabel: string;
+  folders: ProjectFolder[];
+  allTags: ProjectActionsTag[];
+  onPublishChange: (projectId: string, state: ProjectPublishState) => void;
+  onMove: (folderId: string | null) => void;
+  onTagsChange: (projectId: string, tags: ProjectActionsTag[]) => void;
+  onCoverChange: (
+    projectId: string,
+    cover: { status: "ready"; updatedAt: string }
+  ) => void;
+  onConfirmTrash: (autoPurge: boolean) => void | Promise<void>;
+  deleting: boolean;
+}) {
+  const hasCover = project.coverImageStatus === "ready";
+  const coverSrc = hasCover
+    ? projectCoverDisplayUrl(project.id, project.coverImageUpdatedAt)
+    : null;
+
+  return (
+    <Tooltip delayDuration={220}>
+      <TooltipTrigger asChild>
+        <div
+          className={cn(
+            "group/recent flex w-full items-center gap-0.5 rounded-md transition-colors",
+            active ? "bg-primary/10" : "hover:bg-muted"
+          )}
+        >
+          <Link
+            href={`/studio/${project.id}`}
+            onClick={onNavigate}
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-[12px] transition-colors",
+              active
+                ? "text-primary"
+                : "text-muted-foreground group-hover/recent:text-foreground"
+            )}
+          >
+            {coverSrc ? (
+              // eslint-disable-next-line @next/next/no-img-element -- tiny remote cover thumb
+              <img
+                src={coverSrc}
+                alt=""
+                className="h-5 w-5 shrink-0 rounded object-cover bg-muted"
+                loading="lazy"
+              />
+            ) : (
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted/80">
+                <History className="h-3 w-3 opacity-70" aria-hidden />
+              </span>
+            )}
+            <span className="min-w-0 flex-1 truncate">{project.name}</span>
+          </Link>
+          <ProjectActionsMenu
+            project={project}
+            folders={folders}
+            allTags={allTags}
+            side="right"
+            align="start"
+            triggerClassName="mr-0.5 opacity-80 data-[state=open]:opacity-100"
+            onPublishChange={onPublishChange}
+            onMove={onMove}
+            onTagsChange={onTagsChange}
+            onCoverChange={onCoverChange}
+            onConfirmTrash={onConfirmTrash}
+            deleting={deleting}
+          />
+        </div>
+      </TooltipTrigger>
+      <TooltipContent
+        side="right"
+        align="center"
+        // nav uses px-2; offset clears that padding so the card sits on the sidebar border.
+        sideOffset={8}
+        hideArrow
+        className="z-40 max-w-none overflow-hidden rounded-xl border border-border/80 bg-popover p-0 text-popover-foreground shadow-xl"
+      >
+        <div className="w-[240px]">
+          <div className="relative aspect-[16/10] w-full overflow-hidden bg-muted">
+            {coverSrc ? (
+              // eslint-disable-next-line @next/next/no-img-element -- hover cover preview
+              <img
+                src={coverSrc}
+                alt=""
+                className="h-full w-full object-cover object-top"
+              />
+            ) : (
+              <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-muted-foreground">
+                <History className="h-6 w-6 opacity-50" aria-hidden />
+                <span className="px-3 text-center text-[11px] opacity-70">
+                  {noCoverLabel}
+                </span>
+              </div>
+            )}
+          </div>
+          <div className="truncate px-3 py-2 text-[12px] font-medium text-foreground">
+            {project.name}
+          </div>
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 function focusWorkspacePrompt() {
   const root = document.getElementById(WORKSPACE_PROMPT_ID);
@@ -177,12 +329,31 @@ function SidebarBody({
   foldersOpen,
   setFoldersOpen,
   folders,
+  recentProjects,
+  allTags,
+  onRecentPublishChange,
+  onRecentMove,
+  onRecentTagsChange,
+  onRecentCoverChange,
+  onRecentTrash,
+  recentDeletingId,
 }: {
   collapsed: boolean;
   onNavigate?: () => void;
   foldersOpen: boolean;
   setFoldersOpen: (v: boolean | ((p: boolean) => boolean)) => void;
   folders: ProjectFolder[];
+  recentProjects: RecentProject[];
+  allTags: ProjectActionsTag[];
+  onRecentPublishChange: (projectId: string, state: ProjectPublishState) => void;
+  onRecentMove: (projectId: string, folderId: string | null) => void;
+  onRecentTagsChange: (projectId: string, tags: ProjectActionsTag[]) => void;
+  onRecentCoverChange: (
+    projectId: string,
+    cover: { status: "ready"; updatedAt: string }
+  ) => void;
+  onRecentTrash: (projectId: string, autoPurge: boolean) => void | Promise<void>;
+  recentDeletingId: string | null;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -202,6 +373,9 @@ function SidebarBody({
     pathname === "/settings/integrations" || pathname.startsWith("/settings/integrations");
   const onDashboardRoot =
     onDashboard && !onPublished && !onTrashed && isRootFolderParam(folderParam);
+  const studioMatch = pathname.match(/^\/studio\/([^/]+)/);
+  const activeStudioProjectId = studioMatch?.[1] ?? null;
+  const showRecent = !collapsed && recentProjects.length > 0;
 
   const handleStartBuild = async () => {
     onNavigate?.();
@@ -422,6 +596,39 @@ function SidebarBody({
           onClick={onNavigate}
           newTab
         />
+
+        {showRecent ? (
+          <>
+            <div className={cn("my-2 border-t border-border/60", collapsed && "mx-1")} />
+            <div className="min-h-0">
+              <div className="flex items-center gap-2 px-2.5 pb-1 pt-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/80">
+                <History className="h-3 w-3 shrink-0 opacity-80" aria-hidden />
+                <span className="truncate">{t("recentlyOpened")}</span>
+              </div>
+              <div className="space-y-0.5">
+                {recentProjects.slice(0, RECENT_PROJECTS_LIMIT).map((project) => (
+                  <RecentProjectNavItem
+                    key={project.id}
+                    project={project}
+                    active={activeStudioProjectId === project.id}
+                    onNavigate={onNavigate}
+                    noCoverLabel={t("recentNoCover")}
+                    folders={folders}
+                    allTags={allTags}
+                    onPublishChange={onRecentPublishChange}
+                    onMove={(folderId) => onRecentMove(project.id, folderId)}
+                    onTagsChange={onRecentTagsChange}
+                    onCoverChange={onRecentCoverChange}
+                    onConfirmTrash={(autoPurge) =>
+                      void onRecentTrash(project.id, autoPurge)
+                    }
+                    deleting={recentDeletingId === project.id}
+                  />
+                ))}
+              </div>
+            </div>
+          </>
+        ) : null}
       </nav>
     </div>
   );
@@ -433,6 +640,17 @@ function SidebarBodySuspense(props: {
   foldersOpen: boolean;
   setFoldersOpen: (v: boolean | ((p: boolean) => boolean)) => void;
   folders: ProjectFolder[];
+  recentProjects: RecentProject[];
+  allTags: ProjectActionsTag[];
+  onRecentPublishChange: (projectId: string, state: ProjectPublishState) => void;
+  onRecentMove: (projectId: string, folderId: string | null) => void;
+  onRecentTagsChange: (projectId: string, tags: ProjectActionsTag[]) => void;
+  onRecentCoverChange: (
+    projectId: string,
+    cover: { status: "ready"; updatedAt: string }
+  ) => void;
+  onRecentTrash: (projectId: string, autoPurge: boolean) => void | Promise<void>;
+  recentDeletingId: string | null;
 }) {
   return (
     <Suspense
@@ -466,6 +684,9 @@ export function AppSidebar({
   const { user, ready } = useAuthUser();
   const [folders, setFolders] = useState<ProjectFolder[]>([]);
   const [foldersOpen, setFoldersOpen] = useState(true);
+  const [recentProjects, setRecentProjects] = useState<RecentProject[]>([]);
+  const [allTags, setAllTags] = useState<ProjectActionsTag[]>([]);
+  const [recentDeletingId, setRecentDeletingId] = useState<string | null>(null);
   const [resizing, setResizing] = useState(false);
   const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
@@ -487,6 +708,132 @@ export function AppSidebar({
       cancelled = true;
       window.removeEventListener(FOLDERS_CHANGED_EVENT, onChanged);
     };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch(`/api/projects/recent?limit=${RECENT_PROJECTS_LIMIT}`);
+        if (!res.ok || cancelled) return;
+        const body = (await res.json()) as { projects?: RecentProject[] };
+        setRecentProjects(Array.isArray(body.projects) ? body.projects : []);
+      } catch {
+        /* ignore */
+      }
+    };
+    void load();
+    const onChanged = () => void load();
+    window.addEventListener(RECENT_PROJECTS_CHANGED_EVENT, onChanged);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(RECENT_PROJECTS_CHANGED_EVENT, onChanged);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch("/api/tags");
+        if (!res.ok || cancelled) return;
+        const body = (await res.json()) as ProjectActionsTag[];
+        setAllTags(Array.isArray(body) ? body : []);
+      } catch {
+        /* ignore */
+      }
+    };
+    void load();
+  }, []);
+
+  const onRecentPublishChange = useCallback(
+    (projectId: string, state: ProjectPublishState) => {
+      setRecentProjects((prev) =>
+        prev.map((p) =>
+          p.id === projectId
+            ? {
+                ...p,
+                publishPreview: state.publishPreview,
+                allowRemix: state.allowRemix,
+                staticPreviewSyncedAt:
+                  state.staticPreviewSyncedAt ?? p.staticPreviewSyncedAt,
+              }
+            : p
+        )
+      );
+    },
+    []
+  );
+
+  const onRecentMove = useCallback(async (projectId: string, folderId: string | null) => {
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ folderId }),
+      });
+      if (!res.ok) {
+        toast.error("移动失败");
+        return;
+      }
+      setRecentProjects((prev) =>
+        prev.map((p) => (p.id === projectId ? { ...p, folderId } : p))
+      );
+    } catch {
+      toast.error("移动失败");
+    }
+  }, []);
+
+  const onRecentTagsChange = useCallback(
+    (projectId: string, tags: ProjectActionsTag[]) => {
+      setRecentProjects((prev) =>
+        prev.map((p) => (p.id === projectId ? { ...p, tags } : p))
+      );
+      setAllTags((prev) => {
+        const byId = new Map(prev.map((t) => [t.id, t]));
+        for (const tag of tags) byId.set(tag.id, tag);
+        return [...byId.values()];
+      });
+    },
+    []
+  );
+
+  const onRecentCoverChange = useCallback(
+    (projectId: string, cover: { status: "ready"; updatedAt: string }) => {
+      setRecentProjects((prev) =>
+        prev.map((p) =>
+          p.id === projectId
+            ? {
+                ...p,
+                coverImageStatus: cover.status,
+                coverImageUpdatedAt: cover.updatedAt,
+              }
+            : p
+        )
+      );
+    },
+    []
+  );
+
+  const onRecentTrash = useCallback(async (projectId: string, autoPurge: boolean) => {
+    setRecentDeletingId(projectId);
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ autoPurge }),
+      });
+      if (!res.ok) {
+        toast.error("移到回收站失败");
+        return;
+      }
+      setRecentProjects((prev) => prev.filter((p) => p.id !== projectId));
+      toast.message("已移到回收站");
+    } catch {
+      toast.error("移到回收站失败");
+    } finally {
+      setRecentDeletingId(null);
+    }
   }, []);
 
   useEffect(() => {
@@ -613,6 +960,14 @@ export function AppSidebar({
             foldersOpen={foldersOpen}
             setFoldersOpen={setFoldersOpen}
             folders={folders}
+            recentProjects={recentProjects}
+            allTags={allTags}
+            onRecentPublishChange={onRecentPublishChange}
+            onRecentMove={onRecentMove}
+            onRecentTagsChange={onRecentTagsChange}
+            onRecentCoverChange={onRecentCoverChange}
+            onRecentTrash={onRecentTrash}
+            recentDeletingId={recentDeletingId}
           />
         </div>
         <div
@@ -702,6 +1057,14 @@ export function AppSidebar({
                 foldersOpen={foldersOpen}
                 setFoldersOpen={setFoldersOpen}
                 folders={folders}
+                recentProjects={recentProjects}
+                allTags={allTags}
+                onRecentPublishChange={onRecentPublishChange}
+                onRecentMove={onRecentMove}
+                onRecentTagsChange={onRecentTagsChange}
+                onRecentCoverChange={onRecentCoverChange}
+                onRecentTrash={onRecentTrash}
+                recentDeletingId={recentDeletingId}
               />
             </div>
             <div className="relative z-[1]">{userSlot}</div>

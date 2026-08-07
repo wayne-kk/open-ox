@@ -6,6 +6,9 @@ export type { ModifyHistoryTurn };
 const META_GREETING_RE =
   /^(你好|您好|hi|hello|嗨|在吗|谢谢|感谢|多谢|help|\/help|\/clear|\/memory)$/i;
 
+const CASUAL_PRAISE_RE =
+  /^(?:(?:谢谢|感谢|多谢)(?:你|您)?[，,\s]*)?(?:(?:非常|真的?|太|挺|很)?(?:不错|棒|厉害|优秀|完美|赞)|(?:你|您)(?:很|真|太|非常)?棒|做得(?:很|真|非常)?好|干得漂亮|great job|well done|awesome)(?:[，,\s]+(?:(?:非常|真的?|太|挺|很)?(?:不错|棒|厉害|优秀|完美|赞)|(?:你|您)(?:很|真|太|非常)?棒|做得(?:很|真|非常)?好|干得漂亮|great job|well done|awesome))?[！!。.\s]*$/i;
+
 const AFFIRMATIVE_REPLY_RE =
   /^(是的|好的|好|对|嗯|行|可以|确认|按这个|就这个|ok|okay|yes|yep|sure|第一个|第二个|第三个|第[一二三四五1-5个]+|[A-Da-d][选项]?)$/i;
 
@@ -17,7 +20,8 @@ function isShortContinuationReply(text: string): boolean {
 }
 
 export function isMetaGreetingOnly(text: string): boolean {
-  return META_GREETING_RE.test(text.trim());
+  const trimmed = text.trim();
+  return META_GREETING_RE.test(trimmed) || CASUAL_PRAISE_RE.test(trimmed);
 }
 
 export function detectContinuationReply(
@@ -77,16 +81,6 @@ export function inferContinuationCategory(
   return "code_change";
 }
 
-/** Block onboarding-style conversation replies when modify history exists. */
-export function shouldBlockConversationShortCircuit(
-  userInstruction: string,
-  recentHistory: ModifyHistoryTurn[]
-): boolean {
-  if (recentHistory.length === 0) return false;
-  if (isMetaGreetingOnly(userInstruction)) return false;
-  return true;
-}
-
 export function applyContinuationRoutingOverrides(
   routed: {
     category: ModifyIntentCategory;
@@ -112,17 +106,6 @@ export function applyContinuationRoutingOverrides(
       };
     }
     return next;
-  }
-
-  if (
-    next.category === "conversation" &&
-    shouldBlockConversationShortCircuit(options.originalInstruction, options.recentHistory)
-  ) {
-    next = {
-      ...next,
-      category: inferContinuationCategory(options.recentHistory),
-      assistantMessage: "",
-    };
   }
 
   return next;
